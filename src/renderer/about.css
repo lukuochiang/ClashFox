@@ -1,0 +1,82 @@
+:root {
+  --bg: #0f1216;
+  --panel: #151c24;
+  --ink: #e9eef3;
+  --muted: #93a4b7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Trebuchet MS", "Verdana", sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+  height: 100vh;
+  position: relative;
+}
+
+.about {
+  width: 100%;
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.about-title {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.logo {
+  width: 96px;
+  height: 96px;
+  border-radius: 24px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+
+.name {
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.version {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.close-btn {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 171, 197, 0.35);
+  background: rgba(148, 171, 197, 0.12);
+  color: var(--ink);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+  border-color: rgba(244, 179, 74, 0.5);
+  color: rgba(244, 179, 74, 0.9);
+}

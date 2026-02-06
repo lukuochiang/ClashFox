@@ -1,0 +1,32 @@
+{
+  "name": "clashfox-gui",
+  "version": "0.2.5",
+  "description": "ClashFox Mihomo Toolkit GUI",
+  "main": "src/main.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "dev": "CLASHFOX_DEV=1 electron .",
+    "build:mac": "electron-builder --mac",
+    "icon:mac": "scripts/make_icns.sh"
+  },
+  "devDependencies": {
+    "electron": "^28.2.0",
+    "electron-reload": "^1.5.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.clashfox.gui",
+    "productName": "ClashFox",
+    "files": [
+      "src/**/*",
+      "scripts/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "icon": "assets/logo.icns"
+    }
+  }
+}
