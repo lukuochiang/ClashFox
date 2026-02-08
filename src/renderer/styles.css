@@ -730,13 +730,12 @@ h1 {
 .paths-row {
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
 .paths-item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  margin-bottom: 14px;
 }
 
 .paths-label {
@@ -750,6 +749,11 @@ h1 {
   font-size: 13px;
   color: var(--muted);
   word-break: break-all;
+  background: rgba(255, 255, 255, 0.05) !important;
+  padding: 13px 12px !important;
+  border-radius: 10px !important;
+  border: 1px solid var(--border) !important;
+  font-family: monospace !important;
 }
 
 .action-row {
@@ -1036,7 +1040,7 @@ body[data-theme="day"] input::placeholder {
 
 .input-group {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex: 1;
 }
 
