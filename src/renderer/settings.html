@@ -26,6 +26,9 @@
           <button class="nav-btn" data-page="switch" data-i18n="nav.switch">Switch Kernel</button>
           <button class="nav-btn" data-page="backups" data-i18n="nav.backups">Backups</button>
           <button class="nav-btn" data-page="logs" data-i18n="nav.logs">Logs</button>
+        </nav>
+        
+        <nav class="nav nav-bottom">
           <button class="nav-btn active" data-page="settings" data-i18n="nav.settings">Settings</button>
           <button class="nav-btn" data-page="help" data-i18n="nav.help">Help</button>
         </nav>
@@ -105,28 +108,26 @@
             <div class="card">
               <h3 data-i18n="settings.logs">Log Settings</h3>
               <div class="form-row">
-                <div class="field-inline">
-                  <label data-i18n="logs.lines">Lines</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-                  <input id="settingsLogLines" type="number" min="10" max="2000" value="10" />
-                </div>
-                <div class="interval-group">
-                  <label data-i18n="logs.interval">Interval</label>&nbsp;
-                  <select id="settingsLogIntervalPreset">
-                    <option value="1">1s</option>
-                    <option value="3" selected>3s</option>
-                    <option value="5">5s</option>
-                    <option value="10">10s</option>
-                    <option value="15">15s</option>
-                    <option value="30">30s</option>
-                    <option value="60">60s</option>
-                  </select>
-                </div>
-                <label class="toggle">
-                  <input id="settingsLogAutoRefresh" type="checkbox" />
-                  <span class="toggle-pill"></span>
-                  <span data-i18n="logs.auto">Auto refresh</span>
-                </label>
+                <label data-i18n="logs.lines">Lines</label>
+                <input id="settingsLogLines" type="number" min="10" max="2000" value="10" />
               </div>
+              <div class="form-row">
+                <label data-i18n="logs.interval">Interval</label>
+                <select id="settingsLogIntervalPreset">
+                  <option value="1">1s</option>
+                  <option value="3" selected>3s</option>
+                  <option value="5">5s</option>
+                  <option value="10">10s</option>
+                  <option value="15">15s</option>
+                  <option value="30">30s</option>
+                  <option value="60">60s</option>
+                </select>
+              </div>
+<!--              <label class="toggle">-->
+<!--                <input id="settingsLogAutoRefresh" type="checkbox" />-->
+<!--                <span class="toggle-pill"></span>-->
+<!--                <span data-i18n="logs.auto">Auto refresh</span>-->
+<!--              </label>-->
             </div>
 
             <div class="card">

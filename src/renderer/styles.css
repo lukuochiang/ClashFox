@@ -101,6 +101,7 @@ body[data-theme="day"]::after {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  justify-content: space-between;
 }
 
 body[data-theme="day"] .sidebar {
@@ -179,6 +180,24 @@ body[data-theme="day"] .sidebar {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.nav-bottom {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.nav-bottom {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.nav-bottom {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
 }
 
 .nav-btn {
@@ -738,6 +757,14 @@ h1 {
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 10px;
+}
+
+#cancelInstallBtn {
+  display: none;
+}
+
+#cancelInstallBtn.show {
+  display: block;
 }
 
 .is-hidden {

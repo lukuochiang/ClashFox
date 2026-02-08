@@ -22,6 +22,31 @@ const overviewNetwork = document.getElementById('overviewNetwork');
 const overviewLocalIp = document.getElementById('overviewLocalIp');
 const overviewProxyIp = document.getElementById('overviewProxyIp');
 const overviewInternetIp = document.getElementById('overviewInternetIp');
+
+// IP地址隐私保护函数
+function maskIpAddress(ip) {
+  if (!ip || ip === '-') return ip;
+  
+  // 处理IPv4地址
+  if (ip.includes('.')) {
+    const parts = ip.split('.');
+    if (parts.length === 4) {
+      // 保留前两段，后两段替换为星号
+      return `${parts[0]}.${parts[1]}.*.*`;
+    }
+  }
+  
+  // 处理IPv6地址（简化处理）
+  if (ip.includes(':')) {
+    const parts = ip.split(':');
+    if (parts.length >= 4) {
+      // 保留前两段和后两段，中间替换为星号
+      return `${parts[0]}:${parts[1]}:****:****:****:****:${parts[parts.length-2]}:${parts[parts.length-1]}`;
+    }
+  }
+  
+  return ip;
+}
 const overviewNetworkRefresh = document.getElementById('overviewNetworkRefresh');
 
 const githubUser = document.getElementById('githubUser');
@@ -144,6 +169,7 @@ const I18N = {
       version: 'Version',
       versionPlaceholder: 'e.g. v1.19.0',
       action: 'Install / Update',
+      cancel: 'Cancel',
       ready: 'Ready to install.',
       progress: 'Installing kernel...',
       done: 'Install completed.',
@@ -1924,7 +1950,7 @@ function formatKernelDisplay(value) {
   if (match) {
     return match[0];
   }
-  const first = String(value).trim().split(/\s+/)[0];
+  const first = String(value).trim().split(/\s+/)[2];
   return first || '-';
 }
 
@@ -1933,30 +1959,62 @@ function updateOverviewUI(data) {
     return;
   }
   state.overviewRunning = Boolean(data.running);
-  overviewStatus.textContent = state.overviewRunning ? t('labels.running') : t('labels.stopped');
-  overviewKernel.textContent = formatKernelDisplay(data.kernelVersion);
-  overviewSystem.textContent = data.systemName || '-';
-  const systemParts = [data.systemVersion, data.systemBuild].filter(Boolean);
-  overviewVersion.textContent = systemParts.length ? systemParts.join(' ') : '-';
+  
+  // 检查元素是否存在再设置textContent
+  if (overviewStatus) {
+    overviewStatus.textContent = state.overviewRunning ? t('labels.running') : t('labels.stopped');
+  }
+  if (overviewKernel) {
+    overviewKernel.textContent = formatKernelDisplay(data.kernelVersion);
+  }
+  if (overviewSystem) {
+    overviewSystem.textContent = data.systemName || '-';
+  }
+  if (overviewVersion) {
+    const systemParts = [data.systemVersion, data.systemBuild].filter(Boolean);
+    overviewVersion.textContent = systemParts.length ? systemParts.join(' ') : '-';
+  }
+  
   const parsedUptime = Number.parseInt(data.uptimeSec, 10);
   state.overviewUptimeBaseSec = Number.isFinite(parsedUptime) ? parsedUptime : 0;
   state.overviewUptimeAt = Date.now();
-  overviewUptime.textContent = state.overviewRunning
-    ? formatUptime(state.overviewUptimeBaseSec)
-    : '-';
-  overviewConnections.textContent = data.connections === '' || data.connections === null || data.connections === undefined
-    ? '-'
-    : data.connections;
-  overviewMemory.textContent = data.memory === '' || data.memory === null || data.memory === undefined
-    ? '-'
-    : data.memory;
-  overviewInternet.textContent = formatLatency(data.internetMs);
-  overviewDns.textContent = formatLatency(data.dnsMs);
-  overviewRouter.textContent = formatLatency(data.routerMs);
-  overviewNetwork.textContent = data.networkName || '-';
-  overviewLocalIp.textContent = data.localIp || '-';
-  overviewProxyIp.textContent = data.proxyIp || '-';
-  overviewInternetIp.textContent = data.internetIp || '-';
+  
+  if (overviewUptime) {
+    overviewUptime.textContent = state.overviewRunning
+      ? formatUptime(state.overviewUptimeBaseSec)
+      : '-';
+  }
+  if (overviewConnections) {
+    overviewConnections.textContent = data.connections === '' || data.connections === null || data.connections === undefined
+      ? '-'
+      : data.connections;
+  }
+  if (overviewMemory) {
+    overviewMemory.textContent = data.memory === '' || data.memory === null || data.memory === undefined
+      ? '-'
+      : data.memory;
+  }
+  if (overviewInternet) {
+    overviewInternet.textContent = formatLatency(data.internetMs);
+  }
+  if (overviewDns) {
+    overviewDns.textContent = formatLatency(data.dnsMs);
+  }
+  if (overviewRouter) {
+    overviewRouter.textContent = formatLatency(data.routerMs);
+  }
+  if (overviewNetwork) {
+    overviewNetwork.textContent = data.networkName || '-';
+  }
+  if (overviewLocalIp) {
+    overviewLocalIp.textContent = data.localIp || '-';
+  }
+  if (overviewProxyIp) {
+    overviewProxyIp.textContent = maskIpAddress(data.proxyIp) || '-';
+  }
+  if (overviewInternetIp) {
+    overviewInternetIp.textContent = maskIpAddress(data.internetIp) || '-';
+  }
 }
 
 function updateOverviewRuntimeUI(data) {
@@ -1964,7 +2022,12 @@ function updateOverviewRuntimeUI(data) {
     return;
   }
   state.overviewRunning = Boolean(data.running);
-  overviewStatus.textContent = state.overviewRunning ? t('labels.running') : t('labels.stopped');
+  
+  // 检查元素是否存在再设置textContent
+  if (overviewStatus) {
+    overviewStatus.textContent = state.overviewRunning ? t('labels.running') : t('labels.stopped');
+  }
+  
   if (state.overviewRunning) {
     const parsedUptime = Number.parseInt(data.uptimeSec, 10);
     if (Number.isFinite(parsedUptime)) {
@@ -1973,18 +2036,28 @@ function updateOverviewRuntimeUI(data) {
         state.overviewUptimeAt = Date.now();
       }
     }
-    overviewUptime.textContent = formatUptime(state.overviewUptimeBaseSec);
+    if (overviewUptime) {
+      overviewUptime.textContent = formatUptime(state.overviewUptimeBaseSec);
+    }
   } else {
     state.overviewUptimeBaseSec = 0;
     state.overviewUptimeAt = 0;
-    overviewUptime.textContent = '-';
+    if (overviewUptime) {
+      overviewUptime.textContent = '-';
+    }
   }
-  overviewConnections.textContent = data.connections === '' || data.connections === null || data.connections === undefined
-    ? '-'
-    : data.connections;
-  overviewMemory.textContent = data.memory === '' || data.memory === null || data.memory === undefined
-    ? '-'
-    : data.memory;
+  
+  if (overviewConnections) {
+    overviewConnections.textContent = data.connections === '' || data.connections === null || data.connections === undefined
+      ? '-'
+      : data.connections;
+  }
+  
+  if (overviewMemory) {
+    overviewMemory.textContent = data.memory === '' || data.memory === null || data.memory === undefined
+      ? '-'
+      : data.memory;
+  }
 }
 
 async function loadStatus() {
@@ -2601,6 +2674,49 @@ if (switchPageSize) {
     saveSettings({ switchPageSize: switchPageSize.value });
   });
 }
+
+// 添加settings页面上Log Settings的事件监听器
+if (settingsLogLines) {
+  settingsLogLines.addEventListener('change', () => {
+    if (logLines) {
+      logLines.value = settingsLogLines.value;
+    }
+    saveSettings({ logLines: parseInt(settingsLogLines.value, 10) });
+  });
+}
+
+if (settingsLogIntervalPreset) {
+  settingsLogIntervalPreset.addEventListener('change', () => {
+    if (logIntervalPreset) {
+      logIntervalPreset.value = settingsLogIntervalPreset.value;
+    }
+    updateInterval();
+    saveSettings({ logIntervalPreset: settingsLogIntervalPreset.value });
+  });
+}
+
+// 添加settings页面上Pagination的事件监听器
+if (settingsSwitchPageSize) {
+  settingsSwitchPageSize.addEventListener('change', () => {
+    if (switchPageSize) {
+      switchPageSize.value = settingsSwitchPageSize.value;
+    }
+    state.switchPage = 1;
+    renderSwitchTable();
+    saveSettings({ switchPageSize: settingsSwitchPageSize.value });
+  });
+}
+
+if (settingsBackupsPageSize) {
+  settingsBackupsPageSize.addEventListener('change', () => {
+    if (backupsPageSize) {
+      backupsPageSize.value = settingsBackupsPageSize.value;
+    }
+    state.backupsPage = 1;
+    renderBackupsTable();
+    saveSettings({ backupsPageSize: settingsBackupsPageSize.value });
+  });
+}
 if (backupsPrev) {
   backupsPrev.addEventListener('click', () => {
     state.backupsPage = Math.max(1, state.backupsPage - 1);
@@ -2825,7 +2941,7 @@ function startOverviewTimer() {
     clearInterval(state.overviewTickTimer);
   }
   state.overviewTickTimer = setInterval(() => {
-    if (!state.overviewRunning || !state.overviewUptimeAt) {
+    if (!state.overviewRunning || !state.overviewUptimeAt || !overviewUptime) {
       return;
     }
     const elapsedSec = Math.max(0, Math.floor((Date.now() - state.overviewUptimeAt) / 1000));
