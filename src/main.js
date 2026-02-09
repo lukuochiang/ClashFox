@@ -7,7 +7,7 @@ const { spawn, execFileSync } = require('child_process');
 const ROOT_DIR = path.join(__dirname, '..');
 const BRIDGE_PATH = path.join(ROOT_DIR, 'scripts', 'gui_bridge.sh');
 let mainWindow = null;
-let currentProcess = null; // 用于跟踪当前正在运行的进程
+let currentInstallProcess = null; // 仅用于跟踪安装进程，支持取消功能
 
 if (process.env.CLASHFOX_DEV === '1') {
   // Hot reload for main + renderer during local development.
@@ -20,11 +20,54 @@ if (process.env.CLASHFOX_DEV === '1') {
 function runBridge(args) {
   return new Promise((resolve) => {
     try {
+      console.log('[runBridge] Running command:', args);
+      const commandType = args[0];
+
+      // 1. 如果是安装命令，终止当前正在运行的安装进程（如果有）
+      let isInstallCommand = commandType === 'install';
+      
+      if (isInstallCommand && currentInstallProcess) {
+        const oldPid = currentInstallProcess.pid;
+        console.log('[runBridge] Terminating existing install process with PID:', oldPid);
+        try {
+          currentInstallProcess.kill(); // 直接终止，不等待优雅终止
+        } catch (err) {
+          console.error('[runBridge] Error terminating existing install process:', err);
+        }
+        // 立即清空引用，为新进程做准备
+        currentInstallProcess = null;
+      }
+      
+      // 2. 启动新进程
       const child = spawn('bash', [BRIDGE_PATH, ...args], { cwd: ROOT_DIR });
+      const processId = child.pid;
+      
+      // 只跟踪安装进程
+      if (isInstallCommand) {
+        currentInstallProcess = child;
+        console.log('[runBridge] Tracking install process with PID:', processId);
+      }
+      
+      console.log('[runBridge] Started new', commandType, 'process with PID:', processId);
+      
+      // 3. 进程输出和终止处理
       let stdout = '';
       let stderr = '';
+      let resolved = false;
+      
+      // 超时保护
+      const timeout = setTimeout(() => {
+        if (!resolved && child) {
+          console.log('[runBridge] Process timeout, killing PID:', processId);
+          try {
+            child.kill();
+          } catch (err) {
+            console.error('[runBridge] Error killing timed-out process:', err);
+          }
+        }
+      }, 30000);
 
-      // 修复变量名不匹配的问题，使用child而不是currentProcess
+      // 输出收集
       if (child.stdout) {
         child.stdout.on('data', (chunk) => {
           stdout += chunk.toString();
@@ -37,27 +80,83 @@ function runBridge(args) {
         });
       }
 
-      child.on('close', (code) => {
+      // 进程终止处理
+      const handleTermination = (code, signal) => {
+        if (resolved) return;
+        resolved = true;
+        
+        clearTimeout(timeout);
+        
+        // 只在当前进程是这个安装进程时才清空引用
+        if (isInstallCommand && currentInstallProcess === child) {
+          currentInstallProcess = null;
+          console.log('[runBridge] Cleared install process reference for PID:', processId);
+        }
+        
         const output = stdout.trim();
-        if (!output) {
-          resolve({ ok: false, error: 'empty_output', details: stderr.trim(), exitCode: code });
+        
+        // 检查是否为取消操作
+        if (signal === 'SIGINT' || (code && code > 128)) {
+          resolve({ 
+            ok: false, 
+            error: 'cancelled', 
+            details: 'Operation was cancelled by user' 
+          });
           return;
         }
+        
+        // 处理输出
+        if (!output) {
+          resolve({ 
+            ok: false, 
+            error: 'empty_output', 
+            details: stderr.trim() 
+          });
+          return;
+        }
+        
         try {
           const parsed = JSON.parse(output);
           resolve(parsed);
         } catch (err) {
-          resolve({ ok: false, error: 'parse_error', details: output, exitCode: code });
+          console.error('[runBridge] JSON parse error:', err);
+          resolve({ 
+            ok: false, 
+            error: 'parse_error', 
+            details: output 
+          });
         }
+      };
+      
+      // 监听进程事件
+      child.on('close', handleTermination);
+      child.on('exit', handleTermination);
+      
+      child.on('error', (err) => {
+        if (resolved) return;
+        resolved = true;
+        
+        clearTimeout(timeout);
+        
+        if (isInstallCommand && currentInstallProcess === child) {
+          currentInstallProcess = null;
+          console.log('[runBridge] Cleared install process reference for PID:', processId, '(error case)');
+        }
+        
+        resolve({ 
+          ok: false, 
+          error: 'process_error', 
+          details: err.message 
+        });
       });
       
-      // 添加进程错误处理
-      child.on('error', (err) => {
-        resolve({ ok: false, error: 'process_error', details: err.message });
-      });
     } catch (err) {
-      // 捕获创建进程时的异常
-      resolve({ ok: false, error: 'unexpected_error', details: err.message });
+      console.error('Error in runBridge:', err);
+      resolve({ 
+        ok: false, 
+        error: 'unexpected_error', 
+        details: err.message 
+      });
     }
   });
 }
@@ -190,14 +289,21 @@ app.whenReady().then(() => {
     return runBridge([command, ...args]);
   });
   
-  // 处理取消命令
+  // 处理取消命令，只取消安装进程
   ipcMain.handle('clashfox:cancelCommand', () => {
-    if (currentProcess) {
-      currentProcess.kill(); // 发送SIGTERM信号
-      currentProcess = null;
-      return { ok: true, message: 'Operation cancelled' };
+    if (currentInstallProcess) {
+      const pid = currentInstallProcess.pid;
+      console.log('[cancelCommand] Cancelling install process with PID:', pid);
+      try {
+        // 发送SIGINT信号终止安装进程
+        currentInstallProcess.kill('SIGINT');
+        return { ok: true, message: 'Install cancellation initiated' };
+      } catch (err) {
+        console.error('[cancelCommand] Error cancelling install process:', err);
+        return { ok: false, error: 'cancel_error', details: err.message };
+      }
     }
-    return { ok: false, error: 'no_process_running', message: 'No process is currently running' };
+    return { ok: false, error: 'no_install_command_running' };
   });
 
   ipcMain.handle('clashfox:selectConfig', async () => {

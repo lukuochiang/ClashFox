@@ -175,6 +175,8 @@ const I18N = {
       progress: 'Installing kernel...',
       done: 'Install completed.',
       failed: 'Install failed.',
+      cancelSuccess: 'Installation cancelled',
+      cancelFailed: 'Failed to cancel installation',
       hint: 'Downloads the latest kernel for your architecture and backs up the previous one.',
     },
     control: {
@@ -195,7 +197,7 @@ const I18N = {
       delete: 'Delete',
     },
     logs: {
-      title: 'Kernel Logs',
+      title: 'ClashFlox Logs',
       lines: 'Lines',
       refresh: 'Refresh',
       auto: 'Auto refresh',
@@ -257,6 +259,7 @@ const I18N = {
       configNeedsRestart: 'Config updated. Please restart the kernel.',
       selectBackup: 'Select a backup first.',
       installSuccess: 'Install request sent.',
+      installFailed: 'Install failed. Try using backups to restore.',
       switchSuccess: 'Switch request sent.',
       logMissing: 'Log file not found.',
       cleanDone: 'Cleanup completed.',
@@ -365,6 +368,8 @@ const I18N = {
       progress: '正在安装内核...',
       done: '安装完成。',
       failed: '安装失败。',
+      cancelSuccess: '安装已取消',
+      cancelFailed: '取消安装失败',
       hint: '下载适配架构的最新内核，并备份当前版本。',
     },
     control: {
@@ -447,6 +452,7 @@ const I18N = {
       configNeedsRestart: '配置已更新，请重启内核。',
       selectBackup: '请先选择一个备份。',
       installSuccess: '已发送安装请求。',
+      installFailed: '安装失败。请尝试使用备份恢复。',
       switchSuccess: '已发送切换请求。',
       logMissing: '日志文件不存在。',
       cleanDone: '清理完成。',
@@ -555,6 +561,8 @@ const I18N = {
       progress: 'カーネルをインストール中...',
       done: 'インストールが完了しました。',
       failed: 'インストールに失敗しました。',
+      cancelSuccess: 'インストールはキャンセルされました',
+      cancelFailed: 'インストールのキャンセルに失敗しました',
       hint: 'アーキテクチャに適した最新カーネルをダウンロードし、前のバージョンをバックアップします。',
     },
     control: {
@@ -745,6 +753,8 @@ const I18N = {
       progress: '커널을 설치하는 중...',
       done: '설치가 완료되었습니다.',
       failed: '설치에 실패했습니다.',
+      cancelSuccess: '설치가 취소되었습니다',
+      cancelFailed: '설치 취소에 실패했습니다',
       hint: '아키텍처에 맞는 최신 커널을 다운로드하고 이전 버전을 백업합니다.',
     },
     control: {
@@ -935,6 +945,8 @@ const I18N = {
       progress: 'Installation du noyau...',
       done: 'Installation terminée.',
       failed: 'Échec de l’installation.',
+      cancelSuccess: 'Installation annulée',
+      cancelFailed: 'Échec de l’annulation de l’installation',
       hint: 'Télécharge le dernier noyau pour votre architecture et sauvegarde la version précédente.',
     },
     control: {
@@ -1125,6 +1137,8 @@ const I18N = {
       progress: 'Kernel wird installiert...',
       done: 'Installation abgeschlossen.',
       failed: 'Installation fehlgeschlagen.',
+      cancelSuccess: 'Installation abgebrochen',
+      cancelFailed: 'Abbruch der Installation fehlgeschlagen',
       hint: 'Lädt den neuesten Kernel für Ihre Architektur und sichert die vorherige Version.',
     },
     control: {
@@ -1315,6 +1329,8 @@ const I18N = {
       progress: 'Установка ядра...',
       done: 'Установка завершена.',
       failed: 'Ошибка установки.',
+      cancelSuccess: 'Установка отменена',
+      cancelFailed: 'Не удалось отменить установку',
       hint: 'Загружает последнюю версию ядра для вашей архитектуры и делает резервную копию предыдущей.',
     },
     control: {
@@ -1804,9 +1820,7 @@ function setInstallState(nextState, errorMessage = '') {
   } else if (nextState === 'success') {
     message = t('install.done');
   } else if (nextState === 'error') {
-    message = errorMessage
-      ? `${t('install.failed')} ${errorMessage}`
-      : t('install.failed');
+    message = t('install.failed');
   }
 
   installStatus.textContent = message;
@@ -1815,6 +1829,7 @@ function setInstallState(nextState, errorMessage = '') {
   installBtn.disabled = nextState === 'loading';
   githubUser.disabled = nextState === 'loading';
   if (cancelInstallBtn) {
+    cancelInstallBtn.style.display = nextState === 'loading' ? 'block' : 'none';
     cancelInstallBtn.disabled = nextState !== 'loading';
   }
   if (installVersion) {
@@ -2430,16 +2445,10 @@ if (installBtn) {
       showToast(t('labels.installSuccess'));
       loadStatus();
     } else if (response.error === 'cancelled') {
-      setInstallState('idle');
-      showToast('Installation cancelled', 'info');
-    } else {
-      setInstallState('error', response.error || '');
-      // 添加恢复提示
-      if (response.error && response.error !== 'empty_output') {
-        showToast(`Install failed: ${response.error}. Try using backups to restore.`, 'error');
+        setInstallState('idle');
+        showToast(t('install.cancelSuccess'), 'info');
       } else {
-        showToast('Install failed', 'error');
-      }
+      setInstallState('error', response.error || '');
     }
   });
 }
@@ -2450,7 +2459,9 @@ if (cancelInstallBtn) {
     const response = await cancelCommand();
     if (response.ok) {
       setInstallState('idle');
-      showToast('Installation cancelled', 'info');
+      showToast(t('install.cancelSuccess'), 'info');
+    } else {
+      showToast(response.message || t('install.cancelFailed'), 'error');
     }
   });
 }
