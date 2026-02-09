@@ -910,7 +910,7 @@ h1 {
   padding: 6px 10px;
   border-radius: 8px;
   background: rgba(15, 21, 29, 0.92);
-  color: var(--ink);
+  color: var(--muted);
   font-size: 11px;
   white-space: nowrap;
   opacity: 0;
