@@ -1,8 +1,5 @@
 :root {
-  --bg: #0f1216;
-  --panel: #151c24;
-  --ink: #e9eef3;
-  --muted: #93a4b7;
+  /* 使用全局CSS变量，继承自styles.css */
 }
 
 * {
@@ -11,43 +8,87 @@
 
 body {
   margin: 0;
-  font-family: "Trebuchet MS", "Verdana", sans-serif;
-  background: var(--bg);
+  font-family: var(--font-body);
+  background: radial-gradient(circle at top left, #1f2934, transparent 60%),
+    radial-gradient(circle at 30% 70%, #1a332f, transparent 55%),
+    linear-gradient(145deg, var(--bg-1), var(--bg-2));
   color: var(--ink);
-  display: grid;
-  place-items: center;
   height: 100vh;
   position: relative;
+  overflow: hidden;
 }
 
-.about {
+body::before, body::after {
+  content: "";
+  position: absolute;
+  width: 480px;
+  height: 480px;
+  filter: blur(2px);
+  z-index: 0;
+}
+
+body::before {
+  top: -120px;
+  right: -80px;
+  background: radial-gradient(circle, rgba(244, 179, 74, 0.18), transparent 70%);
+}
+
+body::after {
+  bottom: -180px;
+  left: -120px;
+  background: radial-gradient(circle, rgba(140, 224, 198, 0.2), transparent 70%);
+}
+
+.about-container {
+  position: relative;
   width: 100%;
-  display: grid;
-  place-items: center;
-  gap: 10px;
-  text-align: center;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
 }
 
 .about-title {
   position: absolute;
-  top: 14px;
+  top: 16px;
   left: 16px;
   font-size: 12px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--muted);
+  font-family: var(--font-body);
+  margin: 0;
+  padding: 0;
+  line-height: 1;
+}
+
+.about-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  margin-top: 25px;
 }
 
 .logo {
   width: 96px;
   height: 96px;
   border-radius: 24px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 20px 40px var(--shadow);
+  background: rgba(255, 255, 255, 0.95);
+  border: none;
+  object-fit: cover;
+  display: block;
 }
 
 .name {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 600;
+  font-family: var(--font-display);
+  letter-spacing: 0.5px;
 }
 
 .version {
@@ -56,17 +97,18 @@ body {
 }
 
 .meta {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
+  text-align: center;
 }
 
 .close-btn {
-  position: fixed;
-  top: 12px;
+  position: absolute;
+  top: 10px;
   right: 12px;
-  width: 28px;
-  height: 28px;
-  border-radius: 10px;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
   border: 1px solid rgba(148, 171, 197, 0.35);
   background: rgba(148, 171, 197, 0.12);
   color: var(--ink);
@@ -74,9 +116,12 @@ body {
   display: grid;
   place-items: center;
   transition: all 0.2s ease;
+  font-size: 14px;
+  z-index: 2;
 }
 
 .close-btn:hover {
   border-color: rgba(244, 179, 74, 0.5);
-  color: rgba(244, 179, 74, 0.9);
+  color: var(--accent);
+  transform: translateY(-1px);
 }

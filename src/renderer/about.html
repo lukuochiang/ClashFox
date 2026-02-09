@@ -4,16 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>About ClashFox</title>
+    <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="about.css" />
   </head>
   <body>
-    <button class="close-btn" id="closeBtn" aria-label="Close">✕</button>
-    <div class="about">
+    <div class="about-container">
       <div class="about-title">About ClashFox</div>
-      <img class="logo" src="../../assets/logo.png" alt="ClashFox logo" />
-      <div class="name">ClashFox-<span id="version">0.0.0</span></div>
-<!--      <div class="version">Version <span id="1version">0.0.0</span></div>-->
-      <div class="meta">By ClashFox Team</div>
+      <button class="close-btn" id="closeBtn" aria-label="Close">✕</button>
+      <div class="about-content">
+        <img class="logo" src="../../assets/logo.png" alt="ClashFox logo" />
+        <div class="name">ClashFox-<span id="version">0.0.0</span></div>
+        <div class="meta">By ClashFox Team</div>
+      </div>
     </div>
     <script>
       const { ipcRenderer } = require('electron');
