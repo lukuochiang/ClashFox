@@ -1,6 +1,6 @@
 {
   "name": "clashfox-gui",
-  "version": "0.2.9",
+  "version": "0.3.0",
   "description": "ClashFox Mihomo Toolkit GUI",
   "main": "src/main.js",
   "type": "commonjs",

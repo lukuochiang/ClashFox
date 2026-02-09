@@ -137,6 +137,36 @@ body[data-theme="day"]::after {
   visibility: visible;
 }
 
+/* 自定义WebKit滚动条样式 - 默认隐藏 */
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* 当内容滚动时显示滚动条 */
+.content:hover::-webkit-scrollbar,
+.content:focus::-webkit-scrollbar,
+.panel:hover::-webkit-scrollbar,
+.panel:focus::-webkit-scrollbar {
+  width: 6px;
+}
+
+.content:hover::-webkit-scrollbar-track,
+.content:focus::-webkit-scrollbar-track,
+.panel:hover::-webkit-scrollbar-track,
+.panel:focus::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.content:hover::-webkit-scrollbar-thumb,
+.content:focus::-webkit-scrollbar-thumb,
+.panel:hover::-webkit-scrollbar-thumb,
+.panel:focus::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 171, 197, 0.5);
+  border-radius: 3px;
+  border-right: 10px solid transparent;
+}
+
 /* Tooltip positioning adjustments */
 [data-i18n-tip][data-position="top"]::after,
 [data-i18n-tip][data-position="top"]::before {
@@ -331,10 +361,14 @@ body[data-theme="day"] .sidebar {
 
 .content {
   padding: 30px 36px 26px;
-  overflow: hidden;
+  overflow-y: auto;
   height: 100%;
   display: flex;
   flex-direction: column;
+  /* 默认隐藏滚动条但保留滚动功能 */
+  scrollbar-width: none;
+  /* 增加右侧内边距，为滚动条留出空间 */
+  padding-right: 42px;
 }
 
 .topbar {
@@ -467,16 +501,20 @@ h1 {
   animation: fadeUp 0.4s ease;
   flex: 1;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(148, 171, 197, 0.5) transparent;
+  /* 默认隐藏滚动条但保留滚动功能 */
+  scrollbar-width: none;
+  /* 增加右侧内边距，为滚动条留出空间 */
+  padding-right: 6px;
 }
 
 .panel.active {
   display: block;
   flex: 1;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(148, 171, 197, 0.5) transparent;
+  /* 默认隐藏滚动条但保留滚动功能 */
+  scrollbar-width: none;
+  /* 增加右侧内边距，为滚动条留出空间 */
+  padding-right: 6px;
 }
 
 .panel-grid {

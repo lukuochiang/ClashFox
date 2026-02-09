@@ -186,7 +186,7 @@ const I18N = {
       refresh: 'Refresh',
     },
     switch: {
-      title: 'Switch Kernel Version',
+      title: 'Switch Kernel',
       refresh: 'Refresh Backups',
       action: 'Switch to Selected',
     },
