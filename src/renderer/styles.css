@@ -50,7 +50,7 @@ body {
     radial-gradient(circle at 30% 70%, #1a332f, transparent 55%),
     linear-gradient(145deg, var(--bg-1), var(--bg-2));
   min-height: 100vh;
-  /*overflow: hidden;*/
+  overflow: hidden;
 }
 
 body[data-theme="day"] {
@@ -200,6 +200,7 @@ body[data-theme="day"]::after {
   height: 100vh;
   position: relative;
   z-index: 1;
+  overflow: hidden;
 }
 
 .sidebar {
@@ -330,7 +331,10 @@ body[data-theme="day"] .sidebar {
 
 .content {
   padding: 30px 36px 26px;
-  overflow: auto;
+  overflow: hidden;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .topbar {
@@ -461,10 +465,18 @@ h1 {
 .panel {
   display: none;
   animation: fadeUp 0.4s ease;
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 171, 197, 0.5) transparent;
 }
 
 .panel.active {
   display: block;
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 171, 197, 0.5) transparent;
 }
 
 .panel-grid {
