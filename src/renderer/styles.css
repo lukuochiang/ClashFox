@@ -13,6 +13,8 @@
   --shadow: rgba(0, 0, 0, 0.35);
   --font-display: "Georgia", "Times New Roman", serif;
   --font-body: "Trebuchet MS", "Verdana", sans-serif;
+  --tooltip-bg: rgba(0, 0, 0, 0.9);
+  --tooltip-text: #ffffff;
 }
 
 body[data-theme="night"] {
@@ -29,7 +31,9 @@ body[data-theme="day"] {
   --accent-strong: #e56b3b;
   --mint: #2f8f78;
   --ink: #1f2a36;
-  --muted: #5b6e83;
+  /*--muted: #5b6e83;*/
+  /* 增加对比度 */
+  --muted: #3a4b5c;
   --border: rgba(96, 113, 133, 0.25);
   --shadow: rgba(31, 46, 60, 0.12);
 }
@@ -46,7 +50,7 @@ body {
     radial-gradient(circle at 30% 70%, #1a332f, transparent 55%),
     linear-gradient(145deg, var(--bg-1), var(--bg-2));
   min-height: 100vh;
-  overflow: hidden;
+  /*overflow: hidden;*/
 }
 
 body[data-theme="day"] {
@@ -83,6 +87,111 @@ body[data-theme="day"]::before {
 
 body[data-theme="day"]::after {
   background: radial-gradient(circle, rgba(140, 224, 198, 0.28), transparent 70%);
+}
+
+/* -------------------- TOOLTIP STYLES -------------------- */
+[data-i18n-tip] {
+  position: relative;
+  cursor: help;
+}
+
+[data-i18n-tip]::after {
+  content: attr(data-i18n-tip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 12px;
+  background: var(--tooltip-bg);
+  color: var(--tooltip-text);
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+}
+
+[data-i18n-tip]::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 6px;
+  border-style: solid;
+  border-color: var(--tooltip-bg) transparent transparent transparent;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  z-index: 1000;
+  margin-bottom: -1px;
+}
+
+[data-i18n-tip]:hover::after,
+[data-i18n-tip]:hover::before {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Tooltip positioning adjustments */
+[data-i18n-tip][data-position="top"]::after,
+[data-i18n-tip][data-position="top"]::before {
+  bottom: 100%;
+  top: auto;
+}
+
+[data-i18n-tip][data-position="bottom"]::after {
+  bottom: auto;
+  top: 100%;
+}
+
+[data-i18n-tip][data-position="bottom"]::before {
+  bottom: auto;
+  top: 100%;
+  border-color: transparent transparent var(--tooltip-bg) transparent;
+  margin-top: -1px;
+}
+
+[data-i18n-tip][data-position="left"]::after {
+  left: auto;
+  right: 100%;
+  bottom: auto;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-right: 8px;
+}
+
+[data-i18n-tip][data-position="left"]::before {
+  left: auto;
+  right: 100%;
+  bottom: auto;
+  top: 50%;
+  transform: translateY(-50%);
+  border-color: transparent transparent transparent var(--tooltip-bg);
+  margin-right: -1px;
+}
+
+[data-i18n-tip][data-position="right"]::after {
+  left: 100%;
+  right: auto;
+  bottom: auto;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 8px;
+}
+
+[data-i18n-tip][data-position="right"]::before {
+  left: 100%;
+  right: auto;
+  bottom: auto;
+  top: 50%;
+  transform: translateY(-50%);
+  border-color: transparent var(--tooltip-bg) transparent transparent;
+  margin-left: -1px;
 }
 
 .app {
@@ -918,6 +1027,12 @@ h1 {
   transition: all 0.2s ease;
   border: 1px solid var(--border);
   z-index: 2;
+}
+
+/* 日间模式下的tooltip样式 */
+body[data-theme="day"] [data-tooltip]:hover::after {
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
 }
 
 .btn.has-tip:not([data-tip])::after,

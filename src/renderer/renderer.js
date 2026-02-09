@@ -55,6 +55,7 @@ const installStatus = document.getElementById('installStatus');
 const installProgress = document.getElementById('installProgress');
 const installVersionRow = document.getElementById('installVersionRow');
 const installVersion = document.getElementById('installVersion');
+const cancelInstallBtn = document.getElementById('cancelInstallBtn');
 const configPathInput = document.getElementById('configPath');
 const overviewConfigPath = document.getElementById('overviewConfigPath');
 const overviewBrowseConfig = document.getElementById('overviewBrowseConfig');
@@ -1516,12 +1517,19 @@ function getAutoLanguage() {
 function applyI18n() {
   document.querySelectorAll('[data-i18n]').forEach((el) => {
     const key = el.dataset.i18n;
-    el.textContent = t(key);
+    const tip = t(key);
+    if (tip && tip.trim() !== '') {
+      el.setAttribute('title', tip);
+    }
+    el.textContent = tip;
   });
   document.querySelectorAll('[data-i18n-tip]').forEach((el) => {
     const key = el.dataset.i18nTip;
     const tip = t(key);
     el.dataset.tip = tip;
+    // 替换现有的title设置
+    el.setAttribute('data-tooltip', tip);
+    // 保持title属性用于可访问性
     el.setAttribute('title', tip);
   });
   document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
@@ -1806,6 +1814,9 @@ function setInstallState(nextState, errorMessage = '') {
   installProgress.classList.toggle('show', nextState === 'loading');
   installBtn.disabled = nextState === 'loading';
   githubUser.disabled = nextState === 'loading';
+  if (cancelInstallBtn) {
+    cancelInstallBtn.disabled = nextState !== 'loading';
+  }
   if (installVersion) {
     installVersion.disabled = nextState === 'loading';
   }
@@ -1835,6 +1846,13 @@ async function runCommand(command, args = []) {
     return { ok: false, error: 'bridge_missing' };
   }
   return window.clashfox.runCommand(command, args);
+}
+
+async function cancelCommand() {
+  if (!window.clashfox || typeof window.clashfox.cancelCommand !== 'function') {
+    return { ok: false, error: 'bridge_missing' };
+  }
+  return window.clashfox.cancelCommand();
 }
 
 async function loadAppInfo() {
@@ -2413,9 +2431,26 @@ if (installBtn) {
       loadStatus();
     } else if (response.error === 'cancelled') {
       setInstallState('idle');
+      showToast('Installation cancelled', 'info');
     } else {
       setInstallState('error', response.error || '');
-      showToast(response.error || 'Install failed', 'error');
+      // 添加恢复提示
+      if (response.error && response.error !== 'empty_output') {
+        showToast(`Install failed: ${response.error}. Try using backups to restore.`, 'error');
+      } else {
+        showToast('Install failed', 'error');
+      }
+    }
+  });
+}
+
+// 添加取消按钮事件监听
+if (cancelInstallBtn) {
+  cancelInstallBtn.addEventListener('click', async () => {
+    const response = await cancelCommand();
+    if (response.ok) {
+      setInstallState('idle');
+      showToast('Installation cancelled', 'info');
     }
   });
 }
@@ -2501,97 +2536,97 @@ if (settingsBrowseConfig) {
   });
 }
 
-if (startBtn) {
-  startBtn.addEventListener('click', async () => {
-    if (state.coreActionInFlight) {
-      return;
-    }
-    if (state.coreRunning) {
+// 统一的核心操作处理函数
+async function handleCoreAction(action, button) {
+  // 检查是否有操作正在进行
+  if (state.coreActionInFlight) {
+    return;
+  }
+  
+  // 设置操作中状态
+  setCoreActionState(true);
+  
+  try {
+    // 检查当前运行状态
+    if (action === 'start' && state.coreRunning) {
       showToast(t('labels.alreadyRunning'));
       setStatusInterim(true);
       loadStatus();
       setTimeout(() => loadStatus(), 1200);
       return;
     }
-    const args = [];
-    const configPath = getCurrentConfigPath();
-    if (configPath) {
-      args.push('--config', configPath);
-    }
-    setCoreActionState(true);
-    setStatusInterim(true);
-    const response = await runCommandWithSudo('start', args);
-    if (response.ok) {
-      showToast(t('labels.startSuccess'));
-    } else {
-      showToast(response.error || 'Start failed', 'error');
-    }
-    await loadStatus();
-    setTimeout(() => loadStatus(), 1200);
-    setCoreActionState(false);
-  });
-}
-
-if (stopBtn) {
-  stopBtn.addEventListener('click', async () => {
-    if (state.coreActionInFlight) {
-      return;
-    }
-    if (!state.coreRunning) {
+    
+    if (action === 'stop' && !state.coreRunning) {
       showToast(t('labels.alreadyStopped'));
       return;
     }
-    setCoreActionState(true);
-    setStatusInterim(false);
-    const response = await runCommandWithSudo('stop');
-    if (response.ok) {
-      showToast(t('labels.stopped'));
-    } else {
-      showToast(response.error || 'Stop failed', 'error');
+    
+    // 重启操作的特殊处理
+    if (action === 'restart') {
+      if (!state.coreRunning) {
+        showToast(t('labels.restartStarts'));
+        // 直接调用启动操作
+        handleCoreAction('start', startBtn);
+        return;
+      }
+      
+      // 先停止
+      setStatusInterim(false);
+      const stopResponse = await runCommandWithSudo('stop');
+      if (!stopResponse.ok) {
+        showToast(stopResponse.error || 'Stop failed', 'error');
+        return;
+      }
     }
+    
+    // 准备启动参数
+    const args = [];
+    if (action === 'start' || action === 'restart') {
+      const configPath = getCurrentConfigPath();
+      if (configPath) {
+        args.push('--config', configPath);
+      }
+      setStatusInterim(true);
+    }
+    
+    // 执行操作
+    const response = await runCommandWithSudo(action === 'restart' ? 'start' : action, args);
+    if (response.ok) {
+      // 根据操作类型显示不同的成功消息
+      const successMessages = {
+        'start': t('labels.startSuccess'),
+        'stop': t('labels.stopped'),
+        'restart': t('labels.restartSuccess')
+      };
+      showToast(successMessages[action]);
+    } else {
+      showToast(response.error || `${action.charAt(0).toUpperCase() + action.slice(1)} failed`, 'error');
+    }
+    
+  } catch (error) {
+    showToast(error.message || 'An unexpected error occurred', 'error');
+  } finally {
+    // 无论成功失败，都更新状态
     await loadStatus();
-    setTimeout(() => loadStatus(), 1200);
+    const delay = action === 'restart' ? 1500 : 1200;
+    setTimeout(() => loadStatus(), delay);
+    
+    // 重置操作中状态
     setCoreActionState(false);
-  });
+  }
+}
+
+// 使用统一的处理函数
+if (startBtn) {
+  startBtn.addEventListener('click', () => handleCoreAction('start', startBtn));
+}
+
+if (stopBtn) {
+  stopBtn.addEventListener('click', () => handleCoreAction('stop', stopBtn));
 }
 
 if (restartBtn) {
-  restartBtn.addEventListener('click', async () => {
-    if (state.coreActionInFlight) {
-      return;
-    }
-    if (!state.coreRunning) {
-      showToast(t('labels.restartStarts'));
-      if (startBtn) {
-        startBtn.click();
-      }
-      return;
-    }
-    setCoreActionState(true);
-    setStatusInterim(false);
-    const stopResponse = await runCommandWithSudo('stop');
-    if (!stopResponse.ok) {
-      showToast(stopResponse.error || 'Stop failed', 'error');
-      await loadStatus();
-      setCoreActionState(false);
-      return;
-    }
-    const args = [];
-    const configPath = getCurrentConfigPath();
-    if (configPath) {
-      args.push('--config', configPath);
-    }
-    setStatusInterim(true);
-    const startResponse = await runCommandWithSudo('start', args);
-    if (startResponse.ok) {
-      showToast(t('labels.restartSuccess'));
-    } else {
-      showToast(startResponse.error || 'Start failed', 'error');
-    }
-    await loadStatus();
-    setTimeout(() => loadStatus(), 1500);
-    setCoreActionState(false);
-  });
+  restartBtn.addEventListener('click', () => handleCoreAction('restart', restartBtn));
 }
 
 if (refreshBackups) {

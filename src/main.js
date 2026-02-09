@@ -7,6 +7,7 @@ const { spawn, execFileSync } = require('child_process');
 const ROOT_DIR = path.join(__dirname, '..');
 const BRIDGE_PATH = path.join(ROOT_DIR, 'scripts', 'gui_bridge.sh');
 let mainWindow = null;
+let currentProcess = null; // 用于跟踪当前正在运行的进程
 
 if (process.env.CLASHFOX_DEV === '1') {
   // Hot reload for main + renderer during local development.
@@ -18,31 +19,46 @@ if (process.env.CLASHFOX_DEV === '1') {
 
 function runBridge(args) {
   return new Promise((resolve) => {
-    const child = spawn('bash', [BRIDGE_PATH, ...args], { cwd: ROOT_DIR });
-    let stdout = '';
-    let stderr = '';
+    try {
+      const child = spawn('bash', [BRIDGE_PATH, ...args], { cwd: ROOT_DIR });
+      let stdout = '';
+      let stderr = '';
 
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk.toString();
-    });
-
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
-
-    child.on('close', (code) => {
-      const output = stdout.trim();
-      if (!output) {
-        resolve({ ok: false, error: 'empty_output', details: stderr.trim(), exitCode: code });
-        return;
+      // 修复变量名不匹配的问题，使用child而不是currentProcess
+      if (child.stdout) {
+        child.stdout.on('data', (chunk) => {
+          stdout += chunk.toString();
+        });
       }
-      try {
-        const parsed = JSON.parse(output);
-        resolve(parsed);
-      } catch (err) {
-        resolve({ ok: false, error: 'parse_error', details: output, exitCode: code });
+
+      if (child.stderr) {
+        child.stderr.on('data', (chunk) => {
+          stderr += chunk.toString();
+        });
       }
-    });
+
+      child.on('close', (code) => {
+        const output = stdout.trim();
+        if (!output) {
+          resolve({ ok: false, error: 'empty_output', details: stderr.trim(), exitCode: code });
+          return;
+        }
+        try {
+          const parsed = JSON.parse(output);
+          resolve(parsed);
+        } catch (err) {
+          resolve({ ok: false, error: 'parse_error', details: output, exitCode: code });
+        }
+      });
+      
+      // 添加进程错误处理
+      child.on('error', (err) => {
+        resolve({ ok: false, error: 'process_error', details: err.message });
+      });
+    } catch (err) {
+      // 捕获创建进程时的异常
+      resolve({ ok: false, error: 'unexpected_error', details: err.message });
+    }
   });
 }
 
@@ -172,6 +188,16 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:command', (_event, command, args = []) => {
     return runBridge([command, ...args]);
+  });
+  
+  // 处理取消命令
+  ipcMain.handle('clashfox:cancelCommand', () => {
+    if (currentProcess) {
+      currentProcess.kill(); // 发送SIGTERM信号
+      currentProcess = null;
+      return { ok: true, message: 'Operation cancelled' };
+    }
+    return { ok: false, error: 'no_process_running', message: 'No process is currently running' };
   });
 
   ipcMain.handle('clashfox:selectConfig', async () => {
