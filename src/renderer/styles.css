@@ -803,7 +803,7 @@ h1 {
   border: 1px solid var(--border);
   padding: 22px;
   border-radius: 18px;
-  box-shadow: 0 20px 40px var(--shadow);
+  box-shadow: none;
 }
 
 .card h3 {

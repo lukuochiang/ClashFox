@@ -20,7 +20,7 @@ if (process.env.CLASHFOX_DEV === '1') {
 function runBridge(args) {
   return new Promise((resolve) => {
     try {
-      console.log('[runBridge] Running command:', args);
+      // console.log('[runBridge] Running command:', args);
       const commandType = args[0];
 
       // 1. 如果是安装命令，终止当前正在运行的安装进程（如果有）
@@ -28,11 +28,11 @@ function runBridge(args) {
       
       if (isInstallCommand && currentInstallProcess) {
         const oldPid = currentInstallProcess.pid;
-        console.log('[runBridge] Terminating existing install process with PID:', oldPid);
+        // console.log('[runBridge] Terminating existing install process with PID:', oldPid);
         try {
           currentInstallProcess.kill(); // 直接终止，不等待优雅终止
         } catch (err) {
-          console.error('[runBridge] Error terminating existing install process:', err);
+          // console.error('[runBridge] Error terminating existing install process:', err);
         }
         // 立即清空引用，为新进程做准备
         currentInstallProcess = null;
@@ -45,10 +45,10 @@ function runBridge(args) {
       // 只跟踪安装进程
       if (isInstallCommand) {
         currentInstallProcess = child;
-        console.log('[runBridge] Tracking install process with PID:', processId);
+        // console.log('[runBridge] Tracking install process with PID:', processId);
       }
       
-      console.log('[runBridge] Started new', commandType, 'process with PID:', processId);
+      // console.log('[runBridge] Started new', commandType, 'process with PID:', processId);
       
       // 3. 进程输出和终止处理
       let stdout = '';
@@ -58,11 +58,11 @@ function runBridge(args) {
       // 超时保护
       const timeout = setTimeout(() => {
         if (!resolved && child) {
-          console.log('[runBridge] Process timeout, killing PID:', processId);
+          // console.log('[runBridge] Process timeout, killing PID:', processId);
           try {
             child.kill();
           } catch (err) {
-            console.error('[runBridge] Error killing timed-out process:', err);
+            // console.error('[runBridge] Error killing timed-out process:', err);
           }
         }
       }, 30000);
@@ -90,7 +90,7 @@ function runBridge(args) {
         // 只在当前进程是这个安装进程时才清空引用
         if (isInstallCommand && currentInstallProcess === child) {
           currentInstallProcess = null;
-          console.log('[runBridge] Cleared install process reference for PID:', processId);
+          // console.log('[runBridge] Cleared install process reference for PID:', processId);
         }
         
         const output = stdout.trim();
@@ -140,7 +140,7 @@ function runBridge(args) {
         
         if (isInstallCommand && currentInstallProcess === child) {
           currentInstallProcess = null;
-          console.log('[runBridge] Cleared install process reference for PID:', processId, '(error case)');
+          // console.log('[runBridge] Cleared install process reference for PID:', processId, '(error case)');
         }
         
         resolve({ 
@@ -151,7 +151,7 @@ function runBridge(args) {
       });
       
     } catch (err) {
-      console.error('Error in runBridge:', err);
+      // console.error('Error in runBridge:', err);
       resolve({ 
         ok: false, 
         error: 'unexpected_error', 
@@ -211,7 +211,7 @@ function setDockIcon() {
   }
   const icnsPath = path.join(ROOT_DIR, 'assets', 'logo.icns');
   if (!fs.existsSync(icnsPath)) {
-    console.log('[dock] icns missing:', icnsPath);
+    // console.log('[dock] icns missing:', icnsPath);
     return;
   }
   let dockIcon = nativeImage.createFromPath(icnsPath);
@@ -246,7 +246,7 @@ function setDockIcon() {
     }
     fs.rmSync(tmpDir, { recursive: true, force: true });
   } catch (error) {
-    console.log('[dock] iconutil fallback failed:', error.message);
+    // console.log('[dock] iconutil fallback failed:', error.message);
   }
 
   if (!dockIcon.isEmpty()) {
@@ -293,13 +293,13 @@ app.whenReady().then(() => {
   ipcMain.handle('clashfox:cancelCommand', () => {
     if (currentInstallProcess) {
       const pid = currentInstallProcess.pid;
-      console.log('[cancelCommand] Cancelling install process with PID:', pid);
+      // console.log('[cancelCommand] Cancelling install process with PID:', pid);
       try {
         // 发送SIGINT信号终止安装进程
         currentInstallProcess.kill('SIGINT');
         return { ok: true, message: 'Install cancellation initiated' };
       } catch (err) {
-        console.error('[cancelCommand] Error cancelling install process:', err);
+        // console.error('[cancelCommand] Error cancelling install process:', err);
         return { ok: false, error: 'cancel_error', details: err.message };
       }
     }

@@ -61,43 +61,45 @@
         </header>
 
         <section id="logs" class="panel active">
-          <div class="card">
-            <h3 data-i18n="logs.title">Kernel Logs</h3>
-            <div class="form-row">
-              <div class="field-inline">
-                <label data-i18n="logs.lines">Lines</label>
-                <input id="logLines" type="number" min="10" max="2000" value="10" />
+          <div class="panel-grid">
+            <div class="card card-full">
+              <h3 data-i18n="logs.title">Kernel Logs</h3>
+              <div class="form-row">
+                <div class="field-inline">
+                  <label data-i18n="logs.lines">Lines</label>
+                  <input id="logLines" type="number" min="10" max="2000" value="10" />
+                </div>
+                <button class="btn" id="logRefresh" data-i18n="logs.refresh">Refresh</button>
+                <div class="interval-group">
+                  <label data-i18n="logs.interval">Interval</label>
+                  <select id="logIntervalPreset">
+                    <option value="1">1s</option>
+                    <option value="3" selected>3s</option>
+                    <option value="5">5s</option>
+                    <option value="10">10s</option>
+                    <option value="15">15s</option>
+                    <option value="30">30s</option>
+                    <option value="60">60s</option>
+                  </select>
+                </div>
+                <label class="toggle">
+                  <input id="logAutoRefresh" type="checkbox" />
+                  <span class="toggle-pill"></span>
+                  <span data-i18n="logs.auto">Auto refresh</span>
+                </label>
               </div>
-              <button class="btn" id="logRefresh" data-i18n="logs.refresh">Refresh</button>
-              <div class="interval-group">
-                <label data-i18n="logs.interval">Interval</label>
-                <select id="logIntervalPreset">
-                  <option value="1">1s</option>
-                  <option value="3" selected>3s</option>
-                  <option value="5">5s</option>
-                  <option value="10">10s</option>
-                  <option value="15">15s</option>
-                  <option value="30">30s</option>
-                  <option value="60">60s</option>
-                </select>
+              <pre class="log-view" id="logContent"></pre>
+            </div>
+            <div class="card card-full">
+              <h3 data-i18n="clean.title">Clean Logs</h3>
+              <div class="radio-group">
+                <label><input type="radio" name="cleanMode" value="all" checked /> <span data-i18n="clean.all">Delete all backups</span></label>
+                <label><input type="radio" name="cleanMode" value="7d" /> <span data-i18n="clean.7d">Keep last 7 days</span></label>
+                <label><input type="radio" name="cleanMode" value="30d" /> <span data-i18n="clean.30d">Keep last 30 days</span></label>
               </div>
-              <label class="toggle">
-                <input id="logAutoRefresh" type="checkbox" />
-                <span class="toggle-pill"></span>
-                <span data-i18n="logs.auto">Auto refresh</span>
-              </label>
-            </div>
-            <pre class="log-view" id="logContent"></pre>
-          </div>
-          <div class="card">
-            <h3 data-i18n="clean.title">Clean Logs</h3>
-            <div class="radio-group">
-              <label><input type="radio" name="cleanMode" value="all" checked /> <span data-i18n="clean.all">Delete all backups</span></label>
-              <label><input type="radio" name="cleanMode" value="7d" /> <span data-i18n="clean.7d">Keep last 7 days</span></label>
-              <label><input type="radio" name="cleanMode" value="30d" /> <span data-i18n="clean.30d">Keep last 30 days</span></label>
-            </div>
-            <div class="action-row">
-              <button class="btn danger" id="cleanBtn" data-i18n="clean.action">Clean Logs</button>
+              <div class="action-row">
+                <button class="btn danger" id="cleanBtn" data-i18n="clean.action">Clean Logs</button>
+              </div>
             </div>
           </div>
         </section>
