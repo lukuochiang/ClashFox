@@ -1,4 +1,8 @@
-# ClashFox
+<div align="center">
+  <img src="assets/logo.jpeg" alt="ClashFox Logo" width="200">
+</div>
+
+# ClashFox - Native Proxy
 
 ## GUI
 
