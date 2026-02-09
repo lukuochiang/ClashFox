@@ -310,6 +310,8 @@ const I18N = {
       pagination: 'Pagination',
       switchPageSize: 'Switch Page Size',
       backupsPageSize: 'Backups Page Size',
+      debugMode: 'Debug Mode',
+      debugModeLabel: 'Enable Debug Mode',
     },
   },
   zh: {
@@ -503,6 +505,8 @@ const I18N = {
       pagination: '分页',
       switchPageSize: '切换页大小',
       backupsPageSize: '备份页大小',
+      debugMode: '调试模式',
+      debugModeLabel: '启用调试模式',
     },
   },
   ja: {
@@ -695,6 +699,8 @@ const I18N = {
       pagination: 'ページング',
       switchPageSize: '切替ページサイズ',
       backupsPageSize: 'バックアップページサイズ',
+      debugMode: 'デバッグモード',
+      debugModeLabel: 'デバッグモードを有効にする',
     },
   },
   ko: {
@@ -887,6 +893,8 @@ const I18N = {
       pagination: '페이지네이션',
       switchPageSize: '전환 페이지 크기',
       backupsPageSize: '백업 페이지 크기',
+      debugMode: '디버그 모드',
+      debugModeLabel: '디버그 모드 활성화',
     },
   },
   fr: {
@@ -1079,6 +1087,8 @@ const I18N = {
       pagination: 'Pagination',
       switchPageSize: 'Taille de page pour la bascule',
       backupsPageSize: 'Taille de page des sauvegardes',
+      debugMode: 'Mode débogage',
+      debugModeLabel: 'Activer le mode débogage',
     },
   },
   de: {
@@ -1271,6 +1281,8 @@ const I18N = {
       pagination: 'Paginierung',
       switchPageSize: 'Seitengröße Umschalten',
       backupsPageSize: 'Seitengröße Backups',
+      debugMode: 'Debug-Modus',
+      debugModeLabel: 'Debug-Modus aktivieren',
     },
   },
   ru: {
@@ -1463,6 +1475,8 @@ const I18N = {
       pagination: 'Пагинация',
       switchPageSize: 'Размер страницы переключения',
       backupsPageSize: 'Размер страницы резервных копий',
+      debugMode: 'Режим отладки',
+      debugModeLabel: 'Включить режим отладки',
     },
   },
 };
