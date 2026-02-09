@@ -172,6 +172,7 @@ function createWindow() {
     webPreferences: {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
+      devTools: true
     },
   });
 
@@ -199,6 +200,7 @@ function createAboutWindow() {
     webPreferences: {
       contextIsolation: false,
       nodeIntegration: true,
+      devTools: false
     },
   });
 
