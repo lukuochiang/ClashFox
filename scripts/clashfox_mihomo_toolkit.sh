@@ -7,7 +7,7 @@
 # -----------------------------------------------------------------------------
 
 # Author: Kuochiang Lu
-# Version: v1.2.5(10)
+# Version: v1.2.5(12)
 # Last Updated: 2026-02-10
 #
 # 描述：
@@ -31,7 +31,7 @@
 # shc -f clashfox_mihomo_toolkit.sh -o ../shc/clashfox-installer && rm -f clashfox_mihomo_toolkit.sh.x.c
 SCRIPT_NAME="ClashFox Mihomo Toolkit"
 # 脚本版本号
-SCRIPT_VERSION="v1.2.3(53)"
+SCRIPT_VERSION="v1.2.5(12)"
 
 # Language settings: set CLASHFOX_LANG=zh|en|auto (default: auto)
 CLASHFOX_LANG="${CLASHFOX_LANG:-auto}"
@@ -2994,9 +2994,6 @@ start_mihomo_kernel() {
         fi
     fi
 
-    # 设置配置文件选项
-    CONFIG_OPTION="-f $CONFIG_PATH"
-
     # 检查配置文件是否可读
     if [ ! -r "$CONFIG_PATH" ]; then
         log_error "$(tr_msg MSG_CONFIG_READ_FAIL "$CONFIG_PATH")"
@@ -3017,8 +3014,8 @@ start_mihomo_kernel() {
 
     # 启动内核
     log_fmt "${BLUE}$(tr_msg MSG_START_PROCESS)"
-    sudo nohup ./$ACTIVE_CORE $CONFIG_OPTION -d $CLASHFOX_DATA_DIR >> "$CLASHFOX_LOG_DIR/clashfox.log" 2>&1 &
-    log_success "$(tr_msg MSG_START_COMMAND "nohup ./$ACTIVE_CORE $CONFIG_OPTION -d $CLASHFOX_DATA_DIR >> $CLASHFOX_LOG_DIR/clashfox.log 2>&1 &")"
+    sudo nohup ./"$ACTIVE_CORE" -f "$CONFIG_PATH" -d "$CLASHFOX_DATA_DIR" >> "$CLASHFOX_LOG_DIR/clashfox.log" 2>&1 &
+    log_success "$(tr_msg MSG_START_COMMAND "nohup ./$ACTIVE_CORE -f $CONFIG_PATH -d "$CLASHFOX_DATA_DIR" >> $CLASHFOX_LOG_DIR/clashfox.log 2>&1 &")"
     PID=$!
 
     sleep 5

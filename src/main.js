@@ -1,14 +1,14 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme, shell } = require('electron');
 const { spawn, execFileSync } = require('child_process');
 
 const ROOT_DIR = path.join(__dirname, '..');
 app.name = 'ClashFox';
 app.setName('ClashFox');
 const APP_DATA_DIR = path.join(app.getPath('appData'), app.getName());
-const CHROMIUM_DIR = path.join(APP_DATA_DIR, 'Others');
+const CHROMIUM_DIR = path.join(APP_DATA_DIR, 'others');
 app.setPath('userData', CHROMIUM_DIR);
 // app.setPath('cache', path.join(CHROMIUM_DIR, 'Cache'));
 // app.setPath('logs', path.join(CHROMIUM_DIR, 'Logs'));
@@ -143,7 +143,8 @@ function runBridge(args) {
           return;
         }
       }
-      const child = spawn('bash', [bridgePath, ...args], { cwd: ROOT_DIR });
+      const cwd = app.isPackaged ? APP_DATA_DIR : ROOT_DIR;
+      const child = spawn('bash', [bridgePath, ...args], { cwd });
       const processId = child.pid;
       
       // 只跟踪安装进程
@@ -464,6 +465,18 @@ app.whenReady().then(() => {
   ipcMain.handle('clashfox:openAbout', () => {
     createAboutWindow();
     return { ok: true };
+  });
+
+  ipcMain.handle('clashfox:openExternal', async (_event, url) => {
+    if (!url || typeof url !== 'string') {
+      return { ok: false };
+    }
+    try {
+      await shell.openExternal(url);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
   });
 
   ipcMain.handle('clashfox:readSettings', () => {

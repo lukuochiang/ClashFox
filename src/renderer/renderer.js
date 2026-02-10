@@ -104,6 +104,8 @@ const logContent = document.getElementById('logContent');
 const logAutoRefresh = document.getElementById('logAutoRefresh');
 const logIntervalPreset = document.getElementById('logIntervalPreset');
 const cleanBtn = document.getElementById('cleanBtn');
+const zashboardFrame = document.getElementById('zashboardFrame');
+const zashboardEmpty = document.getElementById('zashboardEmpty');
 const sudoModal = document.getElementById('sudoModal');
 const sudoPassword = document.getElementById('sudoPassword');
 const sudoCancel = document.getElementById('sudoCancel');
@@ -152,6 +154,7 @@ const I18N = {
       switch: 'Switch Kernel',
       backups: 'Backups',
       logs: 'Logs',
+      zashboard: 'Zashboard',
       settings: 'Settings',
       help: 'Help',
     },
@@ -252,6 +255,11 @@ const I18N = {
       line2: 'Some actions require sudo and may prompt for your macOS password.',
       line3: 'If you are running on non-macOS, the toolkit functions are disabled.',
     },
+    zashboard: {
+      title: 'Zashboard',
+      hint: 'If it does not load, please start the kernel first.',
+      unavailable: 'Zashboard is not reachable.',
+    },
     actions: {
       start: 'Start',
       stop: 'Stop',
@@ -280,6 +288,7 @@ const I18N = {
       configsEmpty: 'No configs found.',
       kernelsEmpty: 'No kernels found.',
       current: 'Current',
+      backup: 'Backup',
       configsRefreshed: 'Configs refreshed.',
       statusRefreshed: 'Status refreshed.',
       backupsRefreshed: 'Backups refreshed.',
@@ -363,6 +372,7 @@ const I18N = {
       switch: '切换内核',
       backups: '备份',
       logs: '日志',
+      zashboard: 'Zashboard面板',
       settings: '设置',
       help: '帮助',
     },
@@ -490,6 +500,7 @@ const I18N = {
       configsEmpty: '没有可用配置。',
       kernelsEmpty: '没有可用内核。',
       current: '当前',
+      backup: '备份',
       configsRefreshed: '配置已刷新。',
       statusRefreshed: '状态已刷新。',
       backupsRefreshed: '备份已刷新。',
@@ -573,6 +584,7 @@ const I18N = {
       switch: 'カーネル切替',
       backups: 'バックアップ',
       logs: 'ログ',
+      zashboard: 'Zashboardパネル',
       settings: '設定',
       help: 'ヘルプ',
     },
@@ -700,6 +712,7 @@ const I18N = {
       configsEmpty: '設定が見つかりません。',
       kernelsEmpty: 'カーネルが見つかりません。',
       current: '現在',
+      backup: 'バックアップ',
       configsRefreshed: '設定を更新しました。',
       statusRefreshed: '状態を更新しました。',
       backupsRefreshed: 'バックアップを更新しました。',
@@ -782,6 +795,7 @@ const I18N = {
       switch: '커널 전환',
       backups: '백업',
       logs: '로그',
+      zashboard: 'Zashboard 패널',
       settings: '설정',
       help: '도움말',
     },
@@ -909,6 +923,7 @@ const I18N = {
       configsEmpty: '설정을 찾을 수 없습니다.',
       kernelsEmpty: '커널을 찾을 수 없습니다.',
       current: '현재',
+      backup: '백업',
       configsRefreshed: '설정을 새로고침했습니다.',
       statusRefreshed: '상태를 새로고침했습니다.',
       backupsRefreshed: '백업을 새로고침했습니다.',
@@ -991,6 +1006,7 @@ const I18N = {
       switch: 'Changer le noyau',
       backups: 'Sauvegardes',
       logs: 'Journaux',
+      zashboard: 'Panneau Zashboard',
       settings: 'Paramètres',
       help: 'Aide',
     },
@@ -1118,6 +1134,7 @@ const I18N = {
       configsEmpty: 'Aucune configuration trouvée.',
       kernelsEmpty: 'Aucun noyau trouvé.',
       current: 'Actuelle',
+      backup: 'Sauvegarde',
       configsRefreshed: 'Configurations actualisées.',
       statusRefreshed: 'Statut actualisé.',
       backupsRefreshed: 'Sauvegardes actualisées.',
@@ -1200,6 +1217,7 @@ const I18N = {
       switch: 'Kernel wechseln',
       backups: 'Backups',
       logs: 'Logs',
+      zashboard: 'Zashboard-Panel',
       settings: 'Einstellungen',
       help: 'Hilfe',
     },
@@ -1327,6 +1345,7 @@ const I18N = {
       configsEmpty: 'Keine Konfigurationen gefunden.',
       kernelsEmpty: 'Keine Kernel gefunden.',
       current: 'Aktuell',
+      backup: 'Backup',
       configsRefreshed: 'Konfigurationen aktualisiert.',
       statusRefreshed: 'Status aktualisiert.',
       backupsRefreshed: 'Backups aktualisiert.',
@@ -1409,6 +1428,7 @@ const I18N = {
       switch: 'Смена ядра',
       backups: 'Резервные копии',
       logs: 'Журналы',
+      zashboard: 'Панель Zashboard',
       settings: 'Настройки',
       help: 'Помощь',
     },
@@ -1536,6 +1556,7 @@ const I18N = {
       configsEmpty: 'Конфигурации не найдены.',
       kernelsEmpty: 'Ядра не найдены.',
       current: 'Текущая',
+      backup: 'Бэкап',
       configsRefreshed: 'Конфигурации обновлены.',
       statusRefreshed: 'Статус обновлен.',
       backupsRefreshed: 'Резервные копии обновлены.',
@@ -1633,6 +1654,7 @@ const state = {
   lastBackups: [],
   configs: [],
   kernels: [],
+  fileSettings: {},
   logTimer: null,
   logIntervalMs: 3000,
   switchPage: 1,
@@ -1738,13 +1760,21 @@ function setLanguage(lang, persist = true, refreshStatus = true) {
 function readSettings() {
   const raw = localStorage.getItem(SETTINGS_KEY);
   if (!raw) {
-    return { ...DEFAULT_SETTINGS };
+    return { ...DEFAULT_SETTINGS, ...(state.fileSettings || {}) };
   }
   try {
     const parsed = JSON.parse(raw);
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    const merged = { ...DEFAULT_SETTINGS, ...parsed };
+    if (state.fileSettings) {
+      if (!merged.configDir && state.fileSettings.configDir) merged.configDir = state.fileSettings.configDir;
+      if (!merged.coreDir && state.fileSettings.coreDir) merged.coreDir = state.fileSettings.coreDir;
+      if (!merged.dataDir && state.fileSettings.dataDir) merged.dataDir = state.fileSettings.dataDir;
+      if (!merged.logDir && state.fileSettings.logDir) merged.logDir = state.fileSettings.logDir;
+      if (!merged.pidDir && state.fileSettings.pidDir) merged.pidDir = state.fileSettings.pidDir;
+    }
+    return merged;
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return { ...DEFAULT_SETTINGS, ...(state.fileSettings || {}) };
   }
 }
 
@@ -1779,6 +1809,7 @@ async function syncSettingsFromFile() {
     }
   }
   delete merged.configPath;
+  state.fileSettings = { ...merged };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
   if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
     const { configPath, ...fileSettings } = merged;
@@ -1788,6 +1819,7 @@ async function syncSettingsFromFile() {
 
 function saveSettings(patch) {
   state.settings = { ...state.settings, ...patch };
+  state.fileSettings = { ...state.fileSettings, ...patch };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
   if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
     const { configPath, ...fileSettings } = state.settings;
@@ -1903,6 +1935,9 @@ function applySettings(settings) {
   }
   if (settingsSwitchPageSize) {
     settingsSwitchPageSize.value = state.settings.switchPageSize;
+  }
+  if (kernelPageSize) {
+    kernelPageSize.value = state.settings.switchPageSize;
   }
   if (backupsPageSize) {
     backupsPageSize.value = state.settings.backupsPageSize;
@@ -2095,15 +2130,16 @@ async function runCommand(command, args = []) {
   if (!window.clashfox || typeof window.clashfox.runCommand !== 'function') {
     return { ok: false, error: 'bridge_missing' };
   }
+  const effectiveSettings = { ...(state.fileSettings || {}), ...(state.settings || {}) };
   const pathArgs = [];
-  if (state.settings.configDir) {
-    pathArgs.push('--config-dir', state.settings.configDir);
+  if (effectiveSettings.configDir) {
+    pathArgs.push('--config-dir', effectiveSettings.configDir);
   }
-  if (state.settings.coreDir) {
-    pathArgs.push('--core-dir', state.settings.coreDir);
+  if (effectiveSettings.coreDir) {
+    pathArgs.push('--core-dir', effectiveSettings.coreDir);
   }
-  if (state.settings.dataDir) {
-    pathArgs.push('--data-dir', state.settings.dataDir);
+  if (effectiveSettings.dataDir) {
+    pathArgs.push('--data-dir', effectiveSettings.dataDir);
   }
   return window.clashfox.runCommand(command, [...pathArgs, ...args]);
 }
@@ -2521,7 +2557,9 @@ function updateOverviewRuntimeUI(data) {
 }
 
 async function loadStatus() {
-  const response = await runCommand('status');
+  const configPath = getCurrentConfigPath();
+  const args = configPath ? ['--config', configPath] : [];
+  const response = await runCommand('status', args);
   if (!response.ok) {
     const msg = response.error === 'bridge_missing' ? t('labels.bridgeMissing') : (response.error || 'Status error');
     showToast(msg, 'error');
@@ -2535,7 +2573,9 @@ async function loadOverview(showToastOnSuccess = false) {
     return false;
   }
   state.overviewLoading = true;
-  const response = await runCommand('overview');
+  const configPath = getCurrentConfigPath();
+  const args = configPath ? ['--config', configPath] : [];
+  const response = await runCommand('overview', args);
   if (!response.ok) {
     state.overviewLoading = false;
     if (showToastOnSuccess) {
@@ -2556,7 +2596,9 @@ async function loadOverviewLite() {
     return false;
   }
   state.overviewLiteLoading = true;
-  const response = await runCommand('overview-lite');
+  const configPath = getCurrentConfigPath();
+  const args = configPath ? ['--config', configPath] : [];
+  const response = await runCommand('overview-lite', args);
   if (!response.ok) {
     state.overviewLiteLoading = false;
     return false;
@@ -2717,7 +2759,11 @@ function renderKernelTable() {
     return;
   }
   const items = state.kernels || [];
-  const size = Number.parseInt(kernelPageSize.value, 10) || 5;
+  const pageSizeRaw = (switchPageSize && switchPageSize.value) || state.settings.switchPageSize || kernelPageSize.value;
+  if (kernelPageSize && switchPageSize) {
+    kernelPageSize.value = switchPageSize.value;
+  }
+  const size = Number.parseInt(pageSizeRaw, 10) || 5;
   const pageData = paginate(items, state.kernelsPage, size);
   state.kernelsPage = pageData.page;
   kernelPageInfo.textContent = `${pageData.page} / ${pageData.totalPages} · ${items.length}`;
@@ -2729,9 +2775,22 @@ function renderKernelTable() {
   html += `<div class="time-head">${t('table.time')}</div></div>`;
 
   pageData.items.forEach((item) => {
+    const name = item && item.name ? item.name : '-';
+    const backupMatch = /^mihomo\\.backup\\.(mihomo-darwin-(amd64|arm64)-.+)\\.([0-9]{8}_[0-9]{6})$/.exec(name);
+    const isBackup = Boolean(backupMatch);
+    const isCurrent = !isBackup && (name === 'mihomo' || name.startsWith('mihomo-darwin-'));
+    const displayName = backupMatch ? backupMatch[1] : name;
+    const timestamp = backupMatch ? backupMatch[4] : (item.modified || '-');
+    const tags = [];
+    if (isCurrent) {
+      tags.push(`<span class="tag current">${t('labels.current')}</span>`);
+    }
+    if (isBackup) {
+      tags.push(`<span class="tag backup">${t('labels.backup')}</span>`);
+    }
     html += '<div class="table-row kernel">';
-    html += `<div class="version-cell">${item.name || '-'}</div>`;
-    html += `<div class="time-cell">${item.modified || '-'}</div></div>`;
+    html += `<div class="version-cell"><span class="kernel-name">${displayName || '-'}</span>${tags.length ? ` <span class="tag-group">${tags.join('')}</span>` : ''}</div>`;
+    html += `<div class="time-cell">${timestamp}</div></div>`;
   });
 
   if (items.length === 0) {
@@ -2872,6 +2931,15 @@ function getSelectedBackupIndex() {
 
 navButtons.forEach((btn) => {
   btn.addEventListener('click', () => {
+    const targetUrl = btn.dataset.url;
+    if (targetUrl) {
+      if (window.clashfox && typeof window.clashfox.openExternal === 'function') {
+        window.clashfox.openExternal(targetUrl);
+      } else {
+        window.open(targetUrl);
+      }
+      return;
+    }
     const targetPage = btn.dataset.page;
     if (targetPage) {
       if (window.clashfox && typeof window.clashfox.navigate === 'function') {
@@ -3160,6 +3228,13 @@ if (kernelNext) {
 }
 if (kernelPageSize) {
   kernelPageSize.addEventListener('change', () => {
+    if (switchPageSize) {
+      switchPageSize.value = kernelPageSize.value;
+    }
+    if (settingsSwitchPageSize) {
+      settingsSwitchPageSize.value = kernelPageSize.value;
+    }
+    saveSettings({ switchPageSize: kernelPageSize.value });
     state.kernelsPage = 1;
     renderKernelTable();
   });
@@ -3367,6 +3442,9 @@ if (switchNext) {
 if (switchPageSize) {
   switchPageSize.addEventListener('change', () => {
     state.switchPage = 1;
+    if (kernelPageSize) {
+      kernelPageSize.value = switchPageSize.value;
+    }
     renderSwitchTable();
     if (settingsSwitchPageSize) {
       settingsSwitchPageSize.value = switchPageSize.value;
@@ -3400,6 +3478,9 @@ if (settingsSwitchPageSize) {
   settingsSwitchPageSize.addEventListener('change', () => {
     if (switchPageSize) {
       switchPageSize.value = settingsSwitchPageSize.value;
+    }
+    if (kernelPageSize) {
+      kernelPageSize.value = settingsSwitchPageSize.value;
     }
     state.switchPage = 1;
     renderSwitchTable();
@@ -3443,6 +3524,9 @@ if (backupsPageSize) {
 if (settingsSwitchPageSize) {
   settingsSwitchPageSize.addEventListener('change', () => {
     switchPageSize.value = settingsSwitchPageSize.value;
+    if (kernelPageSize) {
+      kernelPageSize.value = settingsSwitchPageSize.value;
+    }
     state.switchPage = 1;
     renderSwitchTable();
     saveSettings({ switchPageSize: settingsSwitchPageSize.value });
@@ -3680,11 +3764,38 @@ function waitForBridge(timeoutMs = 5000) {
   });
 }
 
+function initZashboardFrame() {
+  if (!zashboardFrame || !zashboardEmpty) {
+    return;
+  }
+  const showEmpty = () => {
+    zashboardEmpty.classList.add('show');
+  };
+  const hideEmpty = () => {
+    zashboardEmpty.classList.remove('show');
+  };
+
+  showEmpty();
+  const timeout = setTimeout(showEmpty, 1200);
+
+  zashboardFrame.addEventListener('load', () => {
+    clearTimeout(timeout);
+    hideEmpty();
+  });
+  zashboardFrame.addEventListener('error', () => {
+    clearTimeout(timeout);
+    showEmpty();
+  });
+}
+
 async function initApp() {
   await syncSettingsFromFile();
   applySettings(readSettings());
   setActiveNav(pageId);
   loadAppInfo();
+  if (pageId === 'zashboard') {
+    initZashboardFrame();
+  }
   const ok = await waitForBridge();
   if (!ok) {
     showToast(t('labels.bridgeMissing'), 'error');
@@ -3699,6 +3810,7 @@ async function initApp() {
   updateInstallVersionVisibility();
   startOverviewTimer();
   loadConfigs();
+  loadKernels();
   loadBackups();
   loadLogs();
 }

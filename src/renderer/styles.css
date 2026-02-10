@@ -1474,6 +1474,90 @@ body[data-theme="day"] .toggle-pill::after {
   grid-template-columns: 1fr 160px;
 }
 
+.tag-group {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.2;
+  border: 1px solid var(--border);
+  background: rgba(148, 171, 197, 0.12);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tag.current {
+  color: var(--mint);
+  border-color: rgba(140, 224, 198, 0.5);
+  background: rgba(140, 224, 198, 0.12);
+}
+
+.tag.backup {
+  color: var(--accent);
+  border-color: rgba(244, 179, 74, 0.5);
+  background: rgba(244, 179, 74, 0.12);
+}
+
+.zashboard-card {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 220px);
+  min-height: 520px;
+}
+
+.zashboard-frame {
+  flex: 1;
+  margin-top: 12px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  position: relative;
+}
+
+.zashboard-frame iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+
+.zashboard-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, rgba(18, 22, 28, 0.92), rgba(20, 26, 32, 0.82));
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.zashboard-empty.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.zashboard-empty-title {
+  font-size: 14px;
+  color: var(--ink);
+}
+
 .table-row.backup.multi,
 .table-row.header.backup.multi {
   grid-template-columns: 20px 40px minmax(0, 1fr) 160px !important;

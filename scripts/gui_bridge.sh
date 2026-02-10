@@ -24,12 +24,16 @@ CLASHFOX_DEFAULT_DIR="$CLASHFOX_DIR"
 
 set_clashfox_subdirectories
 
-mkdir -p "$CLASHFOX_USER_DATA_DIR" \
-  "$CLASHFOX_CORE_DIR" \
-  "$CLASHFOX_CONFIG_DIR" \
-  "$CLASHFOX_DATA_DIR" \
-  "$CLASHFOX_LOG_DIR" \
-  "$CLASHFOX_PID_DIR" 2>/dev/null || true
+ensure_runtime_dirs() {
+    mkdir -p "$CLASHFOX_USER_DATA_DIR" \
+      "$CLASHFOX_CORE_DIR" \
+      "$CLASHFOX_CONFIG_DIR" \
+      "$CLASHFOX_DATA_DIR" \
+      "$CLASHFOX_LOG_DIR" \
+      "$CLASHFOX_PID_DIR" 2>/dev/null || true
+}
+
+ensure_runtime_dirs
 
 json_escape() {
     local s="$1"
@@ -39,6 +43,98 @@ json_escape() {
     s="${s//$'\r'/\\r}"
     s="${s//$'\t'/\\t}"
     printf '%s' "$s"
+}
+
+MIHOMO_CONTROLLER=""
+MIHOMO_SECRET=""
+MIHOMO_PROXY_PORT=""
+
+resolve_controller_from_config() {
+    local config_path="$1"
+    if [ -z "$config_path" ] || [ ! -f "$config_path" ]; then
+        return
+    fi
+    local controller secret
+    controller="$(grep -E '^[[:space:]]*external-controller:' "$config_path" | head -n 1 | sed -E 's/^[[:space:]]*external-controller:[[:space:]]*//')"
+    controller="${controller%\"}"
+    controller="${controller#\"}"
+    controller="${controller%\'}"
+    controller="${controller#\'}"
+
+    secret="$(grep -E '^[[:space:]]*secret:' "$config_path" | head -n 1 | sed -E 's/^[[:space:]]*secret:[[:space:]]*//')"
+    secret="${secret%\"}"
+    secret="${secret#\"}"
+    secret="${secret%\'}"
+    secret="${secret#\'}"
+
+    if [ -n "$controller" ]; then
+        if ! echo "$controller" | grep -qE '^https?://'; then
+            controller="http://$controller"
+        fi
+        MIHOMO_CONTROLLER="$controller"
+        MIHOMO_SECRET="$secret"
+    fi
+}
+
+resolve_proxy_port_from_config() {
+    local config_path="$1"
+    if [ -z "$config_path" ] || [ ! -f "$config_path" ]; then
+        return
+    fi
+    local port=""
+    port="$(grep -E '^[[:space:]]*mixed-port:' "$config_path" | head -n 1 | sed -E 's/^[[:space:]]*mixed-port:[[:space:]]*//')"
+    if [ -z "$port" ]; then
+        port="$(grep -E '^[[:space:]]*port:' "$config_path" | head -n 1 | sed -E 's/^[[:space:]]*port:[[:space:]]*//')"
+    fi
+    if [ -z "$port" ]; then
+        port="$(grep -E '^[[:space:]]*socks-port:' "$config_path" | head -n 1 | sed -E 's/^[[:space:]]*socks-port:[[:space:]]*//')"
+    fi
+    port="$(echo "$port" | tr -d '[:space:]')"
+    if [ -n "$port" ] && echo "$port" | grep -qE '^[0-9]+$'; then
+        MIHOMO_PROXY_PORT="$port"
+    fi
+}
+
+resolve_kernel_version_from_pid() {
+    local pid="$1"
+    if [ -z "$pid" ]; then
+        echo ""
+        return
+    fi
+    local cmd bin
+    cmd="$(ps -p "$pid" -o command= 2>/dev/null | head -n 1)"
+    bin="${cmd%% *}"
+    if [ -n "$bin" ] && [ -x "$bin" ]; then
+        "$bin" -v 2>/dev/null | head -n 1 | tr -d '\r'
+        return
+    fi
+    if command -v mihomo >/dev/null 2>&1; then
+        mihomo -v 2>/dev/null | head -n 1 | tr -d '\r'
+        return
+    fi
+    echo ""
+}
+
+resolve_kernel_path_from_pid() {
+    local pid="$1"
+    if [ -z "$pid" ]; then
+        echo ""
+        return
+    fi
+    local path=""
+    if command -v lsof >/dev/null 2>&1; then
+        path="$(lsof -p "$pid" -a -d txt 2>/dev/null | awk 'NR==2{print $9}')"
+    fi
+    if [ -z "$path" ]; then
+        local cmd
+        cmd="$(ps -p "$pid" -o command= 2>/dev/null | head -n 1)"
+        path="${cmd%% *}"
+    fi
+    if [ -n "$path" ] && [ -x "$path" ]; then
+        echo "$path"
+        return
+    fi
+    echo ""
 }
 
 print_ok() {
@@ -228,7 +324,15 @@ get_mihomo_uptime_sec() {
 
 get_mihomo_connections() {
     local api_url="http://127.0.0.1:9090/connections"
-    local token="${CLASHFOX_MIHOMO_TOKEN:-clashfox}"
+    if [ -n "$MIHOMO_CONTROLLER" ]; then
+        api_url="${MIHOMO_CONTROLLER}/connections"
+    fi
+    local token=""
+    if [ -n "$MIHOMO_SECRET" ]; then
+        token="$MIHOMO_SECRET"
+    elif [ -n "${CLASHFOX_MIHOMO_TOKEN:-}" ]; then
+        token="$CLASHFOX_MIHOMO_TOKEN"
+    fi
     local auth_args=()
     if [ -n "$token" ]; then
         auth_args=(-H "Authorization: Bearer $token")
@@ -294,8 +398,26 @@ if [ ${#global_args[@]} -gt 0 ]; then
     set -- "${global_args[@]}"
 fi
 
+ensure_runtime_dirs
+
 case "$command" in
     status)
+        config_path=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --config|--config-path)
+                    shift || true
+                    config_path="${1:-}"
+                    ;;
+            esac
+            shift || true
+        done
+        if [ -z "$config_path" ]; then
+            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+        fi
+        resolve_controller_from_config "$config_path"
+        resolve_proxy_port_from_config "$config_path"
+
         kernel_path="$CLASHFOX_CORE_DIR/$ACTIVE_CORE"
         pid_file="$CLASHFOX_PID_DIR/clashfox.pid"
         log_path="$CLASHFOX_LOG_DIR/clashfox.log"
@@ -329,9 +451,24 @@ case "$command" in
             fi
         fi
 
+        if [ -n "$pid" ] && [ ! -x "$kernel_path" ]; then
+            resolved_path="$(resolve_kernel_path_from_pid "$pid")"
+            if [ -n "$resolved_path" ]; then
+                kernel_path="$resolved_path"
+                kernel_exists=true
+                kernel_exec=true
+            fi
+        fi
+
         version=""
         if [ -x "$kernel_path" ]; then
             version="$($kernel_path -v 2>/dev/null | head -n 1 | tr -d '\r')"
+        fi
+        if [ -z "$version" ] && [ -n "$pid" ]; then
+            version="$(resolve_kernel_version_from_pid "$pid")"
+        fi
+        if [ -n "$version" ] && [ "$kernel_exists" = false ]; then
+            kernel_exists=true
         fi
 
         config_exists=false
@@ -384,6 +521,22 @@ JSON
         print_ok "$json"
         ;;
     overview)
+        config_path=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --config|--config-path)
+                    shift || true
+                    config_path="${1:-}"
+                    ;;
+            esac
+            shift || true
+        done
+        if [ -z "$config_path" ]; then
+            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+        fi
+        resolve_controller_from_config "$config_path"
+        resolve_proxy_port_from_config "$config_path"
+
         kernel_path="$CLASHFOX_CORE_DIR/$ACTIVE_CORE"
         pid_file="$CLASHFOX_PID_DIR/clashfox.pid"
 
@@ -406,9 +559,19 @@ JSON
             fi
         fi
 
+        if [ -n "$pid" ] && [ ! -x "$kernel_path" ]; then
+            resolved_path="$(resolve_kernel_path_from_pid "$pid")"
+            if [ -n "$resolved_path" ]; then
+                kernel_path="$resolved_path"
+            fi
+        fi
+
         kernel_version=""
         if [ -x "$kernel_path" ]; then
             kernel_version="$($kernel_path -v 2>/dev/null | head -n 1 | tr -d '\r')"
+        fi
+        if [ -z "$kernel_version" ] && [ -n "$pid" ]; then
+            kernel_version="$(resolve_kernel_version_from_pid "$pid")"
         fi
 
         uptime_sec=0
@@ -617,12 +780,24 @@ EOF
             fi
         fi
 
-        proxy_ip="$(curl -x http://127.0.0.1:7890 -s --max-time 3 https://api.ipify.org 2>/dev/null)"
-        if [ -z "$proxy_ip" ]; then
-            proxy_ip="$(curl -x http://127.0.0.1:7890 -s --max-time 3 https://ifconfig.me/ip 2>/dev/null)"
+        proxy_ip=""
+        if [ -n "$MIHOMO_PROXY_PORT" ]; then
+            proxy_ip="$(curl -x "http://127.0.0.1:$MIHOMO_PROXY_PORT" -s --max-time 3 https://api.ipify.org 2>/dev/null)"
+            if [ -z "$proxy_ip" ]; then
+                proxy_ip="$(curl -x "http://127.0.0.1:$MIHOMO_PROXY_PORT" -s --max-time 3 https://ifconfig.me/ip 2>/dev/null)"
+            fi
+            if [ -z "$proxy_ip" ]; then
+                proxy_ip="$(curl -x "http://127.0.0.1:$MIHOMO_PROXY_PORT" -s --max-time 3 https://icanhazip.com 2>/dev/null | tr -d '[:space:]')"
+            fi
         fi
-        if [ -z "$proxy_ip" ]; then
-            proxy_ip="$(curl -x http://127.0.0.1:7890 -s --max-time 3 https://icanhazip.com 2>/dev/null | tr -d '[:space:]')"
+        proxy_ip="$(printf '%s' "$proxy_ip" | tr -d '[:space:]')"
+        if [ -n "$proxy_ip" ]; then
+            if [ -n "$internet_ip_v4" ] && [ "$proxy_ip" = "$internet_ip_v4" ]; then
+                proxy_ip=""
+            fi
+            if [ -n "$internet_ip_v6" ] && [ "$proxy_ip" = "$internet_ip_v6" ]; then
+                proxy_ip=""
+            fi
         fi
         if [ -z "$proxy_ip" ]; then
             proxy_ip="-"
@@ -766,6 +941,22 @@ JSON
         print_ok "$data"
         ;;
     overview-lite)
+        config_path=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --config|--config-path)
+                    shift || true
+                    config_path="${1:-}"
+                    ;;
+            esac
+            shift || true
+        done
+        if [ -z "$config_path" ]; then
+            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+        fi
+        resolve_controller_from_config "$config_path"
+        resolve_proxy_port_from_config "$config_path"
+
         kernel_path="$CLASHFOX_CORE_DIR/$ACTIVE_CORE"
         pid_file="$CLASHFOX_PID_DIR/clashfox.pid"
         running=false
