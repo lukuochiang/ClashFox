@@ -941,6 +941,7 @@ h1 {
   word-break: break-all;
   font-family: monospace;
   min-width: 280px;
+  border-radius: 12px;
 }
 
 .paths-input::placeholder {

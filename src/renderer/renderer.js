@@ -72,6 +72,12 @@ const overviewConfigPath = document.getElementById('overviewConfigPath');
 const overviewBrowseConfig = document.getElementById('overviewBrowseConfig');
 const overviewConfigReset = document.getElementById('overviewConfigReset');
 const browseConfigBtn = document.getElementById('browseConfig');
+const externalUiUrlInput = document.getElementById('externalUiUrl');
+const externalUiNameInput = document.getElementById('externalUiName');
+const externalUiDirInput = document.getElementById('externalUiDir');
+const externalControllerInput = document.getElementById('externalController');
+const externalSecretInput = document.getElementById('externalSecret');
+const externalAuthInput = document.getElementById('externalAuth');
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
 const restartBtn = document.getElementById('restartBtn');
@@ -137,7 +143,7 @@ const settingsDataDirReset = document.getElementById('settingsDataDirReset');
 const settingsLogLines = document.getElementById('settingsLogLines');
 const settingsLogAutoRefresh = document.getElementById('settingsLogAutoRefresh');
 const settingsLogIntervalPreset = document.getElementById('settingsLogIntervalPreset');
-const settingsSwitchPageSize = document.getElementById('settingsSwitchPageSize');
+const settingsKernelPageSize = document.getElementById('settingsKernelPageSize');
 const settingsBackupsPageSize = document.getElementById('settingsBackupsPageSize');
 const settingsDebugMode = document.getElementById('settingsDebugMode');
 
@@ -200,6 +206,12 @@ const I18N = {
     install: {
       title: 'Install / Update Mihomo',
       github: 'GitHub Source',
+      externalUiUrl: 'External UI URL',
+      externalUiName: 'External UI Name',
+      externalUiDir: 'External UI Dir',
+      externalController: 'External Controller',
+      secret: 'Secret',
+      authentication: 'Authentication',
       version: 'Version',
       versionPlaceholder: 'e.g. v1.19.0',
       action: 'Install / Update',
@@ -343,10 +355,17 @@ const I18N = {
       themeAuto: 'Auto',
       language: 'Language',
       defaults: 'Defaults',
-      paths: 'Paths',
+      panelManager: 'Panel Manager',
+      paths: 'User Data Paths',
       pathsReset: 'Reset to Default',
       reset: 'Reset',
       github: 'GitHub Source',
+      externalUiUrl: 'External UI URL',
+      externalUiName: 'External UI Name',
+      externalUiDir: 'External UI Dir',
+      externalController: 'External Controller',
+      secret: 'Secret',
+      authentication: 'Authentication',
       configPath: 'Config Path',
       kernelPath: 'Kernel Path',
       configDefault: 'Default Config',
@@ -418,6 +437,12 @@ const I18N = {
     install: {
       title: '安装 / 更新 Mihomo',
       github: 'GitHub 源',
+      externalUiUrl: '管理面板地址',
+      externalUiName: '管理面板名称',
+      externalUiDir: '管理面板目录',
+      externalController: '管理面板端口',
+      secret: '密钥',
+      authentication: '认证账号',
       version: '版本',
       versionPlaceholder: '例如 v1.19.0',
       action: '安装 / 更新',
@@ -555,10 +580,17 @@ const I18N = {
       themeAuto: '自动',
       language: '语言',
       defaults: '默认设置',
-      paths: '路径',
+      panelManager: '面板管理',
+      paths: '用户数据路径',
       pathsReset: '重置为默认',
       reset: '重置',
       github: 'GitHub 源',
+      externalUiUrl: '管理面板地址',
+      externalUiName: '管理面板名称',
+      externalUiDir: '管理面板目录',
+      externalController: '管理面板端口',
+      secret: '密钥',
+      authentication: '认证账号',
       configPath: '配置路径',
       kernelPath: '内核路径',
       configDefault: '默认配置',
@@ -630,6 +662,12 @@ const I18N = {
     install: {
       title: 'Mihomo のインストール / 更新',
       github: 'GitHub ソース',
+      externalUiUrl: '管理パネルURL',
+      externalUiName: '管理パネル名',
+      externalUiDir: '管理パネルディレクトリ',
+      externalController: '管理パネルポート',
+      secret: 'シークレット',
+      authentication: '認証アカウント',
       version: '版本',
       versionPlaceholder: '例: v1.19.0',
       action: 'インストール / 更新',
@@ -766,10 +804,16 @@ const I18N = {
       themeAuto: '自動',
       language: '言語',
       defaults: '既定値',
-      paths: 'パス',
+      paths: 'ユーザーデータパス',
       pathsReset: 'デフォルトにリセット',
       reset: 'リセット',
       github: 'GitHub ソース',
+      externalUiUrl: '管理パネルURL',
+      externalUiName: '管理パネル名',
+      externalUiDir: '管理パネルディレクトリ',
+      externalController: '管理パネルポート',
+      secret: 'シークレット',
+      authentication: '認証アカウント',
       configPath: '設定パス',
       kernelPath: 'カーネルパス',
       configDefault: '既定設定',
@@ -841,6 +885,12 @@ const I18N = {
     install: {
       title: 'Mihomo 설치 / 업데이트',
       github: 'GitHub 소스',
+      externalUiUrl: '관리 패널 URL',
+      externalUiName: '관리 패널 이름',
+      externalUiDir: '관리 패널 디렉터리',
+      externalController: '관리 패널 포트',
+      secret: '시크릿',
+      authentication: '인증 계정',
       version: '버전',
       versionPlaceholder: '예: v1.19.0',
       action: '설치 / 업데이트',
@@ -977,10 +1027,17 @@ const I18N = {
       themeAuto: '자동',
       language: '언어',
       defaults: '기본값',
-      paths: '경로',
+      panelManager: '패널 관리',
+      paths: '사용자 데이터 경로',
       pathsReset: '기본값으로 재설정',
       reset: '재설정',
       github: 'GitHub 소스',
+      externalUiUrl: '관리 패널 URL',
+      externalUiName: '관리 패널 이름',
+      externalUiDir: '관리 패널 디렉터리',
+      externalController: '관리 패널 포트',
+      secret: '시크릿',
+      authentication: '인증 계정',
       configPath: '설정 경로',
       kernelPath: '커널 경로',
       configDefault: '기본 설정',
@@ -1052,6 +1109,12 @@ const I18N = {
     install: {
       title: 'Installer / Mettre à jour Mihomo',
       github: 'Source GitHub',
+      externalUiUrl: 'URL du panneau',
+      externalUiName: 'Nom du panneau',
+      externalUiDir: 'Dossier du panneau',
+      externalController: 'Contrôleur externe',
+      secret: 'Secret',
+      authentication: 'Comptes d’authentification',
       version: 'Version',
       versionPlaceholder: 'ex : v1.19.0',
       action: 'Installer / Mettre à jour',
@@ -1188,10 +1251,17 @@ const I18N = {
       themeAuto: 'Auto',
       language: 'Langue',
       defaults: 'Valeurs par défaut',
-      paths: 'Chemins',
+      panelManager: 'Gestion du panneau',
+      paths: 'Chemins des données utilisateur',
       pathsReset: 'Réinitialiser par défaut',
       reset: 'Réinitialiser',
       github: 'Source GitHub',
+      externalUiUrl: 'URL du panneau',
+      externalUiName: 'Nom du panneau',
+      externalUiDir: 'Dossier du panneau',
+      externalController: 'Contrôleur externe',
+      secret: 'Secret',
+      authentication: 'Comptes d’authentification',
       configPath: 'Chemin de configuration',
       kernelPath: 'Chemin du noyau',
       configDefault: 'Config par défaut',
@@ -1263,6 +1333,12 @@ const I18N = {
     install: {
       title: 'Mihomo installieren / aktualisieren',
       github: 'GitHub-Quelle',
+      externalUiUrl: 'Panel-URL',
+      externalUiName: 'Panel-Name',
+      externalUiDir: 'Panel-Verzeichnis',
+      externalController: 'Externer Controller',
+      secret: 'Secret',
+      authentication: 'Authentifizierung',
       version: 'Version',
       versionPlaceholder: 'z. B. v1.19.0',
       action: 'Installieren / Aktualisieren',
@@ -1399,10 +1475,16 @@ const I18N = {
       themeAuto: 'Auto',
       language: 'Sprache',
       defaults: 'Voreinstellungen',
-      paths: 'Pfade',
+      paths: 'Benutzerdatenpfade',
       pathsReset: 'Auf Standard zurücksetzen',
       reset: 'Zurücksetzen',
       github: 'GitHub-Quelle',
+      externalUiUrl: 'Panel-URL',
+      externalUiName: 'Panel-Name',
+      externalUiDir: 'Panel-Verzeichnis',
+      externalController: 'Externer Controller',
+      secret: 'Secret',
+      authentication: 'Authentifizierung',
       configPath: 'Konfigurationspfad',
       kernelPath: 'Kernelpfad',
       configDefault: 'Standardkonfig',
@@ -1474,6 +1556,12 @@ const I18N = {
     install: {
       title: 'Установка / обновление Mihomo',
       github: 'Источник GitHub',
+      externalUiUrl: 'URL панели',
+      externalUiName: 'Имя панели',
+      externalUiDir: 'Каталог панели',
+      externalController: 'Внешний контроллер',
+      secret: 'Секрет',
+      authentication: 'Учетные записи',
       version: 'Версия',
       versionPlaceholder: 'например v1.19.0',
       action: 'Установить / обновить',
@@ -1610,10 +1698,17 @@ const I18N = {
       themeAuto: 'Авто',
       language: 'Язык',
       defaults: 'По умолчанию',
-      paths: 'Пути',
+      panelManager: 'Управление панелью',
+      paths: 'Пути данных пользователя',
       pathsReset: 'Сбросить по умолчанию',
       reset: 'Сбросить',
       github: 'Источник GitHub',
+      externalUiUrl: 'URL панели',
+      externalUiName: 'Имя панели',
+      externalUiDir: 'Каталог панели',
+      externalController: 'Внешний контроллер',
+      secret: 'Секрет',
+      authentication: 'Учетные записи',
       configPath: 'Путь к конфигурации',
       kernelPath: 'Путь ядра',
       configDefault: 'Конфиг по умолчанию',
@@ -1640,10 +1735,16 @@ const DEFAULT_SETTINGS = {
   configDir: '',
   coreDir: '',
   dataDir: '',
+  externalUiUrl: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
+  externalUiName: 'zashboard',
+  externalUi: 'ui',
+  externalController: '127.0.0.1:9090',
+  secret: 'clashfox',
+  authentication: ['mihomo:clashfox'],
   logLines: 10,
   logAutoRefresh: false,
   logIntervalPreset: '3',
-  switchPageSize: '10',
+  kernelPageSize: '10',
   backupsPageSize: '10',
   debugMode: false,
 };
@@ -1909,6 +2010,25 @@ function applySettings(settings) {
   if (settingsConfigPath) {
     settingsConfigPath.value = state.settings.configPath;
   }
+  if (externalUiUrlInput) {
+    externalUiUrlInput.value = state.settings.externalUiUrl || '';
+  }
+  if (externalUiNameInput) {
+    externalUiNameInput.value = state.settings.externalUiName || '';
+  }
+  if (externalUiDirInput) {
+    externalUiDirInput.value = state.settings.externalUi || '';
+  }
+  if (externalControllerInput) {
+    externalControllerInput.value = state.settings.externalController || '';
+  }
+  if (externalSecretInput) {
+    externalSecretInput.value = state.settings.secret || '';
+  }
+  if (externalAuthInput) {
+    const auth = Array.isArray(state.settings.authentication) ? state.settings.authentication : (state.settings.authentication ? [state.settings.authentication] : []);
+    externalAuthInput.value = auth.join('\n');
+  }
   if (logLines) {
     logLines.value = state.settings.logLines;
   }
@@ -1930,13 +2050,13 @@ function applySettings(settings) {
   }
   setLogAutoRefresh(state.settings.logAutoRefresh);
   if (kernelPageSize) {
-    kernelPageSize.value = state.settings.switchPageSize;
+    kernelPageSize.value = state.settings.kernelPageSize;
   }
-  if (settingsSwitchPageSize) {
-    settingsSwitchPageSize.value = state.settings.switchPageSize;
+  if (settingsKernelPageSize) {
+    settingsKernelPageSize.value = state.settings.kernelPageSize;
   }
   if (kernelPageSize) {
-    kernelPageSize.value = state.settings.switchPageSize;
+    kernelPageSize.value = state.settings.kernelPageSize;
   }
   if (backupsPageSize) {
     backupsPageSize.value = state.settings.backupsPageSize;
@@ -2311,6 +2431,16 @@ function formatBitrate(bytesPerSec) {
   }
   const fixed = value >= 100 ? 0 : value >= 10 ? 1 : 2;
   return `${value.toFixed(fixed)} ${units[idx]}`;
+}
+
+function parseAuthList(value) {
+  if (!value) {
+    return [];
+  }
+  return value
+    .split(/\r?\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function updateSystemTraffic(rxBytes, txBytes) {
@@ -2758,7 +2888,7 @@ function renderKernelTable() {
     return;
   }
   const items = state.kernels || [];
-  const pageSizeRaw = (kernelPageSize && kernelPageSize.value) || state.settings.switchPageSize || kernelPageSize.value;
+  const pageSizeRaw = (kernelPageSize && kernelPageSize.value) || state.settings.kernelPageSize || kernelPageSize.value;
   if (kernelPageSize && kernelPageSize) {
     kernelPageSize.value = kernelPageSize.value;
   }
@@ -3230,10 +3360,10 @@ if (kernelPageSize) {
     if (kernelPageSize) {
       kernelPageSize.value = kernelPageSize.value;
     }
-    if (settingsSwitchPageSize) {
-      settingsSwitchPageSize.value = kernelPageSize.value;
+    if (settingsKernelPageSize) {
+      settingsKernelPageSize.value = kernelPageSize.value;
     }
-    saveSettings({ switchPageSize: kernelPageSize.value });
+    saveSettings({ kernelPageSize: kernelPageSize.value });
     state.kernelsPage = 1;
     renderKernelTable();
   });
@@ -3264,6 +3394,37 @@ if (configPathInput) {
     }
     saveSettings({ configPath: value });
     renderConfigTable();
+  });
+}
+
+if (externalUiUrlInput) {
+  externalUiUrlInput.addEventListener('change', (event) => {
+    saveSettings({ externalUiUrl: event.target.value.trim() });
+  });
+}
+if (externalUiNameInput) {
+  externalUiNameInput.addEventListener('change', (event) => {
+    saveSettings({ externalUiName: event.target.value.trim() });
+  });
+}
+if (externalUiDirInput) {
+  externalUiDirInput.addEventListener('change', (event) => {
+    saveSettings({ externalUi: event.target.value.trim() });
+  });
+}
+if (externalControllerInput) {
+  externalControllerInput.addEventListener('change', (event) => {
+    saveSettings({ externalController: event.target.value.trim() });
+  });
+}
+if (externalSecretInput) {
+  externalSecretInput.addEventListener('change', (event) => {
+    saveSettings({ secret: event.target.value.trim() });
+  });
+}
+if (externalAuthInput) {
+  externalAuthInput.addEventListener('change', (event) => {
+    saveSettings({ authentication: parseAuthList(event.target.value) });
   });
 }
 
@@ -3445,10 +3606,10 @@ if (kernelPageSize) {
       kernelPageSize.value = kernelPageSize.value;
     }
     renderSwitchTable();
-    if (settingsSwitchPageSize) {
-      settingsSwitchPageSize.value = kernelPageSize.value;
+    if (settingsKernelPageSize) {
+      settingsKernelPageSize.value = kernelPageSize.value;
     }
-    saveSettings({ switchPageSize: kernelPageSize.value });
+    saveSettings({ kernelPageSize: kernelPageSize.value });
   });
 }
 
@@ -3473,17 +3634,17 @@ if (settingsLogIntervalPreset) {
 }
 
 // 添加settings页面上Pagination的事件监听器
-if (settingsSwitchPageSize) {
-  settingsSwitchPageSize.addEventListener('change', () => {
+if (settingsKernelPageSize) {
+  settingsKernelPageSize.addEventListener('change', () => {
     if (kernelPageSize) {
-      kernelPageSize.value = settingsSwitchPageSize.value;
+      kernelPageSize.value = settingsKernelPageSize.value;
     }
     if (kernelPageSize) {
-      kernelPageSize.value = settingsSwitchPageSize.value;
+      kernelPageSize.value = settingsKernelPageSize.value;
     }
     state.switchPage = 1;
     renderSwitchTable();
-    saveSettings({ switchPageSize: settingsSwitchPageSize.value });
+    saveSettings({ kernelPageSize: settingsKernelPageSize.value });
   });
 }
 
@@ -3520,15 +3681,15 @@ if (backupsPageSize) {
   });
 }
 
-if (settingsSwitchPageSize) {
-  settingsSwitchPageSize.addEventListener('change', () => {
-    kernelPageSize.value = settingsSwitchPageSize.value;
+if (settingsKernelPageSize) {
+  settingsKernelPageSize.addEventListener('change', () => {
+    kernelPageSize.value = settingsKernelPageSize.value;
     if (kernelPageSize) {
-      kernelPageSize.value = settingsSwitchPageSize.value;
+      kernelPageSize.value = settingsKernelPageSize.value;
     }
     state.switchPage = 1;
     renderSwitchTable();
-    saveSettings({ switchPageSize: settingsSwitchPageSize.value });
+    saveSettings({ kernelPageSize: settingsKernelPageSize.value });
   });
 }
 
