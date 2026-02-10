@@ -505,6 +505,11 @@ const I18N = {
       github: 'GitHub：https://github.com/lukuochiang/ClashFox',
       telegram: 'Telegram：https://t.me/clashfoxd',
     },
+    zashboard: {
+      title: 'Zashboard面板',
+      hint: '如果无法加载，请先启动内核。',
+      unavailable: 'Zashboard 无法访问。',
+    },
     actions: {
       start: '启动',
       stop: '停止',
@@ -736,6 +741,11 @@ const I18N = {
       github: 'GitHub：https://github.com/lukuochiang/ClashFox',
       telegram: 'Telegram：https://t.me/clashfoxd',
     },
+    zashboard: {
+      title: 'Zashboard パネル',
+      hint: '読み込めない場合は、先にカーネルを起動してください。',
+      unavailable: 'Zashboard に接続できません。',
+    },
     actions: {
       start: '開始',
       stop: '停止',
@@ -964,6 +974,11 @@ const I18N = {
       project: '프로젝트: ClashFox GUI',
       github: 'GitHub: https://github.com/lukuochiang/ClashFox',
       telegram: 'Telegram: https://t.me/clashfoxd',
+    },
+    zashboard: {
+      title: 'Zashboard 패널',
+      hint: '로드되지 않으면 먼저 커널을 시작하세요.',
+      unavailable: 'Zashboard에 연결할 수 없습니다.',
     },
     actions: {
       start: '시작',
@@ -1195,6 +1210,11 @@ const I18N = {
       github: 'GitHub : https://github.com/lukuochiang/ClashFox',
       telegram: 'Telegram : https://t.me/clashfoxd',
     },
+    zashboard: {
+      title: 'Panneau Zashboard',
+      hint: "Si le chargement échoue, démarrez d'abord le noyau.",
+      unavailable: 'Zashboard est injoignable.',
+    },
     actions: {
       start: 'Démarrer',
       stop: 'Arrêter',
@@ -1425,6 +1445,11 @@ const I18N = {
       github: 'GitHub: https://github.com/lukuochiang/ClashFox',
       telegram: 'Telegram: https://t.me/clashfoxd',
     },
+    zashboard: {
+      title: 'Zashboard-Panel',
+      hint: 'Wenn es nicht lädt, starten Sie zuerst den Kernel.',
+      unavailable: 'Zashboard ist nicht erreichbar.',
+    },
     actions: {
       start: 'Starten',
       stop: 'Stoppen',
@@ -1653,6 +1678,11 @@ const I18N = {
       project: 'Проект: ClashFox GUI',
       github: 'GitHub: https://github.com/lukuochiang/ClashFox',
       telegram: 'Telegram: https://t.me/clashfoxd',
+    },
+    zashboard: {
+      title: 'Панель Zashboard',
+      hint: 'Если не загружается, сначала запустите ядро.',
+      unavailable: 'Zashboard недоступен.',
     },
     actions: {
       start: 'Запустить',
