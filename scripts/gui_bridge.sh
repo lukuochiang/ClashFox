@@ -251,6 +251,42 @@ get_mihomo_connections() {
 command="${1:-}"
 shift || true
 
+global_args=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --config-dir)
+            shift || true
+            if [ -n "${1:-}" ]; then
+                CLASHFOX_CONFIG_DIR="$1"
+            fi
+            ;;
+        --core-dir)
+            shift || true
+            if [ -n "${1:-}" ]; then
+                CLASHFOX_CORE_DIR="$1"
+            fi
+            ;;
+        --data-dir)
+            shift || true
+            if [ -n "${1:-}" ]; then
+                CLASHFOX_DATA_DIR="$1"
+            fi
+            ;;
+        --)
+            shift || true
+            break
+            ;;
+        *)
+            global_args+=("$1")
+            ;;
+    esac
+    shift || true
+done
+
+if [ ${#global_args[@]} -gt 0 ]; then
+    set -- "${global_args[@]}"
+fi
+
 case "$command" in
     status)
         kernel_path="$CLASHFOX_CORE_DIR/$ACTIVE_CORE"
@@ -409,6 +445,20 @@ JSON
             fi
         fi
 
+        rx_bytes=""
+        tx_bytes=""
+        if [ -n "$iface" ]; then
+            read -r rx_bytes tx_bytes <<EOF
+$(netstat -ibn 2>/dev/null | awk -v iface="$iface" '$1==iface {ibytes=$7; obytes=$10} END {print ibytes, obytes}')
+EOF
+        fi
+        if ! echo "$rx_bytes" | grep -qE '^[0-9]+$'; then
+            rx_bytes=""
+        fi
+        if ! echo "$tx_bytes" | grep -qE '^[0-9]+$'; then
+            tx_bytes=""
+        fi
+
         gateway=""
         if [ -n "$iface" ]; then
             gateway="$(ipconfig getoption "$iface" router 2>/dev/null)"
@@ -477,33 +527,80 @@ JSON
         fi
 
         internet_ms=""
+        internet_ip_v4=""
+        internet_ip_v6=""
+
         internet_ip_resp="$(curl -4 -s --max-time 2 -w '\n%{time_total}' https://api.ipify.org 2>/dev/null)"
         if [ -n "$internet_ip_resp" ]; then
-            internet_ip="$(printf '%s\n' "$internet_ip_resp" | head -n 1 | tr -d '[:space:]')"
+            internet_ip_v4="$(printf '%s\n' "$internet_ip_resp" | head -n 1 | tr -d '[:space:]')"
             internet_time="$(printf '%s\n' "$internet_ip_resp" | tail -n 1)"
             internet_ms="$(printf '%s' "$internet_time" | awk '{if ($1>0) printf "%.0f", $1*1000}')"
         fi
-        if [ -z "$internet_ip" ]; then
+        if [ -z "$internet_ip_v4" ]; then
             internet_ip_resp="$(curl -4 -s --max-time 2 -w '\n%{time_total}' https://ifconfig.me/ip 2>/dev/null)"
             if [ -n "$internet_ip_resp" ]; then
-                internet_ip="$(printf '%s\n' "$internet_ip_resp" | head -n 1 | tr -d '[:space:]')"
+                internet_ip_v4="$(printf '%s\n' "$internet_ip_resp" | head -n 1 | tr -d '[:space:]')"
                 if [ -z "$internet_ms" ]; then
                     internet_time="$(printf '%s\n' "$internet_ip_resp" | tail -n 1)"
                     internet_ms="$(printf '%s' "$internet_time" | awk '{if ($1>0) printf "%.0f", $1*1000}')"
                 fi
             fi
         fi
-        if [ -z "$internet_ip" ]; then
+        if [ -z "$internet_ip_v4" ]; then
             internet_ip_resp="$(curl -4 -s --max-time 2 -w '\n%{time_total}' https://icanhazip.com 2>/dev/null)"
             if [ -n "$internet_ip_resp" ]; then
-                internet_ip="$(printf '%s\n' "$internet_ip_resp" | head -n 1 | tr -d '[:space:]')"
+                internet_ip_v4="$(printf '%s\n' "$internet_ip_resp" | head -n 1 | tr -d '[:space:]')"
                 if [ -z "$internet_ms" ]; then
                     internet_time="$(printf '%s\n' "$internet_ip_resp" | tail -n 1)"
                     internet_ms="$(printf '%s' "$internet_time" | awk '{if ($1>0) printf "%.0f", $1*1000}')"
                 fi
             fi
         fi
-        if [ -z "$internet_ip" ]; then
+        if [ -z "$internet_ip_v4" ]; then
+            internet_ip_resp="$(curl -4 -s --max-time 2 -w '\n%{time_total}' https://ipv4.icanhazip.com 2>/dev/null)"
+            if [ -n "$internet_ip_resp" ]; then
+                internet_ip_v4="$(printf '%s\n' "$internet_ip_resp" | head -n 1 | tr -d '[:space:]')"
+                if [ -z "$internet_ms" ]; then
+                    internet_time="$(printf '%s\n' "$internet_ip_resp" | tail -n 1)"
+                    internet_ms="$(printf '%s' "$internet_time" | awk '{if ($1>0) printf "%.0f", $1*1000}')"
+                fi
+            fi
+        fi
+        if [ -z "$internet_ip_v4" ] && command -v dig >/dev/null 2>&1; then
+            internet_ip_v4="$(dig +short -4 myip.opendns.com @resolver1.opendns.com 2>/dev/null | head -n 1)"
+        fi
+        if [ -z "$internet_ip_v4" ] && command -v nslookup >/dev/null 2>&1; then
+            internet_ip_v4="$(nslookup myip.opendns.com resolver1.opendns.com 2>/dev/null | awk '/Address: /{print $2}' | tail -n 1)"
+        fi
+        if [ -n "$internet_ip_v4" ] && ! echo "$internet_ip_v4" | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$'; then
+            internet_ip_v4=""
+        fi
+        if [ -z "$internet_ip_v4" ]; then
+            internet_ip_resp="$(curl -6 -s --max-time 2 -w '\n%{time_total}' https://api64.ipify.org 2>/dev/null)"
+            if [ -n "$internet_ip_resp" ]; then
+                internet_ip_v6="$(printf '%s\n' "$internet_ip_resp" | head -n 1 | tr -d '[:space:]')"
+                if [ -z "$internet_ms" ]; then
+                    internet_time="$(printf '%s\n' "$internet_ip_resp" | tail -n 1)"
+                    internet_ms="$(printf '%s' "$internet_time" | awk '{if ($1>0) printf "%.0f", $1*1000}')"
+                fi
+            fi
+        fi
+        if [ -z "$internet_ip_v6" ]; then
+            internet_ip_resp="$(curl -6 -s --max-time 2 -w '\n%{time_total}' https://ifconfig.me/ip 2>/dev/null)"
+            if [ -n "$internet_ip_resp" ]; then
+                internet_ip_v6="$(printf '%s\n' "$internet_ip_resp" | head -n 1 | tr -d '[:space:]')"
+                if [ -z "$internet_ms" ]; then
+                    internet_time="$(printf '%s\n' "$internet_ip_resp" | tail -n 1)"
+                    internet_ms="$(printf '%s' "$internet_time" | awk '{if ($1>0) printf "%.0f", $1*1000}')"
+                fi
+            fi
+        fi
+
+        if [ -n "$internet_ip_v4" ]; then
+            internet_ip="$internet_ip_v4"
+        elif [ -n "$internet_ip_v6" ]; then
+            internet_ip="$internet_ip_v6"
+        else
             internet_ip="-"
         fi
         if [ -z "$internet_ms" ] && [ -n "$internet_ip" ] && [ "$internet_ip" != "-" ]; then
@@ -593,7 +690,70 @@ PY
         fi
 
         data=$(cat <<JSON
-{"running":$running,"kernelVersion":"$(json_escape "$kernel_version")","uptimeSec":$uptime_sec,"systemName":"$(json_escape "$system_name")","systemVersion":"$(json_escape "$system_version")","systemBuild":"$(json_escape "$system_build")","networkName":"$(json_escape "$network_name")","localIp":"$(json_escape "$local_ip")","proxyIp":"$(json_escape "$proxy_ip")","internetIp":"$(json_escape "$internet_ip")","internetMs":"$(json_escape "$internet_ms")","dnsMs":"$(json_escape "$dns_ms")","routerMs":"$(json_escape "$router_ms")","connections":"$(json_escape "$connections")","memory":"$(json_escape "$memory")"}
+{"running":$running,"kernelVersion":"$(json_escape "$kernel_version")","uptimeSec":$uptime_sec,"systemName":"$(json_escape "$system_name")","systemVersion":"$(json_escape "$system_version")","systemBuild":"$(json_escape "$system_build")","networkName":"$(json_escape "$network_name")","localIp":"$(json_escape "$local_ip")","proxyIp":"$(json_escape "$proxy_ip")","internetIp":"$(json_escape "$internet_ip")","internetIp4":"$(json_escape "$internet_ip_v4")","internetIp6":"$(json_escape "$internet_ip_v6")","internetMs":"$(json_escape "$internet_ms")","dnsMs":"$(json_escape "$dns_ms")","routerMs":"$(json_escape "$router_ms")","connections":"$(json_escape "$connections")","memory":"$(json_escape "$memory")","rxBytes":"$(json_escape "$rx_bytes")","txBytes":"$(json_escape "$tx_bytes")"}
+JSON
+)
+        print_ok "$data"
+        ;;
+    traffic)
+        config_path=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --config|--config-path)
+                    shift || true
+                    config_path="${1:-}"
+                    ;;
+            esac
+            shift || true
+        done
+
+        if [ -z "$config_path" ]; then
+            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+        fi
+
+        if [ ! -f "$config_path" ]; then
+            print_ok '{"up":"","down":""}'
+            exit 0
+        fi
+
+        controller="$(grep -E '^[[:space:]]*external-controller:' "$config_path" | head -n 1 | sed -E 's/^[[:space:]]*external-controller:[[:space:]]*//')"
+        controller="${controller%\"}"
+        controller="${controller#\"}"
+        controller="${controller%\'}"
+        controller="${controller#\'}"
+
+        secret="$(grep -E '^[[:space:]]*secret:' "$config_path" | head -n 1 | sed -E 's/^[[:space:]]*secret:[[:space:]]*//')"
+        secret="${secret%\"}"
+        secret="${secret#\"}"
+        secret="${secret%\'}"
+        secret="${secret#\'}"
+
+        if [ -z "$controller" ]; then
+            print_ok '{"up":"","down":""}'
+            exit 0
+        fi
+
+        if ! echo "$controller" | grep -qE '^https?://'; then
+            controller="http://$controller"
+        fi
+
+        if [ -n "$secret" ]; then
+            traffic_resp="$(curl -s --max-time 1 -H "Authorization: Bearer $secret" "$controller/traffic" 2>/dev/null)"
+        else
+            traffic_resp="$(curl -s --max-time 1 "$controller/traffic" 2>/dev/null)"
+        fi
+
+        up_val="$(printf '%s' "$traffic_resp" | sed -n 's/.*"up"[[:space:]]*:[[:space:]]*\\([0-9]\\+\\).*/\\1/p')"
+        down_val="$(printf '%s' "$traffic_resp" | sed -n 's/.*"down"[[:space:]]*:[[:space:]]*\\([0-9]\\+\\).*/\\1/p')"
+        if [ -z "$up_val" ]; then
+            up_val=""
+        fi
+        if [ -z "$down_val" ]; then
+            down_val=""
+        fi
+
+        data=$(cat <<JSON
+{"up":"$(json_escape "$up_val")","down":"$(json_escape "$down_val")"}
 JSON
 )
         print_ok "$data"
@@ -700,6 +860,43 @@ JSON
 JSON
 )
         print_ok "$data"
+        ;;
+    cores)
+        if [ ! -d "$CLASHFOX_CORE_DIR" ]; then
+            print_ok "[]"
+            exit 0
+        fi
+        shopt -s nullglob
+        files=( "$CLASHFOX_CORE_DIR"/* )
+        shopt -u nullglob
+        if [ ${#files[@]} -eq 0 ]; then
+            print_ok "[]"
+            exit 0
+        fi
+        json="["
+        first=true
+        for file in "${files[@]}"; do
+            if [ ! -f "$file" ]; then
+                continue
+            fi
+            name="$(basename "$file")"
+            modified="$(stat -f "%Sm" -t "%Y-%m-%d %H:%M:%S" "$file" 2>/dev/null)"
+            if [ -z "$modified" ]; then
+                modified="-"
+            fi
+            size_bytes="$(stat -f "%z" "$file" 2>/dev/null)"
+            if [ -z "$size_bytes" ]; then
+                size_bytes="0"
+            fi
+            if [ "$first" = true ]; then
+                first=false
+            else
+                json+=","
+            fi
+            json+="{\"name\":\"$(json_escape "$name")\",\"path\":\"$(json_escape "$file")\",\"modified\":\"$(json_escape "$modified")\",\"size\":\"$(json_escape "$size_bytes")\"}"
+        done
+        json+="]"
+        print_ok "$json"
         ;;
     backups)
         items=""

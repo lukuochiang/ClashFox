@@ -22,8 +22,8 @@
         <nav class="nav">
           <button class="nav-btn" data-page="status" data-i18n="nav.status">Overview</button>
           <button class="nav-btn active" data-page="install" data-i18n="nav.install">Install / Update</button>
-          <button class="nav-btn" data-page="control" data-i18n="nav.config">Config</button>
           <button class="nav-btn" data-page="switch" data-i18n="nav.switch">Switch Kernel</button>
+          <button class="nav-btn" data-page="control" data-i18n="nav.config">Config</button>
           <button class="nav-btn" data-page="backups" data-i18n="nav.backups">Backups</button>
           <button class="nav-btn" data-page="logs" data-i18n="nav.logs">Logs</button>
         </nav>
@@ -90,6 +90,30 @@
             </div>
             <div class="install-progress progress-track" id="installProgress" aria-hidden="true">
               <div class="progress-bar"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header-row">
+              <h3 data-i18n="install.kernelsTitle">Kernel List</h3>
+              <button class="btn" id="kernelRefresh" data-i18n="actions.refresh">Refresh</button>
+            </div>
+            <div class="hint" data-i18n="install.kernelsHint">Read-only list of available cores.</div>
+            <div class="table" id="kernelTable"></div>
+            <div class="pagination">
+              <div class="page-controls">
+                <button class="btn ghost" id="kernelPrev">Prev</button>
+                <div class="page-info" id="kernelPageInfo">1 / 1</div>
+                <button class="btn ghost" id="kernelNext">Next</button>
+              </div>
+              <div class="page-size">
+                <span data-i18n="pagination.size">Per page</span>
+                <select id="kernelPageSize">
+                  <option value="5" selected>5</option>
+                  <option value="10">10</option>
+                  <option value="20">20</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
             </div>
           </div>
         </section>

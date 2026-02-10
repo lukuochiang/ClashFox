@@ -86,7 +86,10 @@
 
       ipcRenderer.invoke('clashfox:appInfo').then((res) => {
         if (res && res.ok && res.data) {
-          document.getElementById('version').textContent = res.data.version || '0.0.0';
+          const version = res.data.version || '0.0.0';
+          const buildNumber = res.data.buildNumber;
+          const suffix = buildNumber ? `(${buildNumber})` : '';
+          document.getElementById('version').textContent = `${version}${suffix}`;
         }
       });
       document.getElementById('closeBtn').addEventListener('click', () => {

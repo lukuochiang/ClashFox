@@ -22,8 +22,8 @@
         <nav class="nav">
           <button class="nav-btn active" data-page="status" data-i18n="nav.status">Overview</button>
           <button class="nav-btn" data-page="install" data-i18n="nav.install">Install / Update</button>
-          <button class="nav-btn" data-page="control" data-i18n="nav.config">Config</button>
           <button class="nav-btn" data-page="switch" data-i18n="nav.switch">Switch Kernel</button>
+          <button class="nav-btn" data-page="control" data-i18n="nav.config">Config</button>
           <button class="nav-btn" data-page="backups" data-i18n="nav.backups">Backups</button>
           <button class="nav-btn" data-page="logs" data-i18n="nav.logs">Logs</button>
         </nav>
@@ -74,16 +74,35 @@
               </div>
             </div>
             <div class="card quick-actions">
-              <h3 data-i18n="status.configTitle">Config Shortcut</h3>
-              <div class="form-row">
-                <label data-i18n="control.config">Config Path</label>
-                <div class="input-group">
-                  <input id="overviewConfigPath" type="text" placeholder="/Applications/ClashFox.app/Contents/Resources/config/default.yaml" />
-                  <button class="btn" id="overviewBrowseConfig" data-i18n="control.browse">Browse</button>
-                </div>
+              <div class="card-header-row">
+                <h3 data-i18n="status.trafficTitle">Traffic Stats</h3>
+                <span class="card-hint" data-i18n="status.trafficHint">Updated every 2s.</span>
               </div>
-              <div class="hint" data-i18n="status.configHint">
-                Selecting a new config requires restarting the kernel.
+              <div class="traffic-grid">
+                <div class="traffic-group status-grid">
+                  <div>
+                    <div class="label" data-i18n="status.trafficSystemDown">System Download</div>
+                    <div id="trafficSystemDownloadRate" class="value">-</div>
+                    <div id="trafficSystemDownloadTotal" class="value small">-</div>
+                  </div>
+                  <div>
+                    <div class="label" data-i18n="status.trafficSystemUp">System Upload</div>
+                    <div id="trafficSystemUploadRate" class="value">-</div>
+                    <div id="trafficSystemUploadTotal" class="value small">-</div>
+                  </div>
+                </div>
+                <div class="traffic-group status-grid">
+                  <div>
+                    <div class="label" data-i18n="status.trafficProxyDown">Proxy Download</div>
+                    <div id="trafficProxyDownloadRate" class="value">-</div>
+                    <div id="trafficProxyDownloadTotal" class="value small">-</div>
+                  </div>
+                  <div>
+                    <div class="label" data-i18n="status.trafficProxyUp">Proxy Upload</div>
+                    <div id="trafficProxyUploadRate" class="value">-</div>
+                    <div id="trafficProxyUploadTotal" class="value small">-</div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -218,11 +237,11 @@
                   <div class="label" data-i18n="status.version">Version</div>
                   <div id="statusVersion" class="value">-</div>
                 </div>
-                <div>
+                <div id="statusKernelPathRow">
                   <div class="label" data-i18n="status.kernelPath">Kernel Path</div>
                   <div id="statusKernelPath" class="value small">-</div>
                 </div>
-                <div>
+                <div id="statusConfigRow">
                   <div class="label" data-i18n="status.config">Default Config</div>
                   <div id="statusConfig" class="value small">-</div>
                 </div>

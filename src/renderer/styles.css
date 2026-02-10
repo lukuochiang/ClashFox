@@ -855,6 +855,20 @@ h1 {
   margin: 18px 0 14px;
 }
 
+.card-header-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.card-hint {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .subhead {
   margin: 0 0 10px;
   font-size: 14px;
@@ -866,6 +880,22 @@ h1 {
 .status-grid {
   display: grid;
   gap: 16px;
+}
+
+.traffic-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.traffic-group {
+  padding-right: 6px;
+}
+
+@media (max-width: 960px) {
+  .traffic-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .label {
@@ -895,6 +925,7 @@ h1 {
   display: flex;
   align-items: center;
   margin-bottom: 14px;
+  gap: 12px;
 }
 
 .paths-label {
@@ -903,16 +934,21 @@ h1 {
   font-size: 13px;
 }
 
-.paths-value {
+.paths-input {
   flex: 1;
   font-size: 13px;
-  color: var(--muted);
+  color: var(--ink);
   word-break: break-all;
-  background: rgba(255, 255, 255, 0.05) !important;
-  padding: 13px 12px !important;
-  border-radius: 10px !important;
-  border: 1px solid var(--border) !important;
-  font-family: monospace !important;
+  font-family: monospace;
+  min-width: 280px;
+}
+
+.paths-input::placeholder {
+  color: rgba(147, 164, 183, 0.7);
+}
+
+body[data-theme="day"] .paths-input::placeholder {
+  color: rgba(91, 110, 131, 0.7);
 }
 
 .action-row {
@@ -943,6 +979,7 @@ h1 {
 .install-card {
   display: grid;
   gap: 16px;
+  margin-bottom: 14px;
 }
 
 .install-header {
@@ -992,7 +1029,7 @@ h1 {
 
 .install-form {
   display: grid;
-  gap: 12px;
+  /*gap: 12px;*/
 }
 
 .install-progress {
@@ -1111,6 +1148,12 @@ body[data-theme="day"] [data-tooltip]:hover::after {
   background: transparent;
   border-color: rgba(148, 171, 197, 0.35);
   color: var(--muted);
+}
+
+.btn.compact {
+  padding: 8px 10px;
+  font-size: 12px;
+  border-radius: 10px;
 }
 
 .btn.danger {
@@ -1413,8 +1456,22 @@ body[data-theme="day"] .toggle-pill::after {
   align-items: center;
 }
 
+.table-row.empty {
+  grid-template-columns: 1fr;
+  justify-items: center;
+}
+
+.table-row.empty .empty-cell {
+  color: var(--muted);
+}
+
 .table-row.backup {
   grid-template-columns: 24px 1fr 160px;
+}
+
+.table-row.kernel,
+.table-row.header.kernel {
+  grid-template-columns: 1fr 160px;
 }
 
 .table-row.backup.multi,

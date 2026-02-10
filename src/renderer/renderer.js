@@ -7,6 +7,8 @@ const statusRunning = document.getElementById('statusRunning');
 const statusVersion = document.getElementById('statusVersion');
 const statusKernelPath = document.getElementById('statusKernelPath');
 const statusConfig = document.getElementById('statusConfig');
+const statusKernelPathRow = document.getElementById('statusKernelPathRow');
+const statusConfigRow = document.getElementById('statusConfigRow');
 const statusPill = document.getElementById('statusPill');
 const overviewUptime = document.getElementById('overviewUptime');
 const overviewConnections = document.getElementById('overviewConnections');
@@ -22,6 +24,15 @@ const overviewNetwork = document.getElementById('overviewNetwork');
 const overviewLocalIp = document.getElementById('overviewLocalIp');
 const overviewProxyIp = document.getElementById('overviewProxyIp');
 const overviewInternetIp = document.getElementById('overviewInternetIp');
+const trafficSystemDownloadRate = document.getElementById('trafficSystemDownloadRate');
+const trafficSystemDownloadTotal = document.getElementById('trafficSystemDownloadTotal');
+const trafficSystemUploadRate = document.getElementById('trafficSystemUploadRate');
+const trafficSystemUploadTotal = document.getElementById('trafficSystemUploadTotal');
+const trafficProxyDownloadRate = document.getElementById('trafficProxyDownloadRate');
+const trafficProxyDownloadTotal = document.getElementById('trafficProxyDownloadTotal');
+const trafficProxyUploadRate = document.getElementById('trafficProxyUploadRate');
+const trafficProxyUploadTotal = document.getElementById('trafficProxyUploadTotal');
+const quickHintNodes = Array.from(document.querySelectorAll('[data-i18n="status.quickHint"]'));
 
 // IP地址隐私保护函数
 function maskIpAddress(ip) {
@@ -59,6 +70,7 @@ const cancelInstallBtn = document.getElementById('cancelInstallBtn');
 const configPathInput = document.getElementById('configPath');
 const overviewConfigPath = document.getElementById('overviewConfigPath');
 const overviewBrowseConfig = document.getElementById('overviewBrowseConfig');
+const overviewConfigReset = document.getElementById('overviewConfigReset');
 const browseConfigBtn = document.getElementById('browseConfig');
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
@@ -71,6 +83,12 @@ const backupTable = document.getElementById('backupTable');
 const backupTableFull = document.getElementById('backupTableFull');
 const configsRefresh = document.getElementById('configsRefresh');
 const configTable = document.getElementById('configTable');
+const kernelTable = document.getElementById('kernelTable');
+const kernelRefresh = document.getElementById('kernelRefresh');
+const kernelPrev = document.getElementById('kernelPrev');
+const kernelNext = document.getElementById('kernelNext');
+const kernelPageInfo = document.getElementById('kernelPageInfo');
+const kernelPageSize = document.getElementById('kernelPageSize');
 const switchPrev = document.getElementById('switchPrev');
 const switchNext = document.getElementById('switchNext');
 const switchPageInfo = document.getElementById('switchPageInfo');
@@ -109,6 +127,12 @@ const settingsLogPath = document.getElementById('settingsLogPath');
 const settingsConfigDir = document.getElementById('settingsConfigDir');
 const settingsCoreDir = document.getElementById('settingsCoreDir');
 const settingsDataDir = document.getElementById('settingsDataDir');
+const settingsConfigDirBrowse = document.getElementById('settingsConfigDirBrowse');
+const settingsCoreDirBrowse = document.getElementById('settingsCoreDirBrowse');
+const settingsDataDirBrowse = document.getElementById('settingsDataDirBrowse');
+const settingsConfigDirReset = document.getElementById('settingsConfigDirReset');
+const settingsCoreDirReset = document.getElementById('settingsCoreDirReset');
+const settingsDataDirReset = document.getElementById('settingsDataDirReset');
 const settingsLogLines = document.getElementById('settingsLogLines');
 const settingsLogAutoRefresh = document.getElementById('settingsLogAutoRefresh');
 const settingsLogIntervalPreset = document.getElementById('settingsLogIntervalPreset');
@@ -162,8 +186,14 @@ const I18N = {
       config: 'Default Config',
       quick: 'Quick Actions',
       quickHint: 'Actions use the default config unless a custom path is set in Control.',
-      configTitle: 'Config Shortcut',
-      configHint: 'Selecting a new config requires restarting the kernel.',
+      quickHintMissing: 'Kernel not installed. Please install it first.',
+      trafficTitle: 'Traffic Stats',
+      trafficHint: 'Updated every 2 seconds.',
+      trafficSystemDown: 'Download',
+      trafficSystemUp: 'Upload',
+      trafficProxyDown: 'Proxy Download',
+      trafficProxyUp: 'Proxy Upload',
+      trafficTotal: 'Total',
     },
     install: {
       title: 'Install / Update Mihomo',
@@ -179,6 +209,8 @@ const I18N = {
       cancelSuccess: 'Installation cancelled',
       cancelFailed: 'Failed to cancel installation',
       hint: 'Downloads the latest kernel for your architecture and backs up the previous one.',
+      kernelsTitle: 'Kernel List',
+      kernelsHint: 'Read-only list of available cores.',
     },
     control: {
       title: 'Config Control',
@@ -236,6 +268,7 @@ const I18N = {
       name: 'Name',
       path: 'Path',
       modified: 'Modified',
+      size: 'Size',
       current: 'Current',
     },
     labels: {
@@ -245,6 +278,7 @@ const I18N = {
       notInstalled: 'Not installed',
       noBackups: 'No backups found.',
       configsEmpty: 'No configs found.',
+      kernelsEmpty: 'No kernels found.',
       current: 'Current',
       configsRefreshed: 'Configs refreshed.',
       statusRefreshed: 'Status refreshed.',
@@ -277,6 +311,9 @@ const I18N = {
     confirm: {
       title: 'Please Confirm',
       body: 'Are you sure you want to continue?',
+      resetTitle: 'Reset to Default?',
+      resetBody: 'Reset this path to the default location for',
+      resetConfirm: 'Reset',
       deleteTitle: 'Delete Backups?',
       deleteBody: 'This will delete the selected backups and cannot be undone.',
       deleteConfirm: 'Delete',
@@ -299,6 +336,8 @@ const I18N = {
       language: 'Language',
       defaults: 'Defaults',
       paths: 'Paths',
+      pathsReset: 'Reset to Default',
+      reset: 'Reset',
       github: 'GitHub Source',
       configPath: 'Config Path',
       kernelPath: 'Kernel Path',
@@ -358,8 +397,14 @@ const I18N = {
       config: '默认配置',
       quick: '快捷操作',
       quickHint: '快捷操作使用默认配置，除非在控制页指定自定义路径。',
-      configTitle: '配置快捷入口',
-      configHint: '选择新配置后需重启内核。',
+      quickHintMissing: '未安装内核，请先前往安装。',
+      trafficTitle: '流量统计',
+      trafficHint: '每 2 秒更新一次。',
+      trafficSystemDown: '下载',
+      trafficSystemUp: '上传',
+      trafficProxyDown: '代理下载',
+      trafficProxyUp: '代理上传',
+      trafficTotal: '总量',
     },
     install: {
       title: '安装 / 更新 Mihomo',
@@ -374,6 +419,8 @@ const I18N = {
       cancelSuccess: '安装已取消',
       cancelFailed: '取消安装失败',
       hint: '下载适配架构的最新内核，并备份当前版本。',
+      kernelsTitle: '内核列表',
+      kernelsHint: '仅供浏览的核心文件列表。',
     },
     control: {
       title: '配置控制',
@@ -382,7 +429,7 @@ const I18N = {
       refresh: '刷新',
     },
     switch: {
-      title: '切换内核版本',
+      title: '切换内核',
       refresh: '刷新备份',
       action: '切换到所选版本',
     },
@@ -431,6 +478,7 @@ const I18N = {
       name: '文件名',
       path: '路径',
       modified: '修改时间',
+      size: '大小',
       current: '当前',
     },
     labels: {
@@ -440,6 +488,7 @@ const I18N = {
       notInstalled: '未安装',
       noBackups: '没有可用备份。',
       configsEmpty: '没有可用配置。',
+      kernelsEmpty: '没有可用内核。',
       current: '当前',
       configsRefreshed: '配置已刷新。',
       statusRefreshed: '状态已刷新。',
@@ -472,6 +521,9 @@ const I18N = {
     confirm: {
       title: '请确认',
       body: '确定要继续吗？',
+      resetTitle: '重置为默认？',
+      resetBody: '重置为默认路径：',
+      resetConfirm: '重置',
       deleteTitle: '删除备份？',
       deleteBody: '将删除所选备份，且无法恢复。',
       deleteConfirm: '删除',
@@ -494,6 +546,8 @@ const I18N = {
       language: '语言',
       defaults: '默认设置',
       paths: '路径',
+      pathsReset: '重置为默认',
+      reset: '重置',
       github: 'GitHub 源',
       configPath: '配置路径',
       kernelPath: '内核路径',
@@ -553,8 +607,14 @@ const I18N = {
       config: '既定の設定',
       quick: 'クイック操作',
       quickHint: 'コントロールでカスタムパスが設定されていない場合、既定の設定を使用します。',
-      configTitle: '設定ショートカット',
-      configHint: '新しい設定を選択したら再起動が必要です。',
+      quickHintMissing: 'カーネル未インストールです。先にインストールしてください。',
+      trafficTitle: 'トラフィック統計',
+      trafficHint: '2 秒ごとに更新します。',
+      trafficSystemDown: '受信',
+      trafficSystemUp: '送信',
+      trafficProxyDown: 'プロキシ受信',
+      trafficProxyUp: 'プロキシ送信',
+      trafficTotal: '合計',
     },
     install: {
       title: 'Mihomo のインストール / 更新',
@@ -569,6 +629,8 @@ const I18N = {
       cancelSuccess: 'インストールはキャンセルされました',
       cancelFailed: 'インストールのキャンセルに失敗しました',
       hint: 'アーキテクチャに適した最新カーネルをダウンロードし、前のバージョンをバックアップします。',
+      kernelsTitle: 'カーネル一覧',
+      kernelsHint: '閲覧専用のコア一覧です。',
     },
     control: {
       title: '設定コントロール',
@@ -577,7 +639,7 @@ const I18N = {
       refresh: '更新',
     },
     switch: {
-      title: 'カーネルバージョンの切替',
+      title: 'カーネル切替',
       refresh: 'バックアップを更新',
       action: '選択したバージョンへ切替',
     },
@@ -626,6 +688,7 @@ const I18N = {
       name: 'ファイル名',
       path: 'パス',
       modified: '更新日時',
+      size: 'サイズ',
       current: '現在',
     },
     labels: {
@@ -635,6 +698,7 @@ const I18N = {
       notInstalled: '未インストール',
       noBackups: 'バックアップが見つかりません。',
       configsEmpty: '設定が見つかりません。',
+      kernelsEmpty: 'カーネルが見つかりません。',
       current: '現在',
       configsRefreshed: '設定を更新しました。',
       statusRefreshed: '状態を更新しました。',
@@ -666,6 +730,9 @@ const I18N = {
     confirm: {
       title: '確認してください',
       body: '続行してもよろしいですか？',
+      resetTitle: 'デフォルトに戻しますか？',
+      resetBody: 'このパスをデフォルトに戻します：',
+      resetConfirm: 'リセット',
       deleteTitle: 'バックアップを削除しますか？',
       deleteBody: '選択したバックアップは削除され、元に戻せません。',
       deleteConfirm: '削除',
@@ -688,6 +755,8 @@ const I18N = {
       language: '言語',
       defaults: '既定値',
       paths: 'パス',
+      pathsReset: 'デフォルトにリセット',
+      reset: 'リセット',
       github: 'GitHub ソース',
       configPath: '設定パス',
       kernelPath: 'カーネルパス',
@@ -747,8 +816,14 @@ const I18N = {
       config: '기본 설정',
       quick: '빠른 작업',
       quickHint: '컨트롤에서 사용자 경로를 지정하지 않으면 기본 설정을 사용합니다.',
-      configTitle: '설정 바로가기',
-      configHint: '새 설정을 선택하면 커널을 재시작해야 합니다.',
+      quickHintMissing: '커널이 설치되지 않았습니다. 먼저 설치하세요.',
+      trafficTitle: '트래픽 통계',
+      trafficHint: '2초마다 업데이트됩니다.',
+      trafficSystemDown: '다운로드',
+      trafficSystemUp: '업로드',
+      trafficProxyDown: '프록시 다운로드',
+      trafficProxyUp: '프록시 업로드',
+      trafficTotal: '총량',
     },
     install: {
       title: 'Mihomo 설치 / 업데이트',
@@ -763,6 +838,8 @@ const I18N = {
       cancelSuccess: '설치가 취소되었습니다',
       cancelFailed: '설치 취소에 실패했습니다',
       hint: '아키텍처에 맞는 최신 커널을 다운로드하고 이전 버전을 백업합니다.',
+      kernelsTitle: '커널 목록',
+      kernelsHint: '읽기 전용 코어 목록입니다.',
     },
     control: {
       title: '설정 제어',
@@ -771,7 +848,7 @@ const I18N = {
       refresh: '새로고침',
     },
     switch: {
-      title: '커널 버전 전환',
+      title: '커널 전환',
       refresh: '백업 새로고침',
       action: '선택한 버전으로 전환',
     },
@@ -820,6 +897,7 @@ const I18N = {
       name: '파일명',
       path: '경로',
       modified: '수정 시간',
+      size: '크기',
       current: '현재',
     },
     labels: {
@@ -829,6 +907,7 @@ const I18N = {
       notInstalled: '미설치',
       noBackups: '백업이 없습니다.',
       configsEmpty: '설정을 찾을 수 없습니다.',
+      kernelsEmpty: '커널을 찾을 수 없습니다.',
       current: '현재',
       configsRefreshed: '설정을 새로고침했습니다.',
       statusRefreshed: '상태를 새로고침했습니다.',
@@ -860,6 +939,9 @@ const I18N = {
     confirm: {
       title: '확인해주세요',
       body: '계속하시겠습니까?',
+      resetTitle: '기본값으로 되돌릴까요?',
+      resetBody: '이 경로를 기본값으로 되돌립니다:',
+      resetConfirm: '재설정',
       deleteTitle: '백업을 삭제할까요?',
       deleteBody: '선택한 백업이 삭제되며 되돌릴 수 없습니다.',
       deleteConfirm: '삭제',
@@ -882,6 +964,8 @@ const I18N = {
       language: '언어',
       defaults: '기본값',
       paths: '경로',
+      pathsReset: '기본값으로 재설정',
+      reset: '재설정',
       github: 'GitHub 소스',
       configPath: '설정 경로',
       kernelPath: '커널 경로',
@@ -941,8 +1025,14 @@ const I18N = {
       config: 'Configuration par défaut',
       quick: 'Actions rapides',
       quickHint: 'Les actions utilisent la configuration par défaut sauf si un chemin personnalisé est défini dans Contrôle.',
-      configTitle: 'Raccourci de configuration',
-      configHint: 'Changer la configuration nécessite un redémarrage.',
+      quickHintMissing: 'Noyau non installé. Veuillez l’installer d’abord.',
+      trafficTitle: 'Statistiques de trafic',
+      trafficHint: 'Mise à jour toutes les 2 secondes.',
+      trafficSystemDown: 'Téléchargement',
+      trafficSystemUp: 'Téléversement',
+      trafficProxyDown: 'Téléchargement proxy',
+      trafficProxyUp: 'Téléversement proxy',
+      trafficTotal: 'Total',
     },
     install: {
       title: 'Installer / Mettre à jour Mihomo',
@@ -957,6 +1047,8 @@ const I18N = {
       cancelSuccess: 'Installation annulée',
       cancelFailed: 'Échec de l’annulation de l’installation',
       hint: 'Télécharge le dernier noyau pour votre architecture et sauvegarde la version précédente.',
+      kernelsTitle: 'Liste des noyaux',
+      kernelsHint: 'Liste en lecture seule des cœurs disponibles.',
     },
     control: {
       title: 'Contrôle de configuration',
@@ -965,7 +1057,7 @@ const I18N = {
       refresh: 'Actualiser',
     },
     switch: {
-      title: 'Changer la version du noyau',
+      title: 'Changer le noyau',
       refresh: 'Actualiser les sauvegardes',
       action: 'Basculer vers la version sélectionnée',
     },
@@ -1014,6 +1106,7 @@ const I18N = {
       name: 'Nom',
       path: 'Chemin',
       modified: 'Modifié',
+      size: 'Taille',
       current: 'Actuelle',
     },
     labels: {
@@ -1023,6 +1116,7 @@ const I18N = {
       notInstalled: 'Non installé',
       noBackups: 'Aucune sauvegarde trouvée.',
       configsEmpty: 'Aucune configuration trouvée.',
+      kernelsEmpty: 'Aucun noyau trouvé.',
       current: 'Actuelle',
       configsRefreshed: 'Configurations actualisées.',
       statusRefreshed: 'Statut actualisé.',
@@ -1054,6 +1148,9 @@ const I18N = {
     confirm: {
       title: 'Veuillez confirmer',
       body: 'Voulez-vous vraiment continuer ?',
+      resetTitle: 'Rétablir par défaut ?',
+      resetBody: 'Réinitialiser ce chemin par défaut :',
+      resetConfirm: 'Réinitialiser',
       deleteTitle: 'Supprimer les sauvegardes ?',
       deleteBody: 'Les sauvegardes sélectionnées seront supprimées définitivement.',
       deleteConfirm: 'Supprimer',
@@ -1076,6 +1173,8 @@ const I18N = {
       language: 'Langue',
       defaults: 'Valeurs par défaut',
       paths: 'Chemins',
+      pathsReset: 'Réinitialiser par défaut',
+      reset: 'Réinitialiser',
       github: 'Source GitHub',
       configPath: 'Chemin de configuration',
       kernelPath: 'Chemin du noyau',
@@ -1135,8 +1234,14 @@ const I18N = {
       config: 'Standardkonfiguration',
       quick: 'Schnellaktionen',
       quickHint: 'Aktionen verwenden die Standardkonfiguration, sofern kein benutzerdefinierter Pfad in Steuerung gesetzt ist.',
-      configTitle: 'Konfigurationsshortcut',
-      configHint: 'Nach Auswahl ist ein Neustart nötig.',
+      quickHintMissing: 'Kernel nicht installiert. Bitte zuerst installieren.',
+      trafficTitle: 'Datenverkehr',
+      trafficHint: 'Aktualisiert alle 2 Sekunden.',
+      trafficSystemDown: 'Download',
+      trafficSystemUp: 'Upload',
+      trafficProxyDown: 'Proxy Download',
+      trafficProxyUp: 'Proxy Upload',
+      trafficTotal: 'Gesamt',
     },
     install: {
       title: 'Mihomo installieren / aktualisieren',
@@ -1151,6 +1256,8 @@ const I18N = {
       cancelSuccess: 'Installation abgebrochen',
       cancelFailed: 'Abbruch der Installation fehlgeschlagen',
       hint: 'Lädt den neuesten Kernel für Ihre Architektur und sichert die vorherige Version.',
+      kernelsTitle: 'Kernel-Liste',
+      kernelsHint: 'Nur-Lesen-Liste der verfügbaren Kerne.',
     },
     control: {
       title: 'Konfigurationssteuerung',
@@ -1159,7 +1266,7 @@ const I18N = {
       refresh: 'Aktualisieren',
     },
     switch: {
-      title: 'Kernelversion wechseln',
+      title: 'Kernel wechseln',
       refresh: 'Backups aktualisieren',
       action: 'Auf ausgewählte Version wechseln',
     },
@@ -1208,6 +1315,7 @@ const I18N = {
       name: 'Name',
       path: 'Pfad',
       modified: 'Geändert',
+      size: 'Größe',
       current: 'Aktuell',
     },
     labels: {
@@ -1217,6 +1325,7 @@ const I18N = {
       notInstalled: 'Nicht installiert',
       noBackups: 'Keine Backups gefunden.',
       configsEmpty: 'Keine Konfigurationen gefunden.',
+      kernelsEmpty: 'Keine Kernel gefunden.',
       current: 'Aktuell',
       configsRefreshed: 'Konfigurationen aktualisiert.',
       statusRefreshed: 'Status aktualisiert.',
@@ -1248,6 +1357,9 @@ const I18N = {
     confirm: {
       title: 'Bitte bestätigen',
       body: 'Möchten Sie wirklich fortfahren?',
+      resetTitle: 'Auf Standard zurücksetzen?',
+      resetBody: 'Diesen Pfad auf Standard zurücksetzen:',
+      resetConfirm: 'Zurücksetzen',
       deleteTitle: 'Backups löschen?',
       deleteBody: 'Die ausgewählten Backups werden endgültig gelöscht.',
       deleteConfirm: 'Löschen',
@@ -1270,6 +1382,8 @@ const I18N = {
       language: 'Sprache',
       defaults: 'Voreinstellungen',
       paths: 'Pfade',
+      pathsReset: 'Auf Standard zurücksetzen',
+      reset: 'Zurücksetzen',
       github: 'GitHub-Quelle',
       configPath: 'Konfigurationspfad',
       kernelPath: 'Kernelpfad',
@@ -1329,8 +1443,14 @@ const I18N = {
       config: 'Конфигурация по умолчанию',
       quick: 'Быстрые действия',
       quickHint: 'Действия используют конфигурацию по умолчанию, если в разделе Управление не задан пользовательский путь.',
-      configTitle: 'Быстрый доступ к конфигурации',
-      configHint: 'После выбора конфигурации нужен перезапуск.',
+      quickHintMissing: 'Ядро не установлено. Сначала установите его.',
+      trafficTitle: 'Статистика трафика',
+      trafficHint: 'Обновляется каждые 2 секунды.',
+      trafficSystemDown: 'Загрузка',
+      trafficSystemUp: 'Отдача',
+      trafficProxyDown: 'Прокси загрузка',
+      trafficProxyUp: 'Прокси отдача',
+      trafficTotal: 'Всего',
     },
     install: {
       title: 'Установка / обновление Mihomo',
@@ -1345,6 +1465,8 @@ const I18N = {
       cancelSuccess: 'Установка отменена',
       cancelFailed: 'Не удалось отменить установку',
       hint: 'Загружает последнюю версию ядра для вашей архитектуры и делает резервную копию предыдущей.',
+      kernelsTitle: 'Список ядер',
+      kernelsHint: 'Список доступных ядер только для просмотра.',
     },
     control: {
       title: 'Управление конфигурацией',
@@ -1353,7 +1475,7 @@ const I18N = {
       refresh: 'Обновить',
     },
     switch: {
-      title: 'Смена версии ядра',
+      title: 'Смена ядра',
       refresh: 'Обновить резервные копии',
       action: 'Переключить на выбранную версию',
     },
@@ -1402,6 +1524,7 @@ const I18N = {
       name: 'Имя',
       path: 'Путь',
       modified: 'Изменено',
+      size: 'Размер',
       current: 'Текущая',
     },
     labels: {
@@ -1411,6 +1534,7 @@ const I18N = {
       notInstalled: 'Не установлено',
       noBackups: 'Резервные копии не найдены.',
       configsEmpty: 'Конфигурации не найдены.',
+      kernelsEmpty: 'Ядра не найдены.',
       current: 'Текущая',
       configsRefreshed: 'Конфигурации обновлены.',
       statusRefreshed: 'Статус обновлен.',
@@ -1442,6 +1566,9 @@ const I18N = {
     confirm: {
       title: 'Подтвердите действие',
       body: 'Вы уверены, что хотите продолжить?',
+      resetTitle: 'Сбросить по умолчанию?',
+      resetBody: 'Сбросить путь по умолчанию:',
+      resetConfirm: 'Сбросить',
       deleteTitle: 'Удалить резервные копии?',
       deleteBody: 'Выбранные резервные копии будут удалены без возможности восстановления.',
       deleteConfirm: 'Удалить',
@@ -1464,6 +1591,8 @@ const I18N = {
       language: 'Язык',
       defaults: 'По умолчанию',
       paths: 'Пути',
+      pathsReset: 'Сбросить по умолчанию',
+      reset: 'Сбросить',
       github: 'Источник GitHub',
       configPath: 'Путь к конфигурации',
       kernelPath: 'Путь ядра',
@@ -1488,6 +1617,9 @@ const DEFAULT_SETTINGS = {
   themePreference: 'auto',
   githubUser: 'vernesong',
   configPath: '',
+  configDir: '',
+  coreDir: '',
+  dataDir: '',
   logLines: 10,
   logAutoRefresh: false,
   logIntervalPreset: '3',
@@ -1500,10 +1632,12 @@ const state = {
   lang: 'auto',
   lastBackups: [],
   configs: [],
+  kernels: [],
   logTimer: null,
   logIntervalMs: 3000,
   switchPage: 1,
   backupsPage: 1,
+  kernelsPage: 1,
   selectedBackupPaths: new Set(),
   theme: 'night',
   themePreference: 'auto',
@@ -1515,6 +1649,13 @@ const state = {
   overviewLiteLoading: false,
   overviewMemoryTimer: null,
   overviewMemoryLoading: false,
+  trafficTimer: null,
+  trafficRxBytes: null,
+  trafficTxBytes: null,
+  trafficAt: 0,
+  proxyRxBytes: null,
+  proxyTxBytes: null,
+  proxyAt: 0,
   coreActionInFlight: false,
   overviewRunning: false,
   overviewUptimeBaseSec: 0,
@@ -1671,6 +1812,15 @@ function applySettings(settings) {
   applyThemePreference(state.settings.themePreference, false);
   setLanguage(state.settings.lang, false, false);
   syncDebugMode(state.settings.debugMode);
+  if (settingsConfigDir) {
+    settingsConfigDir.value = state.settings.configDir;
+  }
+  if (settingsCoreDir) {
+    settingsCoreDir.value = state.settings.coreDir;
+  }
+  if (settingsDataDir) {
+    settingsDataDir.value = state.settings.dataDir;
+  }
   if (githubUser) {
     githubUser.value = state.settings.githubUser;
   }
@@ -1903,7 +2053,17 @@ async function runCommand(command, args = []) {
   if (!window.clashfox || typeof window.clashfox.runCommand !== 'function') {
     return { ok: false, error: 'bridge_missing' };
   }
-  return window.clashfox.runCommand(command, args);
+  const pathArgs = [];
+  if (state.settings.configDir) {
+    pathArgs.push('--config-dir', state.settings.configDir);
+  }
+  if (state.settings.coreDir) {
+    pathArgs.push('--core-dir', state.settings.coreDir);
+  }
+  if (state.settings.dataDir) {
+    pathArgs.push('--data-dir', state.settings.dataDir);
+  }
+  return window.clashfox.runCommand(command, [...pathArgs, ...args]);
 }
 
 async function cancelCommand() {
@@ -1920,7 +2080,10 @@ async function loadAppInfo() {
   const response = await window.clashfox.getAppInfo();
   if (response && response.ok && response.data) {
     appName.textContent = response.data.name || 'ClashFox';
-    appVersion.textContent = `v${response.data.version || '0.0.0'}`;
+    const version = response.data.version || '0.0.0';
+    const buildNumber = response.data.buildNumber;
+    const suffix = buildNumber ? `(${buildNumber})` : '';
+    appVersion.textContent = `v${version}${suffix}`;
   }
 }
 
@@ -1929,17 +2092,39 @@ function updateStatusUI(data) {
   state.coreRunning = running;
   state.configDefault = data.configDefault || '';
   const configValue = getCurrentConfigPath() || data.configDefault || '-';
+  const hasKernel = Boolean(data.kernelExists);
   if (statusRunning) {
     statusRunning.textContent = running ? t('labels.running') : t('labels.stopped');
   }
   if (statusVersion) {
     statusVersion.textContent = data.version || t('labels.notInstalled');
   }
+  if (startBtn) {
+    startBtn.disabled = !hasKernel || state.coreActionInFlight;
+  }
+  if (stopBtn) {
+    stopBtn.disabled = !hasKernel || state.coreActionInFlight;
+  }
+  if (restartBtn) {
+    restartBtn.disabled = !hasKernel || state.coreActionInFlight;
+  }
+  if (quickHintNodes.length) {
+    const hint = hasKernel ? t('status.quickHint') : t('status.quickHintMissing');
+    quickHintNodes.forEach((node) => {
+      node.textContent = hint;
+    });
+  }
   if (statusKernelPath) {
-    statusKernelPath.textContent = data.kernelPath || '-';
+    statusKernelPath.textContent = hasKernel ? (data.kernelPath || '-') : '-';
   }
   if (statusConfig) {
-    statusConfig.textContent = configValue;
+    statusConfig.textContent = hasKernel ? configValue : '-';
+  }
+  if (statusKernelPathRow) {
+    statusKernelPathRow.classList.toggle('is-hidden', !hasKernel);
+  }
+  if (statusConfigRow) {
+    statusConfigRow.classList.toggle('is-hidden', !hasKernel);
   }
   if (settingsKernelPath) {
     settingsKernelPath.textContent = data.kernelPath || '-';
@@ -1951,13 +2136,13 @@ function updateStatusUI(data) {
     settingsLogPath.textContent = data.logPath || '-';
   }
   if (settingsConfigDir) {
-    settingsConfigDir.textContent = data.configDir || '-';
+    settingsConfigDir.placeholder = data.configDir || '-';
   }
   if (settingsCoreDir) {
-    settingsCoreDir.textContent = data.coreDir || '-';
+    settingsCoreDir.placeholder = data.coreDir || '-';
   }
   if (settingsDataDir) {
-    settingsDataDir.textContent = data.dataDir || '-';
+    settingsDataDir.placeholder = data.dataDir || '-';
   }
   if (statusPill) {
     statusPill.dataset.state = running ? 'running' : 'stopped';
@@ -2016,6 +2201,161 @@ function formatLatency(value) {
     return '-';
   }
   return `${Math.round(num)} ms`;
+}
+
+function formatBytes(value) {
+  const num = Number.parseFloat(value);
+  if (!Number.isFinite(num) || num < 0) {
+    return '-';
+  }
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = num;
+  let idx = 0;
+  while (size >= 1024 && idx < units.length - 1) {
+    size /= 1024;
+    idx += 1;
+  }
+  const fixed = size >= 100 ? 0 : size >= 10 ? 1 : 2;
+  return `${size.toFixed(fixed)} ${units[idx]}`;
+}
+
+function formatBitrate(bytesPerSec) {
+  const num = Number.parseFloat(bytesPerSec);
+  if (!Number.isFinite(num) || num < 0) {
+    return '-';
+  }
+  const bitsPerSec = (num * 8) / 1000;
+  const units = ['Kb/s', 'Mb/s', 'Gb/s', 'Tb/s'];
+  let value = bitsPerSec;
+  let idx = 0;
+  while (value >= 1000 && idx < units.length - 1) {
+    value /= 1000;
+    idx += 1;
+  }
+  const fixed = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(fixed)} ${units[idx]}`;
+}
+
+function updateSystemTraffic(rxBytes, txBytes) {
+  const rx = Number.parseFloat(rxBytes);
+  const tx = Number.parseFloat(txBytes);
+  const now = Date.now();
+  if (!Number.isFinite(rx) || !Number.isFinite(tx)) {
+    if (trafficSystemDownloadRate) {
+      trafficSystemDownloadRate.textContent = '-';
+    }
+    if (trafficSystemDownloadTotal) {
+      trafficSystemDownloadTotal.textContent = '-';
+    }
+    if (trafficSystemUploadRate) {
+      trafficSystemUploadRate.textContent = '-';
+    }
+    if (trafficSystemUploadTotal) {
+      trafficSystemUploadTotal.textContent = '-';
+    }
+    state.trafficRxBytes = null;
+    state.trafficTxBytes = null;
+    state.trafficAt = 0;
+    return;
+  }
+
+  if (trafficSystemDownloadTotal) {
+    trafficSystemDownloadTotal.textContent = `${t('status.trafficTotal')}: ${formatBytes(rx)}`;
+  }
+  if (trafficSystemUploadTotal) {
+    trafficSystemUploadTotal.textContent = `${t('status.trafficTotal')}: ${formatBytes(tx)}`;
+  }
+
+  if (state.trafficRxBytes === null || state.trafficTxBytes === null || !state.trafficAt) {
+    state.trafficRxBytes = rx;
+    state.trafficTxBytes = tx;
+    state.trafficAt = now;
+    if (trafficSystemDownloadRate) {
+      trafficSystemDownloadRate.textContent = '-';
+    }
+    if (trafficSystemUploadRate) {
+      trafficSystemUploadRate.textContent = '-';
+    }
+    return;
+  }
+
+  const deltaSec = (now - state.trafficAt) / 1000;
+  if (deltaSec <= 0) {
+    return;
+  }
+  const rxRate = (rx - state.trafficRxBytes) / deltaSec;
+  const txRate = (tx - state.trafficTxBytes) / deltaSec;
+  state.trafficRxBytes = rx;
+  state.trafficTxBytes = tx;
+  state.trafficAt = now;
+
+  if (trafficSystemDownloadRate) {
+    trafficSystemDownloadRate.textContent = formatBitrate(rxRate);
+  }
+  if (trafficSystemUploadRate) {
+    trafficSystemUploadRate.textContent = formatBitrate(txRate);
+  }
+}
+
+function updateProxyTraffic(rxBytes, txBytes) {
+  const rx = Number.parseFloat(rxBytes);
+  const tx = Number.parseFloat(txBytes);
+  const now = Date.now();
+  if (!Number.isFinite(rx) || !Number.isFinite(tx)) {
+    if (trafficProxyDownloadRate) {
+      trafficProxyDownloadRate.textContent = '-';
+    }
+    if (trafficProxyDownloadTotal) {
+      trafficProxyDownloadTotal.textContent = '-';
+    }
+    if (trafficProxyUploadRate) {
+      trafficProxyUploadRate.textContent = '-';
+    }
+    if (trafficProxyUploadTotal) {
+      trafficProxyUploadTotal.textContent = '-';
+    }
+    state.proxyRxBytes = null;
+    state.proxyTxBytes = null;
+    state.proxyAt = 0;
+    return;
+  }
+
+  if (trafficProxyDownloadTotal) {
+    trafficProxyDownloadTotal.textContent = `${t('status.trafficTotal')}: ${formatBytes(rx)}`;
+  }
+  if (trafficProxyUploadTotal) {
+    trafficProxyUploadTotal.textContent = `${t('status.trafficTotal')}: ${formatBytes(tx)}`;
+  }
+
+  if (state.proxyRxBytes === null || state.proxyTxBytes === null || !state.proxyAt) {
+    state.proxyRxBytes = rx;
+    state.proxyTxBytes = tx;
+    state.proxyAt = now;
+    if (trafficProxyDownloadRate) {
+      trafficProxyDownloadRate.textContent = '-';
+    }
+    if (trafficProxyUploadRate) {
+      trafficProxyUploadRate.textContent = '-';
+    }
+    return;
+  }
+
+  const deltaSec = (now - state.proxyAt) / 1000;
+  if (deltaSec <= 0) {
+    return;
+  }
+  const rxRate = (rx - state.proxyRxBytes) / deltaSec;
+  const txRate = (tx - state.proxyTxBytes) / deltaSec;
+  state.proxyRxBytes = rx;
+  state.proxyTxBytes = tx;
+  state.proxyAt = now;
+
+  if (trafficProxyDownloadRate) {
+    trafficProxyDownloadRate.textContent = formatBitrate(rxRate);
+  }
+  if (trafficProxyUploadRate) {
+    trafficProxyUploadRate.textContent = formatBitrate(txRate);
+  }
 }
 
 function formatKernelDisplay(value) {
@@ -2089,8 +2429,10 @@ function updateOverviewUI(data) {
     overviewProxyIp.textContent = maskIpAddress(data.proxyIp) || '-';
   }
   if (overviewInternetIp) {
-    overviewInternetIp.textContent = maskIpAddress(data.internetIp) || '-';
+    const ipValue = data.internetIp4 || data.internetIp || data.internetIp6 || '-';
+    overviewInternetIp.textContent = maskIpAddress(ipValue) || '-';
   }
+  updateSystemTraffic(data.rxBytes, data.txBytes);
 }
 
 function updateOverviewRuntimeUI(data) {
@@ -2182,6 +2524,17 @@ async function loadOverviewLite() {
   return true;
 }
 
+async function loadTraffic() {
+  const configPath = getCurrentConfigPath();
+  const args = configPath ? ['--config', configPath] : [];
+  const response = await runCommand('traffic', args);
+  if (!response.ok || !response.data) {
+    updateProxyTraffic(null, null);
+    return;
+  }
+  updateProxyTraffic(response.data.down, response.data.up);
+}
+
 async function loadOverviewMemory() {
   if (state.overviewMemoryLoading) {
     return false;
@@ -2263,7 +2616,7 @@ function renderBackups(targetEl, withRadio, pageInfo, pageSize, multiSelect) {
   });
 
   if (items.length === 0) {
-    html += `<div class="table-row"><div>-</div><div>${t('labels.noBackups')}</div><div></div></div>`;
+    html += `<div class="table-row empty"><div class="empty-cell">${t('labels.noBackups')}</div></div>`;
   }
 
   targetEl.innerHTML = html;
@@ -2317,6 +2670,35 @@ function renderConfigTable() {
   configTable.innerHTML = html;
 }
 
+function renderKernelTable() {
+  if (!kernelTable || !kernelPageSize || !kernelPageInfo || !kernelPrev || !kernelNext) {
+    return;
+  }
+  const items = state.kernels || [];
+  const size = Number.parseInt(kernelPageSize.value, 10) || 5;
+  const pageData = paginate(items, state.kernelsPage, size);
+  state.kernelsPage = pageData.page;
+  kernelPageInfo.textContent = `${pageData.page} / ${pageData.totalPages} · ${items.length}`;
+  kernelPrev.disabled = pageData.page <= 1;
+  kernelNext.disabled = pageData.page >= pageData.totalPages;
+
+  let html = '<div class="table-row header kernel">';
+  html += `<div class="version-head">${t('table.version')}</div>`;
+  html += `<div class="time-head">${t('table.time')}</div></div>`;
+
+  pageData.items.forEach((item) => {
+    html += '<div class="table-row kernel">';
+    html += `<div class="version-cell">${item.name || '-'}</div>`;
+    html += `<div class="time-cell">${item.modified || '-'}</div></div>`;
+  });
+
+  if (items.length === 0) {
+    html += `<div class="table-row kernel empty"><div class="empty-cell">${t('labels.kernelsEmpty')}</div></div>`;
+  }
+
+  kernelTable.innerHTML = html;
+}
+
 async function loadConfigs(showToastOnSuccess = false) {
   const response = await runCommand('configs');
   if (!response.ok) {
@@ -2328,6 +2710,19 @@ async function loadConfigs(showToastOnSuccess = false) {
   if (showToastOnSuccess) {
     showToast(t('labels.configsRefreshed'));
   }
+}
+
+async function loadKernels() {
+  if (!kernelTable) {
+    return;
+  }
+  const response = await runCommand('cores');
+  if (!response.ok) {
+    renderKernelTable();
+    return;
+  }
+  state.kernels = response.data || [];
+  renderKernelTable();
 }
 
 async function loadBackups(showToastOnSuccess = false) {
@@ -2379,7 +2774,6 @@ async function loadLogs() {
   const response = await runCommand('logs', ['--lines', String(lines)]);
   if (!response.ok) {
     logContent.textContent = t('labels.logMissing');
-    showToast(response.error || t('labels.logMissing'), 'error');
     return;
   }
   if (response.data && response.data.contentBase64) {
@@ -2483,6 +2877,81 @@ if (settingsDebugMode) {
   });
 }
 
+if (settingsConfigDir) {
+  settingsConfigDir.addEventListener('change', (event) => {
+    const value = event.target.value.trim();
+    saveSettings({ configDir: value });
+    refreshPathDependentViews();
+  });
+}
+
+if (settingsCoreDir) {
+  settingsCoreDir.addEventListener('change', (event) => {
+    const value = event.target.value.trim();
+    saveSettings({ coreDir: value });
+    refreshPathDependentViews();
+  });
+}
+
+if (settingsDataDir) {
+  settingsDataDir.addEventListener('change', (event) => {
+    const value = event.target.value.trim();
+    saveSettings({ dataDir: value });
+    refreshPathDependentViews();
+  });
+}
+
+if (settingsConfigDirBrowse) {
+  settingsConfigDirBrowse.addEventListener('click', async () => {
+    const result = await handleDirectoryBrowse('Select Config Directory');
+    if (result.ok) {
+      settingsConfigDir.value = result.path;
+      saveSettings({ configDir: result.path });
+      refreshPathDependentViews();
+    }
+  });
+}
+
+if (settingsCoreDirBrowse) {
+  settingsCoreDirBrowse.addEventListener('click', async () => {
+    const result = await handleDirectoryBrowse('Select Core Directory');
+    if (result.ok) {
+      settingsCoreDir.value = result.path;
+      saveSettings({ coreDir: result.path });
+      refreshPathDependentViews();
+    }
+  });
+}
+
+if (settingsDataDirBrowse) {
+  settingsDataDirBrowse.addEventListener('click', async () => {
+    const result = await handleDirectoryBrowse('Select Data Directory');
+    if (result.ok) {
+      settingsDataDir.value = result.path;
+      saveSettings({ dataDir: result.path });
+      refreshPathDependentViews();
+    }
+  });
+}
+
+if (settingsConfigDirReset) {
+  settingsConfigDirReset.addEventListener('click', () => {
+    resetPathSetting('configDir', t('settings.configDir'));
+  });
+}
+
+if (settingsCoreDirReset) {
+  settingsCoreDirReset.addEventListener('click', () => {
+    resetPathSetting('coreDir', t('settings.coreDir'));
+  });
+}
+
+if (settingsDataDirReset) {
+  settingsDataDirReset.addEventListener('click', () => {
+    resetPathSetting('dataDir', t('settings.dataDir'));
+  });
+}
+
 if (installBtn) {
   installBtn.addEventListener('click', async () => {
     setInstallState('loading');
@@ -2555,11 +3024,103 @@ async function handleConfigBrowse() {
   }
 }
 
+async function handleDirectoryBrowse(title) {
+  if (!window.clashfox || typeof window.clashfox.selectDirectory !== 'function') {
+    return { ok: false };
+  }
+  return window.clashfox.selectDirectory(title);
+}
+
+function refreshPathDependentViews() {
+  loadStatus();
+  loadConfigs();
+  loadKernels();
+  loadBackups();
+  loadLogs();
+}
+
+async function resetConfigPath() {
+  const ok = await promptConfirm({
+    title: t('confirm.resetTitle'),
+    body: `${t('confirm.resetBody')} ${t('control.config')}`,
+    confirmLabel: t('confirm.resetConfirm'),
+    confirmTone: 'primary',
+  });
+  if (!ok) {
+    return;
+  }
+  if (configPathInput) {
+    configPathInput.value = '';
+  }
+  if (overviewConfigPath) {
+    overviewConfigPath.value = '';
+  }
+  if (settingsConfigPath) {
+    settingsConfigPath.value = '';
+  }
+  saveSettings({ configPath: '' });
+  showToast(t('labels.configNeedsRestart'));
+  renderConfigTable();
+}
+
+async function resetPathSetting(key, label) {
+  const ok = await promptConfirm({
+    title: t('confirm.resetTitle'),
+    body: `${t('confirm.resetBody')} ${label}`,
+    confirmLabel: t('confirm.resetConfirm'),
+    confirmTone: 'primary',
+  });
+  if (!ok) {
+    return;
+  }
+  if (key === 'configDir' && settingsConfigDir) {
+    settingsConfigDir.value = '';
+  }
+  if (key === 'coreDir' && settingsCoreDir) {
+    settingsCoreDir.value = '';
+  }
+  if (key === 'dataDir' && settingsDataDir) {
+    settingsDataDir.value = '';
+  }
+  saveSettings({ [key]: '' });
+  refreshPathDependentViews();
+}
+
 if (browseConfigBtn) {
   browseConfigBtn.addEventListener('click', handleConfigBrowse);
 }
 if (overviewBrowseConfig) {
   overviewBrowseConfig.addEventListener('click', handleConfigBrowse);
+}
+if (overviewConfigReset) {
+  overviewConfigReset.addEventListener('click', () => {
+    resetConfigPath();
+  });
+}
+
+if (kernelRefresh) {
+  kernelRefresh.addEventListener('click', () => {
+    loadKernels();
+  });
+}
+
+if (kernelPrev) {
+  kernelPrev.addEventListener('click', () => {
+    state.kernelsPage = Math.max(1, state.kernelsPage - 1);
+    renderKernelTable();
+  });
+}
+if (kernelNext) {
+  kernelNext.addEventListener('click', () => {
+    state.kernelsPage += 1;
+    renderKernelTable();
+  });
+}
+if (kernelPageSize) {
+  kernelPageSize.addEventListener('change', () => {
+    state.kernelsPage = 1;
+    renderKernelTable();
+  });
 }
 
 if (settingsConfigPath) {
@@ -3019,6 +3580,13 @@ function startOverviewTimer() {
   state.overviewTimer = setInterval(() => {
     loadOverview();
   }, 5000);
+
+  if (state.trafficTimer) {
+    clearInterval(state.trafficTimer);
+  }
+  state.trafficTimer = setInterval(() => {
+    loadTraffic();
+  }, 2000);
 
   if (state.overviewLiteTimer) {
     clearInterval(state.overviewLiteTimer);

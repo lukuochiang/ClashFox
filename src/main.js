@@ -271,13 +271,22 @@ function createWindow() {
   win.webContents.on('did-finish-load', sendSystemTheme);
   nativeTheme.on('updated', sendSystemTheme);
 
-  if (globalSettings.debugMode) {
-    win.webContents.openDevTools({ mode: 'detach' });
-  }
+  // Do not auto-open DevTools here; it should only open when toggled on.
 }
 
 app.name = 'ClashFox';
 app.setName('ClashFox');
+
+function getBuildNumber() {
+  try {
+    const pkgPath = path.join(ROOT_DIR, 'package.json');
+    const raw = fs.readFileSync(pkgPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    return parsed.buildNumber;
+  } catch {
+    return undefined;
+  }
+}
 
 function createAboutWindow() {
   if (!mainWindow) {
@@ -399,13 +408,30 @@ app.whenReady().then(() => {
     return { ok: true, path: result.filePaths[0] };
   });
 
+  ipcMain.handle('clashfox:selectDirectory', async (_event, title) => {
+    const result = await dialog.showOpenDialog({
+      title: title || 'Select Directory',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { ok: false, error: 'cancelled' };
+    }
+
+    return { ok: true, path: result.filePaths[0] };
+  });
+
   ipcMain.handle('clashfox:openAbout', () => {
     createAboutWindow();
     return { ok: true };
   });
 
   ipcMain.handle('clashfox:setDebugMode', (_event, enabled) => {
-    globalSettings.debugMode = Boolean(enabled);
+    const next = Boolean(enabled);
+    if (globalSettings.debugMode === next) {
+      return { ok: true, unchanged: true };
+    }
+    globalSettings.debugMode = next;
     applyDevToolsState();
     return { ok: true };
   });
@@ -416,6 +442,7 @@ app.whenReady().then(() => {
       data: {
         name: app.getName(),
         version: app.getVersion(),
+        buildNumber: getBuildNumber(),
       },
     };
   });

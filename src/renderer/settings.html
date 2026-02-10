@@ -22,8 +22,8 @@
         <nav class="nav">
           <button class="nav-btn" data-page="status" data-i18n="nav.status">Overview</button>
           <button class="nav-btn" data-page="install" data-i18n="nav.install">Install / Update</button>
-          <button class="nav-btn" data-page="control" data-i18n="nav.config">Config</button>
           <button class="nav-btn" data-page="switch" data-i18n="nav.switch">Switch Kernel</button>
+          <button class="nav-btn" data-page="control" data-i18n="nav.config">Config</button>
           <button class="nav-btn" data-page="backups" data-i18n="nav.backups">Backups</button>
           <button class="nav-btn" data-page="logs" data-i18n="nav.logs">Logs</button>
         </nav>
@@ -177,15 +177,27 @@
 <!--                </div>-->
                 <div class="paths-item">
                   <span class="paths-label" data-i18n="settings.configDir">Config Dir</span>
-                  <span class="paths-value" id="settingsConfigDir">-</span>
+                  <div class="input-group">
+                    <input id="settingsConfigDir" class="paths-input" type="text" placeholder="-" />
+                    <button class="btn" id="settingsConfigDirBrowse" data-i18n="control.browse">Browse</button>
+                    <button class="btn ghost compact" id="settingsConfigDirReset" data-i18n="settings.reset">Reset</button>
+                  </div>
                 </div>
                 <div class="paths-item">
                   <span class="paths-label" data-i18n="settings.coreDir">Core Dir</span>
-                  <span class="paths-value" id="settingsCoreDir">-</span>
+                  <div class="input-group">
+                    <input id="settingsCoreDir" class="paths-input" type="text" placeholder="-" />
+                    <button class="btn" id="settingsCoreDirBrowse" data-i18n="control.browse">Browse</button>
+                    <button class="btn ghost compact" id="settingsCoreDirReset" data-i18n="settings.reset">Reset</button>
+                  </div>
                 </div>
                 <div class="paths-item">
                   <span class="paths-label" data-i18n="settings.dataDir">Data Dir</span>
-                  <span class="paths-value" id="settingsDataDir">-</span>
+                  <div class="input-group">
+                    <input id="settingsDataDir" class="paths-input" type="text" placeholder="-" />
+                    <button class="btn" id="settingsDataDirBrowse" data-i18n="control.browse">Browse</button>
+                    <button class="btn ghost compact" id="settingsDataDirReset" data-i18n="settings.reset">Reset</button>
+                  </div>
                 </div>
               </div>
             </div>
