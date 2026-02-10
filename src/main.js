@@ -39,9 +39,13 @@ let currentInstallProcess = null; // 仅用于跟踪安装进程，支持取消�
 let globalSettings = {
   debugMode: true, // 是否启用调试模式
 };
+let isQuitting = false;
 
 function showMainWindow() {
   if (mainWindow && !mainWindow.isDestroyed()) {
+    if (app.dock && app.dock.isVisible && !app.dock.isVisible()) {
+      app.dock.show();
+    }
     if (mainWindow.isMinimized()) {
       mainWindow.restore();
     }
@@ -107,19 +111,16 @@ function createTrayMenu() {
   if (process.platform !== 'darwin') {
     return;
   }
-  const trayIconPath = path.join(ROOT_DIR, 'assets', 'logo.png');
-  let trayIcon = nativeImage.createFromPath(trayIconPath);
-  if (!trayIcon.isEmpty()) {
-    trayIcon = trayIcon.resize({ width: 18, height: 18 });
-    trayIcon.setTemplateImage(true);
-  }
-  tray = new Tray(trayIcon);
+  tray = new Tray(nativeImage.createEmpty());
+  tray.setTitle('🦊');
   tray.setToolTip('ClashFox');
   const trayMenu = Menu.buildFromTemplate([
     { label: 'Show Main Window', click: () => showMainWindow() },
-    { label: 'Zashboard Panel', click: () => openZashboardPanel() },
-    { label: 'About', click: () => createAboutWindow() },
     { type: 'separator' },
+    { label: 'Zashboard', click: () => openZashboardPanel() },
+    { type: 'separator' },
+    // { label: 'About', click: () => createAboutWindow() },
+    // { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
   ]);
   tray.setContextMenu(trayMenu);
@@ -264,14 +265,14 @@ function runBridge(args) {
         }
         
         try {
-          const parsed = JSON.parse(output);
+          const parsed = parseBridgeOutput(output);
           resolve(parsed);
         } catch (err) {
           console.error('[runBridge] JSON parse error:', err);
-          resolve({ 
-            ok: false, 
-            error: 'parse_error', 
-            details: output 
+          resolve({
+            ok: false,
+            error: 'parse_error',
+            details: output
           });
         }
       };
@@ -309,6 +310,30 @@ function runBridge(args) {
   });
 }
 
+function parseBridgeOutput(output) {
+  const trimmed = (output || '').trim();
+  if (!trimmed) {
+    throw new Error('empty_output');
+  }
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const lines = trimmed.split(/\r?\n/);
+    for (const line of lines) {
+      const candidate = line.trim();
+      if (!candidate) continue;
+      if (candidate.startsWith('{') || candidate.startsWith('[')) {
+        try {
+          return JSON.parse(candidate);
+        } catch {
+          // continue searching
+        }
+      }
+    }
+  }
+  throw new Error('parse_failed');
+}
+
 function createWindow() {
   nativeTheme.themeSource = 'system';
   const win = new BrowserWindow({
@@ -328,6 +353,17 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
   mainWindow = win;
+
+  win.on('close', (event) => {
+    if (isQuitting) {
+      return;
+    }
+    event.preventDefault();
+    win.hide();
+    if (app.dock && app.dock.hide) {
+      app.dock.hide();
+    }
+  });
 
   win.webContents.on('before-input-event', (event, input) => {
     if (globalSettings.debugMode) {
@@ -564,6 +600,13 @@ app.whenReady().then(() => {
     return { ok: true };
   });
 
+  ipcMain.handle('clashfox:setThemeSource', (_event, source) => {
+    const allowed = new Set(['system', 'light', 'dark']);
+    const next = allowed.has(source) ? source : 'system';
+    nativeTheme.themeSource = next;
+    return { ok: true };
+  });
+
   ipcMain.handle('clashfox:appInfo', () => {
     return {
       ok: true,
@@ -580,6 +623,10 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+});
+
+app.on('before-quit', () => {
+  isQuitting = true;
 });
 
 app.on('window-all-closed', () => {

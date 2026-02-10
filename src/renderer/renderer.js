@@ -120,7 +120,6 @@ const confirmCancel = document.getElementById('confirmCancel');
 const confirmOk = document.getElementById('confirmOk');
 const appName = document.getElementById('appName');
 const appVersion = document.getElementById('appVersion');
-const helpVersion = document.getElementById('helpVersion');
 const themeToggle = document.getElementById('themeToggle');
 const settingsTheme = document.getElementById('settingsTheme');
 const settingsLang = document.getElementById('settingsLang');
@@ -1806,6 +1805,7 @@ const state = {
   themePreference: 'auto',
   installState: 'idle',
   zashboardAlerted: false,
+  zashboardLoaded: false,
   overviewTimer: null,
   overviewTickTimer: null,
   overviewLoading: false,
@@ -2008,6 +2008,7 @@ function applySystemTheme(isDark) {
     return;
   }
   applyTheme(isDark ? 'night' : 'day');
+  sendZashboardTheme();
   updateThemeToggle();
 }
 
@@ -2017,6 +2018,8 @@ function applyThemePreference(preference, persist = true) {
     settingsTheme.value = preference;
   }
   applyTheme(resolveTheme(preference));
+  syncThemeSource(preference);
+  sendZashboardTheme();
   if (persist) {
     saveSettings({ themePreference: preference });
   }
@@ -2324,9 +2327,6 @@ async function loadAppInfo() {
     const suffix = buildNumber ? `(${buildNumber})` : '';
     const displayVersion = `v${version}${suffix}`;
     appVersion.textContent = displayVersion;
-    if (helpVersion) {
-      helpVersion.textContent = displayVersion;
-    }
   }
 }
 
@@ -2857,6 +2857,35 @@ function getCurrentConfigPath() {
   const explicit = candidates.find((value) => value && value.trim());
   return (explicit || state.configDefault || '').trim();
 }
+
+function syncThemeSource(preference) {
+  if (!window.clashfox || typeof window.clashfox.setThemeSource !== 'function') {
+    return;
+  }
+  let source = 'system';
+  if (preference === 'day') {
+    source = 'light';
+  } else if (preference === 'night') {
+    source = 'dark';
+  }
+  window.clashfox.setThemeSource(source);
+}
+
+function sendZashboardTheme() {
+  if (!zashboardFrame || !zashboardFrame.contentWindow) {
+    return;
+  }
+  const themeValue = state.theme === 'night' ? 'dark' : 'light';
+  try {
+    zashboardFrame.contentWindow.postMessage(
+      { type: 'clashfox-theme', theme: themeValue },
+      '*'
+    );
+  } catch {
+    // ignore cross-origin errors
+  }
+}
+
 
 function getControllerArgs() {
   const settings = state.settings || readSettings();
@@ -3973,11 +4002,14 @@ function initZashboardFrame() {
     clearTimeout(timeout);
     hideEmpty();
     state.zashboardAlerted = false;
+    state.zashboardLoaded = true;
+    sendZashboardTheme();
   });
   zashboardFrame.addEventListener('error', () => {
     clearTimeout(timeout);
     showEmpty();
     showZashboardAlert();
+    state.zashboardLoaded = false;
   });
 }
 

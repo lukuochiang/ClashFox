@@ -60,26 +60,27 @@
             </div>
           </div>
         </header>
-
-        <div class="zashboard-card" id="zashboard">
-          <!--            <div class="card-header-row">-->
-          <!--              <h3 data-i18n="zashboard.title">Zashboard</h3>-->
-          <!--              <div class="hint" data-i18n="zashboard.hint">If it does not load, please start the kernel first.</div>-->
-          <!--            </div>-->
-          <div class="zashboard-frame">
-            <div class="zashboard-empty" id="zashboardEmpty">
-              <div class="zashboard-empty-title" data-i18n="zashboard.unavailable">Zashboard is not reachable.</div>
-              <div class="hint">http://127.0.0.1:9090/ui/zashboard</div>
+        <section id="zashboard" class="panel active">
+          <div class="zashboard-card">
+            <!--            <div class="card-header-row">-->
+            <!--              <h3 data-i18n="zashboard.title">Zashboard</h3>-->
+            <!--              <div class="hint" data-i18n="zashboard.hint">If it does not load, please start the kernel first.</div>-->
+            <!--            </div>-->
+            <div class="zashboard-frame">
+              <div class="zashboard-empty" id="zashboardEmpty">
+                <div class="zashboard-empty-title" data-i18n="zashboard.unavailable">Zashboard is not reachable.</div>
+                <div class="hint">http://127.0.0.1:9090/ui/zashboard</div>
+              </div>
+              <iframe
+                      title="Zashboard"
+                      id="zashboardFrame"
+                      src="http://127.0.0.1:9090/ui/zashboard"
+                      loading="eager"
+                      referrerpolicy="no-referrer"
+              ></iframe>
             </div>
-            <iframe
-                    title="Zashboard"
-                    id="zashboardFrame"
-                    src="http://127.0.0.1:9090/ui/zashboard"
-                    loading="eager"
-                    referrerpolicy="no-referrer"
-            ></iframe>
           </div>
-        </div>
+        </section>
       </main>
     </div>
 

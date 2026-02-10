@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('clashfox', {
   // openAbout: () => ipcRenderer.invoke('clashfox:openAbout'),
   openExternal: (url) => ipcRenderer.invoke('clashfox:openExternal', url),
   setDebugMode: (enabled) => ipcRenderer.invoke('clashfox:setDebugMode', Boolean(enabled)),
+  setThemeSource: (source) => ipcRenderer.invoke('clashfox:setThemeSource', source),
   readSettings: () => ipcRenderer.invoke('clashfox:readSettings'),
   writeSettings: (data) => ipcRenderer.invoke('clashfox:writeSettings', data),
   getUserDataPath: () => ipcRenderer.invoke('clashfox:userDataPath'),

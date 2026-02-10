@@ -71,7 +71,8 @@
           "type": "link",
           "path": "/Applications"
         }
-      ]
+      ],
+      "title": "ClashFox Installer"
     }
   }
 }
