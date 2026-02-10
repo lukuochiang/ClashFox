@@ -6,7 +6,7 @@ contextBridge.exposeInMainWorld('clashfox', {
   selectConfig: () => ipcRenderer.invoke('clashfox:selectConfig'),
   selectDirectory: (title) => ipcRenderer.invoke('clashfox:selectDirectory', title),
   getAppInfo: () => ipcRenderer.invoke('clashfox:appInfo'),
-  openAbout: () => ipcRenderer.invoke('clashfox:openAbout'),
+  // openAbout: () => ipcRenderer.invoke('clashfox:openAbout'),
   openExternal: (url) => ipcRenderer.invoke('clashfox:openExternal', url),
   setDebugMode: (enabled) => ipcRenderer.invoke('clashfox:setDebugMode', Boolean(enabled)),
   readSettings: () => ipcRenderer.invoke('clashfox:readSettings'),

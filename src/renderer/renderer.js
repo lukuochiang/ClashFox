@@ -92,7 +92,6 @@ const kernelPageSize = document.getElementById('kernelPageSize');
 const switchPrev = document.getElementById('switchPrev');
 const switchNext = document.getElementById('switchNext');
 const switchPageInfo = document.getElementById('switchPageInfo');
-const switchPageSize = document.getElementById('switchPageSize');
 const backupsPrev = document.getElementById('backupsPrev');
 const backupsNext = document.getElementById('backupsNext');
 const backupsPageInfo = document.getElementById('backupsPageInfo');
@@ -357,7 +356,7 @@ const I18N = {
       dataDir: 'Data Dir',
       logs: 'Log Settings',
       pagination: 'Pagination',
-      switchPageSize: 'Switch Page Size',
+      kernelPageSize: 'Kernel Page Size',
       backupsPageSize: 'Backups Page Size',
       debugMode: 'Debug Mode',
       debugModeLabel: 'Enable Debug Mode',
@@ -569,7 +568,7 @@ const I18N = {
       dataDir: '数据目录',
       logs: '日志设置',
       pagination: '分页',
-      switchPageSize: '切换页大小',
+      kernelPageSize: '内核页大小',
       backupsPageSize: '备份页大小',
       debugMode: '调试模式',
       debugModeLabel: '启用调试模式',
@@ -780,7 +779,7 @@ const I18N = {
       dataDir: 'データディレクトリ',
       logs: 'ログ設定',
       pagination: 'ページング',
-      switchPageSize: '切替ページサイズ',
+      kernelPageSize: 'カーネルページサイズ',
       backupsPageSize: 'バックアップページサイズ',
       debugMode: 'デバッグモード',
       debugModeLabel: 'デバッグモードを有効にする',
@@ -991,7 +990,7 @@ const I18N = {
       dataDir: '데이터 디렉터리',
       logs: '로그 설정',
       pagination: '페이지네이션',
-      switchPageSize: '전환 페이지 크기',
+      kernelPageSize: '커널 페이지 크기',
       backupsPageSize: '백업 페이지 크기',
       debugMode: '디버그 모드',
       debugModeLabel: '디버그 모드 활성화',
@@ -1202,7 +1201,7 @@ const I18N = {
       dataDir: 'Dossier data',
       logs: 'Paramètres des journaux',
       pagination: 'Pagination',
-      switchPageSize: 'Taille de page pour la bascule',
+      kernelPageSize: 'Taille de page du noyau',
       backupsPageSize: 'Taille de page des sauvegardes',
       debugMode: 'Mode débogage',
       debugModeLabel: 'Activer le mode débogage',
@@ -1413,7 +1412,7 @@ const I18N = {
       dataDir: 'Datenordner',
       logs: 'Log-Einstellungen',
       pagination: 'Paginierung',
-      switchPageSize: 'Seitengröße Umschalten',
+      kernelPageSize: 'Kernel-Seitengröße',
       backupsPageSize: 'Seitengröße Backups',
       debugMode: 'Debug-Modus',
       debugModeLabel: 'Debug-Modus aktivieren',
@@ -1624,7 +1623,7 @@ const I18N = {
       dataDir: 'Каталог данных',
       logs: 'Настройки журнала',
       pagination: 'Пагинация',
-      switchPageSize: 'Размер страницы переключения',
+      kernelPageSize: 'Размер страницы ядер',
       backupsPageSize: 'Размер страницы резервных копий',
       debugMode: 'Режим отладки',
       debugModeLabel: 'Включить режим отладки',
@@ -1930,8 +1929,8 @@ function applySettings(settings) {
     settingsLogAutoRefresh.checked = state.settings.logAutoRefresh;
   }
   setLogAutoRefresh(state.settings.logAutoRefresh);
-  if (switchPageSize) {
-    switchPageSize.value = state.settings.switchPageSize;
+  if (kernelPageSize) {
+    kernelPageSize.value = state.settings.switchPageSize;
   }
   if (settingsSwitchPageSize) {
     settingsSwitchPageSize.value = state.settings.switchPageSize;
@@ -2759,9 +2758,9 @@ function renderKernelTable() {
     return;
   }
   const items = state.kernels || [];
-  const pageSizeRaw = (switchPageSize && switchPageSize.value) || state.settings.switchPageSize || kernelPageSize.value;
-  if (kernelPageSize && switchPageSize) {
-    kernelPageSize.value = switchPageSize.value;
+  const pageSizeRaw = (kernelPageSize && kernelPageSize.value) || state.settings.switchPageSize || kernelPageSize.value;
+  if (kernelPageSize && kernelPageSize) {
+    kernelPageSize.value = kernelPageSize.value;
   }
   const size = Number.parseInt(pageSizeRaw, 10) || 5;
   const pageData = paginate(items, state.kernelsPage, size);
@@ -2844,10 +2843,10 @@ async function loadBackups(showToastOnSuccess = false) {
 }
 
 function renderSwitchTable() {
-  if (!backupTable || !switchPageSize || !switchPageInfo || !switchPrev || !switchNext) {
+  if (!backupTable || !kernelPageSize || !switchPageInfo || !switchPrev || !switchNext) {
     return;
   }
-  const size = Number.parseInt(switchPageSize.value, 10) || 10;
+  const size = Number.parseInt(kernelPageSize.value, 10) || 10;
   const pageData = renderBackups(backupTable, true, state.switchPage, size, false);
   state.switchPage = pageData.page;
   switchPageInfo.textContent = `${pageData.page} / ${pageData.totalPages} · ${state.lastBackups.length}`;
@@ -3228,8 +3227,8 @@ if (kernelNext) {
 }
 if (kernelPageSize) {
   kernelPageSize.addEventListener('change', () => {
-    if (switchPageSize) {
-      switchPageSize.value = kernelPageSize.value;
+    if (kernelPageSize) {
+      kernelPageSize.value = kernelPageSize.value;
     }
     if (settingsSwitchPageSize) {
       settingsSwitchPageSize.value = kernelPageSize.value;
@@ -3439,17 +3438,17 @@ if (switchNext) {
     renderSwitchTable();
   });
 }
-if (switchPageSize) {
-  switchPageSize.addEventListener('change', () => {
+if (kernelPageSize) {
+  kernelPageSize.addEventListener('change', () => {
     state.switchPage = 1;
     if (kernelPageSize) {
-      kernelPageSize.value = switchPageSize.value;
+      kernelPageSize.value = kernelPageSize.value;
     }
     renderSwitchTable();
     if (settingsSwitchPageSize) {
-      settingsSwitchPageSize.value = switchPageSize.value;
+      settingsSwitchPageSize.value = kernelPageSize.value;
     }
-    saveSettings({ switchPageSize: switchPageSize.value });
+    saveSettings({ switchPageSize: kernelPageSize.value });
   });
 }
 
@@ -3476,8 +3475,8 @@ if (settingsLogIntervalPreset) {
 // 添加settings页面上Pagination的事件监听器
 if (settingsSwitchPageSize) {
   settingsSwitchPageSize.addEventListener('change', () => {
-    if (switchPageSize) {
-      switchPageSize.value = settingsSwitchPageSize.value;
+    if (kernelPageSize) {
+      kernelPageSize.value = settingsSwitchPageSize.value;
     }
     if (kernelPageSize) {
       kernelPageSize.value = settingsSwitchPageSize.value;
@@ -3523,7 +3522,7 @@ if (backupsPageSize) {
 
 if (settingsSwitchPageSize) {
   settingsSwitchPageSize.addEventListener('change', () => {
-    switchPageSize.value = settingsSwitchPageSize.value;
+    kernelPageSize.value = settingsSwitchPageSize.value;
     if (kernelPageSize) {
       kernelPageSize.value = settingsSwitchPageSize.value;
     }

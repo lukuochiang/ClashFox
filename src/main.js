@@ -36,7 +36,7 @@ function getBridgePath() {
 let mainWindow = null;
 let currentInstallProcess = null; // 仅用于跟踪安装进程，支持取消功能
 let globalSettings = {
-  debugMode: false, // 是否启用调试模式
+  debugMode: true, // 是否启用调试模式
 };
 
 function buildMenuTemplate() {
