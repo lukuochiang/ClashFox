@@ -2041,7 +2041,7 @@ tr_msg() {
 }
 
 # ClashFox 默认目录 - 默认值，可通过命令行参数或交互方式修改
-CLASHFOX_DEFAULT_DIR="/Applications/ClashFox.app"
+CLASHFOX_DEFAULT_DIR="/Applications/ClashFox"
 CLASHFOX_DIR="$CLASHFOX_DEFAULT_DIR"
 CLASHFOX_USER_DATA_DIR="$HOME/Library/Application Support/ClashFox"
 
