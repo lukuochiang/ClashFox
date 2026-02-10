@@ -15,7 +15,7 @@ const keepNames = new Set([
 
 for (const name of fs.readdirSync(distDir)) {
   const filePath = path.join(distDir, name);
-  if (name === 'mac') {
+  if (name.startsWith('mac')) {
     fs.rmSync(filePath, { recursive: true, force: true });
     continue;
   }

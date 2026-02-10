@@ -28,6 +28,7 @@
     "mac": {
       "category": "public.app-category.utilities",
       "icon": "assets/logo.icns",
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
       "target": [
         {
           "target": "dmg",
