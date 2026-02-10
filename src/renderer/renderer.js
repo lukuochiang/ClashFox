@@ -28,10 +28,8 @@ const trafficSystemDownloadRate = document.getElementById('trafficSystemDownload
 const trafficSystemDownloadTotal = document.getElementById('trafficSystemDownloadTotal');
 const trafficSystemUploadRate = document.getElementById('trafficSystemUploadRate');
 const trafficSystemUploadTotal = document.getElementById('trafficSystemUploadTotal');
-const trafficProxyDownloadRate = document.getElementById('trafficProxyDownloadRate');
-const trafficProxyDownloadTotal = document.getElementById('trafficProxyDownloadTotal');
-const trafficProxyUploadRate = document.getElementById('trafficProxyUploadRate');
-const trafficProxyUploadTotal = document.getElementById('trafficProxyUploadTotal');
+const trafficTotalDownload = document.getElementById('trafficTotalDownload');
+const trafficTotalUpload = document.getElementById('trafficTotalUpload');
 const quickHintNodes = Array.from(document.querySelectorAll('[data-i18n="status.quickHint"]'));
 
 // IP地址隐私保护函数
@@ -122,6 +120,7 @@ const confirmCancel = document.getElementById('confirmCancel');
 const confirmOk = document.getElementById('confirmOk');
 const appName = document.getElementById('appName');
 const appVersion = document.getElementById('appVersion');
+const helpVersion = document.getElementById('helpVersion');
 const themeToggle = document.getElementById('themeToggle');
 const settingsTheme = document.getElementById('settingsTheme');
 const settingsLang = document.getElementById('settingsLang');
@@ -199,8 +198,8 @@ const I18N = {
       trafficHint: 'Updated every 1 second.',
       trafficSystemDown: 'Download',
       trafficSystemUp: 'Upload',
-      trafficProxyDown: 'Proxy Download',
-      trafficProxyUp: 'Proxy Upload',
+      trafficTotalDown: 'Download Total',
+      trafficTotalUp: 'Upload Total',
       trafficTotal: 'Total',
     },
     install: {
@@ -263,12 +262,13 @@ const I18N = {
     help: {
       title: 'Help & Notes',
       introTitle: 'Introduction',
+      sloganLabel: 'Slogan',
       line1: 'This GUI invokes the original ClashFox Mihomo Toolkit script under the hood.',
       line2: 'Some actions require sudo and may prompt for your macOS password.',
       line3: 'If you are running on non-macOS, the toolkit functions are disabled.',
       project: 'Project: ClashFox GUI for Mihomo',
       github: 'GitHub: https://github.com/lukuochiang/ClashFox',
-      telegram: 'Telegram: https://t.me/clashfox',
+      telegram: 'Telegram: https://t.me/clashfoxd',
     },
     zashboard: {
       title: 'Zashboard',
@@ -435,8 +435,8 @@ const I18N = {
       trafficHint: '每 1 秒更新一次。',
       trafficSystemDown: '下载',
       trafficSystemUp: '上传',
-      trafficProxyDown: '代理下载',
-      trafficProxyUp: '代理上传',
+      trafficTotalDown: '下载总量',
+      trafficTotalUp: '上传总量',
       trafficTotal: '总量',
     },
     install: {
@@ -498,12 +498,13 @@ const I18N = {
     help: {
       title: '帮助与说明',
       introTitle: '项目介绍',
+      sloganLabel: '口号',
       line1: '此 GUI 在后台调用 ClashFox Mihomo Toolkit 脚本。',
       line2: '部分操作需要 sudo 权限，可能会提示输入 macOS 密码。',
       line3: '如果运行在非 macOS 系统，工具功能会被禁用。',
       project: '项目：ClashFox GUI for Mihomo',
       github: 'GitHub：https://github.com/lukuochiang/ClashFox',
-      telegram: 'Telegram：https://t.me/clashfox',
+      telegram: 'Telegram：https://t.me/clashfoxd',
     },
     actions: {
       start: '启动',
@@ -665,8 +666,8 @@ const I18N = {
       trafficHint: '1 秒ごとに更新します。',
       trafficSystemDown: '受信',
       trafficSystemUp: '送信',
-      trafficProxyDown: 'プロキシ受信',
-      trafficProxyUp: 'プロキシ送信',
+      trafficTotalDown: 'ダウンロード合計',
+      trafficTotalUp: 'アップロード合計',
       trafficTotal: '合計',
     },
     install: {
@@ -728,12 +729,13 @@ const I18N = {
     help: {
       title: 'ヘルプ & メモ',
       introTitle: '紹介',
+      sloganLabel: 'スローガン',
       line1: 'この GUI は内部で ClashFox Mihomo Toolkit スクリプトを実行します。',
       line2: '一部の操作には sudo が必要で、macOS のパスワードを求められる場合があります。',
       line3: 'macOS 以外の場合、ツール機能は無効になります。',
       project: 'プロジェクト：ClashFox GUI',
       github: 'GitHub：https://github.com/lukuochiang/ClashFox',
-      telegram: 'Telegram：https://t.me/clashfox',
+      telegram: 'Telegram：https://t.me/clashfoxd',
     },
     actions: {
       start: '開始',
@@ -893,8 +895,8 @@ const I18N = {
       trafficHint: '1초마다 업데이트됩니다.',
       trafficSystemDown: '다운로드',
       trafficSystemUp: '업로드',
-      trafficProxyDown: '프록시 다운로드',
-      trafficProxyUp: '프록시 업로드',
+      trafficTotalDown: '다운로드 합계',
+      trafficTotalUp: '업로드 합계',
       trafficTotal: '총량',
     },
     install: {
@@ -956,12 +958,13 @@ const I18N = {
     help: {
       title: '도움말 및 안내',
       introTitle: '소개',
+      sloganLabel: '슬로건',
       line1: '이 GUI는 내부적으로 ClashFox Mihomo Toolkit 스크립트를 실행합니다.',
       line2: '일부 작업은 sudo 권한이 필요하며 macOS 비밀번호를 요청할 수 있습니다.',
       line3: 'macOS가 아닌 경우 도구 기능이 비활성화됩니다.',
       project: '프로젝트: ClashFox GUI',
       github: 'GitHub: https://github.com/lukuochiang/ClashFox',
-      telegram: 'Telegram: https://t.me/clashfox',
+      telegram: 'Telegram: https://t.me/clashfoxd',
     },
     actions: {
       start: '시작',
@@ -1122,8 +1125,8 @@ const I18N = {
       trafficHint: 'Mise à jour toutes les 1 seconde.',
       trafficSystemDown: 'Téléchargement',
       trafficSystemUp: 'Téléversement',
-      trafficProxyDown: 'Téléchargement proxy',
-      trafficProxyUp: 'Téléversement proxy',
+      trafficTotalDown: 'Total téléchargement',
+      trafficTotalUp: 'Total téléversement',
       trafficTotal: 'Total',
     },
     install: {
@@ -1185,12 +1188,13 @@ const I18N = {
     help: {
       title: 'Aide & Notes',
       introTitle: 'Présentation',
+      sloganLabel: 'Slogan',
       line1: 'Cette interface appelle le script ClashFox Mihomo Toolkit en arrière-plan.',
       line2: 'Certaines actions exigent sudo et peuvent demander votre mot de passe macOS.',
       line3: 'Si vous n’êtes pas sur macOS, les fonctions sont désactivées.',
       project: 'Projet : ClashFox GUI for Mihomo',
       github: 'GitHub : https://github.com/lukuochiang/ClashFox',
-      telegram: 'Telegram : https://t.me/clashfox',
+      telegram: 'Telegram : https://t.me/clashfoxd',
     },
     actions: {
       start: 'Démarrer',
@@ -1351,8 +1355,8 @@ const I18N = {
       trafficHint: 'Aktualisiert jede Sekunde.',
       trafficSystemDown: 'Download',
       trafficSystemUp: 'Upload',
-      trafficProxyDown: 'Proxy Download',
-      trafficProxyUp: 'Proxy Upload',
+      trafficTotalDown: 'Download Gesamt',
+      trafficTotalUp: 'Upload Gesamt',
       trafficTotal: 'Gesamt',
     },
     install: {
@@ -1414,12 +1418,13 @@ const I18N = {
     help: {
       title: 'Hilfe & Hinweise',
       introTitle: 'Einführung',
+      sloganLabel: 'Slogan',
       line1: 'Diese GUI ruft im Hintergrund das ClashFox Mihomo Toolkit-Skript auf.',
       line2: 'Einige Aktionen erfordern sudo und können nach Ihrem macOS-Passwort fragen.',
       line3: 'Wenn Sie nicht unter macOS laufen, sind die Toolkit-Funktionen deaktiviert.',
       project: 'Projekt: ClashFox GUI',
       github: 'GitHub: https://github.com/lukuochiang/ClashFox',
-      telegram: 'Telegram: https://t.me/clashfox',
+      telegram: 'Telegram: https://t.me/clashfoxd',
     },
     actions: {
       start: 'Starten',
@@ -1579,8 +1584,8 @@ const I18N = {
       trafficHint: 'Обновляется каждую секунду.',
       trafficSystemDown: 'Загрузка',
       trafficSystemUp: 'Отдача',
-      trafficProxyDown: 'Прокси загрузка',
-      trafficProxyUp: 'Прокси отдача',
+      trafficTotalDown: 'Загрузка всего',
+      trafficTotalUp: 'Отдача всего',
       trafficTotal: 'Всего',
     },
     install: {
@@ -1642,12 +1647,13 @@ const I18N = {
     help: {
       title: 'Помощь и заметки',
       introTitle: 'Введение',
+      sloganLabel: 'Слоган',
       line1: 'Этот интерфейс вызывает скрипт ClashFox Mihomo Toolkit.',
       line2: 'Некоторые действия требуют sudo и могут запросить пароль macOS.',
       line3: 'Если вы не на macOS, функции инструмента отключены.',
       project: 'Проект: ClashFox GUI',
       github: 'GitHub: https://github.com/lukuochiang/ClashFox',
-      telegram: 'Telegram: https://t.me/clashfox',
+      telegram: 'Telegram: https://t.me/clashfoxd',
     },
     actions: {
       start: 'Запустить',
@@ -2316,7 +2322,11 @@ async function loadAppInfo() {
     const version = response.data.version || '0.0.0';
     const buildNumber = response.data.buildNumber;
     const suffix = buildNumber ? `(${buildNumber})` : '';
-    appVersion.textContent = `v${version}${suffix}`;
+    const displayVersion = `v${version}${suffix}`;
+    appVersion.textContent = displayVersion;
+    if (helpVersion) {
+      helpVersion.textContent = displayVersion;
+    }
   }
 }
 
@@ -2496,6 +2506,12 @@ function updateSystemTraffic(rxBytes, txBytes) {
     if (trafficSystemUploadTotal) {
       trafficSystemUploadTotal.textContent = '-';
     }
+    if (trafficTotalDownload) {
+      trafficTotalDownload.textContent = '-';
+    }
+    if (trafficTotalUpload) {
+      trafficTotalUpload.textContent = '-';
+    }
     state.trafficRxBytes = null;
     state.trafficTxBytes = null;
     state.trafficAt = 0;
@@ -2507,6 +2523,12 @@ function updateSystemTraffic(rxBytes, txBytes) {
   }
   if (trafficSystemUploadTotal) {
     trafficSystemUploadTotal.textContent = `${t('status.trafficTotal')}: ${formatBytes(tx)}`;
+  }
+  if (trafficTotalDownload) {
+    trafficTotalDownload.textContent = formatBytes(rx);
+  }
+  if (trafficTotalUpload) {
+    trafficTotalUpload.textContent = formatBytes(tx);
   }
 
   if (state.trafficRxBytes === null || state.trafficTxBytes === null || !state.trafficAt) {
@@ -2541,64 +2563,7 @@ function updateSystemTraffic(rxBytes, txBytes) {
 }
 
 function updateProxyTraffic(rxBytes, txBytes) {
-  const rx = Number.parseFloat(rxBytes);
-  const tx = Number.parseFloat(txBytes);
-  const now = Date.now();
-  if (!Number.isFinite(rx) || !Number.isFinite(tx)) {
-    if (trafficProxyDownloadRate) {
-      trafficProxyDownloadRate.textContent = '-';
-    }
-    if (trafficProxyDownloadTotal) {
-      trafficProxyDownloadTotal.textContent = '-';
-    }
-    if (trafficProxyUploadRate) {
-      trafficProxyUploadRate.textContent = '-';
-    }
-    if (trafficProxyUploadTotal) {
-      trafficProxyUploadTotal.textContent = '-';
-    }
-    state.proxyRxBytes = null;
-    state.proxyTxBytes = null;
-    state.proxyAt = 0;
-    return;
-  }
-
-  if (trafficProxyDownloadTotal) {
-    trafficProxyDownloadTotal.textContent = `${t('status.trafficTotal')}: ${formatBytes(rx)}`;
-  }
-  if (trafficProxyUploadTotal) {
-    trafficProxyUploadTotal.textContent = `${t('status.trafficTotal')}: ${formatBytes(tx)}`;
-  }
-
-  if (state.proxyRxBytes === null || state.proxyTxBytes === null || !state.proxyAt) {
-    state.proxyRxBytes = rx;
-    state.proxyTxBytes = tx;
-    state.proxyAt = now;
-    if (trafficProxyDownloadRate) {
-      trafficProxyDownloadRate.textContent = '-';
-    }
-    if (trafficProxyUploadRate) {
-      trafficProxyUploadRate.textContent = '-';
-    }
-    return;
-  }
-
-  const deltaSec = (now - state.proxyAt) / 1000;
-  if (deltaSec <= 0) {
-    return;
-  }
-  const rxRate = (rx - state.proxyRxBytes) / deltaSec;
-  const txRate = (tx - state.proxyTxBytes) / deltaSec;
-  state.proxyRxBytes = rx;
-  state.proxyTxBytes = tx;
-  state.proxyAt = now;
-
-  if (trafficProxyDownloadRate) {
-    trafficProxyDownloadRate.textContent = formatBitrate(rxRate);
-  }
-  if (trafficProxyUploadRate) {
-    trafficProxyUploadRate.textContent = formatBitrate(txRate);
-  }
+  return;
 }
 
 function formatKernelDisplay(value) {
@@ -2740,6 +2705,7 @@ async function loadOverview(showToastOnSuccess = false) {
   state.overviewLoading = true;
   const configPath = getCurrentConfigPath();
   const args = configPath ? ['--config', configPath] : [];
+  args.push(...getControllerArgs());
   const response = await runCommand('overview', args);
   if (!response.ok) {
     state.overviewLoading = false;
@@ -2763,6 +2729,7 @@ async function loadOverviewLite() {
   state.overviewLiteLoading = true;
   const configPath = getCurrentConfigPath();
   const args = configPath ? ['--config', configPath] : [];
+  args.push(...getControllerArgs());
   const response = await runCommand('overview-lite', args);
   if (!response.ok) {
     state.overviewLiteLoading = false;
@@ -2776,6 +2743,7 @@ async function loadOverviewLite() {
 async function loadTraffic() {
   const configPath = getCurrentConfigPath();
   const args = configPath ? ['--config', configPath] : [];
+  args.push(...getControllerArgs());
   const response = await runCommand('traffic', args);
   if (!response.ok || !response.data) {
     updateProxyTraffic(null, null);
@@ -2888,6 +2856,20 @@ function getCurrentConfigPath() {
   }
   const explicit = candidates.find((value) => value && value.trim());
   return (explicit || state.configDefault || '').trim();
+}
+
+function getControllerArgs() {
+  const settings = state.settings || readSettings();
+  const args = [];
+  const controller = (settings.externalController || '').trim();
+  const secret = (settings.secret || '').trim();
+  if (controller) {
+    args.push('--controller', controller);
+  }
+  if (secret) {
+    args.push('--secret', secret);
+  }
+  return args;
 }
 
 function renderConfigTable() {

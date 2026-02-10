@@ -3359,16 +3359,16 @@ rotate_logs() {
 
     # 检查日志的最后修改日期
     if [ -f "$LOG_FILE" ]; then
-        LOG_MODIFY_DATE=$(stat -f "%Sm" -t "%Y%m%d" "$LOG_FILE")
+        LOG_MODIFY_TS=$(stat -f "%Sm" -t "%Y%m%d_%H%M%S" "$LOG_FILE")
+        LOG_MODIFY_DATE="${LOG_MODIFY_TS%%_*}"
 
-        # 如果日志是昨天或更早的，进行日期备份
+        # 如果日志是昨天或更早的，进行日期备份（文件名包含日期+时分秒）
         if [ "$LOG_MODIFY_DATE" != "$CURRENT_DATE" ]; then
-            # 创建按日期命名的备份文件
-            DATE_BACKUP_FILE="$BACKUP_DIR/clashfox.log.$LOG_MODIFY_DATE.gz"
+            DATE_BACKUP_FILE="$BACKUP_DIR/clashfox.log.$LOG_MODIFY_TS.gz"
 
             # 如果备份文件已存在，添加时间戳避免覆盖
             if [ -f "$DATE_BACKUP_FILE" ]; then
-                DATE_BACKUP_FILE="$BACKUP_DIR/clashfox.log.$LOG_MODIFY_DATE.$(date +%H%M%S).gz"
+                DATE_BACKUP_FILE="$BACKUP_DIR/clashfox.log.$LOG_MODIFY_TS.$(date +%H%M%S).gz"
             fi
 
             # 压缩并备份旧日志

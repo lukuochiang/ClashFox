@@ -1,7 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme, shell, Tray } = require('electron');
 const { spawn, execFileSync } = require('child_process');
 
 const ROOT_DIR = path.join(__dirname, '..');
@@ -34,10 +34,31 @@ function getBridgePath() {
   return path.join(process.resourcesPath, 'app.asar.unpacked', 'scripts', 'gui_bridge.sh');
 }
 let mainWindow = null;
+let tray = null;
 let currentInstallProcess = null; // 仅用于跟踪安装进程，支持取消功能
 let globalSettings = {
   debugMode: true, // 是否启用调试模式
 };
+
+function showMainWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    mainWindow.show();
+    mainWindow.focus();
+    return;
+  }
+  createWindow();
+}
+
+function openZashboardPanel() {
+  showMainWindow();
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+  mainWindow.loadFile(path.join(__dirname, 'renderer', 'zashboard.html'));
+}
 
 function buildMenuTemplate() {
   const viewMenu = globalSettings.debugMode
@@ -80,6 +101,28 @@ function applyAppMenu() {
   }
   const menu = Menu.buildFromTemplate(buildMenuTemplate());
   Menu.setApplicationMenu(menu);
+}
+
+function createTrayMenu() {
+  if (process.platform !== 'darwin') {
+    return;
+  }
+  const trayIconPath = path.join(ROOT_DIR, 'assets', 'logo.png');
+  let trayIcon = nativeImage.createFromPath(trayIconPath);
+  if (!trayIcon.isEmpty()) {
+    trayIcon = trayIcon.resize({ width: 18, height: 18 });
+    trayIcon.setTemplateImage(true);
+  }
+  tray = new Tray(trayIcon);
+  tray.setToolTip('ClashFox');
+  const trayMenu = Menu.buildFromTemplate([
+    { label: 'Show Main Window', click: () => showMainWindow() },
+    { label: 'Zashboard Panel', click: () => openZashboardPanel() },
+    { label: 'About', click: () => createAboutWindow() },
+    { type: 'separator' },
+    { label: 'Quit', click: () => app.quit() },
+  ]);
+  tray.setContextMenu(trayMenu);
 }
 
 function applyDevToolsState() {
@@ -404,6 +447,7 @@ function setDockIcon() {
 app.whenReady().then(() => {
   ensureAppDirs();
   setDockIcon();
+  createTrayMenu();
   createWindow();
   setTimeout(setDockIcon, 500);
   setTimeout(setDockIcon, 1500);

@@ -101,11 +101,24 @@ resolve_kernel_version_from_pid() {
         echo ""
         return
     fi
-    local cmd bin
+    local cmd bin candidate
     cmd="$(ps -p "$pid" -o command= 2>/dev/null | head -n 1)"
     bin="${cmd%% *}"
-    if [ -n "$bin" ] && [ -x "$bin" ]; then
-        "$bin" -v 2>/dev/null | head -n 1 | tr -d '\r'
+    if [ -n "$bin" ]; then
+        if [ -x "$bin" ]; then
+            "$bin" -v 2>/dev/null | head -n 1 | tr -d '\r'
+            return
+        fi
+        if [[ "$bin" != /* ]]; then
+            candidate="$CLASHFOX_CORE_DIR/${bin#./}"
+            if [ -x "$candidate" ]; then
+                "$candidate" -v 2>/dev/null | head -n 1 | tr -d '\r'
+                return
+            fi
+        fi
+    fi
+    if [ -n "$ACTIVE_CORE" ] && [ -x "$CLASHFOX_CORE_DIR/$ACTIVE_CORE" ]; then
+        "$CLASHFOX_CORE_DIR/$ACTIVE_CORE" -v 2>/dev/null | head -n 1 | tr -d '\r'
         return
     fi
     if command -v mihomo >/dev/null 2>&1; then
@@ -130,8 +143,21 @@ resolve_kernel_path_from_pid() {
         cmd="$(ps -p "$pid" -o command= 2>/dev/null | head -n 1)"
         path="${cmd%% *}"
     fi
-    if [ -n "$path" ] && [ -x "$path" ]; then
-        echo "$path"
+    if [ -n "$path" ]; then
+        if [ -x "$path" ]; then
+            echo "$path"
+            return
+        fi
+        if [[ "$path" != /* ]]; then
+            local candidate="$CLASHFOX_CORE_DIR/${path#./}"
+            if [ -x "$candidate" ]; then
+                echo "$candidate"
+                return
+            fi
+        fi
+    fi
+    if [ -n "$ACTIVE_CORE" ] && [ -x "$CLASHFOX_CORE_DIR/$ACTIVE_CORE" ]; then
+        echo "$CLASHFOX_CORE_DIR/$ACTIVE_CORE"
         return
     fi
     echo ""
@@ -402,6 +428,7 @@ ensure_runtime_dirs
 
 case "$command" in
     status)
+        rotate_logs
         config_path=""
         while [ $# -gt 0 ]; do
             case "$1" in
@@ -521,12 +548,23 @@ JSON
         print_ok "$json"
         ;;
     overview)
+        rotate_logs
         config_path=""
+        controller_override=""
+        secret_override=""
         while [ $# -gt 0 ]; do
             case "$1" in
                 --config|--config-path)
                     shift || true
                     config_path="${1:-}"
+                    ;;
+                --controller)
+                    shift || true
+                    controller_override="${1:-}"
+                    ;;
+                --secret)
+                    shift || true
+                    secret_override="${1:-}"
                     ;;
             esac
             shift || true
@@ -536,6 +574,16 @@ JSON
         fi
         resolve_controller_from_config "$config_path"
         resolve_proxy_port_from_config "$config_path"
+        if [ -n "$controller_override" ]; then
+            if ! echo "$controller_override" | grep -qE '^https?://'; then
+                MIHOMO_CONTROLLER="http://$controller_override"
+            else
+                MIHOMO_CONTROLLER="$controller_override"
+            fi
+        fi
+        if [ -n "$secret_override" ]; then
+            MIHOMO_SECRET="$secret_override"
+        fi
 
         kernel_path="$CLASHFOX_CORE_DIR/$ACTIVE_CORE"
         pid_file="$CLASHFOX_PID_DIR/clashfox.pid"
@@ -879,11 +927,21 @@ JSON
         ;;
     traffic)
         config_path=""
+        controller_override=""
+        secret_override=""
         while [ $# -gt 0 ]; do
             case "$1" in
                 --config|--config-path)
                     shift || true
                     config_path="${1:-}"
+                    ;;
+                --controller)
+                    shift || true
+                    controller_override="${1:-}"
+                    ;;
+                --secret)
+                    shift || true
+                    secret_override="${1:-}"
                     ;;
             esac
             shift || true
@@ -909,6 +967,13 @@ JSON
         secret="${secret#\"}"
         secret="${secret%\'}"
         secret="${secret#\'}"
+
+        if [ -n "$controller_override" ]; then
+            controller="$controller_override"
+        fi
+        if [ -n "$secret_override" ]; then
+            secret="$secret_override"
+        fi
 
         if [ -z "$controller" ]; then
             print_ok '{"up":"","down":""}'
@@ -941,12 +1006,23 @@ JSON
         print_ok "$data"
         ;;
     overview-lite)
+        rotate_logs
         config_path=""
+        controller_override=""
+        secret_override=""
         while [ $# -gt 0 ]; do
             case "$1" in
                 --config|--config-path)
                     shift || true
                     config_path="${1:-}"
+                    ;;
+                --controller)
+                    shift || true
+                    controller_override="${1:-}"
+                    ;;
+                --secret)
+                    shift || true
+                    secret_override="${1:-}"
                     ;;
             esac
             shift || true
@@ -956,6 +1032,16 @@ JSON
         fi
         resolve_controller_from_config "$config_path"
         resolve_proxy_port_from_config "$config_path"
+        if [ -n "$controller_override" ]; then
+            if ! echo "$controller_override" | grep -qE '^https?://'; then
+                MIHOMO_CONTROLLER="http://$controller_override"
+            else
+                MIHOMO_CONTROLLER="$controller_override"
+            fi
+        fi
+        if [ -n "$secret_override" ]; then
+            MIHOMO_SECRET="$secret_override"
+        fi
 
         kernel_path="$CLASHFOX_CORE_DIR/$ACTIVE_CORE"
         pid_file="$CLASHFOX_PID_DIR/clashfox.pid"
