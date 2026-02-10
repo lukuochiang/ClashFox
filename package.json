@@ -8,8 +8,6 @@
     "start": "electron .",
     "dev": "node scripts/bump-version.js && CLASHFOX_DEV=1 electron .",
     "build:mac": "electron-builder --mac && node scripts/clean-dist-mac.js",
-    "build:win": "electron-builder --win",
-    "build:linux": "electron-builder --linux"
   },
   "devDependencies": {
     "electron": "^28.2.0",
