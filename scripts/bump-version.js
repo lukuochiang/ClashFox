@@ -17,33 +17,40 @@ function writeJson(filePath, data) {
 const pkg = readJson(pkgPath);
 const DEV_BUMP_WINDOW_MS = 30000;
 
-function shouldSkipForDevSession() {
+function readDevLock() {
+  try {
+    const raw = fs.readFileSync(devLockPath, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function shouldSkipForDevSession(lock) {
   const lifecycle = process.env.npm_lifecycle_event || '';
   if (lifecycle !== 'dev') {
     return false;
   }
-  try {
-    const raw = fs.readFileSync(devLockPath, 'utf8');
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed.ts === 'number') {
-      const age = Date.now() - parsed.ts;
-      if (age >= 0 && age < DEV_BUMP_WINDOW_MS) {
-        return true;
-      }
+  if (lock && typeof lock.ts === 'number') {
+    const age = Date.now() - lock.ts;
+    if (age >= 0 && age < DEV_BUMP_WINDOW_MS) {
+      return true;
     }
-  } catch {
-    // ignore
   }
   return false;
 }
 
-if (shouldSkipForDevSession()) {
+const devLock = readDevLock();
+const lastVersion = devLock && typeof devLock.version === 'string' ? devLock.version : '';
+const versionChanged = lastVersion && lastVersion !== pkg.version;
+
+if (!versionChanged && shouldSkipForDevSession(devLock)) {
   console.log('[bump-version] skipped (dev session already bumped)');
   process.exit(0);
 }
 
 const currentBuild = Number.parseInt(pkg.buildNumber, 10);
-const nextBuild = Number.isFinite(currentBuild) ? currentBuild + 1 : 1;
+const nextBuild = versionChanged ? 1 : (Number.isFinite(currentBuild) ? currentBuild + 1 : 1);
 pkg.buildNumber = nextBuild;
 writeJson(pkgPath, pkg);
 
@@ -60,7 +67,10 @@ if (fs.existsSync(pkgLockPath)) {
 }
 
 try {
-  fs.writeFileSync(devLockPath, JSON.stringify({ ts: Date.now() }));
+  fs.writeFileSync(
+    devLockPath,
+    JSON.stringify({ ts: Date.now(), version: pkg.version, buildNumber: nextBuild })
+  );
 } catch {
   // ignore lock write failures
 }
