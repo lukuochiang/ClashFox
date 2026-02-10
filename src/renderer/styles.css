@@ -1511,7 +1511,7 @@ body[data-theme="day"] .toggle-pill::after {
 .zashboard-card {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 220px);
+  height: calc(100vh - 0px);
   min-height: 520px;
 }
 

@@ -262,9 +262,13 @@ const I18N = {
     },
     help: {
       title: 'Help & Notes',
+      introTitle: 'Introduction',
       line1: 'This GUI invokes the original ClashFox Mihomo Toolkit script under the hood.',
       line2: 'Some actions require sudo and may prompt for your macOS password.',
       line3: 'If you are running on non-macOS, the toolkit functions are disabled.',
+      project: 'Project: ClashFox GUI for Mihomo',
+      github: 'GitHub: https://github.com/lukuochiang/ClashFox',
+      telegram: 'Telegram: https://t.me/clashfox',
     },
     zashboard: {
       title: 'Zashboard',
@@ -314,6 +318,7 @@ const I18N = {
       configNeedsRestart: 'Config updated. Please restart the kernel.',
       selectBackup: 'Select a backup first.',
       installSuccess: 'Install request sent.',
+      installConfigHint: 'Please install or update the config file.',
       installFailed: 'Install failed. Try using backups to restore.',
       switchSuccess: 'Switch request sent.',
       logMissing: 'Log file not found.',
@@ -492,9 +497,13 @@ const I18N = {
     },
     help: {
       title: '帮助与说明',
+      introTitle: '项目介绍',
       line1: '此 GUI 在后台调用 ClashFox Mihomo Toolkit 脚本。',
       line2: '部分操作需要 sudo 权限，可能会提示输入 macOS 密码。',
       line3: '如果运行在非 macOS 系统，工具功能会被禁用。',
+      project: '项目：ClashFox GUI for Mihomo',
+      github: 'GitHub：https://github.com/lukuochiang/ClashFox',
+      telegram: 'Telegram：https://t.me/clashfox',
     },
     actions: {
       start: '启动',
@@ -539,6 +548,7 @@ const I18N = {
       configNeedsRestart: '配置已更新，请重启内核。',
       selectBackup: '请先选择一个备份。',
       installSuccess: '已发送安装请求。',
+      installConfigHint: '请安装或更新配置文件。',
       installFailed: '安装失败。请尝试使用备份恢复。',
       switchSuccess: '已发送切换请求。',
       logMissing: '日志文件不存在。',
@@ -717,9 +727,13 @@ const I18N = {
     },
     help: {
       title: 'ヘルプ & メモ',
+      introTitle: '紹介',
       line1: 'この GUI は内部で ClashFox Mihomo Toolkit スクリプトを実行します。',
       line2: '一部の操作には sudo が必要で、macOS のパスワードを求められる場合があります。',
       line3: 'macOS 以外の場合、ツール機能は無効になります。',
+      project: 'プロジェクト：ClashFox GUI',
+      github: 'GitHub：https://github.com/lukuochiang/ClashFox',
+      telegram: 'Telegram：https://t.me/clashfox',
     },
     actions: {
       start: '開始',
@@ -764,6 +778,7 @@ const I18N = {
       configNeedsRestart: '設定を更新しました。カーネルを再起動してください。',
       selectBackup: '先にバックアップを選択してください。',
       installSuccess: 'インストール要求を送信しました。',
+      installConfigHint: '設定ファイルをインストールまたは更新してください。',
       switchSuccess: '切替要求を送信しました。',
       logMissing: 'ログファイルが見つかりません。',
       cleanDone: '削除が完了しました。',
@@ -940,9 +955,13 @@ const I18N = {
     },
     help: {
       title: '도움말 및 안내',
+      introTitle: '소개',
       line1: '이 GUI는 내부적으로 ClashFox Mihomo Toolkit 스크립트를 실행합니다.',
       line2: '일부 작업은 sudo 권한이 필요하며 macOS 비밀번호를 요청할 수 있습니다.',
       line3: 'macOS가 아닌 경우 도구 기능이 비활성화됩니다.',
+      project: '프로젝트: ClashFox GUI',
+      github: 'GitHub: https://github.com/lukuochiang/ClashFox',
+      telegram: 'Telegram: https://t.me/clashfox',
     },
     actions: {
       start: '시작',
@@ -987,6 +1006,7 @@ const I18N = {
       configNeedsRestart: '설정을 업데이트했습니다. 커널을 재시작하세요.',
       selectBackup: '먼저 백업을 선택하세요.',
       installSuccess: '설치 요청을 보냈습니다.',
+      installConfigHint: '설정 파일을 설치하거나 업데이트하세요.',
       switchSuccess: '전환 요청을 보냈습니다.',
       logMissing: '로그 파일이 없습니다.',
       cleanDone: '정리가 완료되었습니다.',
@@ -1164,9 +1184,13 @@ const I18N = {
     },
     help: {
       title: 'Aide & Notes',
+      introTitle: 'Présentation',
       line1: 'Cette interface appelle le script ClashFox Mihomo Toolkit en arrière-plan.',
       line2: 'Certaines actions exigent sudo et peuvent demander votre mot de passe macOS.',
       line3: 'Si vous n’êtes pas sur macOS, les fonctions sont désactivées.',
+      project: 'Projet : ClashFox GUI for Mihomo',
+      github: 'GitHub : https://github.com/lukuochiang/ClashFox',
+      telegram: 'Telegram : https://t.me/clashfox',
     },
     actions: {
       start: 'Démarrer',
@@ -1211,6 +1235,7 @@ const I18N = {
       configNeedsRestart: 'Configuration mise à jour. Redémarrez le noyau.',
       selectBackup: 'Sélectionnez d’abord une sauvegarde.',
       installSuccess: 'Demande d’installation envoyée.',
+      installConfigHint: 'Veuillez installer ou mettre à jour le fichier de configuration.',
       switchSuccess: 'Demande de bascule envoyée.',
       logMissing: 'Fichier journal introuvable.',
       cleanDone: 'Nettoyage terminé.',
@@ -1388,9 +1413,13 @@ const I18N = {
     },
     help: {
       title: 'Hilfe & Hinweise',
+      introTitle: 'Einführung',
       line1: 'Diese GUI ruft im Hintergrund das ClashFox Mihomo Toolkit-Skript auf.',
       line2: 'Einige Aktionen erfordern sudo und können nach Ihrem macOS-Passwort fragen.',
       line3: 'Wenn Sie nicht unter macOS laufen, sind die Toolkit-Funktionen deaktiviert.',
+      project: 'Projekt: ClashFox GUI',
+      github: 'GitHub: https://github.com/lukuochiang/ClashFox',
+      telegram: 'Telegram: https://t.me/clashfox',
     },
     actions: {
       start: 'Starten',
@@ -1435,6 +1464,7 @@ const I18N = {
       configNeedsRestart: 'Konfiguration aktualisiert. Kernel neu starten.',
       selectBackup: 'Bitte zuerst ein Backup auswählen.',
       installSuccess: 'Installationsanfrage gesendet.',
+      installConfigHint: 'Bitte die Konfigurationsdatei installieren oder aktualisieren.',
       switchSuccess: 'Wechselanfrage gesendet.',
       logMissing: 'Logdatei nicht gefunden.',
       cleanDone: 'Bereinigung abgeschlossen.',
@@ -1611,9 +1641,13 @@ const I18N = {
     },
     help: {
       title: 'Помощь и заметки',
+      introTitle: 'Введение',
       line1: 'Этот интерфейс вызывает скрипт ClashFox Mihomo Toolkit.',
       line2: 'Некоторые действия требуют sudo и могут запросить пароль macOS.',
       line3: 'Если вы не на macOS, функции инструмента отключены.',
+      project: 'Проект: ClashFox GUI',
+      github: 'GitHub: https://github.com/lukuochiang/ClashFox',
+      telegram: 'Telegram: https://t.me/clashfox',
     },
     actions: {
       start: 'Запустить',
@@ -1658,6 +1692,7 @@ const I18N = {
       configNeedsRestart: 'Конфигурация обновлена. Перезапустите ядро.',
       selectBackup: 'Сначала выберите резервную копию.',
       installSuccess: 'Запрос на установку отправлен.',
+      installConfigHint: 'Установите или обновите файл конфигурации.',
       switchSuccess: 'Запрос на переключение отправлен.',
       logMissing: 'Файл журнала не найден.',
       cleanDone: 'Очистка завершена.',
@@ -1764,6 +1799,7 @@ const state = {
   theme: 'night',
   themePreference: 'auto',
   installState: 'idle',
+  zashboardAlerted: false,
   overviewTimer: null,
   overviewTickTimer: null,
   overviewLoading: false,
@@ -3202,6 +3238,8 @@ if (installBtn) {
     if (response.ok) {
       setInstallState('success');
       showToast(t('labels.installSuccess'));
+      showToast(t('labels.installConfigHint'), 'info');
+      loadKernels();
       loadStatus();
     } else if (response.error === 'cancelled') {
         setInstallState('idle');
@@ -3924,6 +3962,14 @@ function waitForBridge(timeoutMs = 5000) {
   });
 }
 
+function showZashboardAlert() {
+  if (state.zashboardAlerted) {
+    return;
+  }
+  state.zashboardAlerted = true;
+  showToast(t('zashboard.hint'), 'info');
+}
+
 function initZashboardFrame() {
   if (!zashboardFrame || !zashboardEmpty) {
     return;
@@ -3936,15 +3982,20 @@ function initZashboardFrame() {
   };
 
   showEmpty();
-  const timeout = setTimeout(showEmpty, 1200);
+  const timeout = setTimeout(() => {
+    showEmpty();
+    showZashboardAlert();
+  }, 1200);
 
   zashboardFrame.addEventListener('load', () => {
     clearTimeout(timeout);
     hideEmpty();
+    state.zashboardAlerted = false;
   });
   zashboardFrame.addEventListener('error', () => {
     clearTimeout(timeout);
     showEmpty();
+    showZashboardAlert();
   });
 }
 
