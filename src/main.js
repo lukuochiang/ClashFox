@@ -5,11 +5,27 @@ const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme } = 
 const { spawn, execFileSync } = require('child_process');
 
 const ROOT_DIR = path.join(__dirname, '..');
+app.name = 'ClashFox';
+app.setName('ClashFox');
 const APP_DATA_DIR = path.join(app.getPath('appData'), app.getName());
 const CHROMIUM_DIR = path.join(APP_DATA_DIR, 'Others');
 app.setPath('userData', CHROMIUM_DIR);
-app.setPath('cache', path.join(CHROMIUM_DIR, 'Cache'));
-app.setPath('logs', path.join(CHROMIUM_DIR, 'Logs'));
+// app.setPath('cache', path.join(CHROMIUM_DIR, 'Cache'));
+// app.setPath('logs', path.join(CHROMIUM_DIR, 'Logs'));
+
+function ensureAppDirs() {
+  try {
+    fs.mkdirSync(APP_DATA_DIR, { recursive: true });
+    fs.mkdirSync(CHROMIUM_DIR, { recursive: true });
+    fs.mkdirSync(path.join(APP_DATA_DIR, 'core'), { recursive: true });
+    fs.mkdirSync(path.join(APP_DATA_DIR, 'config'), { recursive: true });
+    fs.mkdirSync(path.join(APP_DATA_DIR, 'data'), { recursive: true });
+    fs.mkdirSync(path.join(APP_DATA_DIR, 'logs'), { recursive: true });
+    fs.mkdirSync(path.join(APP_DATA_DIR, 'runtime'), { recursive: true });
+  } catch {
+    // ignore
+  }
+}
 
 function getBridgePath() {
   if (!app.isPackaged) {
@@ -300,9 +316,6 @@ function createWindow() {
   // Do not auto-open DevTools here; it should only open when toggled on.
 }
 
-app.name = 'ClashFox';
-app.setName('ClashFox');
-
 function getBuildNumber() {
   try {
     const pkgPath = path.join(ROOT_DIR, 'package.json');
@@ -388,6 +401,7 @@ function setDockIcon() {
 }
 
 app.whenReady().then(() => {
+  ensureAppDirs();
   setDockIcon();
   createWindow();
   setTimeout(setDockIcon, 500);
@@ -454,6 +468,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:readSettings', () => {
     try {
+      ensureAppDirs();
       const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
       if (!fs.existsSync(settingsPath)) {
         return { ok: true, data: {} };
@@ -468,6 +483,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:writeSettings', (_event, data) => {
     try {
+      ensureAppDirs();
       const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
       const json = JSON.stringify(data || {}, null, 2);
       fs.writeFileSync(settingsPath, `${json}\n`);

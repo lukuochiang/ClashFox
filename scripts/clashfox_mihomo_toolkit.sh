@@ -7,8 +7,8 @@
 # -----------------------------------------------------------------------------
 
 # Author: Kuochiang Lu
-# Version: v1.2.3(53)
-# Last Updated: 2026-02-03
+# Version: v1.2.5(10)
+# Last Updated: 2026-02-10
 #
 # 描述：
 #   ClashFox Mihomo Kernel Manager 是一个功能完整的 mihomo 内核管理工具，
