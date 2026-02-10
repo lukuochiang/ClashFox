@@ -1,12 +1,12 @@
 {
   "name": "clashfox-gui",
-  "version": "0.3.0",
+  "version": "0.3.3",
   "description": "ClashFox Mihomo Toolkit GUI",
   "main": "src/main.js",
   "type": "commonjs",
   "scripts": {
     "start": "electron .",
-    "dev": "CLASHFOX_DEV=1 electron .",
+    "dev": "node scripts/bump-version.js && CLASHFOX_DEV=1 electron .",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",
     "build:linux": "electron-builder --linux"

@@ -114,6 +114,7 @@ const settingsLogAutoRefresh = document.getElementById('settingsLogAutoRefresh')
 const settingsLogIntervalPreset = document.getElementById('settingsLogIntervalPreset');
 const settingsSwitchPageSize = document.getElementById('settingsSwitchPageSize');
 const settingsBackupsPageSize = document.getElementById('settingsBackupsPageSize');
+const settingsDebugMode = document.getElementById('settingsDebugMode');
 
 const langButtons = Array.from(document.querySelectorAll('.lang-btn'));
 
@@ -1492,6 +1493,7 @@ const DEFAULT_SETTINGS = {
   logIntervalPreset: '3',
   switchPageSize: '10',
   backupsPageSize: '10',
+  debugMode: false,
 };
 
 const state = {
@@ -1635,6 +1637,23 @@ function applyTheme(theme) {
   document.body.dataset.theme = theme;
 }
 
+function syncDebugMode(enabled) {
+  if (settingsDebugMode) {
+    settingsDebugMode.checked = Boolean(enabled);
+  }
+  if (window.clashfox && typeof window.clashfox.setDebugMode === 'function') {
+    window.clashfox.setDebugMode(Boolean(enabled));
+  }
+}
+
+function applySystemTheme(isDark) {
+  if (state.themePreference !== 'auto') {
+    return;
+  }
+  applyTheme(isDark ? 'night' : 'day');
+  updateThemeToggle();
+}
+
 function applyThemePreference(preference, persist = true) {
   state.themePreference = preference;
   if (settingsTheme) {
@@ -1651,6 +1670,7 @@ function applySettings(settings) {
   state.settings = { ...DEFAULT_SETTINGS, ...settings };
   applyThemePreference(state.settings.themePreference, false);
   setLanguage(state.settings.lang, false, false);
+  syncDebugMode(state.settings.debugMode);
   if (githubUser) {
     githubUser.value = state.settings.githubUser;
   }
@@ -1709,6 +1729,15 @@ if (prefersDarkQuery) {
     if (state.themePreference === 'auto') {
       applyThemePreference('auto', false);
     }
+  });
+}
+
+if (window.clashfox && typeof window.clashfox.onSystemThemeChange === 'function') {
+  window.clashfox.onSystemThemeChange((payload) => {
+    if (!payload || typeof payload.dark !== 'boolean') {
+      return;
+    }
+    applySystemTheme(payload.dark);
   });
 }
 
@@ -2443,6 +2472,14 @@ if (settingsLang) {
 if (settingsTheme) {
   settingsTheme.addEventListener('change', (event) => {
     applyThemePreference(event.target.value);
+  });
+}
+
+if (settingsDebugMode) {
+  settingsDebugMode.addEventListener('change', (event) => {
+    const enabled = Boolean(event.target.checked);
+    saveSettings({ debugMode: enabled });
+    syncDebugMode(enabled);
   });
 }
 

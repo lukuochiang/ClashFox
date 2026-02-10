@@ -19,6 +19,71 @@
     </div>
     <script>
       const { ipcRenderer } = require('electron');
+      const SETTINGS_KEY = 'clashfox-settings';
+
+      let lastSystemDark = window.matchMedia
+        ? window.matchMedia('(prefers-color-scheme: dark)').matches
+        : true;
+
+      function resolveTheme(preference) {
+        if (preference !== 'auto') {
+          return preference;
+        }
+        return lastSystemDark ? 'night' : 'day';
+      }
+
+      function applyThemePreference(preference) {
+        document.body.dataset.theme = resolveTheme(preference);
+      }
+
+      function readThemePreference() {
+        try {
+          const raw = localStorage.getItem(SETTINGS_KEY);
+          if (!raw) {
+            return 'auto';
+          }
+          const parsed = JSON.parse(raw);
+          return parsed && parsed.themePreference ? parsed.themePreference : 'auto';
+        } catch {
+          return 'auto';
+        }
+      }
+
+      function syncThemeFromSettings() {
+        applyThemePreference(readThemePreference());
+      }
+
+      const mediaQuery = window.matchMedia
+        ? window.matchMedia('(prefers-color-scheme: dark)')
+        : null;
+
+      if (mediaQuery) {
+        mediaQuery.addEventListener('change', (event) => {
+          lastSystemDark = Boolean(event.matches);
+          if (readThemePreference() === 'auto') {
+            applyThemePreference('auto');
+          }
+        });
+      }
+
+      ipcRenderer.on('clashfox:systemTheme', (_event, payload) => {
+        if (!payload || typeof payload.dark !== 'boolean') {
+          return;
+        }
+        lastSystemDark = payload.dark;
+        if (readThemePreference() === 'auto') {
+          applyThemePreference('auto');
+        }
+      });
+
+      window.addEventListener('storage', (event) => {
+        if (event.key === SETTINGS_KEY) {
+          syncThemeFromSettings();
+        }
+      });
+
+      syncThemeFromSettings();
+
       ipcRenderer.invoke('clashfox:appInfo').then((res) => {
         if (res && res.ok && res.data) {
           document.getElementById('version').textContent = res.data.version || '0.0.0';

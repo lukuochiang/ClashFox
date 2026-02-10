@@ -1,13 +1,75 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme } = require('electron');
 const { spawn, execFileSync } = require('child_process');
 
 const ROOT_DIR = path.join(__dirname, '..');
 const BRIDGE_PATH = path.join(ROOT_DIR, 'scripts', 'gui_bridge.sh');
 let mainWindow = null;
 let currentInstallProcess = null; // 仅用于跟踪安装进程，支持取消功能
+let globalSettings = {
+  debugMode: false, // 是否启用调试模式
+};
+
+function buildMenuTemplate() {
+  const viewMenu = globalSettings.debugMode
+    ? { role: 'viewMenu' }
+    : {
+        label: 'View',
+        submenu: [
+          { role: 'reload' },
+          { role: 'forceReload' },
+          { type: 'separator' },
+          { role: 'togglefullscreen' },
+        ],
+      };
+
+  return [
+    {
+      label: 'ClashFox',
+      submenu: [
+        { label: 'About ClashFox', click: () => createAboutWindow() },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
+    { role: 'editMenu' },
+    viewMenu,
+    { role: 'windowMenu' },
+    { role: 'help' },
+  ];
+}
+
+function applyAppMenu() {
+  if (process.platform !== 'darwin') {
+    return;
+  }
+  const menu = Menu.buildFromTemplate(buildMenuTemplate());
+  Menu.setApplicationMenu(menu);
+}
+
+function applyDevToolsState() {
+  BrowserWindow.getAllWindows().forEach((win) => {
+    if (globalSettings.debugMode) {
+      if (!win.webContents.isDevToolsOpened()) {
+        win.webContents.openDevTools({ mode: 'detach' });
+      }
+      return;
+    }
+    if (win.webContents.isDevToolsOpened()) {
+      win.webContents.closeDevTools();
+    }
+  });
+  applyAppMenu();
+}
+
 
 if (process.env.CLASHFOX_DEV === '1') {
   // Hot reload for main + renderer during local development.
@@ -162,6 +224,7 @@ function runBridge(args) {
 }
 
 function createWindow() {
+  nativeTheme.themeSource = 'system';
   const win = new BrowserWindow({
     width: 1180,
     height: 760,
@@ -172,12 +235,45 @@ function createWindow() {
     webPreferences: {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
-      devTools: true
+      devTools: true,
     },
   });
 
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+
   mainWindow = win;
+
+  win.webContents.on('before-input-event', (event, input) => {
+    if (globalSettings.debugMode) {
+      return;
+    }
+    const key = (input.key || '').toLowerCase();
+    const isDevToolsCombo =
+      (input.control && input.shift && key === 'i') ||
+      (input.meta && input.alt && key === 'i') ||
+      key === 'f12';
+    if (isDevToolsCombo) {
+      event.preventDefault();
+    }
+  });
+
+  const sendSystemTheme = () => {
+    BrowserWindow.getAllWindows().forEach((window) => {
+      if (!window || window.isDestroyed()) {
+        return;
+      }
+      window.webContents.send('clashfox:systemTheme', {
+        dark: nativeTheme.shouldUseDarkColors,
+      });
+    });
+  };
+
+  win.webContents.on('did-finish-load', sendSystemTheme);
+  nativeTheme.on('updated', sendSystemTheme);
+
+  if (globalSettings.debugMode) {
+    win.webContents.openDevTools({ mode: 'detach' });
+  }
 }
 
 app.name = 'ClashFox';
@@ -263,29 +359,7 @@ app.whenReady().then(() => {
   setTimeout(setDockIcon, 1500);
   setTimeout(setDockIcon, 3000);
 
-  if (process.platform === 'darwin') {
-    const menu = Menu.buildFromTemplate([
-      {
-        label: 'ClashFox',
-        submenu: [
-          { label: 'About ClashFox', click: () => createAboutWindow() },
-          { type: 'separator' },
-          { role: 'services' },
-          { type: 'separator' },
-          { role: 'hide' },
-          { role: 'hideOthers' },
-          { role: 'unhide' },
-          { type: 'separator' },
-          { role: 'quit' },
-        ],
-      },
-      { role: 'editMenu' },
-      { role: 'viewMenu' },
-      { role: 'windowMenu' },
-      { role: 'help' },
-    ]);
-    Menu.setApplicationMenu(menu);
-  }
+  applyAppMenu();
 
   ipcMain.handle('clashfox:command', (_event, command, args = []) => {
     return runBridge([command, ...args]);
@@ -327,6 +401,12 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:openAbout', () => {
     createAboutWindow();
+    return { ok: true };
+  });
+
+  ipcMain.handle('clashfox:setDebugMode', (_event, enabled) => {
+    globalSettings.debugMode = Boolean(enabled);
+    applyDevToolsState();
     return { ok: true };
   });
 

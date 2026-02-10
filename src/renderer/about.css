@@ -18,6 +18,12 @@ body {
   overflow: hidden;
 }
 
+body[data-theme="day"] {
+  background: radial-gradient(circle at top left, #f8e7c6, transparent 60%),
+    radial-gradient(circle at 30% 70%, #d9f2e9, transparent 55%),
+    linear-gradient(145deg, var(--bg-1), var(--bg-2));
+}
+
 body::before, body::after {
   content: "";
   position: absolute;
@@ -37,6 +43,14 @@ body::after {
   bottom: -180px;
   left: -120px;
   background: radial-gradient(circle, rgba(140, 224, 198, 0.2), transparent 70%);
+}
+
+body[data-theme="day"]::before {
+  background: radial-gradient(circle, rgba(244, 179, 74, 0.25), transparent 70%);
+}
+
+body[data-theme="day"]::after {
+  background: radial-gradient(circle, rgba(140, 224, 198, 0.28), transparent 70%);
 }
 
 .about-container {
