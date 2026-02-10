@@ -426,6 +426,31 @@ app.whenReady().then(() => {
     return { ok: true };
   });
 
+  ipcMain.handle('clashfox:readSettings', () => {
+    try {
+      const settingsPath = path.join(app.getPath('userData'), 'settings.json');
+      if (!fs.existsSync(settingsPath)) {
+        return { ok: true, data: {} };
+      }
+      const raw = fs.readFileSync(settingsPath, 'utf8');
+      const parsed = JSON.parse(raw);
+      return { ok: true, data: parsed || {} };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('clashfox:writeSettings', (_event, data) => {
+    try {
+      const settingsPath = path.join(app.getPath('userData'), 'settings.json');
+      const json = JSON.stringify(data || {}, null, 2);
+      fs.writeFileSync(settingsPath, `${json}\n`);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
   ipcMain.handle('clashfox:setDebugMode', (_event, enabled) => {
     const next = Boolean(enabled);
     if (globalSettings.debugMode === next) {

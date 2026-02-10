@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('clashfox', {
   getAppInfo: () => ipcRenderer.invoke('clashfox:appInfo'),
   openAbout: () => ipcRenderer.invoke('clashfox:openAbout'),
   setDebugMode: (enabled) => ipcRenderer.invoke('clashfox:setDebugMode', Boolean(enabled)),
+  readSettings: () => ipcRenderer.invoke('clashfox:readSettings'),
+  writeSettings: (data) => ipcRenderer.invoke('clashfox:writeSettings', data),
   onSystemThemeChange: (handler) => {
     if (typeof handler !== 'function') {
       return () => {};

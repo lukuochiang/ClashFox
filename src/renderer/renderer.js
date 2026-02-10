@@ -1748,9 +1748,24 @@ function readSettings() {
   }
 }
 
+async function syncSettingsFromFile() {
+  if (!window.clashfox || typeof window.clashfox.readSettings !== 'function') {
+    return;
+  }
+  const response = await window.clashfox.readSettings();
+  if (!response || !response.ok || !response.data) {
+    return;
+  }
+  const merged = { ...DEFAULT_SETTINGS, ...response.data };
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
+}
+
 function saveSettings(patch) {
   state.settings = { ...state.settings, ...patch };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
+  if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
+    window.clashfox.writeSettings(state.settings);
+  }
 }
 
 function resolveTheme(preference) {
@@ -3639,6 +3654,7 @@ function waitForBridge(timeoutMs = 5000) {
 }
 
 async function initApp() {
+  await syncSettingsFromFile();
   applySettings(readSettings());
   setActiveNav(pageId);
   loadAppInfo();

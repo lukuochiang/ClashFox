@@ -1,13 +1,15 @@
 {
   "name": "clashfox-gui",
   "version": "0.3.5",
+  "buildNumber": 3,
   "description": "ClashFox Mihomo Toolkit GUI",
+  "author": "Kuochiang Lu <lukuochiang@gmail.com> (https://github.com/lukuochiang/ClashFox)",
   "main": "src/main.js",
   "type": "commonjs",
   "scripts": {
     "start": "electron .",
     "dev": "node scripts/bump-version.js && CLASHFOX_DEV=1 electron .",
-    "build:mac": "electron-builder --mac && node scripts/clean-dist-mac.js",
+    "build:mac": "electron-builder --mac && node scripts/clean-dist-mac.js"
   },
   "devDependencies": {
     "electron": "^28.2.0",
@@ -45,7 +47,24 @@
           ]
         }
       ]
+    },
+    "dmg": {
+      "window": {
+        "width": 540,
+        "height": 380
+      },
+      "contents": [
+        {
+          "x": 160,
+          "y": 160
+        },
+        {
+          "x": 380,
+          "y": 160,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
     }
-  },
-  "buildNumber": 2
+  }
 }
