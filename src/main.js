@@ -111,8 +111,13 @@ function createTrayMenu() {
   if (process.platform !== 'darwin') {
     return;
   }
-  tray = new Tray(nativeImage.createEmpty());
-  tray.setTitle('🦊');
+  const trayIconPath = path.join(ROOT_DIR, 'assets', 'menu.png');
+  let trayIcon = nativeImage.createFromPath(trayIconPath);
+  if (!trayIcon.isEmpty()) {
+    trayIcon = trayIcon.resize({ width: 18, height: 18 });
+    trayIcon.setTemplateImage(true);
+  }
+  tray = new Tray(trayIcon);
   tray.setToolTip('ClashFox');
   const trayMenu = Menu.buildFromTemplate([
     { label: 'Show Main Window', click: () => showMainWindow() },

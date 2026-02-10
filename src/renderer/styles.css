@@ -1515,16 +1515,19 @@ body[data-theme="day"] .toggle-pill::after {
 .zashboard-card {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 0px);
   min-height: 520px;
+  height: calc(100vh - 145px);
+  flex: 1;
+  padding: 0px;
+  border: none;
 }
 
 .zashboard-frame {
   flex: 1;
-  margin-top: 12px;
+  margin-top: 0;
   border-radius: 18px;
   overflow: hidden;
-  background: var(--panel);
+  background: transparent;
   border: 1px solid var(--border);
   position: relative;
 }
