@@ -15,18 +15,76 @@
         place-items: center;
         height: 100vh;
       }
-      a {
-        color: #f4b34a;
-        text-decoration: none;
+      .loading {
+        display: grid;
+        gap: 8px;
+        justify-items: center;
+      }
+      .spinner {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: 3px solid rgba(233, 238, 243, 0.2);
+        border-top-color: #f4b34a;
+        animation: spin 1s linear infinite;
+      }
+      .label {
+        font-size: 14px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #c6d1dc;
+      }
+      .hint {
+        font-size: 12px;
+        color: #93a4b7;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
       }
     </style>
   </head>
   <body>
-    <div>
-      Redirecting to Overview... If not redirected,
-      <a href="status.html">click here</a>.
+    <div class="loading" id="loadingRoot">
+      <div class="spinner" aria-hidden="true"></div>
+      <div class="label" id="loadingLabel">Loading…</div>
+      <div class="hint" id="loadingHint">Redirecting to Overview</div>
     </div>
     <script>
+      const lang = (navigator.language || '').toLowerCase();
+      const isZh = lang.startsWith('zh');
+      const isJa = lang.startsWith('ja');
+      const isKo = lang.startsWith('ko');
+      const isFr = lang.startsWith('fr');
+      const isDe = lang.startsWith('de');
+      const isRu = lang.startsWith('ru');
+
+      const messages = {
+        en: { label: 'Loading…', hint: 'Redirecting to Overview' },
+        zh: { label: '加载中…', hint: '正在进入概览' },
+        ja: { label: '読み込み中…', hint: '概要に移動しています' },
+        ko: { label: '로딩 중…', hint: '개요로 이동 중' },
+        fr: { label: 'Chargement…', hint: 'Redirection vers l’aperçu' },
+        de: { label: 'Wird geladen…', hint: 'Weiterleitung zur Übersicht' },
+        ru: { label: 'Загрузка…', hint: 'Переход к обзору' },
+      };
+
+      let locale = 'en';
+      if (isZh) locale = 'zh';
+      else if (isJa) locale = 'ja';
+      else if (isKo) locale = 'ko';
+      else if (isFr) locale = 'fr';
+      else if (isDe) locale = 'de';
+      else if (isRu) locale = 'ru';
+
+      const labelEl = document.getElementById('loadingLabel');
+      const hintEl = document.getElementById('loadingHint');
+      if (labelEl && hintEl && messages[locale]) {
+        labelEl.textContent = messages[locale].label;
+        hintEl.textContent = messages[locale].hint;
+      }
+
       window.location.replace('status.html');
     </script>
   </body>

@@ -5,7 +5,18 @@ const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme } = 
 const { spawn, execFileSync } = require('child_process');
 
 const ROOT_DIR = path.join(__dirname, '..');
-const BRIDGE_PATH = path.join(ROOT_DIR, 'scripts', 'gui_bridge.sh');
+const APP_DATA_DIR = path.join(app.getPath('appData'), app.getName());
+const CHROMIUM_DIR = path.join(APP_DATA_DIR, 'Others');
+app.setPath('userData', CHROMIUM_DIR);
+app.setPath('cache', path.join(CHROMIUM_DIR, 'Cache'));
+app.setPath('logs', path.join(CHROMIUM_DIR, 'Logs'));
+
+function getBridgePath() {
+  if (!app.isPackaged) {
+    return path.join(ROOT_DIR, 'scripts', 'gui_bridge.sh');
+  }
+  return path.join(process.resourcesPath, 'app.asar.unpacked', 'scripts', 'gui_bridge.sh');
+}
 let mainWindow = null;
 let currentInstallProcess = null; // 仅用于跟踪安装进程，支持取消功能
 let globalSettings = {
@@ -101,7 +112,22 @@ function runBridge(args) {
       }
       
       // 2. 启动新进程
-      const child = spawn('bash', [BRIDGE_PATH, ...args], { cwd: ROOT_DIR });
+      const bridgePath = getBridgePath();
+      if (!fs.existsSync(bridgePath)) {
+        resolve({ ok: false, error: 'script_missing', details: bridgePath });
+        return;
+      }
+      try {
+        fs.accessSync(bridgePath, fs.constants.X_OK);
+      } catch {
+        try {
+          fs.chmodSync(bridgePath, 0o755);
+        } catch (err) {
+          resolve({ ok: false, error: 'script_not_executable', details: err.message });
+          return;
+        }
+      }
+      const child = spawn('bash', [bridgePath, ...args], { cwd: ROOT_DIR });
       const processId = child.pid;
       
       // 只跟踪安装进程
@@ -428,7 +454,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:readSettings', () => {
     try {
-      const settingsPath = path.join(app.getPath('userData'), 'settings.json');
+      const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
       if (!fs.existsSync(settingsPath)) {
         return { ok: true, data: {} };
       }
@@ -442,13 +468,17 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:writeSettings', (_event, data) => {
     try {
-      const settingsPath = path.join(app.getPath('userData'), 'settings.json');
+      const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
       const json = JSON.stringify(data || {}, null, 2);
       fs.writeFileSync(settingsPath, `${json}\n`);
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err.message };
     }
+  });
+
+  ipcMain.handle('clashfox:userDataPath', () => {
+    return { ok: true, path: APP_DATA_DIR };
   });
 
   ipcMain.handle('clashfox:setDebugMode', (_event, enabled) => {

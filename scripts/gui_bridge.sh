@@ -24,6 +24,13 @@ CLASHFOX_DEFAULT_DIR="$CLASHFOX_DIR"
 
 set_clashfox_subdirectories
 
+mkdir -p "$CLASHFOX_USER_DATA_DIR" \
+  "$CLASHFOX_CORE_DIR" \
+  "$CLASHFOX_CONFIG_DIR" \
+  "$CLASHFOX_DATA_DIR" \
+  "$CLASHFOX_LOG_DIR" \
+  "$CLASHFOX_PID_DIR" 2>/dev/null || true
+
 json_escape() {
     local s="$1"
     s="${s//\\/\\\\}"

@@ -188,7 +188,7 @@ const I18N = {
       quickHint: 'Actions use the default config unless a custom path is set in Control.',
       quickHintMissing: 'Kernel not installed. Please install it first.',
       trafficTitle: 'Traffic Stats',
-      trafficHint: 'Updated every 2 seconds.',
+      trafficHint: 'Updated every 1 second.',
       trafficSystemDown: 'Download',
       trafficSystemUp: 'Upload',
       trafficProxyDown: 'Proxy Download',
@@ -399,7 +399,7 @@ const I18N = {
       quickHint: '快捷操作使用默认配置，除非在控制页指定自定义路径。',
       quickHintMissing: '未安装内核，请先前往安装。',
       trafficTitle: '流量统计',
-      trafficHint: '每 2 秒更新一次。',
+      trafficHint: '每 1 秒更新一次。',
       trafficSystemDown: '下载',
       trafficSystemUp: '上传',
       trafficProxyDown: '代理下载',
@@ -609,7 +609,7 @@ const I18N = {
       quickHint: 'コントロールでカスタムパスが設定されていない場合、既定の設定を使用します。',
       quickHintMissing: 'カーネル未インストールです。先にインストールしてください。',
       trafficTitle: 'トラフィック統計',
-      trafficHint: '2 秒ごとに更新します。',
+      trafficHint: '1 秒ごとに更新します。',
       trafficSystemDown: '受信',
       trafficSystemUp: '送信',
       trafficProxyDown: 'プロキシ受信',
@@ -818,7 +818,7 @@ const I18N = {
       quickHint: '컨트롤에서 사용자 경로를 지정하지 않으면 기본 설정을 사용합니다.',
       quickHintMissing: '커널이 설치되지 않았습니다. 먼저 설치하세요.',
       trafficTitle: '트래픽 통계',
-      trafficHint: '2초마다 업데이트됩니다.',
+      trafficHint: '1초마다 업데이트됩니다.',
       trafficSystemDown: '다운로드',
       trafficSystemUp: '업로드',
       trafficProxyDown: '프록시 다운로드',
@@ -1027,7 +1027,7 @@ const I18N = {
       quickHint: 'Les actions utilisent la configuration par défaut sauf si un chemin personnalisé est défini dans Contrôle.',
       quickHintMissing: 'Noyau non installé. Veuillez l’installer d’abord.',
       trafficTitle: 'Statistiques de trafic',
-      trafficHint: 'Mise à jour toutes les 2 secondes.',
+      trafficHint: 'Mise à jour toutes les 1 seconde.',
       trafficSystemDown: 'Téléchargement',
       trafficSystemUp: 'Téléversement',
       trafficProxyDown: 'Téléchargement proxy',
@@ -1236,7 +1236,7 @@ const I18N = {
       quickHint: 'Aktionen verwenden die Standardkonfiguration, sofern kein benutzerdefinierter Pfad in Steuerung gesetzt ist.',
       quickHintMissing: 'Kernel nicht installiert. Bitte zuerst installieren.',
       trafficTitle: 'Datenverkehr',
-      trafficHint: 'Aktualisiert alle 2 Sekunden.',
+      trafficHint: 'Aktualisiert jede Sekunde.',
       trafficSystemDown: 'Download',
       trafficSystemUp: 'Upload',
       trafficProxyDown: 'Proxy Download',
@@ -1445,7 +1445,7 @@ const I18N = {
       quickHint: 'Действия используют конфигурацию по умолчанию, если в разделе Управление не задан пользовательский путь.',
       quickHintMissing: 'Ядро не установлено. Сначала установите его.',
       trafficTitle: 'Статистика трафика',
-      trafficHint: 'Обновляется каждые 2 секунды.',
+      trafficHint: 'Обновляется каждую секунду.',
       trafficSystemDown: 'Загрузка',
       trafficSystemUp: 'Отдача',
       trafficProxyDown: 'Прокси загрузка',
@@ -1757,14 +1757,41 @@ async function syncSettingsFromFile() {
     return;
   }
   const merged = { ...DEFAULT_SETTINGS, ...response.data };
+  if (window.clashfox && typeof window.clashfox.getUserDataPath === 'function') {
+    const userData = await window.clashfox.getUserDataPath();
+    if (userData && userData.ok && userData.path) {
+      const base = userData.path;
+      if (!merged.configDir) {
+        merged.configDir = `${base}/config`;
+      }
+      if (!merged.coreDir) {
+        merged.coreDir = `${base}/core`;
+      }
+      if (!merged.dataDir) {
+        merged.dataDir = `${base}/data`;
+      }
+      if (!merged.logDir) {
+        merged.logDir = `${base}/logs`;
+      }
+      if (!merged.pidDir) {
+        merged.pidDir = `${base}/runtime`;
+      }
+    }
+  }
+  delete merged.configPath;
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
+  if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
+    const { configPath, ...fileSettings } = merged;
+    window.clashfox.writeSettings(fileSettings);
+  }
 }
 
 function saveSettings(patch) {
   state.settings = { ...state.settings, ...patch };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
   if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
-    window.clashfox.writeSettings(state.settings);
+    const { configPath, ...fileSettings } = state.settings;
+    window.clashfox.writeSettings(fileSettings);
   }
 }
 
@@ -3601,7 +3628,7 @@ function startOverviewTimer() {
   }
   state.trafficTimer = setInterval(() => {
     loadTraffic();
-  }, 2000);
+  }, 1000);
 
   if (state.overviewLiteTimer) {
     clearInterval(state.overviewLiteTimer);

@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('clashfox', {
   setDebugMode: (enabled) => ipcRenderer.invoke('clashfox:setDebugMode', Boolean(enabled)),
   readSettings: () => ipcRenderer.invoke('clashfox:readSettings'),
   writeSettings: (data) => ipcRenderer.invoke('clashfox:writeSettings', data),
+  getUserDataPath: () => ipcRenderer.invoke('clashfox:userDataPath'),
   onSystemThemeChange: (handler) => {
     if (typeof handler !== 'function') {
       return () => {};
