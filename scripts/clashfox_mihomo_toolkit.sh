@@ -2047,15 +2047,15 @@ CLASHFOX_DIR="$CLASHFOX_DEFAULT_DIR"
 # ClashFox 子目录定义
 set_clashfox_subdirectories() {
     # ClashFox 内核目录
-    CLASHFOX_CORE_DIR="$CLASHFOX_DIR/core"
+    CLASHFOX_CORE_DIR="$CLASHFOX_DIR/Contents/Resources/core"
     # ClashFox 默认配置文件路径
-    CLASHFOX_CONFIG_DIR="$CLASHFOX_DIR/config"
+    CLASHFOX_CONFIG_DIR="$CLASHFOX_DIR/Contents/Resources/config"
     # ClashFox 数据目录
-    CLASHFOX_DATA_DIR="$CLASHFOX_DIR/data"
+    CLASHFOX_DATA_DIR="$CLASHFOX_DIR/Contents/Resources/data"
     # ClashFox 日志目录
-    CLASHFOX_LOG_DIR="$CLASHFOX_DIR/logs"
+    CLASHFOX_LOG_DIR="$CLASHFOX_DIR/Contents/Resources/logs"
     # ClashFox PID 文件路径
-    CLASHFOX_PID_DIR="$CLASHFOX_DIR/runtime"
+    CLASHFOX_PID_DIR="$CLASHFOX_DIR/Contents/Resources/runtime"
 }
 
 # 初始化子目录
