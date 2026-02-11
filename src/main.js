@@ -859,6 +859,37 @@ function createWindow() {
 
   mainWindow = win;
 
+  const attachZashboardAuth = () => {
+    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
+    win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
+      const url = details.url || '';
+      if (!url.startsWith('http://127.0.0.1:9090/') && !url.startsWith('http://localhost:9090/')) {
+        callback({ requestHeaders: details.requestHeaders });
+        return;
+      }
+      let secret = '';
+      try {
+        if (fs.existsSync(settingsPath)) {
+          const raw = fs.readFileSync(settingsPath, 'utf8');
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed.secret === 'string') {
+            secret = parsed.secret.trim();
+          }
+        }
+      } catch {
+        // ignore
+      }
+      if (secret) {
+        details.requestHeaders = {
+          ...details.requestHeaders,
+          Authorization: `Bearer ${secret}`,
+        };
+      }
+      callback({ requestHeaders: details.requestHeaders });
+    });
+  };
+  attachZashboardAuth();
+
   win.on('close', (event) => {
     if (isQuitting) {
       return;
@@ -1058,6 +1089,18 @@ app.whenReady().then(() => {
     }
     try {
       await shell.openExternal(url);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('clashfox:revealInFinder', (_event, targetPath) => {
+    try {
+      if (!targetPath || typeof targetPath !== 'string') {
+        return { ok: false };
+      }
+      shell.showItemInFolder(targetPath);
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err.message };

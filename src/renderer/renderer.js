@@ -31,6 +31,12 @@ let trafficSystemUploadRate = document.getElementById('trafficSystemUploadRate')
 let trafficSystemUploadTotal = document.getElementById('trafficSystemUploadTotal');
 let trafficTotalDownload = document.getElementById('trafficTotalDownload');
 let trafficTotalUpload = document.getElementById('trafficTotalUpload');
+let trafficUploadLine = document.getElementById('trafficUploadLine');
+let trafficUploadArea = document.getElementById('trafficUploadArea');
+let trafficDownloadLine = document.getElementById('trafficDownloadLine');
+let trafficDownloadArea = document.getElementById('trafficDownloadArea');
+let trafficUploadAxis = [];
+let trafficDownloadAxis = [];
 let quickHintNodes = Array.from(document.querySelectorAll('[data-i18n="status.quickHint"]'));
 
 // IP地址隐私保护函数
@@ -80,6 +86,7 @@ let externalAuthInput = document.getElementById('externalAuth');
 let startBtn = document.getElementById('startBtn');
 let stopBtn = document.getElementById('stopBtn');
 let restartBtn = document.getElementById('restartBtn');
+let proxyModeSelect = document.getElementById('proxyModeSelect');
 let refreshStatusBtn = document.getElementById('refreshStatus');
 let refreshBackups = document.getElementById('refreshBackups');
 let backupsRefresh = document.getElementById('backupsRefresh');
@@ -138,12 +145,9 @@ let settingsLogPath = document.getElementById('settingsLogPath');
 let settingsConfigDir = document.getElementById('settingsConfigDir');
 let settingsCoreDir = document.getElementById('settingsCoreDir');
 let settingsDataDir = document.getElementById('settingsDataDir');
-let settingsConfigDirBrowse = document.getElementById('settingsConfigDirBrowse');
-let settingsCoreDirBrowse = document.getElementById('settingsCoreDirBrowse');
-let settingsDataDirBrowse = document.getElementById('settingsDataDirBrowse');
-let settingsConfigDirReset = document.getElementById('settingsConfigDirReset');
-let settingsCoreDirReset = document.getElementById('settingsCoreDirReset');
-let settingsDataDirReset = document.getElementById('settingsDataDirReset');
+let settingsConfigDirReveal = document.getElementById('settingsConfigDirReveal');
+let settingsCoreDirReveal = document.getElementById('settingsCoreDirReveal');
+let settingsDataDirReveal = document.getElementById('settingsDataDirReveal');
 let settingsLogLines = document.getElementById('settingsLogLines');
 let settingsLogAutoRefresh = document.getElementById('settingsLogAutoRefresh');
 let settingsLogIntervalPreset = document.getElementById('settingsLogIntervalPreset');
@@ -199,7 +203,11 @@ const I18N = {
       quick: 'Quick Actions',
       quickHint: 'Actions use the default config unless a custom path is set in Control.',
       quickHintMissing: 'Kernel not installed. Please install it first.',
-      trafficTitle: 'Traffic Stats',
+      proxyMode: 'Proxy Mode',
+      proxyGlobal: 'Global',
+      proxyRule: 'Rule',
+      proxyDirect: 'Direct',
+      trafficTitle: 'Network History',
       trafficHint: 'Updated every 1 second.',
       trafficSystemDown: 'Download',
       trafficSystemUp: 'Upload',
@@ -319,6 +327,8 @@ const I18N = {
       backupsRefreshed: 'Backups refreshed.',
       startSuccess: 'Kernel started.',
       restartSuccess: 'Kernel restarted.',
+      proxyModeUpdated: 'Proxy mode updated.',
+      controllerMissing: 'Controller is not configured.',
       bridgeMissing: 'Bridge unavailable.',
       sudoInvalid: 'Password incorrect.',
       alreadyRunning: 'Kernel is already running.',
@@ -388,6 +398,7 @@ const I18N = {
       configDir: 'Config Dir',
       coreDir: 'Core Dir',
       dataDir: 'Data Dir',
+      revealInFinder: 'Reveal in Finder',
       logs: 'Log Settings',
       pagination: 'Pagination',
       kernelPageSize: 'Kernel Page Size',
@@ -441,7 +452,11 @@ const I18N = {
       quick: '快捷操作',
       quickHint: '快捷操作使用默认配置，除非在控制页指定自定义路径。',
       quickHintMissing: '未安装内核，请先前往安装。',
-      trafficTitle: '流量统计',
+      proxyMode: '代理模式',
+      proxyGlobal: '全局',
+      proxyRule: '规则',
+      proxyDirect: '直连',
+      trafficTitle: '网络历史',
       trafficHint: '每 1 秒更新一次。',
       trafficSystemDown: '下载',
       trafficSystemUp: '上传',
@@ -560,6 +575,8 @@ const I18N = {
       backupsRefreshed: '备份已刷新。',
       startSuccess: '内核已启动。',
       restartSuccess: '内核已重启。',
+      proxyModeUpdated: '代理模式已更新。',
+      controllerMissing: '控制器未配置。',
       bridgeMissing: '桥接服务不可用。',
       sudoInvalid: '密码不正确。',
       alreadyRunning: '内核已在运行。',
@@ -629,6 +646,7 @@ const I18N = {
       configDir: '配置目录',
       coreDir: '内核目录',
       dataDir: '数据目录',
+      revealInFinder: '在 Finder 中显示',
       logs: '日志设置',
       pagination: '分页',
       kernelPageSize: '内核页大小',
@@ -682,7 +700,11 @@ const I18N = {
       quick: 'クイック操作',
       quickHint: 'コントロールでカスタムパスが設定されていない場合、既定の設定を使用します。',
       quickHintMissing: 'カーネル未インストールです。先にインストールしてください。',
-      trafficTitle: 'トラフィック統計',
+      proxyMode: 'プロキシモード',
+      proxyGlobal: 'グローバル',
+      proxyRule: 'ルール',
+      proxyDirect: '直接',
+      trafficTitle: 'ネットワーク履歴',
       trafficHint: '1 秒ごとに更新します。',
       trafficSystemDown: '受信',
       trafficSystemUp: '送信',
@@ -801,6 +823,8 @@ const I18N = {
       backupsRefreshed: 'バックアップを更新しました。',
       startSuccess: 'カーネルを起動しました。',
       restartSuccess: 'カーネルを再起動しました。',
+      proxyModeUpdated: 'プロキシモードを更新しました。',
+      controllerMissing: 'コントローラが未設定です。',
       bridgeMissing: 'ブリッジが利用できません。',
       sudoInvalid: 'パスワードが正しくありません。',
       alreadyRunning: 'カーネルは既に稼働中です。',
@@ -868,6 +892,7 @@ const I18N = {
       configDir: '設定ディレクトリ',
       coreDir: 'コアディレクトリ',
       dataDir: 'データディレクトリ',
+      revealInFinder: 'Finder で表示',
       logs: 'ログ設定',
       pagination: 'ページング',
       kernelPageSize: 'カーネルページサイズ',
@@ -921,7 +946,11 @@ const I18N = {
       quick: '빠른 작업',
       quickHint: '컨트롤에서 사용자 경로를 지정하지 않으면 기본 설정을 사용합니다.',
       quickHintMissing: '커널이 설치되지 않았습니다. 먼저 설치하세요.',
-      trafficTitle: '트래픽 통계',
+      proxyMode: '프록시 모드',
+      proxyGlobal: '전체',
+      proxyRule: '규칙',
+      proxyDirect: '직접',
+      trafficTitle: '네트워크 기록',
       trafficHint: '1초마다 업데이트됩니다.',
       trafficSystemDown: '다운로드',
       trafficSystemUp: '업로드',
@@ -1040,6 +1069,8 @@ const I18N = {
       backupsRefreshed: '백업을 새로고침했습니다.',
       startSuccess: '커널을 시작했습니다.',
       restartSuccess: '커널을 재시작했습니다.',
+      proxyModeUpdated: '프록시 모드가 업데이트되었습니다.',
+      controllerMissing: '컨트롤러가 설정되지 않았습니다.',
       bridgeMissing: '브리지 서비스를 사용할 수 없습니다.',
       sudoInvalid: '비밀번호가 올바르지 않습니다.',
       alreadyRunning: '커널이 이미 실행 중입니다.',
@@ -1108,6 +1139,7 @@ const I18N = {
       configDir: '설정 디렉터리',
       coreDir: '코어 디렉터리',
       dataDir: '데이터 디렉터리',
+      revealInFinder: 'Finder에서 보기',
       logs: '로그 설정',
       pagination: '페이지네이션',
       kernelPageSize: '커널 페이지 크기',
@@ -1161,7 +1193,11 @@ const I18N = {
       quick: 'Actions rapides',
       quickHint: 'Les actions utilisent la configuration par défaut sauf si un chemin personnalisé est défini dans Contrôle.',
       quickHintMissing: 'Noyau non installé. Veuillez l’installer d’abord.',
-      trafficTitle: 'Statistiques de trafic',
+      proxyMode: 'Mode proxy',
+      proxyGlobal: 'Global',
+      proxyRule: 'Règle',
+      proxyDirect: 'Direct',
+      trafficTitle: 'Historique réseau',
       trafficHint: 'Mise à jour toutes les 1 seconde.',
       trafficSystemDown: 'Téléchargement',
       trafficSystemUp: 'Téléversement',
@@ -1280,6 +1316,8 @@ const I18N = {
       backupsRefreshed: 'Sauvegardes actualisées.',
       startSuccess: 'Noyau démarré.',
       restartSuccess: 'Noyau redémarré.',
+      proxyModeUpdated: 'Mode proxy mis à jour.',
+      controllerMissing: 'Contrôleur non configuré.',
       bridgeMissing: 'Pont indisponible.',
       sudoInvalid: 'Mot de passe incorrect.',
       alreadyRunning: 'Le noyau est déjà en marche.',
@@ -1348,6 +1386,7 @@ const I18N = {
       configDir: 'Dossier config',
       coreDir: 'Dossier core',
       dataDir: 'Dossier data',
+      revealInFinder: 'Afficher dans le Finder',
       logs: 'Paramètres des journaux',
       pagination: 'Pagination',
       kernelPageSize: 'Taille de page du noyau',
@@ -1401,7 +1440,11 @@ const I18N = {
       quick: 'Schnellaktionen',
       quickHint: 'Aktionen verwenden die Standardkonfiguration, sofern kein benutzerdefinierter Pfad in Steuerung gesetzt ist.',
       quickHintMissing: 'Kernel nicht installiert. Bitte zuerst installieren.',
-      trafficTitle: 'Datenverkehr',
+      proxyMode: 'Proxy-Modus',
+      proxyGlobal: 'Global',
+      proxyRule: 'Regel',
+      proxyDirect: 'Direkt',
+      trafficTitle: 'Netzwerkverlauf',
       trafficHint: 'Aktualisiert jede Sekunde.',
       trafficSystemDown: 'Download',
       trafficSystemUp: 'Upload',
@@ -1520,6 +1563,8 @@ const I18N = {
       backupsRefreshed: 'Backups aktualisiert.',
       startSuccess: 'Kernel gestartet.',
       restartSuccess: 'Kernel neu gestartet.',
+      proxyModeUpdated: 'Proxy-Modus aktualisiert.',
+      controllerMissing: 'Controller ist nicht konfiguriert.',
       bridgeMissing: 'Bridge nicht verfügbar.',
       sudoInvalid: 'Passwort falsch.',
       alreadyRunning: 'Kernel läuft bereits.',
@@ -1587,6 +1632,7 @@ const I18N = {
       configDir: 'Konfigordner',
       coreDir: 'Core-Ordner',
       dataDir: 'Datenordner',
+      revealInFinder: 'Im Finder anzeigen',
       logs: 'Log-Einstellungen',
       pagination: 'Paginierung',
       kernelPageSize: 'Kernel-Seitengröße',
@@ -1640,7 +1686,11 @@ const I18N = {
       quick: 'Быстрые действия',
       quickHint: 'Действия используют конфигурацию по умолчанию, если в разделе Управление не задан пользовательский путь.',
       quickHintMissing: 'Ядро не установлено. Сначала установите его.',
-      trafficTitle: 'Статистика трафика',
+      proxyMode: 'Режим прокси',
+      proxyGlobal: 'Глобальный',
+      proxyRule: 'Правила',
+      proxyDirect: 'Напрямую',
+      trafficTitle: 'История сети',
       trafficHint: 'Обновляется каждую секунду.',
       trafficSystemDown: 'Загрузка',
       trafficSystemUp: 'Отдача',
@@ -1759,6 +1809,8 @@ const I18N = {
       backupsRefreshed: 'Резервные копии обновлены.',
       startSuccess: 'Ядро запущено.',
       restartSuccess: 'Ядро перезапущено.',
+      proxyModeUpdated: 'Режим прокси обновлен.',
+      controllerMissing: 'Контроллер не настроен.',
       bridgeMissing: 'Мост недоступен.',
       sudoInvalid: 'Пароль неверный.',
       alreadyRunning: 'Ядро уже запущено.',
@@ -1827,6 +1879,7 @@ const I18N = {
       configDir: 'Каталог конфигов',
       coreDir: 'Каталог ядра',
       dataDir: 'Каталог данных',
+      revealInFinder: 'Показать в Finder',
       logs: 'Настройки журнала',
       pagination: 'Пагинация',
       kernelPageSize: 'Размер страницы ядер',
@@ -1852,6 +1905,7 @@ const DEFAULT_SETTINGS = {
   externalController: '127.0.0.1:9090',
   secret: 'clashfox',
   authentication: ['mihomo:clashfox'],
+  proxyMode: 'rule',
   logLines: 10,
   logAutoRefresh: false,
   logIntervalPreset: '3',
@@ -1900,6 +1954,8 @@ const state = {
   trafficRxBytes: null,
   trafficTxBytes: null,
   trafficAt: 0,
+  trafficHistoryRx: [],
+  trafficHistoryTx: [],
   proxyRxBytes: null,
   proxyTxBytes: null,
   proxyAt: 0,
@@ -2179,6 +2235,9 @@ function applySettings(settings) {
     settingsLogAutoRefresh.checked = state.settings.logAutoRefresh;
   }
   setLogAutoRefresh(state.settings.logAutoRefresh);
+  if (proxyModeSelect) {
+    proxyModeSelect.value = state.settings.proxyMode || 'rule';
+  }
   if (kernelPageSize) {
     kernelPageSize.value = state.settings.kernelPageSize;
   }
@@ -2580,6 +2639,112 @@ function formatBitrate(bytesPerSec) {
   return `${value.toFixed(fixed)} ${units[idx]}`;
 }
 
+const TRAFFIC_HISTORY_POINTS = 26;
+
+function niceMaxValue(value) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return 8;
+  }
+  const magnitude = Math.pow(10, Math.floor(Math.log10(value)));
+  const normalized = value / magnitude;
+  let factor = 10;
+  if (normalized <= 1) factor = 1;
+  else if (normalized <= 2) factor = 2;
+  else if (normalized <= 5) factor = 5;
+  return factor * magnitude;
+}
+
+function formatKbpsLabel(kbPerSec) {
+  const num = Number.parseFloat(kbPerSec);
+  if (!Number.isFinite(num)) {
+    return '-';
+  }
+  if (num >= 1024) {
+    const value = num / 1024;
+    const fixed = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+    return `${value.toFixed(fixed)} MB/s`;
+  }
+  return `${Math.round(num)} KB/s`;
+}
+
+function buildSparkPath(values, maxValue) {
+  if (!values.length) {
+    return '';
+  }
+  const width = 100;
+  const height = 40;
+  const len = values.length;
+  const denom = maxValue > 0 ? maxValue : 1;
+  const points = values.map((value, index) => {
+    const x = len === 1 ? 0 : (index / (len - 1)) * width;
+    const y = height - (Math.min(Math.max(value, 0), denom) / denom) * height;
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  });
+  return `M ${points.join(' L ')}`;
+}
+
+function buildSparkArea(values, maxValue) {
+  if (!values.length) {
+    return '';
+  }
+  const width = 100;
+  const height = 40;
+  const line = buildSparkPath(values, maxValue);
+  if (!line) {
+    return '';
+  }
+  const lastX = values.length === 1 ? 0 : 100;
+  return `${line} L ${lastX},${height} L 0,${height} Z`;
+}
+
+function renderTrafficChart(values, lineEl, areaEl, axisEls) {
+  if (!lineEl || !areaEl || !axisEls.length) {
+    return;
+  }
+  if (!values.length) {
+    axisEls.forEach((el) => {
+      el.textContent = '-';
+    });
+    lineEl.setAttribute('d', '');
+    areaEl.setAttribute('d', '');
+    return;
+  }
+  const maxValue = Math.max(...values, 0);
+  let niceMax = niceMaxValue(maxValue);
+  if (niceMax < 8) {
+    niceMax = 8;
+  }
+  const step = niceMax / 4;
+  axisEls.forEach((el, index) => {
+    const labelValue = step * (4 - index);
+    el.textContent = formatKbpsLabel(labelValue);
+  });
+  lineEl.setAttribute('d', buildSparkPath(values, niceMax));
+  areaEl.setAttribute('d', buildSparkArea(values, niceMax));
+}
+
+function updateTrafficHistory(rxRate, txRate) {
+  const rxK = Math.max(0, rxRate / 1024);
+  const txK = Math.max(0, txRate / 1024);
+  state.trafficHistoryRx.push(rxK);
+  state.trafficHistoryTx.push(txK);
+  if (state.trafficHistoryRx.length > TRAFFIC_HISTORY_POINTS) {
+    state.trafficHistoryRx.shift();
+  }
+  if (state.trafficHistoryTx.length > TRAFFIC_HISTORY_POINTS) {
+    state.trafficHistoryTx.shift();
+  }
+  renderTrafficChart(state.trafficHistoryTx, trafficUploadLine, trafficUploadArea, trafficUploadAxis);
+  renderTrafficChart(state.trafficHistoryRx, trafficDownloadLine, trafficDownloadArea, trafficDownloadAxis);
+}
+
+function resetTrafficHistory() {
+  state.trafficHistoryRx = [];
+  state.trafficHistoryTx = [];
+  renderTrafficChart(state.trafficHistoryTx, trafficUploadLine, trafficUploadArea, trafficUploadAxis);
+  renderTrafficChart(state.trafficHistoryRx, trafficDownloadLine, trafficDownloadArea, trafficDownloadAxis);
+}
+
 function parseAuthList(value) {
   if (!value) {
     return [];
@@ -2616,6 +2781,7 @@ function updateSystemTraffic(rxBytes, txBytes) {
     state.trafficRxBytes = null;
     state.trafficTxBytes = null;
     state.trafficAt = 0;
+    resetTrafficHistory();
     return;
   }
 
@@ -2661,6 +2827,7 @@ function updateSystemTraffic(rxBytes, txBytes) {
   if (trafficSystemUploadRate) {
     trafficSystemUploadRate.textContent = formatBitrate(txRate);
   }
+  updateTrafficHistory(rxRate, txRate);
 }
 
 function updateProxyTraffic(rxBytes, txBytes) {
@@ -3017,7 +3184,8 @@ function renderConfigTable() {
   html += '</tr></thead><tbody>';
   items.forEach((item) => {
     const isCurrent = currentPath && item.path === currentPath;
-    html += '<tr>';
+    const rowClass = isCurrent ? 'selectable selected' : 'selectable';
+    html += `<tr class="${rowClass}" data-path="${item.path || ''}">`;
     html += `<td class="name-col">${item.name || '-'}</td>`;
     html += `<td class="path-col">${item.path || '-'}</td>`;
     html += `<td class="modified-col">${item.modified || '-'}</td>`;
@@ -3276,6 +3444,22 @@ function refreshPageRefs() {
   trafficSystemUploadTotal = document.getElementById('trafficSystemUploadTotal');
   trafficTotalDownload = document.getElementById('trafficTotalDownload');
   trafficTotalUpload = document.getElementById('trafficTotalUpload');
+  trafficUploadLine = document.getElementById('trafficUploadLine');
+  trafficUploadArea = document.getElementById('trafficUploadArea');
+  trafficDownloadLine = document.getElementById('trafficDownloadLine');
+  trafficDownloadArea = document.getElementById('trafficDownloadArea');
+  trafficUploadAxis = [
+    document.getElementById('trafficUploadAxis4'),
+    document.getElementById('trafficUploadAxis3'),
+    document.getElementById('trafficUploadAxis2'),
+    document.getElementById('trafficUploadAxis1'),
+  ].filter(Boolean);
+  trafficDownloadAxis = [
+    document.getElementById('trafficDownloadAxis4'),
+    document.getElementById('trafficDownloadAxis3'),
+    document.getElementById('trafficDownloadAxis2'),
+    document.getElementById('trafficDownloadAxis1'),
+  ].filter(Boolean);
   quickHintNodes = Array.from(document.querySelectorAll('[data-i18n="status.quickHint"]'));
   overviewNetworkRefresh = document.getElementById('overviewNetworkRefresh');
 
@@ -3300,6 +3484,7 @@ function refreshPageRefs() {
   startBtn = document.getElementById('startBtn');
   stopBtn = document.getElementById('stopBtn');
   restartBtn = document.getElementById('restartBtn');
+  proxyModeSelect = document.getElementById('proxyModeSelect');
   refreshStatusBtn = document.getElementById('refreshStatus');
   refreshBackups = document.getElementById('refreshBackups');
   backupsRefresh = document.getElementById('backupsRefresh');
@@ -3358,12 +3543,9 @@ function refreshPageRefs() {
   settingsConfigDir = document.getElementById('settingsConfigDir');
   settingsCoreDir = document.getElementById('settingsCoreDir');
   settingsDataDir = document.getElementById('settingsDataDir');
-  settingsConfigDirBrowse = document.getElementById('settingsConfigDirBrowse');
-  settingsCoreDirBrowse = document.getElementById('settingsCoreDirBrowse');
-  settingsDataDirBrowse = document.getElementById('settingsDataDirBrowse');
-  settingsConfigDirReset = document.getElementById('settingsConfigDirReset');
-  settingsCoreDirReset = document.getElementById('settingsCoreDirReset');
-  settingsDataDirReset = document.getElementById('settingsDataDirReset');
+  settingsConfigDirReveal = document.getElementById('settingsConfigDirReveal');
+  settingsCoreDirReveal = document.getElementById('settingsCoreDirReveal');
+  settingsDataDirReveal = document.getElementById('settingsDataDirReveal');
   settingsLogLines = document.getElementById('settingsLogLines');
   settingsLogAutoRefresh = document.getElementById('settingsLogAutoRefresh');
   settingsLogIntervalPreset = document.getElementById('settingsLogIntervalPreset');
@@ -3413,9 +3595,12 @@ function bindTopbarActions() {
   if (refreshStatusBtn && refreshStatusBtn.dataset.bound !== 'true') {
     refreshStatusBtn.dataset.bound = 'true';
     refreshStatusBtn.addEventListener('click', async () => {
-      await loadStatus();
-      await loadOverview();
-      await loadOverviewLite();
+      await Promise.all([
+        loadStatus(),
+        loadOverviewLite(),
+        loadOverview(),
+        loadOverviewMemory(),
+      ]);
       showToast(t('labels.statusRefreshed'));
     });
   }
@@ -3431,9 +3616,13 @@ function refreshPageView() {
     loadLogs();
   }
   loadStatus();
-  loadOverview();
-  loadOverviewLite();
-  loadOverviewMemory();
+  if (currentPage === 'status') {
+    Promise.all([
+      loadOverview(),
+      loadOverviewLite(),
+      loadOverviewMemory(),
+    ]);
+  }
 }
 
 function getPageFromLocation() {
@@ -3677,78 +3866,45 @@ if (settingsDebugMode) {
   });
 }
 
-if (settingsConfigDir) {
-  settingsConfigDir.addEventListener('change', (event) => {
-    const value = event.target.value.trim();
-    saveSettings({ configDir: value });
-    refreshPathDependentViews();
-  });
-}
+const getRevealPath = (inputEl) => {
+  if (!inputEl) {
+    return '';
+  }
+  const value = (inputEl.value || '').trim();
+  if (value && value !== '-') {
+    return value;
+  }
+  const placeholder = (inputEl.placeholder || '').trim();
+  if (placeholder && placeholder !== '-') {
+    return placeholder;
+  }
+  return '';
+};
 
-if (settingsCoreDir) {
-  settingsCoreDir.addEventListener('change', (event) => {
-    const value = event.target.value.trim();
-    saveSettings({ coreDir: value });
-    refreshPathDependentViews();
-  });
-}
-
-if (settingsDataDir) {
-  settingsDataDir.addEventListener('change', (event) => {
-    const value = event.target.value.trim();
-    saveSettings({ dataDir: value });
-    refreshPathDependentViews();
-  });
-}
-
-if (settingsConfigDirBrowse) {
-  settingsConfigDirBrowse.addEventListener('click', async () => {
-    const result = await handleDirectoryBrowse('Select Config Directory');
-    if (result.ok) {
-      settingsConfigDir.value = result.path;
-      saveSettings({ configDir: result.path });
-      refreshPathDependentViews();
+if (settingsConfigDirReveal) {
+  settingsConfigDirReveal.addEventListener('click', async () => {
+    const target = getRevealPath(settingsConfigDir);
+    if (target && window.clashfox && typeof window.clashfox.revealInFinder === 'function') {
+      await window.clashfox.revealInFinder(target);
     }
   });
 }
 
-if (settingsCoreDirBrowse) {
-  settingsCoreDirBrowse.addEventListener('click', async () => {
-    const result = await handleDirectoryBrowse('Select Core Directory');
-    if (result.ok) {
-      settingsCoreDir.value = result.path;
-      saveSettings({ coreDir: result.path });
-      refreshPathDependentViews();
+if (settingsCoreDirReveal) {
+  settingsCoreDirReveal.addEventListener('click', async () => {
+    const target = getRevealPath(settingsCoreDir);
+    if (target && window.clashfox && typeof window.clashfox.revealInFinder === 'function') {
+      await window.clashfox.revealInFinder(target);
     }
   });
 }
 
-if (settingsDataDirBrowse) {
-  settingsDataDirBrowse.addEventListener('click', async () => {
-    const result = await handleDirectoryBrowse('Select Data Directory');
-    if (result.ok) {
-      settingsDataDir.value = result.path;
-      saveSettings({ dataDir: result.path });
-      refreshPathDependentViews();
+if (settingsDataDirReveal) {
+  settingsDataDirReveal.addEventListener('click', async () => {
+    const target = getRevealPath(settingsDataDir);
+    if (target && window.clashfox && typeof window.clashfox.revealInFinder === 'function') {
+      await window.clashfox.revealInFinder(target);
     }
-  });
-}
-
-if (settingsConfigDirReset) {
-  settingsConfigDirReset.addEventListener('click', () => {
-    resetPathSetting('configDir', t('settings.configDir'));
-  });
-}
-
-if (settingsCoreDirReset) {
-  settingsCoreDirReset.addEventListener('click', () => {
-    resetPathSetting('coreDir', t('settings.coreDir'));
-  });
-}
-
-if (settingsDataDirReset) {
-  settingsDataDirReset.addEventListener('click', () => {
-    resetPathSetting('dataDir', t('settings.dataDir'));
   });
 }
 
@@ -4093,6 +4249,38 @@ if (restartBtn) {
   restartBtn.addEventListener('click', () => handleCoreAction('restart', restartBtn));
 }
 
+if (proxyModeSelect) {
+  proxyModeSelect.addEventListener('change', async () => {
+    const value = proxyModeSelect.value || 'rule';
+    const response = await runCommand('mode', ['--mode', value, ...getControllerArgs()]);
+    if (response.ok) {
+      saveSettings({ proxyMode: value });
+      showToast(t('labels.proxyModeUpdated'));
+      return;
+    }
+    const message = response.error === 'controller_missing'
+      ? t('labels.controllerMissing')
+      : (response.error || 'Mode update failed');
+    showToast(message, 'error');
+  });
+}
+
+if (configTable) {
+  configTable.addEventListener('click', (event) => {
+    const row = event.target.closest('tr[data-path]');
+    if (!row) {
+      return;
+    }
+    const path = row.getAttribute('data-path') || '';
+    if (!path || path === getCurrentConfigPath()) {
+      return;
+    }
+    saveSettings({ configPath: path });
+    showToast(t('labels.configNeedsRestart'));
+    renderConfigTable();
+  });
+}
+
 if (refreshBackups) {
   refreshBackups.addEventListener('click', () => loadBackups(true));
 }
@@ -4333,19 +4521,11 @@ if (logRefresh) {
 if (logAutoRefresh) {
   logAutoRefresh.addEventListener('change', (event) => {
     setLogAutoRefresh(event.target.checked);
-    if (settingsLogAutoRefresh) {
-      settingsLogAutoRefresh.checked = event.target.checked;
-    }
-    saveSettings({ logAutoRefresh: event.target.checked });
   });
 }
 if (logIntervalPreset) {
   logIntervalPreset.addEventListener('change', () => {
     updateInterval();
-    if (settingsLogIntervalPreset) {
-      settingsLogIntervalPreset.value = logIntervalPreset.value;
-    }
-    saveSettings({ logIntervalPreset: logIntervalPreset.value });
   });
 }
 
@@ -4382,10 +4562,9 @@ if (settingsLogLines) {
 if (logLines) {
   logLines.addEventListener('change', (event) => {
     const value = Number.parseInt(event.target.value, 10) || 10;
-    if (settingsLogLines) {
-      settingsLogLines.value = value;
+    if (logLines) {
+      logLines.value = value;
     }
-    saveSettings({ logLines: value });
   });
 }
 
@@ -4417,7 +4596,9 @@ function startOverviewTimer() {
     clearInterval(state.overviewTimer);
   }
   state.overviewTimer = setInterval(() => {
-    loadOverview();
+    if (currentPage === 'status') {
+      loadOverview();
+    }
   }, 5000);
 
   if (state.trafficTimer) {
@@ -4431,14 +4612,18 @@ function startOverviewTimer() {
     clearInterval(state.overviewLiteTimer);
   }
   state.overviewLiteTimer = setInterval(() => {
-    loadOverviewLite();
+    if (currentPage === 'status') {
+      loadOverviewLite();
+    }
   }, 2000);
 
   if (state.overviewMemoryTimer) {
     clearInterval(state.overviewMemoryTimer);
   }
   state.overviewMemoryTimer = setInterval(() => {
-    loadOverviewMemory();
+    if (currentPage === 'status') {
+      loadOverviewMemory();
+    }
   }, 1000);
 
   if (state.overviewTickTimer) {
@@ -4540,9 +4725,13 @@ async function initApp() {
   loadStatus();
   setTimeout(() => loadStatus(), 1200);
   setTimeout(() => loadStatus(), 4000);
-  loadOverview();
-  loadOverviewLite();
-  loadOverviewMemory();
+  if (currentPage === 'status') {
+    Promise.all([
+      loadOverview(),
+      loadOverviewLite(),
+      loadOverviewMemory(),
+    ]);
+  }
   updateInstallVersionVisibility();
   startOverviewTimer();
   loadConfigs();

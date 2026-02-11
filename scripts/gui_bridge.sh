@@ -1145,6 +1145,79 @@ JSON
 )
         print_ok "$data"
         ;;
+    mode)
+        mode=""
+        config_path=""
+        controller_override=""
+        secret_override=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --mode)
+                    shift
+                    mode="$1"
+                    ;;
+                --config|--config-path)
+                    shift || true
+                    config_path="${1:-}"
+                    ;;
+                --controller)
+                    shift
+                    controller_override="${1:-}"
+                    ;;
+                --secret)
+                    shift
+                    secret_override="${1:-}"
+                    ;;
+            esac
+            shift || true
+        done
+
+        case "$mode" in
+            global|rule|direct)
+                ;;
+            *)
+                print_err "invalid_mode"
+                exit 1
+                ;;
+        esac
+
+        if [ -z "$config_path" ]; then
+            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+        fi
+        resolve_controller_from_config "$config_path"
+
+        if [ -n "$controller_override" ]; then
+            if ! echo "$controller_override" | grep -qE '^https?://'; then
+                MIHOMO_CONTROLLER="http://$controller_override"
+            else
+                MIHOMO_CONTROLLER="$controller_override"
+            fi
+        fi
+        if [ -n "$secret_override" ]; then
+            MIHOMO_SECRET="$secret_override"
+        fi
+
+        if [ -z "$MIHOMO_CONTROLLER" ]; then
+            print_err "controller_missing"
+            exit 1
+        fi
+        if ! command -v curl >/dev/null 2>&1; then
+            print_err "curl_missing"
+            exit 1
+        fi
+
+        auth_args=()
+        if [ -n "$MIHOMO_SECRET" ]; then
+            auth_args=(-H "Authorization: Bearer $MIHOMO_SECRET")
+        fi
+        code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 -X PATCH "${auth_args[@]}" -H "Content-Type: application/json" -d "{\"mode\":\"$mode\"}" "$MIHOMO_CONTROLLER/configs" 2>/dev/null)"
+        if echo "$code" | grep -qE '^(200|204)$'; then
+            print_ok "{}"
+        else
+            print_err "request_failed"
+            exit 1
+        fi
+        ;;
     cores)
         if [ ! -d "$CLASHFOX_CORE_DIR" ]; then
             print_ok "[]"

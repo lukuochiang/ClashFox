@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('clashfox', {
   readSettings: () => ipcRenderer.invoke('clashfox:readSettings'),
   writeSettings: (data) => ipcRenderer.invoke('clashfox:writeSettings', data),
   getUserDataPath: () => ipcRenderer.invoke('clashfox:userDataPath'),
+  revealInFinder: (targetPath) => ipcRenderer.invoke('clashfox:revealInFinder', targetPath),
   onSystemThemeChange: (handler) => {
     if (typeof handler !== 'function') {
       return () => {};

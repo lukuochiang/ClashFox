@@ -23,36 +23,51 @@
                 <button class="btn has-tip" id="stopBtn" data-i18n="actions.stop" data-i18n-tip="actions.stopTip">Stop</button>
                 <button class="btn has-tip" id="restartBtn" data-i18n="actions.restart" data-i18n-tip="actions.restartTip">Restart</button>
               </div>
+              <div class="action-row mode-row">
+                <span class="mode-label" data-i18n="status.proxyMode">Proxy Mode</span>
+                <select id="proxyModeSelect" aria-label="Proxy Mode">
+                  <option value="global" data-i18n="status.proxyGlobal">Global</option>
+                  <option value="rule" data-i18n="status.proxyRule" selected>Rule</option>
+                  <option value="direct" data-i18n="status.proxyDirect">Direct</option>
+                </select>
+              </div>
               <div class="hint" data-i18n="status.quickHint">
                 Actions use the default config unless a custom path is set in Control.
               </div>
             </div>
             <div class="card quick-actions">
               <div class="card-header-row">
-                <h3 data-i18n="status.trafficTitle">Traffic Stats</h3>
-                <span class="card-hint" data-i18n="status.trafficHint">Updated every 1s.</span>
+                <h3 data-i18n="status.trafficTitle">Network History</h3>
               </div>
-              <div class="traffic-grid">
-                <div class="traffic-group status-grid">
-                  <div>
-                    <div class="label" data-i18n="status.trafficSystemDown">Download</div>
-                    <div id="trafficSystemDownloadRate" class="value">-</div>
-<!--                    <div id="trafficSystemDownloadTotal" class="value small">-</div>-->
-                  </div>
-                  <div>
-                    <div class="label" data-i18n="status.trafficSystemUp">Upload</div>
-                    <div id="trafficSystemUploadRate" class="value">-</div>
-<!--                    <div id="trafficSystemUploadTotal" class="value small">-</div>-->
+              <div class="history-grid">
+                <div class="history-panel upload">
+                  <div class="history-label" data-i18n="status.trafficSystemUp">Upload</div>
+                  <div class="history-chart">
+                    <svg class="history-svg" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
+                      <path id="trafficUploadArea" class="history-area upload" d=""></path>
+                      <path id="trafficUploadLine" class="history-line upload" d=""></path>
+                    </svg>
+                    <div class="history-axis">
+                      <span id="trafficUploadAxis4">-</span>
+                      <span id="trafficUploadAxis3">-</span>
+                      <span id="trafficUploadAxis2">-</span>
+                      <span id="trafficUploadAxis1">-</span>
+                    </div>
                   </div>
                 </div>
-                <div class="traffic-group status-grid">
-                  <div>
-                    <div class="label" data-i18n="status.trafficTotalDown">Download Total</div>
-                    <div id="trafficTotalDownload" class="value">-</div>
-                  </div>
-                  <div>
-                    <div class="label" data-i18n="status.trafficTotalUp">Upload Total</div>
-                    <div id="trafficTotalUpload" class="value">-</div>
+                <div class="history-panel download">
+                  <div class="history-label" data-i18n="status.trafficSystemDown">Download</div>
+                  <div class="history-chart">
+                    <svg class="history-svg" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
+                      <path id="trafficDownloadArea" class="history-area download" d=""></path>
+                      <path id="trafficDownloadLine" class="history-line download" d=""></path>
+                    </svg>
+                    <div class="history-axis">
+                      <span id="trafficDownloadAxis4">-</span>
+                      <span id="trafficDownloadAxis3">-</span>
+                      <span id="trafficDownloadAxis2">-</span>
+                      <span id="trafficDownloadAxis1">-</span>
+                    </div>
                   </div>
                 </div>
               </div>
