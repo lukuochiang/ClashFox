@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const distDir = path.join(__dirname, '..', 'dist');
+const isPreclean = process.argv.includes('--pre');
 const pkgPath = path.join(__dirname, '..', 'package.json');
 
 if (!fs.existsSync(distDir)) {
@@ -21,6 +22,13 @@ try {
 const versionDir = path.join(distDir, version);
 if (!fs.existsSync(versionDir)) {
   fs.mkdirSync(versionDir, { recursive: true });
+}
+
+if (isPreclean) {
+  for (const name of fs.readdirSync(versionDir)) {
+    fs.rmSync(path.join(versionDir, name), { recursive: true, force: true });
+  }
+  process.exit(0);
 }
 
 const keepExts = new Set(['.dmg', '.zip', '.yml']);

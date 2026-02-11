@@ -9,7 +9,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "node scripts/bump-version.js && CLASHFOX_DEV=1 electron .",
-    "build:mac": "electron-builder --mac; code=$?; node scripts/clean-dist-mac.js; exit $code",
+    "build:mac": "node scripts/clean-dist-mac.js --pre; electron-builder --mac; code=$?; node scripts/clean-dist-mac.js; exit $code",
     "clean:mac": "node scripts/clean-dist-mac.js"
   },
   "devDependencies": {
