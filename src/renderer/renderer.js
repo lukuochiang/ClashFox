@@ -308,7 +308,7 @@ const I18N = {
       running: 'Running',
       stopped: 'Stopped',
       unknown: 'Unknown',
-      notInstalled: 'Not installed',
+      notInstalled: 'Version unavailable',
       noBackups: 'No backups found.',
       configsEmpty: 'No configs found.',
       kernelsEmpty: 'No kernels found.',
@@ -549,7 +549,7 @@ const I18N = {
       running: '运行中',
       stopped: '已停止',
       unknown: '未知',
-      notInstalled: '未安装',
+      notInstalled: '未获取到版本',
       noBackups: '没有可用备份。',
       configsEmpty: '没有可用配置。',
       kernelsEmpty: '没有可用内核。',
@@ -790,7 +790,7 @@ const I18N = {
       running: '稼働中',
       stopped: '停止中',
       unknown: '不明',
-      notInstalled: '未インストール',
+      notInstalled: 'バージョン未取得',
       noBackups: 'バックアップが見つかりません。',
       configsEmpty: '設定が見つかりません。',
       kernelsEmpty: 'カーネルが見つかりません。',
@@ -1029,7 +1029,7 @@ const I18N = {
       running: '실행 중',
       stopped: '중지됨',
       unknown: '알 수 없음',
-      notInstalled: '미설치',
+      notInstalled: '버전 정보를 가져오지 못했습니다',
       noBackups: '백업이 없습니다.',
       configsEmpty: '설정을 찾을 수 없습니다.',
       kernelsEmpty: '커널을 찾을 수 없습니다.',
@@ -1269,7 +1269,7 @@ const I18N = {
       running: 'En marche',
       stopped: 'Arrêté',
       unknown: 'Inconnu',
-      notInstalled: 'Non installé',
+      notInstalled: 'Version indisponible',
       noBackups: 'Aucune sauvegarde trouvée.',
       configsEmpty: 'Aucune configuration trouvée.',
       kernelsEmpty: 'Aucun noyau trouvé.',
@@ -1509,7 +1509,7 @@ const I18N = {
       running: 'Läuft',
       stopped: 'Gestoppt',
       unknown: 'Unbekannt',
-      notInstalled: 'Nicht installiert',
+      notInstalled: 'Version nicht verfügbar',
       noBackups: 'Keine Backups gefunden.',
       configsEmpty: 'Keine Konfigurationen gefunden.',
       kernelsEmpty: 'Keine Kernel gefunden.',
@@ -1748,7 +1748,7 @@ const I18N = {
       running: 'Работает',
       stopped: 'Остановлено',
       unknown: 'Неизвестно',
-      notInstalled: 'Не установлено',
+      notInstalled: 'Версия недоступна',
       noBackups: 'Резервные копии не найдены.',
       configsEmpty: 'Конфигурации не найдены.',
       kernelsEmpty: 'Ядра не найдены.',
@@ -2220,6 +2220,12 @@ if (window.clashfox && typeof window.clashfox.onSystemThemeChange === 'function'
       return;
     }
     applySystemTheme(payload.dark);
+  });
+}
+
+if (window.clashfox && typeof window.clashfox.onTrayRefresh === 'function') {
+  window.clashfox.onTrayRefresh(() => {
+    loadStatus();
   });
 }
 
@@ -3485,10 +3491,34 @@ function setLayoutReady() {
   }
 }
 
+function updateScrollbarWidthVar() {
+  const measure = document.createElement('div');
+  measure.style.width = '100px';
+  measure.style.height = '100px';
+  measure.style.overflow = 'scroll';
+  measure.style.position = 'absolute';
+  measure.style.top = '-9999px';
+  document.body.appendChild(measure);
+  const width = measure.offsetWidth - measure.clientWidth;
+  document.body.removeChild(measure);
+  document.documentElement.style.setProperty('--scrollbar-width', `${width}px`);
+}
+
 async function loadLayoutParts() {
   const menuContainer = document.getElementById('menuContainer');
   const topbarContainer = document.getElementById('topbarContainer');
+  const overlayRoot = document.getElementById('overlayRoot');
   let hasCache = false;
+  const applyCachedFragment = (key, target) => {
+    if (!target) {
+      return;
+    }
+    const cached = sessionStorage.getItem(key);
+    if (cached) {
+      target.innerHTML = cached;
+      hasCache = true;
+    }
+  };
   try {
     if (menuContainer) {
       const cachedMenu = sessionStorage.getItem('layout:menu');
@@ -3502,6 +3532,17 @@ async function loadLayoutParts() {
       if (cachedTopbar) {
         topbarContainer.innerHTML = cachedTopbar;
         hasCache = true;
+      }
+    }
+    if (overlayRoot) {
+      const cachedOverlays = sessionStorage.getItem('layout:overlays');
+      if (cachedOverlays) {
+        overlayRoot.innerHTML = cachedOverlays;
+        hasCache = true;
+      }
+      if (cachedOverlays) {
+        applyCachedFragment('layout:sudo', document.getElementById('sudoRoot'));
+        applyCachedFragment('layout:confirm', document.getElementById('confirmRoot'));
       }
     }
   } catch {
@@ -3547,8 +3588,62 @@ async function loadLayoutParts() {
         })
     );
   }
+  if (overlayRoot) {
+    tasks.push(
+      fetch('overlays.html')
+        .then((res) => (res.ok ? res.text() : ''))
+        .then((html) => {
+          if (html) {
+            overlayRoot.innerHTML = html;
+            try {
+              sessionStorage.setItem('layout:overlays', html);
+            } catch {
+              // Ignore cache errors
+            }
+          }
+        })
+    );
+  }
   if (tasks.length) {
     await Promise.all(tasks);
+  }
+  const sudoRoot = document.getElementById('sudoRoot');
+  const confirmRoot = document.getElementById('confirmRoot');
+  const fragmentTasks = [];
+  if (sudoRoot) {
+    fragmentTasks.push(
+      fetch('sudo.html')
+        .then((res) => (res.ok ? res.text() : ''))
+        .then((html) => {
+          if (html) {
+            sudoRoot.innerHTML = html;
+            try {
+              sessionStorage.setItem('layout:sudo', html);
+            } catch {
+              // Ignore cache errors
+            }
+          }
+        })
+    );
+  }
+  if (confirmRoot) {
+    fragmentTasks.push(
+      fetch('confirm.html')
+        .then((res) => (res.ok ? res.text() : ''))
+        .then((html) => {
+          if (html) {
+            confirmRoot.innerHTML = html;
+            try {
+              sessionStorage.setItem('layout:confirm', html);
+            } catch {
+              // Ignore cache errors
+            }
+          }
+        })
+    );
+  }
+  if (fragmentTasks.length) {
+    await Promise.all(fragmentTasks);
   }
   refreshLayoutRefs();
   refreshPageRefs();
@@ -4426,6 +4521,8 @@ async function initApp() {
   await loadLayoutParts();
   await syncSettingsFromFile();
   applySettings(readSettings());
+  updateScrollbarWidthVar();
+  window.addEventListener('resize', updateScrollbarWidthVar);
   bindPageEvents();
   if (contentRoot && contentRoot.firstElementChild) {
     contentRoot.firstElementChild.classList.add('page-section');

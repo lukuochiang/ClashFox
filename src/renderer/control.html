@@ -66,38 +66,7 @@
         </div>
       </main>
     </div>
-
-    <div class="toast" id="toast"></div>
-
-    <div class="modal" id="sudoModal" aria-hidden="true">
-      <div class="modal-card">
-        <div class="modal-title" data-i18n="sudo.title">Authorization Required</div>
-        <div class="modal-body" data-i18n="sudo.body">
-          Enter your macOS password to continue.
-        </div>
-        <input id="sudoPassword" type="password" autocomplete="current-password" placeholder="••••••••" />
-        <div class="modal-actions">
-          <button class="btn ghost" id="sudoCancel" data-i18n="sudo.cancel">Cancel</button>
-          <button class="btn primary" id="sudoConfirm" data-i18n="sudo.confirm">Authorize</button>
-        </div>
-        <div class="modal-hint" data-i18n="sudo.hint">
-          Password is only used for this action and not stored.
-        </div>
-      </div>
-    </div>
-
-    <div class="modal" id="confirmModal" aria-hidden="true">
-      <div class="modal-card">
-        <div class="modal-title" id="confirmTitle" data-i18n="confirm.title">Please Confirm</div>
-        <div class="modal-body" id="confirmBody" data-i18n="confirm.body">
-          Are you sure you want to continue?
-        </div>
-        <div class="modal-actions">
-          <button class="btn ghost" id="confirmCancel" data-i18n="confirm.cancel">Cancel</button>
-          <button class="btn danger" id="confirmOk" data-i18n="confirm.confirm">Confirm</button>
-        </div>
-      </div>
-    </div>
+    <div id="overlayRoot"></div>
 
     <script src="renderer.js"></script>
   </body>

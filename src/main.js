@@ -41,6 +41,436 @@ let globalSettings = {
 };
 let isQuitting = false;
 
+const TRAY_I18N = {
+  en: {
+    showMain: 'Show Main Window',
+    zashboard: 'Zashboard',
+    kernelManager: 'Kernel Manager',
+    startKernel: 'Start Kernel',
+    stopKernel: 'Stop Kernel',
+    restartKernel: 'Restart Kernel',
+    restartConfirm: 'Are you sure you want to restart the kernel?',
+    cancel: 'Cancel',
+    errorTitle: 'Operation Failed',
+    commandFailed: 'Command failed',
+    sudoRequired: 'Administrator permission required',
+    sudoHint: 'Please open the main window and run the action with authorization.',
+    alreadyRunning: 'Kernel is already running.',
+    alreadyStopped: 'Kernel is already stopped.',
+    notRunning: 'Kernel is not running.',
+    startSuccess: 'Kernel started successfully.',
+    stopSuccess: 'Kernel stopped successfully.',
+    restartSuccess: 'Kernel restarted successfully.',
+    ok: 'Authorize',
+    sudoTitle: 'Authorization Required',
+    sudoMessage: 'Enter your macOS password to continue.',
+    sudoPlaceholder: '••••••••',
+    sudoInvalid: 'Password incorrect.',
+    sudoHint: 'Password is only used for this action and not stored.',
+    quit: 'Quit',
+  },
+  zh: {
+    showMain: '显示主窗口',
+    zashboard: 'Zashboard',
+    kernelManager: '内核管理',
+    startKernel: '开启内核',
+    stopKernel: '终止内核',
+    restartKernel: '重启内核',
+    restartConfirm: '确定要重启内核吗？',
+    cancel: '取消',
+    errorTitle: '操作失败',
+    commandFailed: '命令执行失败',
+    sudoRequired: '需要管理员权限',
+    sudoHint: '请打开主窗口并授权后再执行。',
+    alreadyRunning: '内核已在运行。',
+    alreadyStopped: '内核已停止。',
+    notRunning: '内核未运行。',
+    startSuccess: '内核已启动。',
+    stopSuccess: '内核已停止。',
+    restartSuccess: '内核已重启。',
+    ok: '授权',
+    sudoTitle: '授权请求',
+    sudoMessage: '请输入 macOS 密码以继续。',
+    sudoPlaceholder: '••••••••',
+    sudoInvalid: '密码不正确。',
+    sudoHint: '密码仅用于本次操作，不会被保存。',
+    quit: '退出',
+  },
+  ja: {
+    showMain: 'メインウィンドウを表示',
+    zashboard: 'Zashboard',
+    kernelManager: 'カーネル管理',
+    startKernel: 'カーネルを起動',
+    stopKernel: 'カーネルを停止',
+    restartKernel: 'カーネルを再起動',
+    restartConfirm: 'カーネルを再起動しますか？',
+    cancel: 'キャンセル',
+    errorTitle: '操作に失敗しました',
+    commandFailed: 'コマンドの実行に失敗しました',
+    sudoRequired: '管理者権限が必要です',
+    sudoHint: 'メインウィンドウで認証してから実行してください。',
+    alreadyRunning: 'カーネルはすでに起動しています。',
+    alreadyStopped: 'カーネルはすでに停止しています。',
+    notRunning: 'カーネルが起動していません。',
+    startSuccess: 'カーネルを起動しました。',
+    stopSuccess: 'カーネルを停止しました。',
+    restartSuccess: 'カーネルを再起動しました。',
+    ok: '認証',
+    sudoTitle: '認証が必要です',
+    sudoMessage: '続行するには macOS パスワードを入力してください。',
+    sudoPlaceholder: '••••••••',
+    sudoInvalid: 'パスワードが正しくありません。',
+    sudoHint: 'パスワードはこの操作のみに使用され、保存されません。',
+    quit: '終了',
+  },
+  ko: {
+    showMain: '메인 창 표시',
+    zashboard: 'Zashboard',
+    kernelManager: '커널 관리',
+    startKernel: '커널 시작',
+    stopKernel: '커널 종료',
+    restartKernel: '커널 재시작',
+    restartConfirm: '커널을 재시작할까요?',
+    cancel: '취소',
+    errorTitle: '작업 실패',
+    commandFailed: '명령 실행에 실패했습니다',
+    sudoRequired: '관리자 권한이 필요합니다',
+    sudoHint: '메인 창에서 인증 후 실행하세요.',
+    alreadyRunning: '커널이 이미 실행 중입니다.',
+    alreadyStopped: '커널이 이미 중지되었습니다.',
+    notRunning: '커널이 실행 중이 아닙니다.',
+    startSuccess: '커널이 시작되었습니다.',
+    stopSuccess: '커널이 중지되었습니다.',
+    restartSuccess: '커널이 재시작되었습니다.',
+    ok: '인증',
+    sudoTitle: '인증 필요',
+    sudoMessage: '계속하려면 macOS 비밀번호를 입력하세요.',
+    sudoPlaceholder: '••••••••',
+    sudoInvalid: '비밀번호가 올바르지 않습니다.',
+    sudoHint: '비밀번호는 이번 작업에만 사용되며 저장되지 않습니다.',
+    quit: '종료',
+  },
+  fr: {
+    showMain: 'Afficher la fenêtre principale',
+    zashboard: 'Zashboard',
+    kernelManager: 'Gestion du noyau',
+    startKernel: 'Démarrer le noyau',
+    stopKernel: 'Arrêter le noyau',
+    restartKernel: 'Redémarrer le noyau',
+    restartConfirm: 'Voulez-vous redémarrer le noyau ?',
+    cancel: 'Annuler',
+    errorTitle: 'Échec de l’opération',
+    commandFailed: 'Échec de la commande',
+    sudoRequired: 'Autorisation administrateur requise',
+    sudoHint: 'Ouvrez la fenêtre principale et autorisez l’action.',
+    alreadyRunning: 'Le noyau est déjà en marche.',
+    alreadyStopped: 'Le noyau est déjà arrêté.',
+    notRunning: 'Le noyau n’est pas en marche.',
+    startSuccess: 'Noyau démarré.',
+    stopSuccess: 'Noyau arrêté.',
+    restartSuccess: 'Noyau redémarré.',
+    ok: 'Autoriser',
+    sudoTitle: 'Autorisation requise',
+    sudoMessage: 'Saisissez votre mot de passe macOS pour continuer.',
+    sudoPlaceholder: '••••••••',
+    sudoInvalid: 'Mot de passe incorrect.',
+    sudoHint: 'Le mot de passe est utilisé uniquement pour cette action et n’est pas stocké.',
+    quit: 'Quitter',
+  },
+  de: {
+    showMain: 'Hauptfenster anzeigen',
+    zashboard: 'Zashboard',
+    kernelManager: 'Kernel-Verwaltung',
+    startKernel: 'Kernel starten',
+    stopKernel: 'Kernel stoppen',
+    restartKernel: 'Kernel neu starten',
+    restartConfirm: 'Möchten Sie den Kernel neu starten?',
+    cancel: 'Abbrechen',
+    errorTitle: 'Vorgang fehlgeschlagen',
+    commandFailed: 'Befehl fehlgeschlagen',
+    sudoRequired: 'Administratorrechte erforderlich',
+    sudoHint: 'Bitte im Hauptfenster autorisieren und dann ausführen.',
+    alreadyRunning: 'Kernel läuft bereits.',
+    alreadyStopped: 'Kernel ist bereits gestoppt.',
+    notRunning: 'Kernel läuft nicht.',
+    startSuccess: 'Kernel gestartet.',
+    stopSuccess: 'Kernel gestoppt.',
+    restartSuccess: 'Kernel neu gestartet.',
+    ok: 'Autorisieren',
+    sudoTitle: 'Autorisierung erforderlich',
+    sudoMessage: 'Geben Sie Ihr macOS-Passwort ein, um fortzufahren.',
+    sudoPlaceholder: '••••••••',
+    sudoInvalid: 'Passwort falsch.',
+    sudoHint: 'Das Passwort wird nur für diese Aktion verwendet und nicht gespeichert.',
+    quit: 'Beenden',
+  },
+  ru: {
+    showMain: 'Показать главное окно',
+    zashboard: 'Zashboard',
+    kernelManager: 'Управление ядром',
+    startKernel: 'Запустить ядро',
+    stopKernel: 'Остановить ядро',
+    restartKernel: 'Перезапустить ядро',
+    restartConfirm: 'Перезапустить ядро?',
+    cancel: 'Отмена',
+    errorTitle: 'Операция не выполнена',
+    commandFailed: 'Ошибка выполнения команды',
+    sudoRequired: 'Нужны права администратора',
+    sudoHint: 'Откройте главное окно и подтвердите действие.',
+    alreadyRunning: 'Ядро уже запущено.',
+    alreadyStopped: 'Ядро уже остановлено.',
+    notRunning: 'Ядро не запущено.',
+    startSuccess: 'Ядро запущено.',
+    stopSuccess: 'Ядро остановлено.',
+    restartSuccess: 'Ядро перезапущено.',
+    ok: 'Авторизовать',
+    sudoTitle: 'Требуется авторизация',
+    sudoMessage: 'Введите пароль macOS для продолжения.',
+    sudoPlaceholder: '••••••••',
+    sudoInvalid: 'Пароль неверный.',
+    sudoHint: 'Пароль используется только для этого действия и не сохраняется.',
+    quit: 'Выход',
+  },
+};
+
+function resolveTrayLang() {
+  try {
+    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
+    if (fs.existsSync(settingsPath)) {
+      const raw = fs.readFileSync(settingsPath, 'utf8');
+      const parsed = JSON.parse(raw);
+      const lang = parsed && parsed.lang ? String(parsed.lang) : '';
+      if (lang && lang !== 'auto') {
+        return TRAY_I18N[lang] ? lang : 'en';
+      }
+    }
+  } catch {
+    // ignore
+  }
+  const locale = (app.getLocale && app.getLocale()) ? app.getLocale().toLowerCase() : '';
+  if (locale.startsWith('zh')) return 'zh';
+  if (locale.startsWith('ja')) return 'ja';
+  if (locale.startsWith('ko')) return 'ko';
+  if (locale.startsWith('fr')) return 'fr';
+  if (locale.startsWith('de')) return 'de';
+  if (locale.startsWith('ru')) return 'ru';
+  return 'en';
+}
+
+function getTrayLabels() {
+  const lang = resolveTrayLang();
+  return TRAY_I18N[lang] || TRAY_I18N.en;
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+async function promptTraySudo(labels) {
+  return new Promise((resolve) => {
+    const channel = `clashfox:traySudo:${Date.now()}`;
+    let resolved = false;
+    const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+    let sudoTemplate = '';
+    let sharedStyles = '';
+    try {
+      sudoTemplate = fs.readFileSync(path.join(__dirname, 'renderer', 'sudo.html'), 'utf8');
+      sharedStyles = fs.readFileSync(path.join(__dirname, 'renderer', 'styles.css'), 'utf8');
+    } catch {
+      sudoTemplate = '';
+      sharedStyles = '';
+    }
+    const win = new BrowserWindow({
+      width: 420,
+      height: 240,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      parent: parent || undefined,
+      modal: Boolean(parent),
+      alwaysOnTop: true,
+      title: labels.sudoTitle || 'Administrator permission required',
+      backgroundColor: '#0f1216',
+      webPreferences: {
+        contextIsolation: false,
+        nodeIntegration: true,
+      },
+    });
+
+    const isDark = nativeTheme && nativeTheme.shouldUseDarkColors;
+    const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(labels.sudoTitle)}</title>
+    <style>${sharedStyles}</style>
+    <style>
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body data-theme="${isDark ? 'night' : 'day'}">
+    ${sudoTemplate}
+    <script>
+      const { ipcRenderer } = require('electron');
+      const labels = ${JSON.stringify(labels)};
+      const modal = document.getElementById('sudoModal');
+      const title = modal ? modal.querySelector('.modal-title') : null;
+      const body = modal ? modal.querySelector('.modal-body') : null;
+      const hint = modal ? modal.querySelector('.modal-hint') : null;
+      const cancel = document.getElementById('sudoCancel');
+      const confirm = document.getElementById('sudoConfirm');
+      const password = document.getElementById('sudoPassword');
+      if (title) title.textContent = labels.sudoTitle || 'Authorization Required';
+      if (body) body.textContent = labels.sudoMessage || 'Enter your macOS password to continue.';
+      if (hint) hint.textContent = labels.sudoHint || '';
+      if (cancel) cancel.textContent = labels.cancel || 'Cancel';
+      if (confirm) confirm.textContent = labels.ok || 'Authorize';
+      if (password) {
+        password.placeholder = labels.sudoPlaceholder || '••••••••';
+        password.focus();
+      }
+      if (modal) {
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+      }
+      if (cancel) cancel.addEventListener('click', () => {
+        ipcRenderer.send('${channel}', { ok: false });
+      });
+      if (confirm) confirm.addEventListener('click', () => {
+        ipcRenderer.send('${channel}', { ok: true, password: password ? password.value : '' });
+      });
+      window.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          ipcRenderer.send('${channel}', { ok: true, password: password ? password.value : '' });
+        }
+        if (event.key === 'Escape') {
+          ipcRenderer.send('${channel}', { ok: false });
+        }
+      });
+    </script>
+  </body>
+</html>`;
+
+    win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+
+    const cleanup = (payload) => {
+      if (resolved) return;
+      resolved = true;
+      if (!win.isDestroyed()) {
+        win.close();
+      }
+      resolve(payload && payload.ok ? String(payload.password || '') : null);
+    };
+
+    ipcMain.once(channel, (_event, payload) => {
+      cleanup(payload);
+    });
+
+    win.on('closed', () => {
+      cleanup({ ok: false });
+    });
+  });
+}
+
+function emitTrayRefresh() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('clashfox:trayRefresh');
+  }
+}
+
+async function runTrayCommand(command, args = [], labels = TRAY_I18N.en, sudoPass = '') {
+  const baseArgs = sudoPass ? [...args, '--sudo-pass', sudoPass] : args;
+  const result = await runBridge([command, ...baseArgs]);
+  if (!result || !result.ok) {
+    if (result && result.error === 'sudo_required') {
+      const password = await promptTraySudo(labels);
+      if (!password) {
+        return { ok: false };
+      }
+      return runTrayCommand(command, args, labels, password);
+    }
+    if (result && result.error === 'sudo_invalid') {
+      await dialog.showMessageBox({
+        type: 'error',
+        buttons: [labels.ok || 'OK'],
+        title: labels.errorTitle || 'Operation Failed',
+        message: labels.sudoInvalid || 'Password incorrect.',
+      });
+      return { ok: false };
+    }
+    const message = (result && (result.error || result.message)) ? String(result.error || result.message) : 'Unknown error';
+    await dialog.showMessageBox({
+      type: 'error',
+      buttons: [labels.ok || 'OK'],
+      title: labels.errorTitle || 'Operation Failed',
+      message: `${labels.commandFailed || 'Command failed'}: ${command}`,
+      detail: message,
+    });
+    return { ok: false };
+  }
+  return { ok: true, sudoPass };
+}
+
+async function confirmTrayRestart(labels) {
+  const response = await dialog.showMessageBox({
+    type: 'warning',
+    buttons: [labels.cancel || 'Cancel', labels.restartKernel],
+    defaultId: 1,
+    cancelId: 0,
+    message: labels.restartKernel,
+    detail: labels.restartConfirm || 'Are you sure you want to restart the kernel?',
+  });
+  return response.response === 1;
+}
+
+async function getKernelRunning(labels) {
+  let result = await runBridge(['status']);
+  if (result && result.ok) {
+    return { running: Boolean(result.data && result.data.running), sudoPass: '' };
+  }
+  if (result && result.error === 'sudo_required') {
+    const password = await promptTraySudo(labels);
+    if (!password) {
+      return null;
+    }
+    result = await runBridge(['status', '--sudo-pass', password]);
+    if (result && result.ok) {
+      return { running: Boolean(result.data && result.data.running), sudoPass: password };
+    }
+    if (result && result.error === 'sudo_invalid') {
+      await dialog.showMessageBox({
+        type: 'error',
+        buttons: [labels.ok || 'OK'],
+        title: labels.errorTitle || 'Operation Failed',
+        message: labels.sudoInvalid || 'Password incorrect.',
+      });
+      return null;
+    }
+  }
+  const message = (result && (result.error || result.message)) ? String(result.error || result.message) : 'Unknown error';
+  await dialog.showMessageBox({
+    type: 'error',
+    buttons: [labels.ok || 'OK'],
+    title: labels.errorTitle || 'Operation Failed',
+    message: `${labels.commandFailed || 'Command failed'}: status`,
+    detail: message,
+  });
+  return null;
+}
+
 function showMainWindow() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     if (app.dock && app.dock.isVisible && !app.dock.isVisible()) {
@@ -111,22 +541,92 @@ function createTrayMenu() {
   if (process.platform !== 'darwin') {
     return;
   }
-  const trayIconPath = path.join(ROOT_DIR, 'assets', 'menu.png');
-  let trayIcon = nativeImage.createFromPath(trayIconPath);
-  if (!trayIcon.isEmpty()) {
-    trayIcon = trayIcon.resize({ width: 18, height: 18 });
-    trayIcon.setTemplateImage(true);
+  if (!tray) {
+    const trayIconPath = path.join(ROOT_DIR, 'assets', 'menu.png');
+    let trayIcon = nativeImage.createFromPath(trayIconPath);
+    if (!trayIcon.isEmpty()) {
+      trayIcon = trayIcon.resize({ width: 18, height: 18 });
+      trayIcon.setTemplateImage(true);
+    }
+    tray = new Tray(trayIcon);
+    tray.setToolTip('ClashFox');
   }
-  tray = new Tray(trayIcon);
-  tray.setToolTip('ClashFox');
+  const labels = getTrayLabels();
   const trayMenu = Menu.buildFromTemplate([
-    { label: 'Show Main Window', click: () => showMainWindow() },
+    { label: labels.showMain, click: () => showMainWindow() },
     { type: 'separator' },
-    { label: 'Zashboard', click: () => openZashboardPanel() },
+    { label: labels.zashboard, click: () => openZashboardPanel() },
     { type: 'separator' },
     // { label: 'About', click: () => createAboutWindow() },
     // { type: 'separator' },
-    { label: 'Quit', click: () => app.quit() },
+    {
+      label: labels.kernelManager,
+      submenu: [
+        {
+          label: labels.startKernel,
+          click: async () => {
+            try {
+              const status = await getKernelRunning(labels);
+              if (status === null) {
+                return;
+              }
+              if (status.running) {
+                return;
+              }
+              await runTrayCommand('start', [], labels, status.sudoPass);
+            } finally {
+              emitTrayRefresh();
+            }
+          },
+        },
+        { type: 'separator' },
+        {
+          label: labels.stopKernel,
+          click: async () => {
+            try {
+              const status = await getKernelRunning(labels);
+              if (status === null) {
+                return;
+              }
+              if (!status.running) {
+                return;
+              }
+              await runTrayCommand('stop', [], labels, status.sudoPass);
+            } finally {
+              emitTrayRefresh();
+            }
+          },
+        },
+        { type: 'separator' },
+        {
+          label: labels.restartKernel,
+          click: async () => {
+            try {
+              const ok = await confirmTrayRestart(labels);
+              if (!ok) {
+                return;
+              }
+              const status = await getKernelRunning(labels);
+              if (status === null) {
+                return;
+              }
+              if (!status.running) {
+                return;
+              }
+              const stopped = await runTrayCommand('stop', [], labels, status.sudoPass);
+              if (!stopped.ok) {
+                return;
+              }
+              await runTrayCommand('start', [], labels, stopped.sudoPass || status.sudoPass);
+            } finally {
+              emitTrayRefresh();
+            }
+          },
+        },
+      ],
+    },
+    { type: 'separator' },
+    { label: labels.quit, click: () => app.quit() },
   ]);
   tray.setContextMenu(trayMenu);
 }
@@ -585,6 +1085,7 @@ app.whenReady().then(() => {
       const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
       const json = JSON.stringify(data || {}, null, 2);
       fs.writeFileSync(settingsPath, `${json}\n`);
+      createTrayMenu();
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err.message };

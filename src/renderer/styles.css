@@ -1,5 +1,6 @@
 :root {
   color-scheme: light dark;
+  --scrollbar-width: 0px;
   --bg-1: #0f151d;
   --bg-2: #1b2430;
   --panel: #151c24;
@@ -70,7 +71,7 @@ body.layout-ready .app {
 }
 
 #topbarContainer {
-  min-height: 72px;
+  min-height: 60px;
 }
 
 body[data-theme="day"] {
@@ -375,21 +376,22 @@ body[data-theme="day"] .sidebar {
 
 .content {
   padding: 20px 26px 16px;
-  overflow-y: auto;
+  overflow: hidden;
   height: 100%;
   display: flex;
   flex-direction: column;
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(148, 171, 197, 0.5) transparent;
-  /* 增加右侧内边距，为滚动条留出空间 */
-  padding-right: 26px;
 }
 
 .content-root {
   position: relative;
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 171, 197, 0.5) transparent;
+  /* 增加右侧内边距，为滚动条留出空间 */
+  padding-right: 0px;
 }
 
 .content-root .page-section {
@@ -401,7 +403,7 @@ body[data-theme="day"] .sidebar {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
-  padding-right: 0px;
+  padding-right: calc(0px + var(--scrollbar-width));
 }
 
 .topbar-actions {
@@ -1861,7 +1863,7 @@ body[data-theme="day"] .modal {
 }
 
 .modal-card {
-  width: min(420px, 90vw);
+  width: min(420px, 100vw);
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 18px;

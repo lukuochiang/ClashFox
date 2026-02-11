@@ -21,4 +21,12 @@ contextBridge.exposeInMainWorld('clashfox', {
     ipcRenderer.on('clashfox:systemTheme', listener);
     return () => ipcRenderer.removeListener('clashfox:systemTheme', listener);
   },
+  onTrayRefresh: (handler) => {
+    if (typeof handler !== 'function') {
+      return () => {};
+    }
+    const listener = () => handler();
+    ipcRenderer.on('clashfox:trayRefresh', listener);
+    return () => ipcRenderer.removeListener('clashfox:trayRefresh', listener);
+  },
 });
