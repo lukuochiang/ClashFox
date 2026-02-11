@@ -876,6 +876,16 @@ body[data-page="settings"] .card h3 {
   margin-bottom: 14px;
 }
 
+.help-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.help-link:hover {
+  text-decoration: underline;
+}
+
 .card h3 {
   margin: 0 0 16px;
   font-size: 18px;

@@ -167,7 +167,7 @@ const I18N = {
       switch: 'Switch Kernel',
       backups: 'Backups',
       logs: 'Logs',
-      zashboard: 'Zashboard',
+      zashboard: 'Dashboard',
       settings: 'Settings',
       help: 'Help',
     },
@@ -281,8 +281,8 @@ const I18N = {
       line2: 'Some actions require sudo and may prompt for your macOS password.',
       line3: 'If you are running on non-macOS, the toolkit functions are disabled.',
       project: 'Project: ClashFox GUI for Mihomo',
-      github: 'GitHub: https://github.com/lukuochiang/ClashFox',
-      telegram: 'Telegram: https://t.me/clashfoxd',
+      githubLabel: 'GitHub:',
+      telegramLabel: 'Telegram:',
     },
     zashboard: {
       title: 'Zashboard',
@@ -416,7 +416,7 @@ const I18N = {
       switch: '切换内核',
       backups: '备份',
       logs: '日志',
-      zashboard: 'Zashboard面板',
+      zashboard: '仪表盘',
       settings: '设置',
       help: '帮助',
     },
@@ -529,8 +529,8 @@ const I18N = {
       line2: '部分操作需要 sudo 权限，可能会提示输入 macOS 密码。',
       line3: '如果运行在非 macOS 系统，工具功能会被禁用。',
       project: '项目：ClashFox GUI for Mihomo',
-      github: 'GitHub：https://github.com/lukuochiang/ClashFox',
-      telegram: 'Telegram：https://t.me/clashfoxd',
+      githubLabel: 'GitHub：',
+      telegramLabel: 'Telegram：',
     },
     zashboard: {
       title: 'Zashboard面板',
@@ -664,7 +664,7 @@ const I18N = {
       switch: 'カーネル切替',
       backups: 'バックアップ',
       logs: 'ログ',
-      zashboard: 'Zashboardパネル',
+      zashboard: 'ダッシュボード',
       settings: '設定',
       help: 'ヘルプ',
     },
@@ -777,8 +777,8 @@ const I18N = {
       line2: '一部の操作には sudo が必要で、macOS のパスワードを求められる場合があります。',
       line3: 'macOS 以外の場合、ツール機能は無効になります。',
       project: 'プロジェクト：ClashFox GUI',
-      github: 'GitHub：https://github.com/lukuochiang/ClashFox',
-      telegram: 'Telegram：https://t.me/clashfoxd',
+      githubLabel: 'GitHub：',
+      telegramLabel: 'Telegram：',
     },
     zashboard: {
       title: 'Zashboard パネル',
@@ -910,7 +910,7 @@ const I18N = {
       switch: '커널 전환',
       backups: '백업',
       logs: '로그',
-      zashboard: 'Zashboard 패널',
+      zashboard: '대시보드',
       settings: '설정',
       help: '도움말',
     },
@@ -1023,8 +1023,8 @@ const I18N = {
       line2: '일부 작업은 sudo 권한이 필요하며 macOS 비밀번호를 요청할 수 있습니다.',
       line3: 'macOS가 아닌 경우 도구 기능이 비활성화됩니다.',
       project: '프로젝트: ClashFox GUI',
-      github: 'GitHub: https://github.com/lukuochiang/ClashFox',
-      telegram: 'Telegram: https://t.me/clashfoxd',
+      githubLabel: 'GitHub:',
+      telegramLabel: 'Telegram:',
     },
     zashboard: {
       title: 'Zashboard 패널',
@@ -1157,7 +1157,7 @@ const I18N = {
       switch: 'Changer le noyau',
       backups: 'Sauvegardes',
       logs: 'Journaux',
-      zashboard: 'Panneau Zashboard',
+      zashboard: 'Tableau de bord',
       settings: 'Paramètres',
       help: 'Aide',
     },
@@ -1270,8 +1270,8 @@ const I18N = {
       line2: 'Certaines actions exigent sudo et peuvent demander votre mot de passe macOS.',
       line3: 'Si vous n’êtes pas sur macOS, les fonctions sont désactivées.',
       project: 'Projet : ClashFox GUI for Mihomo',
-      github: 'GitHub : https://github.com/lukuochiang/ClashFox',
-      telegram: 'Telegram : https://t.me/clashfoxd',
+      githubLabel: 'GitHub :',
+      telegramLabel: 'Telegram :',
     },
     zashboard: {
       title: 'Panneau Zashboard',
@@ -1404,7 +1404,7 @@ const I18N = {
       switch: 'Kernel wechseln',
       backups: 'Backups',
       logs: 'Logs',
-      zashboard: 'Zashboard-Panel',
+      zashboard: 'Dashboard',
       settings: 'Einstellungen',
       help: 'Hilfe',
     },
@@ -1517,8 +1517,8 @@ const I18N = {
       line2: 'Einige Aktionen erfordern sudo und können nach Ihrem macOS-Passwort fragen.',
       line3: 'Wenn Sie nicht unter macOS laufen, sind die Toolkit-Funktionen deaktiviert.',
       project: 'Projekt: ClashFox GUI',
-      github: 'GitHub: https://github.com/lukuochiang/ClashFox',
-      telegram: 'Telegram: https://t.me/clashfoxd',
+      githubLabel: 'GitHub:',
+      telegramLabel: 'Telegram:',
     },
     zashboard: {
       title: 'Zashboard-Panel',
@@ -1650,7 +1650,7 @@ const I18N = {
       switch: 'Смена ядра',
       backups: 'Резервные копии',
       logs: 'Журналы',
-      zashboard: 'Панель Zashboard',
+      zashboard: 'Панель управления',
       settings: 'Настройки',
       help: 'Помощь',
     },
@@ -1763,8 +1763,8 @@ const I18N = {
       line2: 'Некоторые действия требуют sudo и могут запросить пароль macOS.',
       line3: 'Если вы не на macOS, функции инструмента отключены.',
       project: 'Проект: ClashFox GUI',
-      github: 'GitHub: https://github.com/lukuochiang/ClashFox',
-      telegram: 'Telegram: https://t.me/clashfoxd',
+      githubLabel: 'GitHub:',
+      telegramLabel: 'Telegram:',
     },
     zashboard: {
       title: 'Панель Zashboard',
@@ -3616,6 +3616,9 @@ function refreshPageView() {
     loadLogs();
   }
   loadStatus();
+  if (currentPage === 'install') {
+    loadKernels();
+  }
   if (currentPage === 'status') {
     Promise.all([
       loadOverview(),
@@ -3842,6 +3845,25 @@ async function loadLayoutParts() {
 }
 
 function bindPageEvents() {
+const externalLinks = Array.from(document.querySelectorAll('[data-open-external="true"]'));
+externalLinks.forEach((link) => {
+  if (link.dataset.bound === 'true') {
+    return;
+  }
+  link.dataset.bound = 'true';
+  link.addEventListener('click', (event) => {
+    event.preventDefault();
+    const url = link.getAttribute('href');
+    if (!url) {
+      return;
+    }
+    if (window.clashfox && typeof window.clashfox.openExternal === 'function') {
+      window.clashfox.openExternal(url);
+    } else {
+      window.open(url);
+    }
+  });
+});
 langButtons.forEach((btn) => {
   btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
 });
