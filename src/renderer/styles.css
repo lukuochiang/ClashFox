@@ -1946,20 +1946,33 @@ body[data-theme="day"] .log-view {
 .toast {
   position: fixed;
   left: 50%;
-  top: 24px;
-  background: rgba(19, 24, 31, 0.9);
-  padding: 12px 18px;
+  top: 2px;
+  background: var(--panel);
+  padding: 10px 16px;
   border-radius: 12px;
   border: 1px solid var(--border);
   color: var(--ink);
   opacity: 0;
-  transform: translate(-50%, -8px);
+  transform: translate(-50%, -6px);
   transition: all 0.2s ease;
   pointer-events: none;
+  z-index: 40;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
 }
 
 body[data-theme="day"] .toast {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 24px rgba(31, 46, 60, 0.18);
+}
+
+.toast[data-type="success"] {
+  border-color: rgba(76, 217, 100, 0.6);
+  box-shadow: 0 12px 30px rgba(76, 217, 100, 0.18);
+}
+
+.toast[data-type="error"] {
+  border-color: rgba(255, 122, 74, 0.7);
+  box-shadow: 0 12px 30px rgba(255, 122, 74, 0.2);
 }
 
 .toast.show {
