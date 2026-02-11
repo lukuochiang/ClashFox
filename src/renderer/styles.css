@@ -53,6 +53,26 @@ body {
   overflow: hidden;
 }
 
+.app {
+  opacity: 0;
+  transition: opacity 0.28s ease;
+  will-change: opacity, transform;
+}
+
+body.layout-ready .app {
+  opacity: 1;
+}
+
+#menuContainer {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+#topbarContainer {
+  min-height: 72px;
+}
+
 body[data-theme="day"] {
   background: radial-gradient(circle at top left, #f8e7c6, transparent 60%),
     radial-gradient(circle at 30% 70%, #d9f2e9, transparent 55%),
@@ -137,25 +157,21 @@ body[data-theme="day"]::after {
   visibility: visible;
 }
 
-/* 自定义WebKit滚动条样式 - 默认隐藏 */
+/* 自定义WebKit滚动条样式 - 预留空间避免抖动 */
 ::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-}
-
-/* 当内容滚动时显示滚动条 */
-.content:hover::-webkit-scrollbar,
-.content:focus::-webkit-scrollbar,
-.panel:hover::-webkit-scrollbar,
-.panel:focus::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 
-.content:hover::-webkit-scrollbar-track,
-.content:focus::-webkit-scrollbar-track,
-.panel:hover::-webkit-scrollbar-track,
-.panel:focus::-webkit-scrollbar-track {
+.content::-webkit-scrollbar-track,
+.panel::-webkit-scrollbar-track {
   background: transparent;
+}
+
+.content::-webkit-scrollbar-thumb,
+.panel::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 171, 197, 0);
+  border-radius: 3px;
 }
 
 .content:hover::-webkit-scrollbar-thumb,
@@ -163,8 +179,6 @@ body[data-theme="day"]::after {
 .panel:hover::-webkit-scrollbar-thumb,
 .panel:focus::-webkit-scrollbar-thumb {
   background-color: rgba(148, 171, 197, 0.5);
-  border-radius: 3px;
-  border-right: 10px solid transparent;
 }
 
 /* Tooltip positioning adjustments */
@@ -365,8 +379,9 @@ body[data-theme="day"] .sidebar {
   height: 100%;
   display: flex;
   flex-direction: column;
-  /* 默认隐藏滚动条但保留滚动功能 */
-  scrollbar-width: none;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 171, 197, 0.5) transparent;
   /* 增加右侧内边距，为滚动条留出空间 */
   padding-right: 26px;
 }
@@ -376,7 +391,7 @@ body[data-theme="day"] .sidebar {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
-  padding-right: 8px;
+  padding-right: 0px;
 }
 
 .topbar-actions {
@@ -501,21 +516,13 @@ h1 {
   display: none;
   animation: fadeUp 0.4s ease;
   flex: 1;
-  overflow-y: auto;
-  /* 默认隐藏滚动条但保留滚动功能 */
-  scrollbar-width: none;
-  /* 增加右侧内边距，为滚动条留出空间 */
-  padding-right: 6px;
+  overflow: visible;
 }
 
 .panel.active {
   display: block;
   flex: 1;
-  overflow-y: auto;
-  /* 默认隐藏滚动条但保留滚动功能 */
-  scrollbar-width: none;
-  /* 增加右侧内边距，为滚动条留出空间 */
-  padding-right: 6px;
+  overflow: visible;
 }
 
 .panel-grid {

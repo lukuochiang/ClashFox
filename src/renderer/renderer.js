@@ -3289,9 +3289,40 @@ function bindTopbarActions() {
   }
 }
 
+function setLayoutReady() {
+  if (document.body && !document.body.classList.contains('layout-ready')) {
+    document.body.classList.add('layout-ready');
+  }
+}
+
 async function loadLayoutParts() {
   const menuContainer = document.getElementById('menuContainer');
   const topbarContainer = document.getElementById('topbarContainer');
+  let hasCache = false;
+  try {
+    if (menuContainer) {
+      const cachedMenu = sessionStorage.getItem('layout:menu');
+      if (cachedMenu) {
+        menuContainer.innerHTML = cachedMenu;
+        hasCache = true;
+      }
+    }
+    if (topbarContainer) {
+      const cachedTopbar = sessionStorage.getItem('layout:topbar');
+      if (cachedTopbar) {
+        topbarContainer.innerHTML = cachedTopbar;
+        hasCache = true;
+      }
+    }
+  } catch {
+    // Ignore cache errors
+  }
+  if (hasCache) {
+    refreshLayoutRefs();
+    bindNavButtons();
+    bindTopbarActions();
+    setLayoutReady();
+  }
   const tasks = [];
   if (menuContainer) {
     tasks.push(
@@ -3300,6 +3331,11 @@ async function loadLayoutParts() {
         .then((html) => {
           if (html) {
             menuContainer.innerHTML = html;
+            try {
+              sessionStorage.setItem('layout:menu', html);
+            } catch {
+              // Ignore cache errors
+            }
           }
         })
     );
@@ -3311,6 +3347,11 @@ async function loadLayoutParts() {
         .then((html) => {
           if (html) {
             topbarContainer.innerHTML = html;
+            try {
+              sessionStorage.setItem('layout:topbar', html);
+            } catch {
+              // Ignore cache errors
+            }
           }
         })
     );
@@ -3321,6 +3362,7 @@ async function loadLayoutParts() {
   refreshLayoutRefs();
   bindNavButtons();
   bindTopbarActions();
+  setLayoutReady();
 }
 
 langButtons.forEach((btn) => {
