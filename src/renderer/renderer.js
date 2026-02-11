@@ -1,36 +1,37 @@
 let navButtons = Array.from(document.querySelectorAll('.nav-btn'));
-const panels = Array.from(document.querySelectorAll('.panel'));
-const toast = document.getElementById('toast');
-const pageId = document.body ? document.body.dataset.page : '';
+let panels = Array.from(document.querySelectorAll('.panel'));
+let toast = document.getElementById('toast');
+let contentRoot = document.getElementById('contentRoot');
+let currentPage = document.body ? document.body.dataset.page : '';
 
-const statusRunning = document.getElementById('statusRunning');
-const statusVersion = document.getElementById('statusVersion');
-const statusKernelPath = document.getElementById('statusKernelPath');
-const statusConfig = document.getElementById('statusConfig');
-const statusKernelPathRow = document.getElementById('statusKernelPathRow');
-const statusConfigRow = document.getElementById('statusConfigRow');
+let statusRunning = document.getElementById('statusRunning');
+let statusVersion = document.getElementById('statusVersion');
+let statusKernelPath = document.getElementById('statusKernelPath');
+let statusConfig = document.getElementById('statusConfig');
+let statusKernelPathRow = document.getElementById('statusKernelPathRow');
+let statusConfigRow = document.getElementById('statusConfigRow');
 let statusPill = document.getElementById('statusPill');
-const overviewUptime = document.getElementById('overviewUptime');
-const overviewConnections = document.getElementById('overviewConnections');
-const overviewMemory = document.getElementById('overviewMemory');
-const overviewStatus = document.getElementById('overviewStatus');
-const overviewKernel = document.getElementById('overviewKernel');
-const overviewSystem = document.getElementById('overviewSystem');
-const overviewVersion = document.getElementById('overviewVersion');
-const overviewInternet = document.getElementById('overviewInternet');
-const overviewDns = document.getElementById('overviewDns');
-const overviewRouter = document.getElementById('overviewRouter');
-const overviewNetwork = document.getElementById('overviewNetwork');
-const overviewLocalIp = document.getElementById('overviewLocalIp');
-const overviewProxyIp = document.getElementById('overviewProxyIp');
-const overviewInternetIp = document.getElementById('overviewInternetIp');
-const trafficSystemDownloadRate = document.getElementById('trafficSystemDownloadRate');
-const trafficSystemDownloadTotal = document.getElementById('trafficSystemDownloadTotal');
-const trafficSystemUploadRate = document.getElementById('trafficSystemUploadRate');
-const trafficSystemUploadTotal = document.getElementById('trafficSystemUploadTotal');
-const trafficTotalDownload = document.getElementById('trafficTotalDownload');
-const trafficTotalUpload = document.getElementById('trafficTotalUpload');
-const quickHintNodes = Array.from(document.querySelectorAll('[data-i18n="status.quickHint"]'));
+let overviewUptime = document.getElementById('overviewUptime');
+let overviewConnections = document.getElementById('overviewConnections');
+let overviewMemory = document.getElementById('overviewMemory');
+let overviewStatus = document.getElementById('overviewStatus');
+let overviewKernel = document.getElementById('overviewKernel');
+let overviewSystem = document.getElementById('overviewSystem');
+let overviewVersion = document.getElementById('overviewVersion');
+let overviewInternet = document.getElementById('overviewInternet');
+let overviewDns = document.getElementById('overviewDns');
+let overviewRouter = document.getElementById('overviewRouter');
+let overviewNetwork = document.getElementById('overviewNetwork');
+let overviewLocalIp = document.getElementById('overviewLocalIp');
+let overviewProxyIp = document.getElementById('overviewProxyIp');
+let overviewInternetIp = document.getElementById('overviewInternetIp');
+let trafficSystemDownloadRate = document.getElementById('trafficSystemDownloadRate');
+let trafficSystemDownloadTotal = document.getElementById('trafficSystemDownloadTotal');
+let trafficSystemUploadRate = document.getElementById('trafficSystemUploadRate');
+let trafficSystemUploadTotal = document.getElementById('trafficSystemUploadTotal');
+let trafficTotalDownload = document.getElementById('trafficTotalDownload');
+let trafficTotalUpload = document.getElementById('trafficTotalUpload');
+let quickHintNodes = Array.from(document.querySelectorAll('[data-i18n="status.quickHint"]'));
 
 // IP地址隐私保护函数
 function maskIpAddress(ip) {
@@ -56,101 +57,101 @@ function maskIpAddress(ip) {
   
   return ip;
 }
-const overviewNetworkRefresh = document.getElementById('overviewNetworkRefresh');
+let overviewNetworkRefresh = document.getElementById('overviewNetworkRefresh');
 
-const githubUser = document.getElementById('githubUser');
-const installBtn = document.getElementById('installBtn');
-const installStatus = document.getElementById('installStatus');
-const installProgress = document.getElementById('installProgress');
-const installVersionRow = document.getElementById('installVersionRow');
-const installVersion = document.getElementById('installVersion');
-const cancelInstallBtn = document.getElementById('cancelInstallBtn');
-const configPathInput = document.getElementById('configPath');
-const overviewConfigPath = document.getElementById('overviewConfigPath');
-const overviewBrowseConfig = document.getElementById('overviewBrowseConfig');
-const overviewConfigReset = document.getElementById('overviewConfigReset');
-const browseConfigBtn = document.getElementById('browseConfig');
-const externalUiUrlInput = document.getElementById('externalUiUrl');
-const externalUiNameInput = document.getElementById('externalUiName');
-const externalUiDirInput = document.getElementById('externalUiDir');
-const externalControllerInput = document.getElementById('externalController');
-const externalSecretInput = document.getElementById('externalSecret');
-const externalAuthInput = document.getElementById('externalAuth');
-const startBtn = document.getElementById('startBtn');
-const stopBtn = document.getElementById('stopBtn');
-const restartBtn = document.getElementById('restartBtn');
+let githubUser = document.getElementById('githubUser');
+let installBtn = document.getElementById('installBtn');
+let installStatus = document.getElementById('installStatus');
+let installProgress = document.getElementById('installProgress');
+let installVersionRow = document.getElementById('installVersionRow');
+let installVersion = document.getElementById('installVersion');
+let cancelInstallBtn = document.getElementById('cancelInstallBtn');
+let configPathInput = document.getElementById('configPath');
+let overviewConfigPath = document.getElementById('overviewConfigPath');
+let overviewBrowseConfig = document.getElementById('overviewBrowseConfig');
+let overviewConfigReset = document.getElementById('overviewConfigReset');
+let browseConfigBtn = document.getElementById('browseConfig');
+let externalUiUrlInput = document.getElementById('externalUiUrl');
+let externalUiNameInput = document.getElementById('externalUiName');
+let externalUiDirInput = document.getElementById('externalUiDir');
+let externalControllerInput = document.getElementById('externalController');
+let externalSecretInput = document.getElementById('externalSecret');
+let externalAuthInput = document.getElementById('externalAuth');
+let startBtn = document.getElementById('startBtn');
+let stopBtn = document.getElementById('stopBtn');
+let restartBtn = document.getElementById('restartBtn');
 let refreshStatusBtn = document.getElementById('refreshStatus');
-const refreshBackups = document.getElementById('refreshBackups');
-const backupsRefresh = document.getElementById('backupsRefresh');
-const switchBtn = document.getElementById('switchBtn');
-const backupTable = document.getElementById('backupTable');
-const backupTableFull = document.getElementById('backupTableFull');
-const configsRefresh = document.getElementById('configsRefresh');
-const configTable = document.getElementById('configTable');
-const kernelTable = document.getElementById('kernelTable');
-const kernelRefresh = document.getElementById('kernelRefresh');
-const kernelPrev = document.getElementById('kernelPrev');
-const kernelNext = document.getElementById('kernelNext');
-const kernelPageInfo = document.getElementById('kernelPageInfo');
-const kernelPageSize = document.getElementById('kernelPageSize');
-const switchPrev = document.getElementById('switchPrev');
-const switchNext = document.getElementById('switchNext');
-const switchPageInfo = document.getElementById('switchPageInfo');
-const backupsPrev = document.getElementById('backupsPrev');
-const backupsNext = document.getElementById('backupsNext');
-const backupsPageInfo = document.getElementById('backupsPageInfo');
-const backupsPageSize = document.getElementById('backupsPageSize');
-const recommendPrev = document.getElementById('recommendPrev');
-const recommendNext = document.getElementById('recommendNext');
-const recommendPageInfo = document.getElementById('recommendPageInfo');
-const recommendPageSize = document.getElementById('recommendPageSize');
-const recommendTableBody = document.getElementById('recommendTableBody');
-const backupsDelete = document.getElementById('backupsDelete');
-const logLines = document.getElementById('logLines');
-const logRefresh = document.getElementById('logRefresh');
-const logContent = document.getElementById('logContent');
-const logAutoRefresh = document.getElementById('logAutoRefresh');
-const logIntervalPreset = document.getElementById('logIntervalPreset');
-const cleanBtn = document.getElementById('cleanBtn');
-const zashboardFrame = document.getElementById('zashboardFrame');
-const zashboardEmpty = document.getElementById('zashboardEmpty');
-const sudoModal = document.getElementById('sudoModal');
-const sudoPassword = document.getElementById('sudoPassword');
-const sudoCancel = document.getElementById('sudoCancel');
-const sudoConfirm = document.getElementById('sudoConfirm');
-const confirmModal = document.getElementById('confirmModal');
-const confirmTitle = document.getElementById('confirmTitle');
-const confirmBody = document.getElementById('confirmBody');
-const confirmCancel = document.getElementById('confirmCancel');
-const confirmOk = document.getElementById('confirmOk');
+let refreshBackups = document.getElementById('refreshBackups');
+let backupsRefresh = document.getElementById('backupsRefresh');
+let switchBtn = document.getElementById('switchBtn');
+let backupTable = document.getElementById('backupTable');
+let backupTableFull = document.getElementById('backupTableFull');
+let configsRefresh = document.getElementById('configsRefresh');
+let configTable = document.getElementById('configTable');
+let kernelTable = document.getElementById('kernelTable');
+let kernelRefresh = document.getElementById('kernelRefresh');
+let kernelPrev = document.getElementById('kernelPrev');
+let kernelNext = document.getElementById('kernelNext');
+let kernelPageInfo = document.getElementById('kernelPageInfo');
+let kernelPageSize = document.getElementById('kernelPageSize');
+let switchPrev = document.getElementById('switchPrev');
+let switchNext = document.getElementById('switchNext');
+let switchPageInfo = document.getElementById('switchPageInfo');
+let backupsPrev = document.getElementById('backupsPrev');
+let backupsNext = document.getElementById('backupsNext');
+let backupsPageInfo = document.getElementById('backupsPageInfo');
+let backupsPageSize = document.getElementById('backupsPageSize');
+let recommendPrev = document.getElementById('recommendPrev');
+let recommendNext = document.getElementById('recommendNext');
+let recommendPageInfo = document.getElementById('recommendPageInfo');
+let recommendPageSize = document.getElementById('recommendPageSize');
+let recommendTableBody = document.getElementById('recommendTableBody');
+let backupsDelete = document.getElementById('backupsDelete');
+let logLines = document.getElementById('logLines');
+let logRefresh = document.getElementById('logRefresh');
+let logContent = document.getElementById('logContent');
+let logAutoRefresh = document.getElementById('logAutoRefresh');
+let logIntervalPreset = document.getElementById('logIntervalPreset');
+let cleanBtn = document.getElementById('cleanBtn');
+let zashboardFrame = document.getElementById('zashboardFrame');
+let zashboardEmpty = document.getElementById('zashboardEmpty');
+let sudoModal = document.getElementById('sudoModal');
+let sudoPassword = document.getElementById('sudoPassword');
+let sudoCancel = document.getElementById('sudoCancel');
+let sudoConfirm = document.getElementById('sudoConfirm');
+let confirmModal = document.getElementById('confirmModal');
+let confirmTitle = document.getElementById('confirmTitle');
+let confirmBody = document.getElementById('confirmBody');
+let confirmCancel = document.getElementById('confirmCancel');
+let confirmOk = document.getElementById('confirmOk');
 let appName = document.getElementById('appName');
 let appVersion = document.getElementById('appVersion');
 let themeToggle = document.getElementById('themeToggle');
-const settingsTheme = document.getElementById('settingsTheme');
-const settingsLang = document.getElementById('settingsLang');
-const settingsGithubUser = document.getElementById('settingsGithubUser');
-const settingsConfigPath = document.getElementById('settingsConfigPath');
-const settingsBrowseConfig = document.getElementById('settingsBrowseConfig');
-const settingsKernelPath = document.getElementById('settingsKernelPath');
-const settingsConfigDefault = document.getElementById('settingsConfigDefault');
-const settingsLogPath = document.getElementById('settingsLogPath');
-const settingsConfigDir = document.getElementById('settingsConfigDir');
-const settingsCoreDir = document.getElementById('settingsCoreDir');
-const settingsDataDir = document.getElementById('settingsDataDir');
-const settingsConfigDirBrowse = document.getElementById('settingsConfigDirBrowse');
-const settingsCoreDirBrowse = document.getElementById('settingsCoreDirBrowse');
-const settingsDataDirBrowse = document.getElementById('settingsDataDirBrowse');
-const settingsConfigDirReset = document.getElementById('settingsConfigDirReset');
-const settingsCoreDirReset = document.getElementById('settingsCoreDirReset');
-const settingsDataDirReset = document.getElementById('settingsDataDirReset');
-const settingsLogLines = document.getElementById('settingsLogLines');
-const settingsLogAutoRefresh = document.getElementById('settingsLogAutoRefresh');
-const settingsLogIntervalPreset = document.getElementById('settingsLogIntervalPreset');
-const settingsKernelPageSize = document.getElementById('settingsKernelPageSize');
-const settingsBackupsPageSize = document.getElementById('settingsBackupsPageSize');
-const settingsDebugMode = document.getElementById('settingsDebugMode');
+let settingsTheme = document.getElementById('settingsTheme');
+let settingsLang = document.getElementById('settingsLang');
+let settingsGithubUser = document.getElementById('settingsGithubUser');
+let settingsConfigPath = document.getElementById('settingsConfigPath');
+let settingsBrowseConfig = document.getElementById('settingsBrowseConfig');
+let settingsKernelPath = document.getElementById('settingsKernelPath');
+let settingsConfigDefault = document.getElementById('settingsConfigDefault');
+let settingsLogPath = document.getElementById('settingsLogPath');
+let settingsConfigDir = document.getElementById('settingsConfigDir');
+let settingsCoreDir = document.getElementById('settingsCoreDir');
+let settingsDataDir = document.getElementById('settingsDataDir');
+let settingsConfigDirBrowse = document.getElementById('settingsConfigDirBrowse');
+let settingsCoreDirBrowse = document.getElementById('settingsCoreDirBrowse');
+let settingsDataDirBrowse = document.getElementById('settingsDataDirBrowse');
+let settingsConfigDirReset = document.getElementById('settingsConfigDirReset');
+let settingsCoreDirReset = document.getElementById('settingsCoreDirReset');
+let settingsDataDirReset = document.getElementById('settingsDataDirReset');
+let settingsLogLines = document.getElementById('settingsLogLines');
+let settingsLogAutoRefresh = document.getElementById('settingsLogAutoRefresh');
+let settingsLogIntervalPreset = document.getElementById('settingsLogIntervalPreset');
+let settingsKernelPageSize = document.getElementById('settingsKernelPageSize');
+let settingsBackupsPageSize = document.getElementById('settingsBackupsPageSize');
+let settingsDebugMode = document.getElementById('settingsDebugMode');
 
-const langButtons = Array.from(document.querySelectorAll('.lang-btn'));
+let langButtons = Array.from(document.querySelectorAll('.lang-btn'));
 
 const I18N = {
   en: {
@@ -3237,6 +3238,135 @@ function refreshLayoutRefs() {
   statusPill = document.getElementById('statusPill');
 }
 
+function refreshPageRefs() {
+  panels = Array.from(document.querySelectorAll('.panel'));
+  toast = document.getElementById('toast');
+  contentRoot = document.getElementById('contentRoot');
+
+  statusRunning = document.getElementById('statusRunning');
+  statusVersion = document.getElementById('statusVersion');
+  statusKernelPath = document.getElementById('statusKernelPath');
+  statusConfig = document.getElementById('statusConfig');
+  statusKernelPathRow = document.getElementById('statusKernelPathRow');
+  statusConfigRow = document.getElementById('statusConfigRow');
+  statusPill = document.getElementById('statusPill');
+  overviewUptime = document.getElementById('overviewUptime');
+  overviewConnections = document.getElementById('overviewConnections');
+  overviewMemory = document.getElementById('overviewMemory');
+  overviewStatus = document.getElementById('overviewStatus');
+  overviewKernel = document.getElementById('overviewKernel');
+  overviewSystem = document.getElementById('overviewSystem');
+  overviewVersion = document.getElementById('overviewVersion');
+  overviewInternet = document.getElementById('overviewInternet');
+  overviewDns = document.getElementById('overviewDns');
+  overviewRouter = document.getElementById('overviewRouter');
+  overviewNetwork = document.getElementById('overviewNetwork');
+  overviewLocalIp = document.getElementById('overviewLocalIp');
+  overviewProxyIp = document.getElementById('overviewProxyIp');
+  overviewInternetIp = document.getElementById('overviewInternetIp');
+  trafficSystemDownloadRate = document.getElementById('trafficSystemDownloadRate');
+  trafficSystemDownloadTotal = document.getElementById('trafficSystemDownloadTotal');
+  trafficSystemUploadRate = document.getElementById('trafficSystemUploadRate');
+  trafficSystemUploadTotal = document.getElementById('trafficSystemUploadTotal');
+  trafficTotalDownload = document.getElementById('trafficTotalDownload');
+  trafficTotalUpload = document.getElementById('trafficTotalUpload');
+  quickHintNodes = Array.from(document.querySelectorAll('[data-i18n="status.quickHint"]'));
+  overviewNetworkRefresh = document.getElementById('overviewNetworkRefresh');
+
+  githubUser = document.getElementById('githubUser');
+  installBtn = document.getElementById('installBtn');
+  installStatus = document.getElementById('installStatus');
+  installProgress = document.getElementById('installProgress');
+  installVersionRow = document.getElementById('installVersionRow');
+  installVersion = document.getElementById('installVersion');
+  cancelInstallBtn = document.getElementById('cancelInstallBtn');
+  configPathInput = document.getElementById('configPath');
+  overviewConfigPath = document.getElementById('overviewConfigPath');
+  overviewBrowseConfig = document.getElementById('overviewBrowseConfig');
+  overviewConfigReset = document.getElementById('overviewConfigReset');
+  browseConfigBtn = document.getElementById('browseConfig');
+  externalUiUrlInput = document.getElementById('externalUiUrl');
+  externalUiNameInput = document.getElementById('externalUiName');
+  externalUiDirInput = document.getElementById('externalUiDir');
+  externalControllerInput = document.getElementById('externalController');
+  externalSecretInput = document.getElementById('externalSecret');
+  externalAuthInput = document.getElementById('externalAuth');
+  startBtn = document.getElementById('startBtn');
+  stopBtn = document.getElementById('stopBtn');
+  restartBtn = document.getElementById('restartBtn');
+  refreshStatusBtn = document.getElementById('refreshStatus');
+  refreshBackups = document.getElementById('refreshBackups');
+  backupsRefresh = document.getElementById('backupsRefresh');
+  switchBtn = document.getElementById('switchBtn');
+  backupTable = document.getElementById('backupTable');
+  backupTableFull = document.getElementById('backupTableFull');
+  configsRefresh = document.getElementById('configsRefresh');
+  configTable = document.getElementById('configTable');
+  kernelTable = document.getElementById('kernelTable');
+  kernelRefresh = document.getElementById('kernelRefresh');
+  kernelPrev = document.getElementById('kernelPrev');
+  kernelNext = document.getElementById('kernelNext');
+  kernelPageInfo = document.getElementById('kernelPageInfo');
+  kernelPageSize = document.getElementById('kernelPageSize');
+  switchPrev = document.getElementById('switchPrev');
+  switchNext = document.getElementById('switchNext');
+  switchPageInfo = document.getElementById('switchPageInfo');
+  backupsPrev = document.getElementById('backupsPrev');
+  backupsNext = document.getElementById('backupsNext');
+  backupsPageInfo = document.getElementById('backupsPageInfo');
+  backupsPageSize = document.getElementById('backupsPageSize');
+  recommendPrev = document.getElementById('recommendPrev');
+  recommendNext = document.getElementById('recommendNext');
+  recommendPageInfo = document.getElementById('recommendPageInfo');
+  recommendPageSize = document.getElementById('recommendPageSize');
+  recommendTableBody = document.getElementById('recommendTableBody');
+  backupsDelete = document.getElementById('backupsDelete');
+  logLines = document.getElementById('logLines');
+  logRefresh = document.getElementById('logRefresh');
+  logContent = document.getElementById('logContent');
+  logAutoRefresh = document.getElementById('logAutoRefresh');
+  logIntervalPreset = document.getElementById('logIntervalPreset');
+  cleanBtn = document.getElementById('cleanBtn');
+  zashboardFrame = document.getElementById('zashboardFrame');
+  zashboardEmpty = document.getElementById('zashboardEmpty');
+  sudoModal = document.getElementById('sudoModal');
+  sudoPassword = document.getElementById('sudoPassword');
+  sudoCancel = document.getElementById('sudoCancel');
+  sudoConfirm = document.getElementById('sudoConfirm');
+  confirmModal = document.getElementById('confirmModal');
+  confirmTitle = document.getElementById('confirmTitle');
+  confirmBody = document.getElementById('confirmBody');
+  confirmCancel = document.getElementById('confirmCancel');
+  confirmOk = document.getElementById('confirmOk');
+  appName = document.getElementById('appName');
+  appVersion = document.getElementById('appVersion');
+  themeToggle = document.getElementById('themeToggle');
+  settingsTheme = document.getElementById('settingsTheme');
+  settingsLang = document.getElementById('settingsLang');
+  settingsGithubUser = document.getElementById('settingsGithubUser');
+  settingsConfigPath = document.getElementById('settingsConfigPath');
+  settingsBrowseConfig = document.getElementById('settingsBrowseConfig');
+  settingsKernelPath = document.getElementById('settingsKernelPath');
+  settingsConfigDefault = document.getElementById('settingsConfigDefault');
+  settingsLogPath = document.getElementById('settingsLogPath');
+  settingsConfigDir = document.getElementById('settingsConfigDir');
+  settingsCoreDir = document.getElementById('settingsCoreDir');
+  settingsDataDir = document.getElementById('settingsDataDir');
+  settingsConfigDirBrowse = document.getElementById('settingsConfigDirBrowse');
+  settingsCoreDirBrowse = document.getElementById('settingsCoreDirBrowse');
+  settingsDataDirBrowse = document.getElementById('settingsDataDirBrowse');
+  settingsConfigDirReset = document.getElementById('settingsConfigDirReset');
+  settingsCoreDirReset = document.getElementById('settingsCoreDirReset');
+  settingsDataDirReset = document.getElementById('settingsDataDirReset');
+  settingsLogLines = document.getElementById('settingsLogLines');
+  settingsLogAutoRefresh = document.getElementById('settingsLogAutoRefresh');
+  settingsLogIntervalPreset = document.getElementById('settingsLogIntervalPreset');
+  settingsKernelPageSize = document.getElementById('settingsKernelPageSize');
+  settingsBackupsPageSize = document.getElementById('settingsBackupsPageSize');
+  settingsDebugMode = document.getElementById('settingsDebugMode');
+  langButtons = Array.from(document.querySelectorAll('.lang-btn'));
+}
+
 function bindNavButtons() {
   navButtons.forEach((btn) => {
     if (btn.dataset.bound === 'true') {
@@ -3255,11 +3385,7 @@ function bindNavButtons() {
       }
       const targetPage = btn.dataset.page;
       if (targetPage) {
-        if (window.clashfox && typeof window.clashfox.navigate === 'function') {
-          window.clashfox.navigate(targetPage);
-        } else {
-          window.location.href = `${targetPage}.html`;
-        }
+        navigatePage(targetPage);
         return;
       }
       const target = btn.dataset.section;
@@ -3286,6 +3412,70 @@ function bindTopbarActions() {
       await loadOverviewLite();
       showToast(t('labels.statusRefreshed'));
     });
+  }
+}
+
+function refreshPageView() {
+  renderConfigTable();
+  renderKernelTable();
+  renderSwitchTable();
+  renderBackupsTable();
+  renderRecommendTable();
+  if (logContent || logLines) {
+    loadLogs();
+  }
+  loadStatus();
+  loadOverview();
+  loadOverviewLite();
+  loadOverviewMemory();
+}
+
+function getPageFromLocation() {
+  const path = window.location.pathname || '';
+  const match = path.match(/([^/]+)\.html$/);
+  return match ? match[1] : currentPage;
+}
+
+async function navigatePage(targetPage, pushState = true) {
+  if (!targetPage || targetPage === currentPage) {
+    return;
+  }
+  if (!contentRoot) {
+    window.location.href = `${targetPage}.html`;
+    return;
+  }
+  const response = await fetch(`${targetPage}.html`);
+  if (!response.ok) {
+    window.location.href = `${targetPage}.html`;
+    return;
+  }
+  const html = await response.text();
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const newRoot = doc.getElementById('contentRoot');
+  if (!newRoot || !newRoot.firstElementChild) {
+    window.location.href = `${targetPage}.html`;
+    return;
+  }
+  const newSection = document.importNode(newRoot.firstElementChild, true);
+  newSection.classList.add('page-section');
+  contentRoot.innerHTML = '';
+  contentRoot.appendChild(newSection);
+
+  currentPage = targetPage;
+  if (document.body) {
+    document.body.dataset.page = targetPage;
+  }
+  setActiveNav(targetPage);
+  refreshPageRefs();
+  applySettings(state.settings || readSettings());
+  applyI18n();
+  bindPageEvents();
+  refreshPageView();
+  if (targetPage === 'zashboard') {
+    initZashboardFrame();
+  }
+  if (pushState) {
+    history.pushState({ page: targetPage }, '', `${targetPage}.html`);
   }
 }
 
@@ -3319,6 +3509,7 @@ async function loadLayoutParts() {
   }
   if (hasCache) {
     refreshLayoutRefs();
+    refreshPageRefs();
     bindNavButtons();
     bindTopbarActions();
     setLayoutReady();
@@ -3360,11 +3551,13 @@ async function loadLayoutParts() {
     await Promise.all(tasks);
   }
   refreshLayoutRefs();
+  refreshPageRefs();
   bindNavButtons();
   bindTopbarActions();
   setLayoutReady();
 }
 
+function bindPageEvents() {
 langButtons.forEach((btn) => {
   btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
 });
@@ -4122,6 +4315,7 @@ if (overviewNetworkRefresh) {
     setTimeout(() => overviewNetworkRefresh.classList.remove('is-loading'), 400);
   });
 }
+}
 
 function startOverviewTimer() {
   if (state.overviewTimer) {
@@ -4232,9 +4426,13 @@ async function initApp() {
   await loadLayoutParts();
   await syncSettingsFromFile();
   applySettings(readSettings());
-  setActiveNav(pageId);
+  bindPageEvents();
+  if (contentRoot && contentRoot.firstElementChild) {
+    contentRoot.firstElementChild.classList.add('page-section');
+  }
+  setActiveNav(currentPage);
   loadAppInfo();
-  if (pageId === 'zashboard') {
+  if (currentPage === 'zashboard') {
     initZashboardFrame();
   }
   const ok = await waitForBridge();
@@ -4255,6 +4453,11 @@ async function initApp() {
   loadBackups();
   loadLogs();
 }
+
+window.addEventListener('popstate', () => {
+  const target = (history.state && history.state.page) || getPageFromLocation();
+  navigatePage(target, false);
+});
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initApp);

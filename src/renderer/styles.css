@@ -386,6 +386,16 @@ body[data-theme="day"] .sidebar {
   padding-right: 26px;
 }
 
+.content-root {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.content-root .page-section {
+  transition: none;
+}
+
 .topbar {
   display: flex;
   justify-content: space-between;
