@@ -1,4 +1,4 @@
-const navButtons = Array.from(document.querySelectorAll('.nav-btn'));
+let navButtons = Array.from(document.querySelectorAll('.nav-btn'));
 const panels = Array.from(document.querySelectorAll('.panel'));
 const toast = document.getElementById('toast');
 const pageId = document.body ? document.body.dataset.page : '';
@@ -9,7 +9,7 @@ const statusKernelPath = document.getElementById('statusKernelPath');
 const statusConfig = document.getElementById('statusConfig');
 const statusKernelPathRow = document.getElementById('statusKernelPathRow');
 const statusConfigRow = document.getElementById('statusConfigRow');
-const statusPill = document.getElementById('statusPill');
+let statusPill = document.getElementById('statusPill');
 const overviewUptime = document.getElementById('overviewUptime');
 const overviewConnections = document.getElementById('overviewConnections');
 const overviewMemory = document.getElementById('overviewMemory');
@@ -79,7 +79,7 @@ const externalAuthInput = document.getElementById('externalAuth');
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
 const restartBtn = document.getElementById('restartBtn');
-const refreshStatusBtn = document.getElementById('refreshStatus');
+let refreshStatusBtn = document.getElementById('refreshStatus');
 const refreshBackups = document.getElementById('refreshBackups');
 const backupsRefresh = document.getElementById('backupsRefresh');
 const switchBtn = document.getElementById('switchBtn');
@@ -123,9 +123,9 @@ const confirmTitle = document.getElementById('confirmTitle');
 const confirmBody = document.getElementById('confirmBody');
 const confirmCancel = document.getElementById('confirmCancel');
 const confirmOk = document.getElementById('confirmOk');
-const appName = document.getElementById('appName');
-const appVersion = document.getElementById('appVersion');
-const themeToggle = document.getElementById('themeToggle');
+let appName = document.getElementById('appName');
+let appVersion = document.getElementById('appVersion');
+let themeToggle = document.getElementById('themeToggle');
 const settingsTheme = document.getElementById('settingsTheme');
 const settingsLang = document.getElementById('settingsLang');
 const settingsGithubUser = document.getElementById('settingsGithubUser');
@@ -1956,9 +1956,11 @@ function applyI18n() {
     el.setAttribute('placeholder', t(key));
   });
 
-  statusPill.setAttribute('aria-label', t('labels.unknown'));
-  statusPill.setAttribute('title', t('labels.unknown'));
-  statusPill.dataset.state = 'unknown';
+  if (statusPill) {
+    statusPill.setAttribute('aria-label', t('labels.unknown'));
+    statusPill.setAttribute('title', t('labels.unknown'));
+    statusPill.dataset.state = 'unknown';
+  }
   updateThemeToggle();
   setInstallState(state.installState);
   renderConfigTable();
@@ -2409,12 +2411,16 @@ async function loadAppInfo() {
   }
   const response = await window.clashfox.getAppInfo();
   if (response && response.ok && response.data) {
-    appName.textContent = response.data.name || 'ClashFox';
+    if (appName) {
+      appName.textContent = response.data.name || 'ClashFox';
+    }
     const version = response.data.version || '0.0.0';
     const buildNumber = response.data.buildNumber;
     const suffix = buildNumber ? `(${buildNumber})` : '';
     const displayVersion = `v${version}${suffix}`;
-    appVersion.textContent = displayVersion;
+    if (appVersion) {
+      appVersion.textContent = displayVersion;
+    }
   }
 }
 
@@ -3222,43 +3228,104 @@ function getSelectedBackupIndex() {
   return selectedRow ? selectedRow.dataset.index : null;
 }
 
-navButtons.forEach((btn) => {
-  btn.addEventListener('click', () => {
-    const targetUrl = btn.dataset.url;
-    if (targetUrl) {
-      if (window.clashfox && typeof window.clashfox.openExternal === 'function') {
-        window.clashfox.openExternal(targetUrl);
-      } else {
-        window.open(targetUrl);
-      }
+function refreshLayoutRefs() {
+  navButtons = Array.from(document.querySelectorAll('.nav-btn'));
+  appName = document.getElementById('appName');
+  appVersion = document.getElementById('appVersion');
+  themeToggle = document.getElementById('themeToggle');
+  refreshStatusBtn = document.getElementById('refreshStatus');
+  statusPill = document.getElementById('statusPill');
+}
+
+function bindNavButtons() {
+  navButtons.forEach((btn) => {
+    if (btn.dataset.bound === 'true') {
       return;
     }
-    const targetPage = btn.dataset.page;
-    if (targetPage) {
-      if (window.clashfox && typeof window.clashfox.navigate === 'function') {
-        window.clashfox.navigate(targetPage);
-      } else {
-        window.location.href = `${targetPage}.html`;
+    btn.dataset.bound = 'true';
+    btn.addEventListener('click', () => {
+      const targetUrl = btn.dataset.url;
+      if (targetUrl) {
+        if (window.clashfox && typeof window.clashfox.openExternal === 'function') {
+          window.clashfox.openExternal(targetUrl);
+        } else {
+          window.open(targetUrl);
+        }
+        return;
       }
-      return;
-    }
-    const target = btn.dataset.section;
-    if (target) {
-      setActiveSection(target);
-    }
+      const targetPage = btn.dataset.page;
+      if (targetPage) {
+        if (window.clashfox && typeof window.clashfox.navigate === 'function') {
+          window.clashfox.navigate(targetPage);
+        } else {
+          window.location.href = `${targetPage}.html`;
+        }
+        return;
+      }
+      const target = btn.dataset.section;
+      if (target) {
+        setActiveSection(target);
+      }
+    });
   });
-});
+}
+
+function bindTopbarActions() {
+  if (themeToggle && themeToggle.dataset.bound !== 'true') {
+    themeToggle.dataset.bound = 'true';
+    themeToggle.addEventListener('click', () => {
+      const nextTheme = state.theme === 'night' ? 'day' : 'night';
+      applyThemePreference(nextTheme);
+    });
+  }
+  if (refreshStatusBtn && refreshStatusBtn.dataset.bound !== 'true') {
+    refreshStatusBtn.dataset.bound = 'true';
+    refreshStatusBtn.addEventListener('click', async () => {
+      await loadStatus();
+      await loadOverview();
+      await loadOverviewLite();
+      showToast(t('labels.statusRefreshed'));
+    });
+  }
+}
+
+async function loadLayoutParts() {
+  const menuContainer = document.getElementById('menuContainer');
+  const topbarContainer = document.getElementById('topbarContainer');
+  const tasks = [];
+  if (menuContainer) {
+    tasks.push(
+      fetch('menu.html')
+        .then((res) => (res.ok ? res.text() : ''))
+        .then((html) => {
+          if (html) {
+            menuContainer.innerHTML = html;
+          }
+        })
+    );
+  }
+  if (topbarContainer) {
+    tasks.push(
+      fetch('topbar.html')
+        .then((res) => (res.ok ? res.text() : ''))
+        .then((html) => {
+          if (html) {
+            topbarContainer.innerHTML = html;
+          }
+        })
+    );
+  }
+  if (tasks.length) {
+    await Promise.all(tasks);
+  }
+  refreshLayoutRefs();
+  bindNavButtons();
+  bindTopbarActions();
+}
 
 langButtons.forEach((btn) => {
   btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
 });
-
-if (themeToggle) {
-  themeToggle.addEventListener('click', () => {
-    const nextTheme = state.theme === 'night' ? 'day' : 'night';
-    applyThemePreference(nextTheme);
-  });
-}
 
 if (settingsLang) {
   settingsLang.addEventListener('change', (event) => {
@@ -4006,13 +4073,6 @@ if (cleanBtn) {
 }
 
 
-if (refreshStatusBtn) {
-  refreshStatusBtn.addEventListener('click', async () => {
-    await loadStatus();
-    showToast(t('labels.statusRefreshed'));
-  });
-}
-
 if (overviewNetworkRefresh) {
   overviewNetworkRefresh.addEventListener('click', async () => {
     overviewNetworkRefresh.classList.add('is-loading');
@@ -4127,6 +4187,7 @@ function initZashboardFrame() {
 }
 
 async function initApp() {
+  await loadLayoutParts();
   await syncSettingsFromFile();
   applySettings(readSettings());
   setActiveNav(pageId);

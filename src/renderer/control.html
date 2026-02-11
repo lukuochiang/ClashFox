@@ -8,58 +8,10 @@
   </head>
   <body data-page="control">
     <div class="app">
-      <aside class="sidebar">
-        <div class="brand">
-          <div class="brand-mark">
-            <img src="../../assets/logo.png" alt="ClashFox logo" />
-          </div>
-          <div>
-            <div class="brand-title" id="appName">ClashFox</div>
-            <div class="brand-sub" id="appVersion">v0.0.0</div>
-          </div>
-        </div>
-
-        <nav class="nav">
-          <button class="nav-btn" data-page="status" data-i18n="nav.status">Overview</button>
-          <button class="nav-btn" data-page="install" data-i18n="nav.install">Install / Update</button>
-          <button class="nav-btn" data-page="switch" data-i18n="nav.switch">Switch Kernel</button>
-          <button class="nav-btn active" data-page="control" data-i18n="nav.config">Config</button>
-          <button class="nav-btn" data-page="backups" data-i18n="nav.backups">Backups</button>
-          <button class="nav-btn" data-page="logs" data-i18n="nav.logs">Logs</button>
-          <button class="nav-btn" data-page="zashboard" data-i18n="nav.zashboard">Zashboard</button>
-        </nav>
-        
-        <nav class="nav nav-bottom">
-          <button class="nav-btn" data-page="settings" data-i18n="nav.settings">Settings</button>
-          <button class="nav-btn" data-page="help" data-i18n="nav.help">Help</button>
-        </nav>
-      </aside>
+      <aside class="sidebar" id="menuContainer"></aside>
 
       <main class="content">
-        <header class="topbar">
-          <div>
-            <div class="eyebrow" data-i18n="topbar.eyebrow">Kernel Dashboard</div>
-            <h1 data-i18n="topbar.title">Mihomo Control Center</h1>
-          </div>
-          <div class="topbar-actions">
-            <button class="icon-btn theme-toggle" id="themeToggle" aria-label="Switch to day mode" title="Switch to day mode">
-              <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 4.5a.9.9 0 0 1 .9.9v1.4a.9.9 0 1 1-1.8 0V5.4a.9.9 0 0 1 .9-.9Zm0 10.8a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2Zm7.1-2.4a.9.9 0 0 1 .9-.9h1.4a.9.9 0 1 1 0 1.8h-1.4a.9.9 0 0 1-.9-.9Zm-15.5 0a.9.9 0 0 1 .9-.9h1.4a.9.9 0 0 1 0 1.8H4.5a.9.9 0 0 1-.9-.9Zm12.2-5.4a.9.9 0 0 1 1.27-1.27l1 1a.9.9 0 0 1-1.27 1.27l-1-1Zm-8.4 8.4a.9.9 0 0 1 1.27-1.27l1 1a.9.9 0 0 1-1.27 1.27l-1-1Zm8.4 1a.9.9 0 0 1 1.27 0l1 1a.9.9 0 0 1-1.27 1.27l-1-1a.9.9 0 0 1 0-1.27Zm-8.4-8.4a.9.9 0 0 1 0-1.27l1-1a.9.9 0 1 1 1.27 1.27l-1 1a.9.9 0 0 1-1.27 0Z"/>
-              </svg>
-              <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12.7 3.2a.9.9 0 0 1 .9 1.08 7.2 7.2 0 1 0 6.04 9.96.9.9 0 0 1 1.25 1.06 9 9 0 1 1-8.47-12.1.9.9 0 0 1 .28 0Z"/>
-              </svg>
-            </button>
-            <button class="icon-btn" id="refreshStatus" aria-label="Refresh status" title="Refresh">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4.8 12a7.2 7.2 0 0 1 12.4-4.9V5.2a.9.9 0 0 1 1.8 0v4.6a.9.9 0 0 1-.9.9h-4.6a.9.9 0 1 1 0-1.8h2.7A5.4 5.4 0 1 0 17.4 12a.9.9 0 1 1 1.8 0 7.2 7.2 0 0 1-14.4 0Z"/>
-              </svg>
-            </button>
-            <div class="status-light" id="statusPill" aria-label="-" title="-">
-              <span class="status-dot" aria-hidden="true"></span>
-            </div>
-          </div>
-        </header>
+        <header class="topbar" id="topbarContainer"></header>
 
         <section id="control" class="panel active">
           <div class="card control-card">

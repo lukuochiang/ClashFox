@@ -360,7 +360,7 @@ body[data-theme="day"] .sidebar {
 }
 
 .content {
-  padding: 30px 36px 26px;
+  padding: 20px 26px 16px;
   overflow-y: auto;
   height: 100%;
   display: flex;
@@ -368,14 +368,15 @@ body[data-theme="day"] .sidebar {
   /* 默认隐藏滚动条但保留滚动功能 */
   scrollbar-width: none;
   /* 增加右侧内边距，为滚动条留出空间 */
-  padding-right: 42px;
+  padding-right: 26px;
 }
 
 .topbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 26px;
+  margin-bottom: 12px;
+  padding-right: 8px;
 }
 
 .topbar-actions {
@@ -520,7 +521,7 @@ h1 {
 .panel-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 18px;
+  gap: 10px;
 }
 
 .panel-grid .card-full {
@@ -591,11 +592,11 @@ h1 {
 }
 
 .quick-actions {
-  margin-bottom: 18px;
+  margin-bottom: 10px;
 }
 
 .overview-grid {
-  margin-bottom: 18px;
+  margin-bottom: 10px;
   grid-template-columns: 1fr;
 }
 
@@ -984,7 +985,7 @@ body[data-theme="day"] .paths-input::placeholder {
 .install-card {
   display: grid;
   gap: 16px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .install-header {
@@ -1516,7 +1517,7 @@ body[data-theme="day"] .toggle-pill::after {
   display: flex;
   flex-direction: column;
   min-height: 520px;
-  height: calc(100vh - 145px);
+  height: calc(100vh - 120px);
   flex: 1;
   padding: 0px;
   border: none;
@@ -1525,7 +1526,7 @@ body[data-theme="day"] .toggle-pill::after {
 .control-card {
   display: grid;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .zashboard-frame {
