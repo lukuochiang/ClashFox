@@ -100,6 +100,11 @@ const backupsPrev = document.getElementById('backupsPrev');
 const backupsNext = document.getElementById('backupsNext');
 const backupsPageInfo = document.getElementById('backupsPageInfo');
 const backupsPageSize = document.getElementById('backupsPageSize');
+const recommendPrev = document.getElementById('recommendPrev');
+const recommendNext = document.getElementById('recommendNext');
+const recommendPageInfo = document.getElementById('recommendPageInfo');
+const recommendPageSize = document.getElementById('recommendPageSize');
+const recommendTableBody = document.getElementById('recommendTableBody');
 const backupsDelete = document.getElementById('backupsDelete');
 const logLines = document.getElementById('logLines');
 const logRefresh = document.getElementById('logRefresh');
@@ -229,6 +234,7 @@ const I18N = {
       config: 'Config Path',
       browse: 'Browse',
       refresh: 'Refresh',
+      recommendationsTitle: 'Recommended Configs',
     },
     switch: {
       title: 'Switch Kernel',
@@ -292,6 +298,10 @@ const I18N = {
       modified: 'Modified',
       size: 'Size',
       current: 'Current',
+      recommendAuthor: 'Creator',
+      recommendGithub: 'GitHub URL',
+      recommendDir: 'Directory',
+      recommendRating: 'Rating',
     },
     labels: {
       running: 'Running',
@@ -380,7 +390,7 @@ const I18N = {
       logs: 'Log Settings',
       pagination: 'Pagination',
       kernelPageSize: 'Kernel Page Size',
-      backupsPageSize: 'Backups Page Size',
+      backupsPageSize: 'General Page Size',
       debugMode: 'Debug Mode',
       debugModeLabel: 'Enable Debug Mode',
     },
@@ -465,6 +475,7 @@ const I18N = {
       config: '配置路径',
       browse: '浏览',
       refresh: '刷新',
+      recommendationsTitle: '推荐配置',
     },
     switch: {
       title: '切换内核',
@@ -528,6 +539,10 @@ const I18N = {
       modified: '修改时间',
       size: '大小',
       current: '当前',
+      recommendAuthor: '大佬',
+      recommendGithub: 'GitHub地址',
+      recommendDir: '目录',
+      recommendRating: '推荐指数',
     },
     labels: {
       running: '运行中',
@@ -616,7 +631,7 @@ const I18N = {
       logs: '日志设置',
       pagination: '分页',
       kernelPageSize: '内核页大小',
-      backupsPageSize: '备份页大小',
+      backupsPageSize: '通用页大小',
       debugMode: '调试模式',
       debugModeLabel: '启用调试模式',
     },
@@ -701,6 +716,7 @@ const I18N = {
       config: '設定パス',
       browse: '参照',
       refresh: '更新',
+      recommendationsTitle: 'おすすめ設定',
     },
     switch: {
       title: 'カーネル切替',
@@ -764,6 +780,10 @@ const I18N = {
       modified: '更新日時',
       size: 'サイズ',
       current: '現在',
+      recommendAuthor: '作者',
+      recommendGithub: 'GitHub URL',
+      recommendDir: 'ディレクトリ',
+      recommendRating: '推薦指数',
     },
     labels: {
       running: '稼働中',
@@ -850,7 +870,7 @@ const I18N = {
       logs: 'ログ設定',
       pagination: 'ページング',
       kernelPageSize: 'カーネルページサイズ',
-      backupsPageSize: 'バックアップページサイズ',
+      backupsPageSize: '共通ページサイズ',
       debugMode: 'デバッグモード',
       debugModeLabel: 'デバッグモードを有効にする',
     },
@@ -935,6 +955,7 @@ const I18N = {
       config: '설정 경로',
       browse: '찾아보기',
       refresh: '새로고침',
+      recommendationsTitle: '추천 구성',
     },
     switch: {
       title: '커널 전환',
@@ -998,6 +1019,10 @@ const I18N = {
       modified: '수정 시간',
       size: '크기',
       current: '현재',
+      recommendAuthor: '작성자',
+      recommendGithub: 'GitHub 주소',
+      recommendDir: '디렉터리',
+      recommendRating: '추천 지수',
     },
     labels: {
       running: '실행 중',
@@ -1085,7 +1110,7 @@ const I18N = {
       logs: '로그 설정',
       pagination: '페이지네이션',
       kernelPageSize: '커널 페이지 크기',
-      backupsPageSize: '백업 페이지 크기',
+      backupsPageSize: '일반 페이지 크기',
       debugMode: '디버그 모드',
       debugModeLabel: '디버그 모드 활성화',
     },
@@ -1170,6 +1195,7 @@ const I18N = {
       config: 'Chemin de configuration',
       browse: 'Parcourir',
       refresh: 'Actualiser',
+      recommendationsTitle: 'Configurations recommandées',
     },
     switch: {
       title: 'Changer le noyau',
@@ -1233,6 +1259,10 @@ const I18N = {
       modified: 'Modifié',
       size: 'Taille',
       current: 'Actuelle',
+      recommendAuthor: 'Auteur',
+      recommendGithub: 'URL GitHub',
+      recommendDir: 'Répertoire',
+      recommendRating: 'Indice de recommandation',
     },
     labels: {
       running: 'En marche',
@@ -1320,7 +1350,7 @@ const I18N = {
       logs: 'Paramètres des journaux',
       pagination: 'Pagination',
       kernelPageSize: 'Taille de page du noyau',
-      backupsPageSize: 'Taille de page des sauvegardes',
+      backupsPageSize: 'Taille de page générale',
       debugMode: 'Mode débogage',
       debugModeLabel: 'Activer le mode débogage',
     },
@@ -1405,6 +1435,7 @@ const I18N = {
       config: 'Konfigurationspfad',
       browse: 'Durchsuchen',
       refresh: 'Aktualisieren',
+      recommendationsTitle: 'Empfohlene Konfigurationen',
     },
     switch: {
       title: 'Kernel wechseln',
@@ -1468,6 +1499,10 @@ const I18N = {
       modified: 'Geändert',
       size: 'Größe',
       current: 'Aktuell',
+      recommendAuthor: 'Autor',
+      recommendGithub: 'GitHub-Adresse',
+      recommendDir: 'Verzeichnis',
+      recommendRating: 'Empfehlung',
     },
     labels: {
       running: 'Läuft',
@@ -1554,7 +1589,7 @@ const I18N = {
       logs: 'Log-Einstellungen',
       pagination: 'Paginierung',
       kernelPageSize: 'Kernel-Seitengröße',
-      backupsPageSize: 'Seitengröße Backups',
+      backupsPageSize: 'Allgemeine Seitengröße',
       debugMode: 'Debug-Modus',
       debugModeLabel: 'Debug-Modus aktivieren',
     },
@@ -1639,6 +1674,7 @@ const I18N = {
       config: 'Путь к конфигурации',
       browse: 'Обзор',
       refresh: 'Обновить',
+      recommendationsTitle: 'Рекомендуемые конфигурации',
     },
     switch: {
       title: 'Смена ядра',
@@ -1702,6 +1738,10 @@ const I18N = {
       modified: 'Изменено',
       size: 'Размер',
       current: 'Текущая',
+      recommendAuthor: 'Автор',
+      recommendGithub: 'GitHub-адрес',
+      recommendDir: 'Каталог',
+      recommendRating: 'Рейтинг',
     },
     labels: {
       running: 'Работает',
@@ -1789,7 +1829,7 @@ const I18N = {
       logs: 'Настройки журнала',
       pagination: 'Пагинация',
       kernelPageSize: 'Размер страницы ядер',
-      backupsPageSize: 'Размер страницы резервных копий',
+      backupsPageSize: 'Общий размер страницы',
       debugMode: 'Режим отладки',
       debugModeLabel: 'Включить режим отладки',
     },
@@ -1819,6 +1859,15 @@ const DEFAULT_SETTINGS = {
   debugMode: false,
 };
 
+const RECOMMENDED_CONFIGS = [
+  {
+    name: '666OS',
+    github: 'https://github.com/666OS/YYDS',
+    dir: 'mihomo/config',
+    rating: '★★★★★',
+  },
+];
+
 const state = {
   lang: 'auto',
   lastBackups: [],
@@ -1829,7 +1878,10 @@ const state = {
   logIntervalMs: 3000,
   switchPage: 1,
   backupsPage: 1,
+  recommendPage: 1,
   kernelsPage: 1,
+  kernelPageSizeLocal: null,
+  generalPageSizeLocal: null,
   selectedBackupPaths: new Set(),
   theme: 'night',
   themePreference: 'auto',
@@ -2130,15 +2182,21 @@ function applySettings(settings) {
   if (settingsKernelPageSize) {
     settingsKernelPageSize.value = state.settings.kernelPageSize;
   }
+  state.kernelPageSizeLocal = state.settings.kernelPageSize || '10';
+  state.generalPageSizeLocal = state.settings.backupsPageSize || '10';
   if (kernelPageSize) {
-    kernelPageSize.value = state.settings.kernelPageSize;
+    kernelPageSize.value = state.kernelPageSizeLocal;
   }
   if (backupsPageSize) {
-    backupsPageSize.value = state.settings.backupsPageSize;
+    backupsPageSize.value = state.kernelPageSizeLocal;
+  }
+  if (recommendPageSize) {
+    recommendPageSize.value = state.generalPageSizeLocal;
   }
   if (settingsBackupsPageSize) {
     settingsBackupsPageSize.value = state.settings.backupsPageSize;
   }
+  renderRecommendTable();
 }
 
 const prefersDarkQuery = window.matchMedia
@@ -2965,11 +3023,8 @@ function renderKernelTable() {
     return;
   }
   const items = state.kernels || [];
-  const pageSizeRaw = (kernelPageSize && kernelPageSize.value) || state.settings.kernelPageSize || kernelPageSize.value;
-  if (kernelPageSize && kernelPageSize) {
-    kernelPageSize.value = kernelPageSize.value;
-  }
-  const size = Number.parseInt(pageSizeRaw, 10) || 5;
+  const pageSizeRaw = state.kernelPageSizeLocal || (kernelPageSize && kernelPageSize.value) || state.settings.kernelPageSize || '10';
+  const size = Number.parseInt(pageSizeRaw, 10) || 10;
   const pageData = paginate(items, state.kernelsPage, size);
   state.kernelsPage = pageData.page;
   kernelPageInfo.textContent = `${pageData.page} / ${pageData.totalPages} · ${items.length}`;
@@ -3053,7 +3108,7 @@ function renderSwitchTable() {
   if (!backupTable || !kernelPageSize || !switchPageInfo || !switchPrev || !switchNext) {
     return;
   }
-  const size = Number.parseInt(kernelPageSize.value, 10) || 10;
+  const size = Number.parseInt(state.kernelPageSizeLocal || kernelPageSize.value || '10', 10) || 10;
   const pageData = renderBackups(backupTable, true, state.switchPage, size, false);
   state.switchPage = pageData.page;
   switchPageInfo.textContent = `${pageData.page} / ${pageData.totalPages} · ${state.lastBackups.length}`;
@@ -3062,15 +3117,47 @@ function renderSwitchTable() {
 }
 
 function renderBackupsTable() {
-  if (!backupTableFull || !backupsPageSize || !backupsPageInfo || !backupsPrev || !backupsNext) {
+  if (!backupTableFull || !backupsPageInfo || !backupsPrev || !backupsNext) {
     return;
   }
-  const size = Number.parseInt(backupsPageSize.value, 10) || 10;
+  const pageSizeRaw = state.kernelPageSizeLocal || (kernelPageSize && kernelPageSize.value) || state.settings.kernelPageSize || '10';
+  const size = Number.parseInt(pageSizeRaw, 10) || 10;
   const pageData = renderBackups(backupTableFull, false, state.backupsPage, size, true);
   state.backupsPage = pageData.page;
   backupsPageInfo.textContent = `${pageData.page} / ${pageData.totalPages} · ${state.lastBackups.length}`;
   backupsPrev.disabled = pageData.page <= 1;
   backupsNext.disabled = pageData.page >= pageData.totalPages;
+}
+
+function renderRecommendTable() {
+  if (!recommendTableBody || !recommendPageSize || !recommendPageInfo || !recommendPrev || !recommendNext) {
+    return;
+  }
+  const size = Number.parseInt(state.generalPageSizeLocal || recommendPageSize.value || '10', 10) || 10;
+  const pageData = paginate(RECOMMENDED_CONFIGS, state.recommendPage, size);
+  state.recommendPage = pageData.page;
+  recommendPageInfo.textContent = `${pageData.page} / ${pageData.totalPages} · ${RECOMMENDED_CONFIGS.length}`;
+  recommendPrev.disabled = pageData.page <= 1;
+  recommendNext.disabled = pageData.page >= pageData.totalPages;
+
+  const startIndex = (pageData.page - 1) * size;
+  let html = '';
+  pageData.items.forEach((item, index) => {
+    const githubLabel = (item.github || '').replace(/^https?:\/\//, '');
+    html += '<tr>';
+    html += `<td class="index-col">${startIndex + index + 1}</td>`;
+    html += `<td class="name-col">${item.name || '-'}</td>`;
+    html += '<td class="github-col">';
+    html += `<a class="recommend-link" href="${item.github}" target="_blank" rel="noopener noreferrer">${githubLabel || '-'}</a>`;
+    html += '</td>';
+    html += `<td class="dir-col">${item.dir || '-'}</td>`;
+    html += `<td class="rating-col">${item.rating || '-'}</td>`;
+    html += '</tr>';
+  });
+  if (pageData.items.length === 0) {
+    html = `<tr><td class="empty-cell" colspan="5">${t('labels.configsEmpty')}</td></tr>`;
+  }
+  recommendTableBody.innerHTML = html;
 }
 
 async function loadLogs() {
@@ -3436,15 +3523,16 @@ if (kernelNext) {
 }
 if (kernelPageSize) {
   kernelPageSize.addEventListener('change', () => {
-    if (kernelPageSize) {
-      kernelPageSize.value = kernelPageSize.value;
+    if (backupsPageSize) {
+      backupsPageSize.value = kernelPageSize.value;
     }
-    if (settingsKernelPageSize) {
-      settingsKernelPageSize.value = kernelPageSize.value;
-    }
-    saveSettings({ kernelPageSize: kernelPageSize.value });
+    state.kernelPageSizeLocal = kernelPageSize.value;
     state.kernelsPage = 1;
+    state.switchPage = 1;
+    state.backupsPage = 1;
     renderKernelTable();
+    renderSwitchTable();
+    renderBackupsTable();
   });
 }
 
@@ -3678,20 +3766,6 @@ if (switchNext) {
     renderSwitchTable();
   });
 }
-if (kernelPageSize) {
-  kernelPageSize.addEventListener('change', () => {
-    state.switchPage = 1;
-    if (kernelPageSize) {
-      kernelPageSize.value = kernelPageSize.value;
-    }
-    renderSwitchTable();
-    if (settingsKernelPageSize) {
-      settingsKernelPageSize.value = kernelPageSize.value;
-    }
-    saveSettings({ kernelPageSize: kernelPageSize.value });
-  });
-}
-
 // 添加settings页面上Log Settings的事件监听器
 if (settingsLogLines) {
   settingsLogLines.addEventListener('change', () => {
@@ -3718,22 +3792,28 @@ if (settingsKernelPageSize) {
     if (kernelPageSize) {
       kernelPageSize.value = settingsKernelPageSize.value;
     }
-    if (kernelPageSize) {
-      kernelPageSize.value = settingsKernelPageSize.value;
+    if (backupsPageSize) {
+      backupsPageSize.value = settingsKernelPageSize.value;
     }
+    state.kernelPageSizeLocal = settingsKernelPageSize.value;
     state.switchPage = 1;
+    state.kernelsPage = 1;
+    state.backupsPage = 1;
+    renderKernelTable();
     renderSwitchTable();
+    renderBackupsTable();
     saveSettings({ kernelPageSize: settingsKernelPageSize.value });
   });
 }
 
 if (settingsBackupsPageSize) {
   settingsBackupsPageSize.addEventListener('change', () => {
-    if (backupsPageSize) {
-      backupsPageSize.value = settingsBackupsPageSize.value;
+    if (recommendPageSize) {
+      recommendPageSize.value = settingsBackupsPageSize.value;
     }
-    state.backupsPage = 1;
-    renderBackupsTable();
+    state.generalPageSizeLocal = settingsBackupsPageSize.value;
+    state.recommendPage = 1;
+    renderRecommendTable();
     saveSettings({ backupsPageSize: settingsBackupsPageSize.value });
   });
 }
@@ -3751,33 +3831,36 @@ if (backupsNext) {
 }
 if (backupsPageSize) {
   backupsPageSize.addEventListener('change', () => {
-    state.backupsPage = 1;
-    renderBackupsTable();
-    if (settingsBackupsPageSize) {
-      settingsBackupsPageSize.value = backupsPageSize.value;
-    }
-    saveSettings({ backupsPageSize: backupsPageSize.value });
-  });
-}
-
-if (settingsKernelPageSize) {
-  settingsKernelPageSize.addEventListener('change', () => {
-    kernelPageSize.value = settingsKernelPageSize.value;
     if (kernelPageSize) {
-      kernelPageSize.value = settingsKernelPageSize.value;
+      kernelPageSize.value = backupsPageSize.value;
     }
+    state.kernelPageSizeLocal = backupsPageSize.value;
+    state.kernelsPage = 1;
     state.switchPage = 1;
+    state.backupsPage = 1;
+    renderKernelTable();
     renderSwitchTable();
-    saveSettings({ kernelPageSize: settingsKernelPageSize.value });
+    renderBackupsTable();
   });
 }
 
-if (settingsBackupsPageSize) {
-  settingsBackupsPageSize.addEventListener('change', () => {
-    backupsPageSize.value = settingsBackupsPageSize.value;
-    state.backupsPage = 1;
-    renderBackupsTable();
-    saveSettings({ backupsPageSize: settingsBackupsPageSize.value });
+if (recommendPrev) {
+  recommendPrev.addEventListener('click', () => {
+    state.recommendPage = Math.max(1, state.recommendPage - 1);
+    renderRecommendTable();
+  });
+}
+if (recommendNext) {
+  recommendNext.addEventListener('click', () => {
+    state.recommendPage += 1;
+    renderRecommendTable();
+  });
+}
+if (recommendPageSize) {
+  recommendPageSize.addEventListener('change', () => {
+    state.recommendPage = 1;
+    renderRecommendTable();
+    state.generalPageSizeLocal = recommendPageSize.value;
   });
 }
 

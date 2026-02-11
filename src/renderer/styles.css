@@ -1522,6 +1522,12 @@ body[data-theme="day"] .toggle-pill::after {
   border: none;
 }
 
+.control-card {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
 .zashboard-frame {
   flex: 1;
   margin-top: 0;
@@ -1746,7 +1752,7 @@ body[data-theme="day"] .log-view {
 .help-intro-meta {
   display: grid;
   gap: 6px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   color: var(--muted);
   font-size: 13px;
 }
@@ -1757,6 +1763,37 @@ body[data-theme="day"] .log-view {
   font-family:"PingFang SC, Microsoft YaHei, Arial";
   font-size: 16px;
   font-style: italic;
+}
+
+.recommend-table .github-col {
+  width: 260px;
+}
+
+.recommend-table .dir-col {
+  width: 180px;
+}
+
+.recommend-table .rating-col {
+  width: 110px;
+  text-align: center;
+}
+
+.recommend-table .name-col {
+  width: 160px;
+}
+
+.recommend-table .index-col {
+  text-align: center;
+}
+
+.recommend-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.recommend-link:hover {
+  text-decoration: underline;
 }
 
 .toast {

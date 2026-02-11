@@ -62,7 +62,7 @@
         </header>
 
         <section id="control" class="panel active">
-          <div class="card">
+          <div class="card control-card">
             <h3 data-i18n="control.title">Config Control</h3>
 <!--            <div class="form-row">-->
 <!--              <label data-i18n="control.config">Config Path</label>-->
@@ -75,6 +75,39 @@
               <button class="btn" id="configsRefresh" data-i18n="control.refresh">Refresh</button>
             </div>
             <div class="table" id="configTable"></div>
+          </div>
+          <div class="card">
+            <h3 data-i18n="control.recommendationsTitle">Recommended Configs</h3>
+            <div class="table">
+              <table class="backup-table recommend-table">
+                <thead>
+                  <tr>
+                    <th class="index-col" data-i18n="table.index">#</th>
+                    <th class="name-col" data-i18n="table.recommendAuthor">Creator</th>
+                    <th class="github-col" data-i18n="table.recommendGithub">GitHub URL</th>
+                    <th class="dir-col" data-i18n="table.recommendDir">Directory</th>
+                    <th class="rating-col" data-i18n="table.recommendRating">Rating</th>
+                  </tr>
+                </thead>
+                <tbody id="recommendTableBody"></tbody>
+              </table>
+            </div>
+            <div class="pagination">
+              <div class="page-controls">
+                <button class="btn ghost" id="recommendPrev">Prev</button>
+                <div class="page-info" id="recommendPageInfo">1 / 1</div>
+                <button class="btn ghost" id="recommendNext">Next</button>
+              </div>
+              <div class="page-size">
+                <span data-i18n="pagination.size">Per page</span>
+                <select id="recommendPageSize">
+                  <option value="5">5</option>
+                  <option value="10" selected>10</option>
+                  <option value="20">20</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+            </div>
           </div>
         </section>
       </main>
