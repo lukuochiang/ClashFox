@@ -1,0 +1,20 @@
+{
+  "panelPresets": {
+    "zashboard": {
+      "name": "zashboard",
+      "url": "https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip"
+    },
+    "metacubexd": {
+      "name": "metacubexd",
+      "url": "https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz"
+    }
+  },
+  "recommendedConfigs": [
+    {
+      "name": "666OS",
+      "github": "https://github.com/666OS/YYDS",
+      "dir": "mihomo/config",
+      "rating": "★★★★★"
+    }
+  ]
+}

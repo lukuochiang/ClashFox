@@ -1,9 +1,25 @@
-# ClashMac Default - Replace YOUR_SUBSCRIPTION_URL to start
+# 修改自clashmac, 感谢clashmac的开源和维护，原项目地址：https://github.com/666OS/ClashMac
+
+# ClashFox Default - Replace YOUR_SUBSCRIPTION_URL to start
+
 
 mode: rule
 mixed-port: 7890
 unified-delay: true
 tcp-concurrent: true
+
+# 认证配置
+authentication:
+  - mihomo:clashfox
+skip-auth-prefixes:
+  - 192.168.1.0/24
+  - 192.168.31.0/24
+  - 192.168.100.0/24
+  - 127.0.0.1/8
+
+# 管理面板配置
+external-controller: 127.0.0.1:9090
+secret: clashfox
 
 profile:
   store-selected: true

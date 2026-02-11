@@ -118,21 +118,15 @@
               <h3 data-i18n="settings.panelManager">Panel Manager</h3>
               <div class="paths-row">
                 <div class="paths-item">
-                  <span class="paths-label" data-i18n="settings.externalUiUrl">External UI URL</span>
+                  <span class="paths-label" data-i18n="settings.panelOption">Panel</span>
                   <div class="input-group">
-                    <input id="externalUiUrl" class="paths-input" type="text" placeholder="-" />
-                  </div>
-                </div>
-                <div class="paths-item">
-                  <span class="paths-label" data-i18n="settings.externalUiName">External UI Name</span>
-                  <div class="input-group">
-                    <input id="externalUiName" class="paths-input" type="text" placeholder="-" />
-                  </div>
-                </div>
-                <div class="paths-item">
-                  <span class="paths-label" data-i18n="settings.externalUiDir">External UI Dir</span>
-                  <div class="input-group">
-                    <input id="externalUiDir" class="paths-input" type="text" placeholder="-" />
+                    <div class="panel-select-stack">
+                      <select id="panelSelect" class="paths-input">
+                        <option value="zashboard" data-i18n="settings.panelZashboard">Zashboard</option>
+                        <option value="metacubexd" data-i18n="settings.panelMetacubexd">MetaCubeXD</option>
+                      </select>
+                      <div class="panel-hint" data-i18n="settings.panelHint">将自动下载安装你选择的面板</div>
+                    </div>
                   </div>
                 </div>
                 <div class="paths-item">

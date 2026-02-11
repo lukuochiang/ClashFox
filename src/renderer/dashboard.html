@@ -6,27 +6,27 @@
     <title>ClashFox</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body data-page="zashboard">
+  <body data-page="dashboard">
     <div class="app">
       <aside class="sidebar" id="menuContainer"></aside>
 
       <main class="content">
         <header class="topbar" id="topbarContainer"></header>
         <div id="contentRoot" class="content-root">
-          <section id="zashboard" class="panel active">
-          <div class="card zashboard-card">
+          <section id="dashboard" class="panel active">
+          <div class="card dashboard-card">
             <!--            <div class="card-header-row">-->
-            <!--              <h3 data-i18n="zashboard.title">Zashboard</h3>-->
-            <!--              <div class="hint" data-i18n="zashboard.hint">If it does not load, please start the kernel first.</div>-->
+            <!--              <h3 data-i18n="dashboard.title">Dashboard</h3>-->
+            <!--              <div class="hint" data-i18n="dashboard.hint">If it does not load, please start the kernel first.</div>-->
             <!--            </div>-->
-            <div class="zashboard-frame">
-              <div class="zashboard-empty" id="zashboardEmpty">
-                <div class="zashboard-empty-title" data-i18n="zashboard.unavailable">Zashboard is not reachable.</div>
-                <div class="hint">http://127.0.0.1:9090/ui/zashboard</div>
+            <div class="dashboard-frame">
+              <div class="dashboard-empty" id="dashboardEmpty">
+                <div class="dashboard-empty-title" data-i18n="dashboard.unavailable">Dashboard is not reachable.</div>
+                <div class="hint" id="dashboardHint">http://127.0.0.1:9090/ui/zashboard</div>
               </div>
               <iframe
-                      title="Zashboard"
-                      id="zashboardFrame"
+                      title="Dashboard"
+                      id="dashboardFrame"
                       src="http://127.0.0.1:9090/ui/zashboard"
                       loading="eager"
                       referrerpolicy="no-referrer"

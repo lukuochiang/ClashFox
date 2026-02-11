@@ -77,12 +77,10 @@ let overviewConfigPath = document.getElementById('overviewConfigPath');
 let overviewBrowseConfig = document.getElementById('overviewBrowseConfig');
 let overviewConfigReset = document.getElementById('overviewConfigReset');
 let browseConfigBtn = document.getElementById('browseConfig');
-let externalUiUrlInput = document.getElementById('externalUiUrl');
-let externalUiNameInput = document.getElementById('externalUiName');
-let externalUiDirInput = document.getElementById('externalUiDir');
 let externalControllerInput = document.getElementById('externalController');
 let externalSecretInput = document.getElementById('externalSecret');
 let externalAuthInput = document.getElementById('externalAuth');
+let panelSelect = document.getElementById('panelSelect');
 let startBtn = document.getElementById('startBtn');
 let stopBtn = document.getElementById('stopBtn');
 let restartBtn = document.getElementById('restartBtn');
@@ -120,8 +118,9 @@ let logContent = document.getElementById('logContent');
 let logAutoRefresh = document.getElementById('logAutoRefresh');
 let logIntervalPreset = document.getElementById('logIntervalPreset');
 let cleanBtn = document.getElementById('cleanBtn');
-let zashboardFrame = document.getElementById('zashboardFrame');
-let zashboardEmpty = document.getElementById('zashboardEmpty');
+let dashboardFrame = document.getElementById('dashboardFrame');
+let dashboardEmpty = document.getElementById('dashboardEmpty');
+let dashboardHint = document.getElementById('dashboardHint');
 let sudoModal = document.getElementById('sudoModal');
 let sudoPassword = document.getElementById('sudoPassword');
 let sudoCancel = document.getElementById('sudoCancel');
@@ -167,7 +166,7 @@ const I18N = {
       switch: 'Switch Kernel',
       backups: 'Backups',
       logs: 'Logs',
-      zashboard: 'Dashboard',
+      dashboard: 'Dashboard',
       settings: 'Settings',
       help: 'Help',
     },
@@ -284,10 +283,10 @@ const I18N = {
       githubLabel: 'GitHub:',
       telegramLabel: 'Telegram:',
     },
-    zashboard: {
-      title: 'Zashboard',
+    dashboard: {
+      title: 'Dashboard',
       hint: 'If it does not load, please start the kernel first.',
-      unavailable: 'Zashboard is not reachable.',
+      unavailable: 'Dashboard is not reachable.',
     },
     actions: {
       start: 'Start',
@@ -329,6 +328,8 @@ const I18N = {
       restartSuccess: 'Kernel restarted.',
       proxyModeUpdated: 'Proxy mode updated.',
       controllerMissing: 'Controller is not configured.',
+      panelInstalled: 'Panel installed.',
+      panelInstallFailed: 'Panel install failed.',
       bridgeMissing: 'Bridge unavailable.',
       sudoInvalid: 'Password incorrect.',
       alreadyRunning: 'Kernel is already running.',
@@ -381,6 +382,11 @@ const I18N = {
       language: 'Language',
       defaults: 'Defaults',
       panelManager: 'Panel Manager',
+      panelOption: 'Panel',
+      panelPlaceholder: 'Please select',
+      panelHint: 'Automatically download and install the panel you choose.',
+      panelZashboard: 'Zashboard',
+      panelMetacubexd: 'MetaCubeXD',
       paths: 'User Data Paths',
       pathsReset: 'Reset to Default',
       reset: 'Reset',
@@ -416,7 +422,7 @@ const I18N = {
       switch: '切换内核',
       backups: '备份',
       logs: '日志',
-      zashboard: '仪表盘',
+      dashboard: '仪表盘',
       settings: '设置',
       help: '帮助',
     },
@@ -532,10 +538,10 @@ const I18N = {
       githubLabel: 'GitHub：',
       telegramLabel: 'Telegram：',
     },
-    zashboard: {
-      title: 'Zashboard面板',
+    dashboard: {
+      title: 'Dashboard面板',
       hint: '如果无法加载，请先启动内核。',
-      unavailable: 'Zashboard 无法访问。',
+      unavailable: 'Dashboard 无法访问。',
     },
     actions: {
       start: '启动',
@@ -577,6 +583,8 @@ const I18N = {
       restartSuccess: '内核已重启。',
       proxyModeUpdated: '代理模式已更新。',
       controllerMissing: '控制器未配置。',
+      panelInstalled: '面板已安装。',
+      panelInstallFailed: '面板安装失败。',
       bridgeMissing: '桥接服务不可用。',
       sudoInvalid: '密码不正确。',
       alreadyRunning: '内核已在运行。',
@@ -629,6 +637,11 @@ const I18N = {
       language: '语言',
       defaults: '默认设置',
       panelManager: '面板管理',
+      panelOption: '面板选择',
+      panelPlaceholder: '请选择',
+      panelHint: '将自动下载安装你选择的面板。',
+      panelZashboard: 'Zashboard',
+      panelMetacubexd: 'MetaCubeXD',
       paths: '用户数据路径',
       pathsReset: '重置为默认',
       reset: '重置',
@@ -664,7 +677,7 @@ const I18N = {
       switch: 'カーネル切替',
       backups: 'バックアップ',
       logs: 'ログ',
-      zashboard: 'ダッシュボード',
+      dashboard: 'ダッシュボード',
       settings: '設定',
       help: 'ヘルプ',
     },
@@ -780,10 +793,10 @@ const I18N = {
       githubLabel: 'GitHub：',
       telegramLabel: 'Telegram：',
     },
-    zashboard: {
-      title: 'Zashboard パネル',
+    dashboard: {
+      title: 'Dashboard パネル',
       hint: '読み込めない場合は、先にカーネルを起動してください。',
-      unavailable: 'Zashboard に接続できません。',
+      unavailable: 'Dashboard に接続できません。',
     },
     actions: {
       start: '開始',
@@ -825,6 +838,8 @@ const I18N = {
       restartSuccess: 'カーネルを再起動しました。',
       proxyModeUpdated: 'プロキシモードを更新しました。',
       controllerMissing: 'コントローラが未設定です。',
+      panelInstalled: 'パネルをインストールしました。',
+      panelInstallFailed: 'パネルのインストールに失敗しました。',
       bridgeMissing: 'ブリッジが利用できません。',
       sudoInvalid: 'パスワードが正しくありません。',
       alreadyRunning: 'カーネルは既に稼働中です。',
@@ -875,6 +890,12 @@ const I18N = {
       themeAuto: '自動',
       language: '言語',
       defaults: '既定値',
+      panelManager: 'パネル管理',
+      panelOption: 'パネル',
+      panelPlaceholder: '選択してください',
+      panelHint: '選択したパネルを自動でダウンロードしてインストールします。',
+      panelZashboard: 'Zashboard',
+      panelMetacubexd: 'MetaCubeXD',
       paths: 'ユーザーデータパス',
       pathsReset: 'デフォルトにリセット',
       reset: 'リセット',
@@ -910,7 +931,7 @@ const I18N = {
       switch: '커널 전환',
       backups: '백업',
       logs: '로그',
-      zashboard: '대시보드',
+      dashboard: '대시보드',
       settings: '설정',
       help: '도움말',
     },
@@ -1026,10 +1047,10 @@ const I18N = {
       githubLabel: 'GitHub:',
       telegramLabel: 'Telegram:',
     },
-    zashboard: {
-      title: 'Zashboard 패널',
+    dashboard: {
+      title: 'Dashboard 패널',
       hint: '로드되지 않으면 먼저 커널을 시작하세요.',
-      unavailable: 'Zashboard에 연결할 수 없습니다.',
+      unavailable: 'Dashboard에 연결할 수 없습니다.',
     },
     actions: {
       start: '시작',
@@ -1071,6 +1092,8 @@ const I18N = {
       restartSuccess: '커널을 재시작했습니다.',
       proxyModeUpdated: '프록시 모드가 업데이트되었습니다.',
       controllerMissing: '컨트롤러가 설정되지 않았습니다.',
+      panelInstalled: '패널이 설치되었습니다.',
+      panelInstallFailed: '패널 설치에 실패했습니다.',
       bridgeMissing: '브리지 서비스를 사용할 수 없습니다.',
       sudoInvalid: '비밀번호가 올바르지 않습니다.',
       alreadyRunning: '커널이 이미 실행 중입니다.',
@@ -1122,6 +1145,11 @@ const I18N = {
       language: '언어',
       defaults: '기본값',
       panelManager: '패널 관리',
+      panelOption: '패널',
+      panelPlaceholder: '선택하세요',
+      panelHint: '선택한 패널을 자동으로 다운로드하여 설치합니다.',
+      panelZashboard: 'Zashboard',
+      panelMetacubexd: 'MetaCubeXD',
       paths: '사용자 데이터 경로',
       pathsReset: '기본값으로 재설정',
       reset: '재설정',
@@ -1157,7 +1185,7 @@ const I18N = {
       switch: 'Changer le noyau',
       backups: 'Sauvegardes',
       logs: 'Journaux',
-      zashboard: 'Tableau de bord',
+      dashboard: 'Tableau de bord',
       settings: 'Paramètres',
       help: 'Aide',
     },
@@ -1273,10 +1301,10 @@ const I18N = {
       githubLabel: 'GitHub :',
       telegramLabel: 'Telegram :',
     },
-    zashboard: {
-      title: 'Panneau Zashboard',
+    dashboard: {
+      title: 'Panneau Dashboard',
       hint: "Si le chargement échoue, démarrez d'abord le noyau.",
-      unavailable: 'Zashboard est injoignable.',
+      unavailable: 'Dashboard est injoignable.',
     },
     actions: {
       start: 'Démarrer',
@@ -1318,6 +1346,8 @@ const I18N = {
       restartSuccess: 'Noyau redémarré.',
       proxyModeUpdated: 'Mode proxy mis à jour.',
       controllerMissing: 'Contrôleur non configuré.',
+      panelInstalled: 'Panneau installé.',
+      panelInstallFailed: 'Échec de l’installation du panneau.',
       bridgeMissing: 'Pont indisponible.',
       sudoInvalid: 'Mot de passe incorrect.',
       alreadyRunning: 'Le noyau est déjà en marche.',
@@ -1369,6 +1399,11 @@ const I18N = {
       language: 'Langue',
       defaults: 'Valeurs par défaut',
       panelManager: 'Gestion du panneau',
+      panelOption: 'Panneau',
+      panelPlaceholder: 'Veuillez sélectionner',
+      panelHint: 'Télécharge et installe automatiquement le panneau choisi.',
+      panelZashboard: 'Zashboard',
+      panelMetacubexd: 'MetaCubeXD',
       paths: 'Chemins des données utilisateur',
       pathsReset: 'Réinitialiser par défaut',
       reset: 'Réinitialiser',
@@ -1404,7 +1439,7 @@ const I18N = {
       switch: 'Kernel wechseln',
       backups: 'Backups',
       logs: 'Logs',
-      zashboard: 'Dashboard',
+      dashboard: 'Dashboard',
       settings: 'Einstellungen',
       help: 'Hilfe',
     },
@@ -1520,10 +1555,10 @@ const I18N = {
       githubLabel: 'GitHub:',
       telegramLabel: 'Telegram:',
     },
-    zashboard: {
-      title: 'Zashboard-Panel',
+    dashboard: {
+      title: 'Dashboard-Panel',
       hint: 'Wenn es nicht lädt, starten Sie zuerst den Kernel.',
-      unavailable: 'Zashboard ist nicht erreichbar.',
+      unavailable: 'Dashboard ist nicht erreichbar.',
     },
     actions: {
       start: 'Starten',
@@ -1565,6 +1600,8 @@ const I18N = {
       restartSuccess: 'Kernel neu gestartet.',
       proxyModeUpdated: 'Proxy-Modus aktualisiert.',
       controllerMissing: 'Controller ist nicht konfiguriert.',
+      panelInstalled: 'Panel installiert.',
+      panelInstallFailed: 'Panel-Installation fehlgeschlagen.',
       bridgeMissing: 'Bridge nicht verfügbar.',
       sudoInvalid: 'Passwort falsch.',
       alreadyRunning: 'Kernel läuft bereits.',
@@ -1615,6 +1652,12 @@ const I18N = {
       themeAuto: 'Auto',
       language: 'Sprache',
       defaults: 'Voreinstellungen',
+      panelManager: 'Panel-Verwaltung',
+      panelOption: 'Panel',
+      panelPlaceholder: 'Bitte auswählen',
+      panelHint: 'Lädt das gewählte Panel automatisch herunter und installiert es.',
+      panelZashboard: 'Zashboard',
+      panelMetacubexd: 'MetaCubeXD',
       paths: 'Benutzerdatenpfade',
       pathsReset: 'Auf Standard zurücksetzen',
       reset: 'Zurücksetzen',
@@ -1650,7 +1693,7 @@ const I18N = {
       switch: 'Смена ядра',
       backups: 'Резервные копии',
       logs: 'Журналы',
-      zashboard: 'Панель управления',
+      dashboard: 'Панель управления',
       settings: 'Настройки',
       help: 'Помощь',
     },
@@ -1766,10 +1809,10 @@ const I18N = {
       githubLabel: 'GitHub:',
       telegramLabel: 'Telegram:',
     },
-    zashboard: {
-      title: 'Панель Zashboard',
+    dashboard: {
+      title: 'Панель Dashboard',
       hint: 'Если не загружается, сначала запустите ядро.',
-      unavailable: 'Zashboard недоступен.',
+      unavailable: 'Dashboard недоступен.',
     },
     actions: {
       start: 'Запустить',
@@ -1811,6 +1854,8 @@ const I18N = {
       restartSuccess: 'Ядро перезапущено.',
       proxyModeUpdated: 'Режим прокси обновлен.',
       controllerMissing: 'Контроллер не настроен.',
+      panelInstalled: 'Панель установлена.',
+      panelInstallFailed: 'Не удалось установить панель.',
       bridgeMissing: 'Мост недоступен.',
       sudoInvalid: 'Пароль неверный.',
       alreadyRunning: 'Ядро уже запущено.',
@@ -1862,6 +1907,11 @@ const I18N = {
       language: 'Язык',
       defaults: 'По умолчанию',
       panelManager: 'Управление панелью',
+      panelOption: 'Панель',
+      panelPlaceholder: 'Выберите',
+      panelHint: 'Автоматически скачает и установит выбранную панель.',
+      panelZashboard: 'Zashboard',
+      panelMetacubexd: 'MetaCubeXD',
       paths: 'Пути данных пользователя',
       pathsReset: 'Сбросить по умолчанию',
       reset: 'Сбросить',
@@ -1899,9 +1949,7 @@ const DEFAULT_SETTINGS = {
   configDir: '',
   coreDir: '',
   dataDir: '',
-  externalUiUrl: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
-  externalUiName: 'zashboard',
-  externalUi: 'ui',
+  panelChoice: '',
   externalController: '127.0.0.1:9090',
   secret: 'clashfox',
   authentication: ['mihomo:clashfox'],
@@ -1914,7 +1962,18 @@ const DEFAULT_SETTINGS = {
   debugMode: false,
 };
 
-const RECOMMENDED_CONFIGS = [
+let PANEL_PRESETS = {
+  zashboard: {
+    name: 'zashboard',
+    url: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
+  },
+  metacubexd: {
+    name: 'metacubexd',
+    url: 'https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz',
+  },
+};
+
+let RECOMMENDED_CONFIGS = [
   {
     name: '666OS',
     github: 'https://github.com/666OS/YYDS',
@@ -1922,6 +1981,8 @@ const RECOMMENDED_CONFIGS = [
     rating: '★★★★★',
   },
 ];
+
+const STATIC_CONFIGS_URL = new URL('../../static/configs.json', window.location.href);
 
 const state = {
   lang: 'auto',
@@ -1941,8 +2002,9 @@ const state = {
   theme: 'night',
   themePreference: 'auto',
   installState: 'idle',
-  zashboardAlerted: false,
-  zashboardLoaded: false,
+  dashboardAlerted: false,
+  dashboardLoaded: false,
+  autoPanelInstalled: false,
   overviewTimer: null,
   overviewTickTimer: null,
   overviewLoading: false,
@@ -2095,7 +2157,7 @@ async function syncSettingsFromFile() {
   state.fileSettings = { ...merged };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
   if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
-    const { configPath, ...fileSettings } = merged;
+    const { configPath, externalUiUrl, externalUiName, externalUi, ...fileSettings } = merged;
     window.clashfox.writeSettings(fileSettings);
   }
 }
@@ -2105,7 +2167,7 @@ function saveSettings(patch) {
   state.fileSettings = { ...state.fileSettings, ...patch };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
   if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
-    const { configPath, ...fileSettings } = state.settings;
+    const { configPath, externalUiUrl, externalUiName, externalUi, ...fileSettings } = state.settings;
     window.clashfox.writeSettings(fileSettings);
   }
 }
@@ -2149,7 +2211,7 @@ function applySystemTheme(isDark) {
     return;
   }
   applyTheme(isDark ? 'night' : 'day');
-  sendZashboardTheme();
+  sendDashboardTheme();
   updateThemeToggle();
 }
 
@@ -2160,7 +2222,7 @@ function applyThemePreference(preference, persist = true) {
   }
   applyTheme(resolveTheme(preference));
   syncThemeSource(preference);
-  sendZashboardTheme();
+  sendDashboardTheme();
   if (persist) {
     saveSettings({ themePreference: preference });
   }
@@ -2169,6 +2231,10 @@ function applyThemePreference(preference, persist = true) {
 
 function applySettings(settings) {
   state.settings = { ...DEFAULT_SETTINGS, ...settings };
+  if (!state.settings.panelChoice) {
+    state.settings.panelChoice = 'zashboard';
+    saveSettings({ panelChoice: 'zashboard' });
+  }
   applyThemePreference(state.settings.themePreference, false);
   setLanguage(state.settings.lang, false, false);
   syncDebugMode(state.settings.debugMode);
@@ -2195,15 +2261,6 @@ function applySettings(settings) {
   }
   if (settingsConfigPath) {
     settingsConfigPath.value = state.settings.configPath;
-  }
-  if (externalUiUrlInput) {
-    externalUiUrlInput.value = state.settings.externalUiUrl || '';
-  }
-  if (externalUiNameInput) {
-    externalUiNameInput.value = state.settings.externalUiName || '';
-  }
-  if (externalUiDirInput) {
-    externalUiDirInput.value = state.settings.externalUi || '';
   }
   if (externalControllerInput) {
     externalControllerInput.value = state.settings.externalController || '';
@@ -2238,6 +2295,10 @@ function applySettings(settings) {
   if (proxyModeSelect) {
     proxyModeSelect.value = state.settings.proxyMode || 'rule';
   }
+  if (panelSelect) {
+    panelSelect.value = state.settings.panelChoice || '';
+  }
+  updateDashboardFrameSrc();
   if (kernelPageSize) {
     kernelPageSize.value = state.settings.kernelPageSize;
   }
@@ -2462,6 +2523,26 @@ async function runCommand(command, args = []) {
     pathArgs.push('--data-dir', effectiveSettings.dataDir);
   }
   return window.clashfox.runCommand(command, [...pathArgs, ...args]);
+}
+
+async function loadStaticConfigs() {
+  try {
+    const response = await fetch(STATIC_CONFIGS_URL, { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error(`load_failed_${response.status}`);
+    }
+    const payload = await response.json();
+    if (payload && typeof payload === 'object') {
+      if (payload.panelPresets && typeof payload.panelPresets === 'object') {
+        PANEL_PRESETS = payload.panelPresets;
+      }
+      if (Array.isArray(payload.recommendedConfigs)) {
+        RECOMMENDED_CONFIGS = payload.recommendedConfigs;
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to load static configs.', error);
+  }
 }
 
 async function cancelCommand() {
@@ -3139,13 +3220,14 @@ function syncThemeSource(preference) {
   window.clashfox.setThemeSource(source);
 }
 
-function sendZashboardTheme() {
-  if (!zashboardFrame || !zashboardFrame.contentWindow) {
+function sendDashboardTheme() {
+  if (!dashboardFrame || !dashboardFrame.contentWindow) {
     return;
   }
+  updateDashboardFrameSrc();
   const themeValue = state.theme === 'night' ? 'dark' : 'light';
   try {
-    zashboardFrame.contentWindow.postMessage(
+    dashboardFrame.contentWindow.postMessage(
       { type: 'clashfox-theme', theme: themeValue },
       '*'
     );
@@ -3475,12 +3557,10 @@ function refreshPageRefs() {
   overviewBrowseConfig = document.getElementById('overviewBrowseConfig');
   overviewConfigReset = document.getElementById('overviewConfigReset');
   browseConfigBtn = document.getElementById('browseConfig');
-  externalUiUrlInput = document.getElementById('externalUiUrl');
-  externalUiNameInput = document.getElementById('externalUiName');
-  externalUiDirInput = document.getElementById('externalUiDir');
   externalControllerInput = document.getElementById('externalController');
   externalSecretInput = document.getElementById('externalSecret');
   externalAuthInput = document.getElementById('externalAuth');
+  panelSelect = document.getElementById('panelSelect');
   startBtn = document.getElementById('startBtn');
   stopBtn = document.getElementById('stopBtn');
   restartBtn = document.getElementById('restartBtn');
@@ -3518,8 +3598,9 @@ function refreshPageRefs() {
   logAutoRefresh = document.getElementById('logAutoRefresh');
   logIntervalPreset = document.getElementById('logIntervalPreset');
   cleanBtn = document.getElementById('cleanBtn');
-  zashboardFrame = document.getElementById('zashboardFrame');
-  zashboardEmpty = document.getElementById('zashboardEmpty');
+  dashboardFrame = document.getElementById('dashboardFrame');
+  dashboardEmpty = document.getElementById('dashboardEmpty');
+  dashboardHint = document.getElementById('dashboardHint');
   sudoModal = document.getElementById('sudoModal');
   sudoPassword = document.getElementById('sudoPassword');
   sudoCancel = document.getElementById('sudoCancel');
@@ -3669,8 +3750,8 @@ async function navigatePage(targetPage, pushState = true) {
   applyI18n();
   bindPageEvents();
   refreshPageView();
-  if (targetPage === 'zashboard') {
-    initZashboardFrame();
+  if (targetPage === 'dashboard') {
+    initDashboardFrame();
   }
   if (pushState) {
     history.pushState({ page: targetPage }, '', `${targetPage}.html`);
@@ -4139,19 +4220,31 @@ if (configPathInput) {
   });
 }
 
-if (externalUiUrlInput) {
-  externalUiUrlInput.addEventListener('change', (event) => {
-    saveSettings({ externalUiUrl: event.target.value.trim() });
-  });
-}
-if (externalUiNameInput) {
-  externalUiNameInput.addEventListener('change', (event) => {
-    saveSettings({ externalUiName: event.target.value.trim() });
-  });
-}
-if (externalUiDirInput) {
-  externalUiDirInput.addEventListener('change', (event) => {
-    saveSettings({ externalUi: event.target.value.trim() });
+if (panelSelect) {
+  panelSelect.addEventListener('change', async (event) => {
+    const value = event.target.value || '';
+    if (!value) {
+      return;
+    }
+    const preset = PANEL_PRESETS[value];
+    if (!preset) {
+      return;
+    }
+    saveSettings({ panelChoice: value });
+    updateDashboardFrameSrc();
+    const response = await runCommand('panel-install', ['--name', preset.name, '--url', preset.url]);
+    if (response.ok) {
+      showToast(t('labels.panelInstalled'));
+      return;
+    }
+    let errorMsg = t('labels.panelInstallFailed');
+    if (response.error) {
+      errorMsg = `${errorMsg} (${response.error})`;
+      if (response.error === 'empty_output' && response.details) {
+        errorMsg = `${errorMsg}: ${response.details}`;
+      }
+    }
+    showToast(errorMsg, 'error');
   });
 }
 if (externalControllerInput) {
@@ -4684,65 +4777,108 @@ function waitForBridge(timeoutMs = 5000) {
   });
 }
 
-function showZashboardAlert() {
-  if (state.zashboardAlerted) {
+function showDashboardAlert() {
+  if (state.dashboardAlerted) {
     return;
   }
-  state.zashboardAlerted = true;
-  showToast(t('zashboard.hint'), 'info');
+  state.dashboardAlerted = true;
+  showToast(t('dashboard.hint'), 'info');
 }
 
-function initZashboardFrame() {
-  if (!zashboardFrame || !zashboardEmpty) {
+function getSelectedPanelName() {
+  const choice = (state.settings && state.settings.panelChoice) || (panelSelect && panelSelect.value) || '';
+  return choice || 'zashboard';
+}
+
+function updateDashboardFrameSrc() {
+  if (!dashboardFrame) {
     return;
   }
+  const panelName = getSelectedPanelName();
+  const themeValue = state.theme === 'night' ? 'dark' : 'light';
+  let targetUrl = `http://127.0.0.1:9090/ui/${panelName}`;
+  if (panelName === 'metacubexd') {
+    targetUrl = `${targetUrl}?theme=${themeValue}`;
+  }
+  const targetKey = `${panelName}:${themeValue}`;
+  if (dashboardFrame.dataset.panel === targetKey) {
+    return;
+  }
+  dashboardFrame.dataset.panel = targetKey;
+  dashboardFrame.src = targetUrl;
+  if (dashboardHint) {
+    dashboardHint.textContent = targetUrl;
+  }
+}
+
+function initDashboardFrame() {
+  if (!dashboardFrame || !dashboardEmpty) {
+    return;
+  }
+  updateDashboardFrameSrc();
   const showEmpty = () => {
-    zashboardEmpty.classList.add('show');
+    dashboardEmpty.classList.add('show');
   };
   const hideEmpty = () => {
-    zashboardEmpty.classList.remove('show');
+    dashboardEmpty.classList.remove('show');
   };
 
   showEmpty();
   const timeout = setTimeout(() => {
     showEmpty();
-    showZashboardAlert();
+    showDashboardAlert();
   }, 1200);
 
-  zashboardFrame.addEventListener('load', () => {
+  dashboardFrame.addEventListener('load', () => {
     clearTimeout(timeout);
     hideEmpty();
-    state.zashboardAlerted = false;
-    state.zashboardLoaded = true;
-    sendZashboardTheme();
+    state.dashboardAlerted = false;
+    state.dashboardLoaded = true;
+    sendDashboardTheme();
   });
-  zashboardFrame.addEventListener('error', () => {
+  dashboardFrame.addEventListener('error', () => {
     clearTimeout(timeout);
     showEmpty();
-    showZashboardAlert();
-    state.zashboardLoaded = false;
+    showDashboardAlert();
+    state.dashboardLoaded = false;
   });
 }
 
 async function initApp() {
   await loadLayoutParts();
+  await loadStaticConfigs();
   await syncSettingsFromFile();
   applySettings(readSettings());
   updateScrollbarWidthVar();
   window.addEventListener('resize', updateScrollbarWidthVar);
   bindPageEvents();
+  renderRecommendTable();
   if (contentRoot && contentRoot.firstElementChild) {
     contentRoot.firstElementChild.classList.add('page-section');
   }
   setActiveNav(currentPage);
   loadAppInfo();
-  if (currentPage === 'zashboard') {
-    initZashboardFrame();
+  if (currentPage === 'dashboard') {
+    initDashboardFrame();
   }
   const ok = await waitForBridge();
   if (!ok) {
     showToast(t('labels.bridgeMissing'), 'error');
     return;
+  }
+  if (state.settings && state.settings.panelChoice && !state.autoPanelInstalled) {
+    const preset = PANEL_PRESETS[state.settings.panelChoice];
+    if (preset) {
+      state.autoPanelInstalled = true;
+      runCommand('panel-install', ['--name', preset.name, '--url', preset.url]).then((response) => {
+        if (response.ok) {
+          showToast(t('labels.panelInstalled'));
+        } else {
+          const errorMsg = response.error ? `${t('labels.panelInstallFailed')} (${response.error})` : t('labels.panelInstallFailed');
+          showToast(errorMsg, 'error');
+        }
+      });
+    }
   }
   loadStatus();
   setTimeout(() => loadStatus(), 1200);

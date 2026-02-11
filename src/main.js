@@ -44,7 +44,7 @@ let isQuitting = false;
 const TRAY_I18N = {
   en: {
     showMain: 'Show Main Window',
-    zashboard: 'Zashboard',
+    dashboard: 'Dashboard',
     kernelManager: 'Kernel Manager',
     startKernel: 'Start Kernel',
     stopKernel: 'Stop Kernel',
@@ -71,7 +71,7 @@ const TRAY_I18N = {
   },
   zh: {
     showMain: '显示主窗口',
-    zashboard: 'Zashboard',
+    dashboard: 'Dashboard',
     kernelManager: '内核管理',
     startKernel: '开启内核',
     stopKernel: '终止内核',
@@ -98,7 +98,7 @@ const TRAY_I18N = {
   },
   ja: {
     showMain: 'メインウィンドウを表示',
-    zashboard: 'Zashboard',
+    dashboard: 'Dashboard',
     kernelManager: 'カーネル管理',
     startKernel: 'カーネルを起動',
     stopKernel: 'カーネルを停止',
@@ -125,7 +125,7 @@ const TRAY_I18N = {
   },
   ko: {
     showMain: '메인 창 표시',
-    zashboard: 'Zashboard',
+    dashboard: 'Dashboard',
     kernelManager: '커널 관리',
     startKernel: '커널 시작',
     stopKernel: '커널 종료',
@@ -152,7 +152,7 @@ const TRAY_I18N = {
   },
   fr: {
     showMain: 'Afficher la fenêtre principale',
-    zashboard: 'Zashboard',
+    dashboard: 'Dashboard',
     kernelManager: 'Gestion du noyau',
     startKernel: 'Démarrer le noyau',
     stopKernel: 'Arrêter le noyau',
@@ -179,7 +179,7 @@ const TRAY_I18N = {
   },
   de: {
     showMain: 'Hauptfenster anzeigen',
-    zashboard: 'Zashboard',
+    dashboard: 'Dashboard',
     kernelManager: 'Kernel-Verwaltung',
     startKernel: 'Kernel starten',
     stopKernel: 'Kernel stoppen',
@@ -206,7 +206,7 @@ const TRAY_I18N = {
   },
   ru: {
     showMain: 'Показать главное окно',
-    zashboard: 'Zashboard',
+    dashboard: 'Dashboard',
     kernelManager: 'Управление ядром',
     startKernel: 'Запустить ядро',
     stopKernel: 'Остановить ядро',
@@ -486,12 +486,12 @@ function showMainWindow() {
   createWindow();
 }
 
-function openZashboardPanel() {
+function openDashboardPanel() {
   showMainWindow();
   if (!mainWindow || mainWindow.isDestroyed()) {
     return;
   }
-  mainWindow.loadFile(path.join(__dirname, 'renderer', 'zashboard.html'));
+  mainWindow.loadFile(path.join(__dirname, 'renderer', 'dashboard.html'));
 }
 
 function buildMenuTemplate() {
@@ -555,7 +555,7 @@ function createTrayMenu() {
   const trayMenu = Menu.buildFromTemplate([
     { label: labels.showMain, click: () => showMainWindow() },
     { type: 'separator' },
-    { label: labels.zashboard, click: () => openZashboardPanel() },
+    { label: labels.dashboard, click: () => openDashboardPanel() },
     { type: 'separator' },
     // { label: 'About', click: () => createAboutWindow() },
     // { type: 'separator' },
@@ -662,7 +662,7 @@ function runBridge(args) {
       const commandType = args[0];
 
       // 1. 如果是安装命令，终止当前正在运行的安装进程（如果有）
-      let isInstallCommand = commandType === 'install';
+      let isInstallCommand = commandType === 'install' || commandType === 'panel-install';
       
       if (isInstallCommand && currentInstallProcess) {
         const oldPid = currentInstallProcess.pid;
@@ -710,6 +710,7 @@ function runBridge(args) {
       let resolved = false;
       
       // 超时保护
+      const timeoutMs = isInstallCommand ? 180000 : 30000;
       const timeout = setTimeout(() => {
         if (!resolved && child) {
           // console.log('[runBridge] Process timeout, killing PID:', processId);
@@ -719,7 +720,7 @@ function runBridge(args) {
             // console.error('[runBridge] Error killing timed-out process:', err);
           }
         }
-      }, 30000);
+      }, timeoutMs);
 
       // 输出收集
       if (child.stdout) {
@@ -859,7 +860,7 @@ function createWindow() {
 
   mainWindow = win;
 
-  const attachZashboardAuth = () => {
+  const attachDashboardAuth = () => {
     const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
     win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
       const url = details.url || '';
@@ -888,7 +889,7 @@ function createWindow() {
       callback({ requestHeaders: details.requestHeaders });
     });
   };
-  attachZashboardAuth();
+  attachDashboardAuth();
 
   win.on('close', (event) => {
     if (isQuitting) {

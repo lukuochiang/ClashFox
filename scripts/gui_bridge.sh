@@ -1145,6 +1145,125 @@ JSON
 )
         print_ok "$data"
         ;;
+    panel-install)
+        panel_name=""
+        panel_url=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --name)
+                    shift || true
+                    panel_name="${1:-}"
+                    ;;
+                --url)
+                    shift || true
+                    panel_url="${1:-}"
+                    ;;
+            esac
+            shift || true
+        done
+
+        if [ -z "$panel_name" ] || [ -z "$panel_url" ]; then
+            print_err "missing_panel_info"
+            exit 1
+        fi
+        if ! command -v curl >/dev/null 2>&1; then
+            print_err "curl_missing"
+            exit 1
+        fi
+        if ! command -v unzip >/dev/null 2>&1; then
+            unzip_available=false
+        else
+            unzip_available=true
+        fi
+        if ! command -v tar >/dev/null 2>&1; then
+            tar_available=false
+        else
+            tar_available=true
+        fi
+
+        temp_dir="$(mktemp -d)"
+        archive_path="$temp_dir/panel.archive"
+        unpack_dir="$temp_dir/unpack"
+        mkdir -p "$unpack_dir"
+
+        if ! curl -L -o "$archive_path" "$panel_url"; then
+            rm -rf "$temp_dir"
+            print_err "download_failed"
+            exit 1
+        fi
+
+        case "$panel_url" in
+            *.tgz|*.tar.gz)
+                if [ "$tar_available" = false ]; then
+                    rm -rf "$temp_dir"
+                    print_err "tar_missing"
+                    exit 1
+                fi
+                if ! tar -xzf "$archive_path" -C "$unpack_dir"; then
+                    rm -rf "$temp_dir"
+                    print_err "untar_failed"
+                    exit 1
+                fi
+                ;;
+            *)
+                if [ "$unzip_available" = false ]; then
+                    rm -rf "$temp_dir"
+                    print_err "unzip_missing"
+                    exit 1
+                fi
+                if ! unzip -q "$archive_path" -d "$unpack_dir"; then
+                    rm -rf "$temp_dir"
+                    print_err "unzip_failed"
+                    exit 1
+                fi
+                ;;
+        esac
+
+        src_dir="$unpack_dir"
+        shopt -s nullglob
+        entries=( "$unpack_dir"/* )
+        shopt -u nullglob
+        if [ ${#entries[@]} -eq 1 ] && [ -d "${entries[0]}" ]; then
+            src_dir="${entries[0]}"
+        fi
+
+        if [ -z "$CLASHFOX_DATA_DIR" ]; then
+            CLASHFOX_DATA_DIR="$CLASHFOX_USER_DATA_DIR/data"
+        fi
+        if ! mkdir -p "$CLASHFOX_DATA_DIR/ui" 2>/dev/null; then
+            fallback_dir="$CLASHFOX_USER_DATA_DIR/data"
+            if [ -n "$fallback_dir" ] && mkdir -p "$fallback_dir/ui" 2>/dev/null; then
+                CLASHFOX_DATA_DIR="$fallback_dir"
+            else
+                rm -rf "$temp_dir"
+                print_err "data_dir_unwritable"
+                exit 1
+            fi
+        fi
+        chmod u+rwx "$CLASHFOX_DATA_DIR" "$CLASHFOX_DATA_DIR/ui" 2>/dev/null || true
+
+        panel_dir="$CLASHFOX_DATA_DIR/ui/$panel_name"
+        rm -rf "$panel_dir"
+        mkdir -p "$panel_dir"
+        if [ ! -w "$panel_dir" ]; then
+            rm -rf "$temp_dir"
+            print_err "data_dir_unwritable"
+            exit 1
+        fi
+        if [ -z "$(ls -A "$src_dir" 2>/dev/null)" ]; then
+            rm -rf "$temp_dir"
+            print_err "empty_archive"
+            exit 1
+        fi
+        if ! cp -R "$src_dir"/. "$panel_dir"/; then
+            rm -rf "$temp_dir"
+            print_err "copy_failed"
+            exit 1
+        fi
+
+        rm -rf "$temp_dir"
+        print_ok "{\"installed\":true,\"path\":\"$(json_escape "$panel_dir")\"}"
+        ;;
     mode)
         mode=""
         config_path=""
