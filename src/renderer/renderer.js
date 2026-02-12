@@ -1548,7 +1548,7 @@ function renderConfigTable() {
   let html = '<table class="backup-table" aria-label="Configs">';
   html += '<thead><tr>';
   html += `<th class="name-col">${t('table.name')}</th>`;
-  html += `<th class="path-col">${t('table.path')}</th>`;
+  // html += `<th class="path-col">${t('table.path')}</th>`;
   html += `<th class="modified-col">${t('table.modified')}</th>`;
   html += `<th class="current-col">${t('table.current')}</th>`;
   html += '</tr></thead><tbody>';
@@ -1557,7 +1557,7 @@ function renderConfigTable() {
     const rowClass = isCurrent ? 'selectable selected' : 'selectable';
     html += `<tr class="${rowClass}" data-path="${item.path || ''}">`;
     html += `<td class="name-col">${item.name || '-'}</td>`;
-    html += `<td class="path-col">${item.path || '-'}</td>`;
+    // html += `<td class="path-col">${item.path || '-'}</td>`;
     html += `<td class="modified-col">${item.modified || '-'}</td>`;
     html += `<td class="current-col">${isCurrent ? t('labels.current') : '-'}</td>`;
     html += '</tr>';
