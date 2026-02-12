@@ -24,20 +24,42 @@
                 <button class="btn has-tip" id="restartBtn" data-i18n="actions.restart" data-i18n-tip="actions.restartTip">Restart</button>
               </div>
               <div class="action-row mode-row">
-                <span class="mode-label" data-i18n="status.proxyMode">Proxy Mode</span>
-                <select id="proxyModeSelect" aria-label="Proxy Mode">
+                <span class="mode-label" data-i18n="status.proxyMode">Outbound Mode</span>
+                <select id="proxyModeSelect" aria-label="Outbound Mode">
                   <option value="global" data-i18n="status.proxyGlobal">Global</option>
                   <option value="rule" data-i18n="status.proxyRule" selected>Rule</option>
                   <option value="direct" data-i18n="status.proxyDirect">Direct</option>
                 </select>
               </div>
-              <div class="hint" data-i18n="status.quickHint">
-                Actions use the default config unless a custom path is set in Control.
+              <div class="action-row mode-row">
+                <label class="toggle">
+                  <span data-i18n="status.tun">TUN</span>
+                  <input id="tunToggle" type="checkbox" />
+                  <span class="toggle-pill" aria-hidden="true"></span>
+                </label>
+                <span class="action-divider" aria-hidden="true"></span>
+                <span class="mode-label" data-i18n="status.tunStack">Stack</span>
+                <select id="tunStackSelect" aria-label="TUN Stack">
+                  <option value="mixed" data-i18n="status.tunStackMixed" selected>Mixed</option>
+                  <option value="gvisor" data-i18n="status.tunStackGvisor">gVisor</option>
+                  <option value="system" data-i18n="status.tunStackSystem">System</option>
+                  <option value="lwip" data-i18n="status.tunStackLwip">lwip</option>
+                </select>
               </div>
             </div>
             <div class="card quick-actions">
               <div class="card-header-row">
                 <h3 data-i18n="status.trafficTitle">Network History</h3>
+              </div>
+              <div class="history-totals">
+                <div class="history-total-item">
+                  <span data-i18n="status.trafficTotalUp">Upload Total</span>
+                  <span id="trafficTotalUpload">-</span>
+                </div>
+                <div class="history-total-item">
+                  <span data-i18n="status.trafficTotalDown">Download Total</span>
+                  <span id="trafficTotalDownload">-</span>
+                </div>
               </div>
               <div class="history-grid">
                 <div class="history-panel upload">

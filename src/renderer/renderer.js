@@ -37,7 +37,9 @@ let trafficDownloadLine = document.getElementById('trafficDownloadLine');
 let trafficDownloadArea = document.getElementById('trafficDownloadArea');
 let trafficUploadAxis = [];
 let trafficDownloadAxis = [];
-let quickHintNodes = Array.from(document.querySelectorAll('[data-i18n="status.quickHint"]'));
+let tunToggle = document.getElementById('tunToggle');
+let tunStackSelect = document.getElementById('tunStackSelect');
+let quickHintNodes = [];
 
 // IP地址隐私保护函数
 function maskIpAddress(ip) {
@@ -177,6 +179,8 @@ const DEFAULT_SETTINGS = {
   secret: 'clashfox',
   authentication: ['mihomo:clashfox'],
   proxyMode: 'rule',
+  tunEnabled: false,
+  tunStack: 'mixed',
   logLines: 10,
   logAutoRefresh: false,
   logIntervalPreset: '3',
@@ -364,7 +368,7 @@ async function syncSettingsFromFile() {
   state.fileSettings = { ...merged };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
   if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
-    const { configPath, externalUiUrl, externalUiName, externalUi, ...fileSettings } = merged;
+    const { configPath, externalUiUrl, externalUiName, ...fileSettings } = merged;
     window.clashfox.writeSettings(fileSettings);
   }
 }
@@ -374,7 +378,7 @@ function saveSettings(patch) {
   state.fileSettings = { ...state.fileSettings, ...patch };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
   if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
-    const { configPath, externalUiUrl, externalUiName, externalUi, ...fileSettings } = state.settings;
+    const { configPath, externalUiUrl, externalUiName, ...fileSettings } = state.settings;
     window.clashfox.writeSettings(fileSettings);
   }
 }
@@ -511,6 +515,12 @@ function applySettings(settings) {
   setLogAutoRefresh(state.settings.logAutoRefresh);
   if (proxyModeSelect) {
     proxyModeSelect.value = state.settings.proxyMode || 'rule';
+  }
+  if (tunToggle) {
+    tunToggle.checked = Boolean(state.settings.tunEnabled);
+  }
+  if (tunStackSelect) {
+    tunStackSelect.value = state.settings.tunStack || 'mixed';
   }
   if (panelSelect) {
     panelSelect.value = state.settings.panelChoice || '';
@@ -671,6 +681,9 @@ async function runCommandWithSudo(command, args = []) {
 }
 
 function showToast(message, type = 'info') {
+  if (!message || message === 'empty_object') {
+    return;
+  }
   toast.textContent = message;
   toast.dataset.type = type;
   toast.classList.add('show');
@@ -810,10 +823,7 @@ function updateStatusUI(data) {
     restartBtn.disabled = !hasKernel || state.coreActionInFlight;
   }
   if (quickHintNodes.length) {
-    const hint = hasKernel ? t('status.quickHint') : t('status.quickHintMissing');
-    quickHintNodes.forEach((node) => {
-      node.textContent = hint;
-    });
+  // quick hint removed
   }
   if (statusKernelPath) {
     statusKernelPath.textContent = hasKernel ? (data.kernelPath || '-') : '-';
@@ -1288,7 +1298,36 @@ async function loadOverview(showToastOnSuccess = false) {
   if (showToastOnSuccess) {
     showToast(t('labels.statusRefreshed'));
   }
+  loadTunStatus(false);
   return true;
+}
+
+async function loadTunStatus(showToastOnSuccess = false) {
+  if (!tunToggle && !tunStackSelect) {
+    return;
+  }
+  const configPath = getCurrentConfigPath();
+  const args = configPath ? ['--config', configPath] : [];
+  args.push(...getControllerArgs());
+  const response = await runCommand('tun-status', args);
+  if (!response.ok || !response.data) {
+    return;
+  }
+  if (tunToggle && typeof response.data.enabled === 'boolean') {
+    tunToggle.checked = response.data.enabled;
+    if (state.settings.tunEnabled !== response.data.enabled) {
+      saveSettings({ tunEnabled: response.data.enabled });
+    }
+  }
+  if (tunStackSelect && typeof response.data.stack === 'string') {
+    tunStackSelect.value = response.data.stack;
+    if (state.settings.tunStack !== response.data.stack) {
+      saveSettings({ tunStack: response.data.stack });
+    }
+  }
+  if (showToastOnSuccess) {
+    showToast(t('labels.tunRefreshed'));
+  }
 }
 
 async function loadOverviewLite() {
@@ -1762,7 +1801,7 @@ function refreshPageRefs() {
     document.getElementById('trafficDownloadAxis2'),
     document.getElementById('trafficDownloadAxis1'),
   ].filter(Boolean);
-  quickHintNodes = Array.from(document.querySelectorAll('[data-i18n="status.quickHint"]'));
+  quickHintNodes = [];
   overviewNetworkRefresh = document.getElementById('overviewNetworkRefresh');
 
   githubUser = document.getElementById('githubUser');
@@ -1786,6 +1825,8 @@ function refreshPageRefs() {
   stopBtn = document.getElementById('stopBtn');
   restartBtn = document.getElementById('restartBtn');
   proxyModeSelect = document.getElementById('proxyModeSelect');
+  tunToggle = document.getElementById('tunToggle');
+  tunStackSelect = document.getElementById('tunStackSelect');
   refreshStatusBtn = document.getElementById('refreshStatus');
   refreshBackups = document.getElementById('refreshBackups');
   backupsRefresh = document.getElementById('backupsRefresh');
@@ -2617,16 +2658,48 @@ if (restartBtn) {
 if (proxyModeSelect) {
   proxyModeSelect.addEventListener('change', async () => {
     const value = proxyModeSelect.value || 'rule';
+    const previous = (state.settings && state.settings.proxyMode) || 'rule';
+    saveSettings({ proxyMode: value });
     const response = await runCommand('mode', ['--mode', value, ...getControllerArgs()]);
     if (response.ok) {
-      saveSettings({ proxyMode: value });
       showToast(t('labels.proxyModeUpdated'));
       return;
     }
+    proxyModeSelect.value = previous;
+    saveSettings({ proxyMode: previous });
     const message = response.error === 'controller_missing'
       ? t('labels.controllerMissing')
       : (response.error || 'Mode update failed');
     showToast(message, 'error');
+  });
+}
+
+if (tunToggle) {
+  tunToggle.addEventListener('change', async () => {
+    const enabled = Boolean(tunToggle.checked);
+    const response = await runCommand('tun', ['--enable', enabled ? 'true' : 'false', ...getControllerArgs()]);
+    if (!response.ok) {
+      tunToggle.checked = !enabled;
+      const message = response.error === 'controller_missing'
+        ? t('labels.controllerMissing')
+        : (response.error || 'TUN update failed');
+      showToast(message, 'error');
+    }
+  });
+}
+
+if (tunStackSelect) {
+  tunStackSelect.addEventListener('change', async () => {
+    const value = tunStackSelect.value || 'mixed';
+    const response = await runCommand('tun', ['--stack', value, ...getControllerArgs()]);
+    if (!response.ok) {
+      const fallback = (state.settings && state.settings.tunStack) || 'mixed';
+      tunStackSelect.value = fallback;
+      const message = response.error === 'controller_missing'
+        ? t('labels.controllerMissing')
+        : (response.error || 'TUN stack update failed');
+      showToast(message, 'error');
+    }
   });
 }
 
@@ -3099,6 +3172,9 @@ async function initApp() {
   await loadStaticConfigs();
   await syncSettingsFromFile();
   applySettings(readSettings());
+  if (state.themePreference === 'auto' && prefersDarkQuery) {
+    applySystemTheme(prefersDarkQuery.matches);
+  }
   updateScrollbarWidthVar();
   window.addEventListener('resize', updateScrollbarWidthVar);
   bindPageEvents();

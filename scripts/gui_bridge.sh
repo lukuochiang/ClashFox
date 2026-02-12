@@ -1337,6 +1337,180 @@ JSON
             exit 1
         fi
         ;;
+    tun-status)
+        config_path=""
+        controller_override=""
+        secret_override=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --config|--config-path)
+                    shift || true
+                    config_path="${1:-}"
+                    ;;
+                --controller)
+                    shift || true
+                    controller_override="${1:-}"
+                    ;;
+                --secret)
+                    shift || true
+                    secret_override="${1:-}"
+                    ;;
+            esac
+            shift || true
+        done
+
+        if [ -z "$config_path" ]; then
+            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+        fi
+        resolve_controller_from_config "$config_path"
+
+        if [ -n "$controller_override" ]; then
+            if ! echo "$controller_override" | grep -qE '^https?://'; then
+                MIHOMO_CONTROLLER="http://$controller_override"
+            else
+                MIHOMO_CONTROLLER="$controller_override"
+            fi
+        fi
+        if [ -n "$secret_override" ]; then
+            MIHOMO_SECRET="$secret_override"
+        fi
+
+        if [ -z "$MIHOMO_CONTROLLER" ]; then
+            print_err "controller_missing"
+            exit 1
+        fi
+        if ! command -v curl >/dev/null 2>&1; then
+            print_err "curl_missing"
+            exit 1
+        fi
+        if ! command -v python3 >/dev/null 2>&1; then
+            print_err "python_missing"
+            exit 1
+        fi
+
+        auth_args=()
+        if [ -n "$MIHOMO_SECRET" ]; then
+            auth_args=(-H "Authorization: Bearer $MIHOMO_SECRET")
+        fi
+        json="$(curl -s --max-time 2 "${auth_args[@]}" "$MIHOMO_CONTROLLER/configs" 2>/dev/null)"
+        if [ -z "$json" ]; then
+            print_err "request_failed"
+            exit 1
+        fi
+        if ! python3 - "$json" <<'PY' >/tmp/clashfox_tun_status.json 2>/dev/null
+import json
+import sys
+
+raw = sys.argv[1]
+data = json.loads(raw)
+tun = data.get('tun') or {}
+enabled = tun.get('enable')
+stack = tun.get('stack')
+if enabled is None:
+    enabled = False
+if not stack:
+    stack = 'mixed'
+print(json.dumps({'enabled': bool(enabled), 'stack': stack}))
+PY
+        then
+            print_err "request_failed"
+            exit 1
+        fi
+        print_ok "$(cat /tmp/clashfox_tun_status.json)"
+        ;;
+    tun)
+        enable_value=""
+        stack_value=""
+        config_path=""
+        controller_override=""
+        secret_override=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --enable)
+                    shift || true
+                    enable_value="${1:-}"
+                    ;;
+                --stack)
+                    shift || true
+                    stack_value="${1:-}"
+                    ;;
+                --config|--config-path)
+                    shift || true
+                    config_path="${1:-}"
+                    ;;
+                --controller)
+                    shift || true
+                    controller_override="${1:-}"
+                    ;;
+                --secret)
+                    shift || true
+                    secret_override="${1:-}"
+                    ;;
+            esac
+            shift || true
+        done
+
+        if [ -z "$config_path" ]; then
+            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+        fi
+        resolve_controller_from_config "$config_path"
+
+        if [ -n "$controller_override" ]; then
+            if ! echo "$controller_override" | grep -qE '^https?://'; then
+                MIHOMO_CONTROLLER="http://$controller_override"
+            else
+                MIHOMO_CONTROLLER="$controller_override"
+            fi
+        fi
+        if [ -n "$secret_override" ]; then
+            MIHOMO_SECRET="$secret_override"
+        fi
+
+        if [ -z "$MIHOMO_CONTROLLER" ]; then
+            print_err "controller_missing"
+            exit 1
+        fi
+        if ! command -v curl >/dev/null 2>&1; then
+            print_err "curl_missing"
+            exit 1
+        fi
+
+        payload=""
+        if [ -n "$enable_value" ]; then
+            case "$enable_value" in
+                true|false) ;;
+                *) print_err "invalid_tun"; exit 1 ;;
+            esac
+            payload="{\"tun\":{\"enable\":$enable_value}}"
+        fi
+        if [ -n "$stack_value" ]; then
+            case "$stack_value" in
+                mixed|gvisor|system|lwip) ;;
+                *) print_err "invalid_tun"; exit 1 ;;
+            esac
+            if [ -n "$payload" ]; then
+                payload="{\"tun\":{\"enable\":${enable_value:-false},\"stack\":\"$stack_value\"}}"
+            else
+                payload="{\"tun\":{\"stack\":\"$stack_value\"}}"
+            fi
+        fi
+        if [ -z "$payload" ]; then
+            print_err "invalid_tun"
+            exit 1
+        fi
+
+        auth_args=()
+        if [ -n "$MIHOMO_SECRET" ]; then
+            auth_args=(-H "Authorization: Bearer $MIHOMO_SECRET")
+        fi
+        code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 -X PATCH "${auth_args[@]}" -H "Content-Type: application/json" -d "$payload" "$MIHOMO_CONTROLLER/configs" 2>/dev/null)"
+        if echo "$code" | grep -qE '^(200|204)$'; then
+            print_ok "{}"
+        else
+            print_err "request_failed"
+            exit 1
+        fi
+        ;;
     cores)
         if [ ! -d "$CLASHFOX_CORE_DIR" ]; then
             print_ok "[]"

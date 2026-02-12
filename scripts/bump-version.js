@@ -45,7 +45,7 @@ const lastVersion = devLock && typeof devLock.version === 'string' ? devLock.ver
 const versionChanged = lastVersion && lastVersion !== pkg.version;
 
 if (!versionChanged && shouldSkipForDevSession(devLock)) {
-  console.log('[bump-version] skipped (dev session already bumped)');
+  // console.log('[bump-version] skipped (dev session already bumped)');
   process.exit(0);
 }
 
@@ -75,4 +75,4 @@ try {
   // ignore lock write failures
 }
 
-console.log(`[bump-version] buildNumber ${nextBuild}`);
+// console.log(`[bump-version] buildNumber ${nextBuild}`);

@@ -1120,6 +1120,30 @@ body[data-theme="day"] .mode-row {
   border-radius: 10px;
 }
 
+.action-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(148, 171, 197, 0.35);
+  margin: 0px 45px;
+}
+
+.history-totals {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(148, 171, 197, 0.2);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.history-total-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 #cancelInstallBtn {
   display: none;
 }
