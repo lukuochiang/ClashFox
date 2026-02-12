@@ -1609,7 +1609,7 @@ body[data-theme="day"] .toggle-pill::after {
 }
 
 .backup-table .modified-col {
-  width: 180px;
+  width: 50px;
 }
 
 .backup-table .current-col {

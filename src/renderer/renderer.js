@@ -1611,16 +1611,16 @@ function renderConfigTable() {
   html += `<th class="name-col">${t('table.name')}</th>`;
   // html += `<th class="path-col">${t('table.path')}</th>`;
   html += `<th class="modified-col">${t('table.modified')}</th>`;
-  html += `<th class="current-col">${t('table.current')}</th>`;
+  // html += `<th class="current-col">${t('table.current')}</th>`;
   html += '</tr></thead><tbody>';
-  items.forEach((item) => {
+  items.forEach((item, index) => {
     const isCurrent = currentPath && item.path === currentPath;
     const rowClass = isCurrent ? 'selectable selected' : 'selectable';
     html += `<tr class="${rowClass}" data-path="${item.path || ''}">`;
-    html += `<td class="name-col">${item.name || '-'}</td>`;
+    html += `<td class="name-col">${item.name || '-'} ${isCurrent ? `<span class="tag current">${t('labels.current')}</span>` : ''}</td>`;
     // html += `<td class="path-col">${item.path || '-'}</td>`;
     html += `<td class="modified-col">${item.modified || '-'}</td>`;
-    html += `<td class="current-col">${isCurrent ? t('labels.current') : '-'}</td>`;
+    // html += `<td class="current-col">${isCurrent ? t('labels.current') : '-'}</td>`;
     html += '</tr>';
   });
   if (items.length === 0) {
