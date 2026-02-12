@@ -298,11 +298,26 @@ function showMainWindow() {
 }
 
 function openDashboardPanel() {
-  showMainWindow();
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    return;
+  try {
+    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
+    let settings = {};
+    if (fs.existsSync(settingsPath)) {
+      const raw = fs.readFileSync(settingsPath, 'utf8');
+      settings = JSON.parse(raw);
+    }
+    const panel = (settings && settings.panelChoice) ? String(settings.panelChoice) : 'zashboard';
+    let controller = (settings && settings.externalController) ? String(settings.externalController).trim() : '127.0.0.1:9090';
+    const secret = (settings && settings.secret) ? String(settings.secret).trim() : 'clashfox';
+    if (!/^https?:\/\//.test(controller)) {
+      controller = `http://${controller}`;
+    }
+    controller = controller.replace(/\/+$/, '');
+    const url = `${controller}/ui/${panel}/?_ts=${Date.now()}`;//secret=${encodeURIComponent(secret)}&
+    shell.openExternal(url);
+  } catch (err) {
+    // fallback: just show main window
+    showMainWindow();
   }
-  mainWindow.loadFile(path.join(__dirname, 'renderer', 'dashboard.html'));
 }
 
 function buildMenuTemplate() {
