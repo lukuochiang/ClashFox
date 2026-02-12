@@ -2548,7 +2548,8 @@ if (panelSelect) {
     const response = await runCommand('panel-install', ['--name', preset.name, '--url', preset.url]);
     if (response.ok) {
       await runCommand('panel-activate', ['--name', preset.name]);
-      if (state.panelInstallRequested) {
+      const installed = response.data && response.data.installed === true;
+      if (state.panelInstallRequested && installed) {
         showToast(t('labels.panelInstalled'));
       }
       state.panelInstallRequested = false;
@@ -3151,7 +3152,7 @@ function showDashboardAlert() {
 }
 
 function getSelectedPanelName() {
-  const choice = (state.settings && state.settings.panelChoice) || (panelSelect && panelSelect.value) || '';
+  const choice = (panelSelect && panelSelect.value) || (state.settings && state.settings.panelChoice) || '';
   return choice || 'zashboard';
 }
 
@@ -3160,6 +3161,7 @@ function updateDashboardFrameSrc() {
     return;
   }
   const panelName = getSelectedPanelName();
+  const previousPanel = dashboardFrame.dataset.panelName || '';
   const themeValue = state.theme === 'night' ? 'dark' : 'light';
   let targetUrl = `http://127.0.0.1:9090/ui/${panelName}/index.html`;
   if (panelName === 'metacubexd') {
@@ -3169,11 +3171,25 @@ function updateDashboardFrameSrc() {
   if (dashboardFrame.dataset.panel === targetKey) {
     return;
   }
-  dashboardFrame.dataset.panel = targetKey;
-  dashboardFrame.src = targetUrl;
-  if (dashboardHint) {
-    dashboardHint.textContent = targetUrl;
+  const applyFrameSrc = () => {
+    const separator = targetUrl.includes('?') ? '&' : '?';
+    const stampedUrl = `${targetUrl}${separator}_ts=${Date.now()}`;
+    dashboardFrame.dataset.panelName = panelName;
+    dashboardFrame.dataset.panel = targetKey;
+    dashboardFrame.src = stampedUrl;
+    if (dashboardHint) {
+      dashboardHint.textContent = stampedUrl;
+    }
+  };
+
+  if (previousPanel && previousPanel !== panelName && window.clashfox && typeof window.clashfox.clearUiStorage === 'function') {
+    window.clashfox.clearUiStorage()
+      .then(applyFrameSrc)
+      .catch(applyFrameSrc);
+    return;
   }
+
+  applyFrameSrc();
 }
 
 function initDashboardFrame() {

@@ -1,7 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme, shell, Tray } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme, shell, Tray, session } = require('electron');
 const { spawn, execFileSync } = require('child_process');
 
 const ROOT_DIR = path.join(__dirname, '..');
@@ -913,6 +913,19 @@ app.whenReady().then(() => {
         return { ok: false };
       }
       shell.showItemInFolder(targetPath);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('clashfox:clearUiStorage', async () => {
+    try {
+      const origin = 'http://127.0.0.1:9090';
+      await session.defaultSession.clearStorageData({
+        origin,
+        storages: ['serviceworkers', 'caches'],
+      });
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err.message };

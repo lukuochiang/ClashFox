@@ -1181,6 +1181,27 @@ JSON
             tar_available=true
         fi
 
+        if [ -z "$CLASHFOX_DATA_DIR" ]; then
+            CLASHFOX_DATA_DIR="$CLASHFOX_USER_DATA_DIR/data"
+        fi
+        if ! mkdir -p "$CLASHFOX_DATA_DIR/ui" 2>/dev/null; then
+            fallback_dir="$CLASHFOX_USER_DATA_DIR/data"
+            if [ -n "$fallback_dir" ] && mkdir -p "$fallback_dir/ui" 2>/dev/null; then
+                CLASHFOX_DATA_DIR="$fallback_dir"
+            else
+                rm -rf "$temp_dir"
+                print_err "data_dir_unwritable"
+                exit 1
+            fi
+        fi
+        chmod u+rwx "$CLASHFOX_DATA_DIR" "$CLASHFOX_DATA_DIR/ui" 2>/dev/null || true
+
+        panel_dir="$CLASHFOX_DATA_DIR/ui/$panel_name"
+        if [ -d "$panel_dir" ] && [ -n "$(ls -A "$panel_dir" 2>/dev/null)" ]; then
+            print_ok "{\"installed\":false,\"path\":\"$(json_escape "$panel_dir")\",\"skipped\":true}"
+            exit 0
+        fi
+
         temp_dir="$(mktemp -d)"
         archive_path="$temp_dir/panel.archive"
         unpack_dir="$temp_dir/unpack"
@@ -1226,23 +1247,6 @@ JSON
         if [ ${#entries[@]} -eq 1 ] && [ -d "${entries[0]}" ]; then
             src_dir="${entries[0]}"
         fi
-
-        if [ -z "$CLASHFOX_DATA_DIR" ]; then
-            CLASHFOX_DATA_DIR="$CLASHFOX_USER_DATA_DIR/data"
-        fi
-        if ! mkdir -p "$CLASHFOX_DATA_DIR/ui" 2>/dev/null; then
-            fallback_dir="$CLASHFOX_USER_DATA_DIR/data"
-            if [ -n "$fallback_dir" ] && mkdir -p "$fallback_dir/ui" 2>/dev/null; then
-                CLASHFOX_DATA_DIR="$fallback_dir"
-            else
-                rm -rf "$temp_dir"
-                print_err "data_dir_unwritable"
-                exit 1
-            fi
-        fi
-        chmod u+rwx "$CLASHFOX_DATA_DIR" "$CLASHFOX_DATA_DIR/ui" 2>/dev/null || true
-
-        panel_dir="$CLASHFOX_DATA_DIR/ui/$panel_name"
         rm -rf "$panel_dir"
         mkdir -p "$panel_dir"
         if [ ! -w "$panel_dir" ]; then
@@ -1662,8 +1666,26 @@ JSON
             esac
             shift || true
         done
-        if [ -n "$config_path" ]; then
-            export CLASHFOX_CONFIG_PATH="$config_path"
+        if [ -z "$config_path" ]; then
+            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+        fi
+        export CLASHFOX_CONFIG_PATH="$config_path"
+
+        # Ensure external-ui points to the shared ui directory for multi-panel support
+        if [ -n "$CLASHFOX_DATA_DIR" ] && [ -f "$config_path" ]; then
+            external_ui_dir="$CLASHFOX_DATA_DIR/ui"
+            if [ ! -d "$external_ui_dir" ]; then
+                mkdir -p "$external_ui_dir" 2>/dev/null || true
+            fi
+            case "$config_path" in
+                *.yaml|*.yml)
+                    if grep -qE '^[[:space:]]*external-ui:' "$config_path"; then
+                        sed -E -i '' "s#^[[:space:]]*external-ui:.*#external-ui: \"$external_ui_dir\"#g" "$config_path" || true
+                    else
+                        printf '\nexternal-ui: "%s"\n' "$external_ui_dir" >> "$config_path"
+                    fi
+                    ;;
+            esac
         fi
         if ! ensure_sudo "$sudo_pass"; then
             exit 1

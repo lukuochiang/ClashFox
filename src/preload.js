@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('clashfox', {
   writeSettings: (data) => ipcRenderer.invoke('clashfox:writeSettings', data),
   getUserDataPath: () => ipcRenderer.invoke('clashfox:userDataPath'),
   revealInFinder: (targetPath) => ipcRenderer.invoke('clashfox:revealInFinder', targetPath),
+  clearUiStorage: () => ipcRenderer.invoke('clashfox:clearUiStorage'),
   onSystemThemeChange: (handler) => {
     if (typeof handler !== 'function') {
       return () => {};
