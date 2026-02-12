@@ -1293,6 +1293,7 @@ async function loadStatus() {
     return;
   }
   updateStatusUI(response.data);
+  loadTunStatus(false);
 }
 
 async function loadOverview(showToastOnSuccess = false) {
@@ -2727,7 +2728,9 @@ if (tunToggle) {
         ? t('labels.controllerMissing')
         : (response.error || 'TUN update failed');
       showToast(message, 'error');
+      return;
     }
+    saveSettings({ tunEnabled: enabled });
   });
 }
 
@@ -2742,7 +2745,9 @@ if (tunStackSelect) {
         ? t('labels.controllerMissing')
         : (response.error || 'TUN stack update failed');
       showToast(message, 'error');
+      return;
     }
+    saveSettings({ tunStack: value });
   });
 }
 
@@ -3163,9 +3168,20 @@ function updateDashboardFrameSrc() {
   const panelName = getSelectedPanelName();
   const previousPanel = dashboardFrame.dataset.panelName || '';
   const themeValue = state.theme === 'night' ? 'dark' : 'light';
+  const token = [
+    state.settings && state.settings.secret,
+    state.fileSettings && state.fileSettings.secret,
+    externalSecretInput && externalSecretInput.value,
+  ].map((value) => (value ? String(value).trim() : '')).find((value) => value);
   let targetUrl = `http://127.0.0.1:9090/ui/${panelName}/index.html`;
   if (panelName === 'metacubexd') {
-    targetUrl = `${targetUrl}?theme=${themeValue}`;
+    const params = new URLSearchParams();
+    params.set('theme', themeValue);
+    if (token) {
+      params.set('token', token);
+      params.set('secret', token);
+    }
+    targetUrl = `${targetUrl}?${params.toString()}`;
   }
   const targetKey = `${panelName}:${themeValue}`;
   if (dashboardFrame.dataset.panel === targetKey) {

@@ -1446,10 +1446,14 @@ JSON
             print_err "request_failed"
             exit 1
         fi
-        enabled="$(printf '%s' "$json" | sed -nE 's/.*\"tun\"[[:space:]]*:[[:space:]]*\\{[^}]*\"enable\"[[:space:]]*:[[:space:]]*([^,}\\ ]+).*/\\1/p')"
+        enabled="$(printf '%s' "$json" | sed -nE 's/.*\"tun\"[[:space:]]*:[[:space:]]*\\{[^}]*\"(enable|enabled)\"[[:space:]]*:[[:space:]]*([^,}\\ ]+).*/\\2/p')"
+        if [ -z "$enabled" ]; then
+            enabled="$(printf '%s' "$json" | sed -nE 's/.*\"tun\"[[:space:]]*:[[:space:]]*(true|false).*/\\1/p')"
+        fi
         stack="$(printf '%s' "$json" | sed -nE 's/.*\"tun\"[[:space:]]*:[[:space:]]*\\{[^}]*\"stack\"[[:space:]]*:[[:space:]]*\"([^\"]+)\".*/\\1/p')"
         if [ -z "$enabled" ]; then
-            enabled="false"
+            print_err "tun_parse_failed"
+            exit 1
         fi
         if [ -z "$stack" ]; then
             stack="mixed"
