@@ -108,6 +108,7 @@ let externalControllerInput = document.getElementById('externalController');
 let externalSecretInput = document.getElementById('externalSecret');
 let externalAuthInput = document.getElementById('externalAuth');
 let settingsExternalUi = document.getElementById('settingsExternalUi');
+let settingsExternalUiUrl = document.getElementById('settingsExternalUiUrl');
 let panelSelect = document.getElementById('panelSelect');
 let startBtn = document.getElementById('startBtn');
 let stopBtn = document.getElementById('stopBtn');
@@ -218,6 +219,10 @@ let PANEL_PRESETS = {};
 let RECOMMENDED_CONFIGS = [];
 
 const STATIC_CONFIGS_URL = new URL('../../static/configs.json', window.location.href);
+const PANEL_EXTERNAL_UI_URLS = {
+  zashboard: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
+  metacubexd: 'https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz',
+};
 
 const state = {
   lang: 'auto',
@@ -507,6 +512,7 @@ function applySettings(settings) {
   if (settingsExternalUi) {
     settingsExternalUi.value = state.settings.externalUi || 'ui';
   }
+  updateExternalUiUrlField();
   if (githubUser) {
     githubUser.value = state.settings.githubUser;
   }
@@ -564,6 +570,7 @@ function applySettings(settings) {
   if (panelSelect) {
     panelSelect.value = state.settings.panelChoice || '';
   }
+  updateExternalUiUrlField();
   updateDashboardFrameSrc();
   if (kernelPageSize) {
     kernelPageSize.value = state.settings.kernelPageSize;
@@ -899,6 +906,11 @@ function updateStatusUI(data) {
   }
   if (settingsExternalUi) {
     settingsExternalUi.placeholder = 'ui';
+  }
+  if (settingsExternalUiUrl) {
+    settingsExternalUiUrl.placeholder = '-';
+    // ensure value reflects current panel
+    updateExternalUiUrlField();
   }
   syncRunningIndicators(running, { allowTransitionOverride: true });
   renderConfigTable();
@@ -1898,6 +1910,7 @@ function refreshPageRefs() {
   externalSecretInput = document.getElementById('externalSecret');
   externalAuthInput = document.getElementById('externalAuth');
   settingsExternalUi = document.getElementById('settingsExternalUi');
+  settingsExternalUiUrl = document.getElementById('settingsExternalUiUrl');
   panelSelect = document.getElementById('panelSelect');
   startBtn = document.getElementById('startBtn');
   stopBtn = document.getElementById('stopBtn');
@@ -2591,6 +2604,13 @@ if (panelSelect) {
     if (!preset) {
       return;
     }
+    updateExternalUiUrlField();
+    if (settingsExternalUiUrl) {
+      const urlVal = settingsExternalUiUrl.value || '';
+      if (urlVal && state.settings.externalUiUrl !== urlVal) {
+        saveSettings({ externalUiUrl: urlVal });
+      }
+    }
     state.panelInstallRequested = true;
     showToast(t('labels.panelSwitchHint'), 'info');
     saveSettings({ panelChoice: value });
@@ -3210,8 +3230,28 @@ function showDashboardAlert() {
   showToast(t('dashboard.hint'), 'info');
 }
 
+function updateExternalUiUrlField() {
+  if (!settingsExternalUiUrl) {
+    return;
+  }
+  const choice = getSelectedPanelName();
+  const preset = PANEL_PRESETS && PANEL_PRESETS[choice];
+  let url = PANEL_EXTERNAL_UI_URLS[choice] || '';
+  if (!url && preset) {
+    url = preset['external-ui-url'] || preset.externalUiUrl || '';
+  }
+  settingsExternalUiUrl.value = url || '';
+}
+
 function getSelectedPanelName() {
-  const choice = (panelSelect && panelSelect.value) || (state.settings && state.settings.panelChoice) || '';
+  let choice = (panelSelect && panelSelect.value) || (state.settings && state.settings.panelChoice) || '';
+  if (!choice && panelSelect && panelSelect.options && panelSelect.options.length > 0) {
+    choice = panelSelect.options[0].value || '';
+  }
+  if (!choice && PANEL_PRESETS && typeof PANEL_PRESETS === 'object') {
+    const keys = Object.keys(PANEL_PRESETS);
+    if (keys.length > 0) choice = keys[0];
+  }
   return choice || 'zashboard';
 }
 
