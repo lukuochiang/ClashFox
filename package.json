@@ -1,8 +1,8 @@
 {
   "name": "ClashFox",
   "version": "0.3.6",
-  "buildNumber": 13,
-  "description": "ClashFox For Mihomo GUI",
+  "buildNumber": 17,
+  "description": "ClashFox GUI for Mihomo",
   "author": "Kuochiang Lu <lukuochiang@gmail.com> (https://github.com/lukuochiang/ClashFox)",
   "main": "src/main.js",
   "type": "commonjs",

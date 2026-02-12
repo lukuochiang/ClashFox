@@ -246,10 +246,10 @@ function t(path) {
   const parts = path.split('.');
   let current = I18N[lang];
   for (const part of parts) {
-    if (!current || typeof current !== 'object') return path;
+    if (!current || typeof current !== 'object') return '';
     current = current[part];
   }
-  return current || path;
+  return current || '';
 }
 
 function getAutoLanguage() {
@@ -320,13 +320,22 @@ function readSettings() {
   }
   try {
     const parsed = JSON.parse(raw);
+    if (parsed && parsed.configFile && !parsed.configPath) {
+      parsed.configPath = parsed.configFile;
+      delete parsed.configFile;
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(parsed));
+    }
     const merged = { ...DEFAULT_SETTINGS, ...parsed };
     if (state.fileSettings) {
+      if (!merged.configPath && state.fileSettings.configPath) merged.configPath = state.fileSettings.configPath;
       if (!merged.configDir && state.fileSettings.configDir) merged.configDir = state.fileSettings.configDir;
       if (!merged.coreDir && state.fileSettings.coreDir) merged.coreDir = state.fileSettings.coreDir;
       if (!merged.dataDir && state.fileSettings.dataDir) merged.dataDir = state.fileSettings.dataDir;
       if (!merged.logDir && state.fileSettings.logDir) merged.logDir = state.fileSettings.logDir;
       if (!merged.pidDir && state.fileSettings.pidDir) merged.pidDir = state.fileSettings.pidDir;
+    }
+    if (merged.configPath && (!parsed.configPath || parsed.configPath !== merged.configPath)) {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
     }
     return merged;
   } catch {
@@ -343,6 +352,12 @@ async function syncSettingsFromFile() {
     return;
   }
   const merged = { ...DEFAULT_SETTINGS, ...response.data };
+  if (merged.configFile && !merged.configPath) {
+    merged.configPath = merged.configFile;
+  }
+  if (merged.configFile) {
+    delete merged.configFile;
+  }
   if (window.clashfox && typeof window.clashfox.getUserDataPath === 'function') {
     const userData = await window.clashfox.getUserDataPath();
     if (userData && userData.ok && userData.path) {
@@ -364,11 +379,10 @@ async function syncSettingsFromFile() {
       }
     }
   }
-  delete merged.configPath;
   state.fileSettings = { ...merged };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
   if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
-    const { configPath, externalUiUrl, externalUiName, ...fileSettings } = merged;
+    const { externalUiUrl, externalUiName, ...fileSettings } = merged;
     window.clashfox.writeSettings(fileSettings);
   }
 }
@@ -378,7 +392,7 @@ function saveSettings(patch) {
   state.fileSettings = { ...state.fileSettings, ...patch };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
   if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
-    const { configPath, externalUiUrl, externalUiName, ...fileSettings } = state.settings;
+    const { externalUiUrl, externalUiName, ...fileSettings } = state.settings;
     window.clashfox.writeSettings(fileSettings);
   }
 }
@@ -810,6 +824,9 @@ function updateStatusUI(data) {
   if (statusRunning) {
     statusRunning.textContent = running ? t('labels.running') : t('labels.stopped');
   }
+  if (overviewStatus) {
+    overviewStatus.textContent = running ? t('labels.running') : t('labels.stopped');
+  }
   if (statusVersion) {
     statusVersion.textContent = data.version || t('labels.notInstalled');
   }
@@ -820,7 +837,7 @@ function updateStatusUI(data) {
     stopBtn.disabled = !hasKernel || state.coreActionInFlight;
   }
   if (restartBtn) {
-    restartBtn.disabled = !hasKernel || state.coreActionInFlight;
+    restartBtn.disabled = !hasKernel || !running || state.coreActionInFlight;
   }
   if (quickHintNodes.length) {
   // quick hint removed
@@ -858,32 +875,37 @@ function updateStatusUI(data) {
   if (settingsExternalUi) {
     settingsExternalUi.placeholder = 'ui';
   }
-  if (statusPill) {
-    statusPill.dataset.state = running ? 'running' : 'stopped';
-    const label = running ? t('labels.running') : t('labels.stopped');
-    statusPill.setAttribute('aria-label', label);
-    statusPill.setAttribute('title', label);
-  }
+  syncRunningIndicators(running, { allowTransitionOverride: true });
   renderConfigTable();
 }
 
 function setStatusInterim(running) {
-  if (statusRunning) {
-    statusRunning.textContent = running ? t('labels.running') : t('labels.stopped');
-  }
-  if (statusPill) {
-    statusPill.dataset.state = running ? 'running' : 'stopped';
-    const label = running ? t('labels.running') : t('labels.stopped');
-    statusPill.setAttribute('aria-label', label);
-    statusPill.setAttribute('title', label);
-  }
+  syncRunningIndicators(running, { allowTransitionOverride: true });
 }
 
 function setCoreActionState(inFlight) {
   state.coreActionInFlight = inFlight;
   startBtn.disabled = inFlight;
   stopBtn.disabled = inFlight;
-  restartBtn.disabled = inFlight;
+  restartBtn.disabled = inFlight || !state.coreRunning;
+}
+
+function syncRunningIndicators(running, { allowTransitionOverride = false } = {}) {
+  const label = running ? t('labels.running') : t('labels.stopped');
+  if (statusRunning) {
+    statusRunning.textContent = label;
+  }
+  if (overviewStatus) {
+    overviewStatus.textContent = label;
+  }
+  if (statusPill) {
+    if (statusPill.dataset.state === 'transition' && !allowTransitionOverride) {
+      return;
+    }
+    statusPill.dataset.state = running ? 'running' : 'stopped';
+    statusPill.setAttribute('aria-label', label);
+    statusPill.setAttribute('title', label);
+  }
 }
 
 function updateInstallVersionVisibility() {
@@ -1167,6 +1189,7 @@ function updateOverviewUI(data) {
   if (overviewStatus) {
     overviewStatus.textContent = state.overviewRunning ? t('labels.running') : t('labels.stopped');
   }
+  syncRunningIndicators(state.overviewRunning, { allowTransitionOverride: false });
   if (overviewKernel) {
     overviewKernel.textContent = formatKernelDisplay(data.kernelVersion);
   }
@@ -1227,12 +1250,7 @@ function updateOverviewRuntimeUI(data) {
     return;
   }
   state.overviewRunning = Boolean(data.running);
-  
-  // 检查元素是否存在再设置textContent
-  if (overviewStatus) {
-    overviewStatus.textContent = state.overviewRunning ? t('labels.running') : t('labels.stopped');
-  }
-  
+  // 运行状态统一由 updateStatusUI / setStatusInterim 管理，避免并发刷新不同步
   if (state.overviewRunning) {
     const parsedUptime = Number.parseInt(data.uptimeSec, 10);
     if (Number.isFinite(parsedUptime)) {
@@ -1460,7 +1478,17 @@ function getCurrentConfigPath() {
     candidates.push(settingsConfigPath.value);
   }
   if (state.settings && typeof state.settings.configPath === 'string') {
-    candidates.push(state.settings.configPath);
+    const selected = state.settings.configPath.trim();
+    if (selected) {
+      if (!state.configs || state.configs.length === 0) {
+        candidates.push(selected);
+      } else {
+        const exists = state.configs.some((item) => item && item.path === selected);
+        if (exists) {
+          candidates.push(selected);
+        }
+      }
+    }
   }
   const explicit = candidates.find((value) => value && value.trim());
   return (explicit || state.configDefault || '').trim();
@@ -2519,6 +2547,7 @@ if (panelSelect) {
     updateDashboardFrameSrc();
     const response = await runCommand('panel-install', ['--name', preset.name, '--url', preset.url]);
     if (response.ok) {
+      await runCommand('panel-activate', ['--name', preset.name]);
       if (state.panelInstallRequested) {
         showToast(t('labels.panelInstalled'));
       }
@@ -2603,6 +2632,9 @@ async function handleCoreAction(action, button) {
         showToast(stopResponse.error || 'Stop failed', 'error');
         return;
       }
+      await loadStatus();
+      loadOverviewLite();
+      setTimeout(() => loadStatus(), 3000);
     }
     
     // 准备启动参数
@@ -2618,13 +2650,23 @@ async function handleCoreAction(action, button) {
     // 执行操作
     const response = await runCommandWithSudo(action === 'restart' ? 'start' : action, args);
     if (response.ok) {
-      // 根据操作类型显示不同的成功消息
-      const successMessages = {
-        'start': t('labels.startSuccess'),
-        'stop': t('labels.stopped'),
-        'restart': t('labels.restartSuccess')
-      };
-      showToast(successMessages[action]);
+      if (action === 'start' || action === 'restart') {
+        await loadStatus();
+        loadOverviewLite();
+      }
+      if (action === 'start' || action === 'restart') {
+        if (state.coreRunning) {
+          const successMessages = {
+            'start': t('labels.startSuccess'),
+            'restart': t('labels.restartSuccess')
+          };
+          showToast(successMessages[action]);
+        } else {
+          showToast('Start failed', 'error');
+        }
+      } else {
+        showToast(t('labels.stopped'));
+      }
     } else {
       showToast(response.error || `${action.charAt(0).toUpperCase() + action.slice(1)} failed`, 'error');
     }
@@ -3119,7 +3161,7 @@ function updateDashboardFrameSrc() {
   }
   const panelName = getSelectedPanelName();
   const themeValue = state.theme === 'night' ? 'dark' : 'light';
-  let targetUrl = `http://127.0.0.1:9090/ui/${panelName}`;
+  let targetUrl = `http://127.0.0.1:9090/ui/${panelName}/index.html`;
   if (panelName === 'metacubexd') {
     targetUrl = `${targetUrl}?theme=${themeValue}`;
   }
@@ -3197,6 +3239,9 @@ async function initApp() {
     if (preset) {
       state.autoPanelInstalled = true;
       runCommand('panel-install', ['--name', preset.name, '--url', preset.url]).then((response) => {
+        if (response.ok) {
+          runCommand('panel-activate', ['--name', preset.name]);
+        }
         if (!response.ok && response.error && response.error !== 'cancelled') {
           const errorMsg = response.error ? `${t('labels.panelInstallFailed')} (${response.error})` : t('labels.panelInstallFailed');
           showToast(errorMsg, 'error');

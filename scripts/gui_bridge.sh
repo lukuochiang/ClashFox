@@ -1264,6 +1264,56 @@ JSON
         rm -rf "$temp_dir"
         print_ok "{\"installed\":true,\"path\":\"$(json_escape "$panel_dir")\"}"
         ;;
+    panel-activate)
+        panel_name=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --name)
+                    shift || true
+                    panel_name="${1:-}"
+                    ;;
+            esac
+            shift || true
+        done
+
+        if [ -z "$panel_name" ]; then
+            print_err "missing_panel_info"
+            exit 1
+        fi
+
+        if [ -z "$CLASHFOX_DATA_DIR" ]; then
+            CLASHFOX_DATA_DIR="$CLASHFOX_USER_DATA_DIR/data"
+        fi
+        panel_dir="$CLASHFOX_DATA_DIR/ui/$panel_name"
+        if [ ! -d "$panel_dir" ] || [ ! -f "$panel_dir/index.html" ]; then
+            print_err "panel_missing"
+            exit 1
+        fi
+
+        if [ -f "$panel_dir/index.html" ]; then
+            tmp_file="$(mktemp)"
+            if ! sed -E \
+                -e "s#([\"'])/assets/#\\1assets/#g" \
+                -e "s#([\"'])/_nuxt/#\\1_nuxt/#g" \
+                -e "s#([\"'])/_fonts/#\\1_fonts/#g" \
+                -e "s#([\"'])/registerSW\\.js#\\1registerSW.js#g" \
+                -e "s#([\"'])/manifest\\.webmanifest#\\1manifest.webmanifest#g" \
+                -e "s#([\"'])/favicon\\.ico#\\1favicon.ico#g" \
+                -e "s#([\"'])/favicon\\.svg#\\1favicon.svg#g" \
+                "$panel_dir/index.html" > "$tmp_file"; then
+                rm -f "$tmp_file"
+                print_err "config_update_failed"
+                exit 1
+            fi
+            if ! mv "$tmp_file" "$panel_dir/index.html"; then
+                rm -f "$tmp_file"
+                print_err "config_update_failed"
+                exit 1
+            fi
+        fi
+
+        print_ok "{\"configured\":true,\"path\":\"$(json_escape "$panel_dir")\"}"
+        ;;
     mode)
         mode=""
         config_path=""
@@ -1383,40 +1433,24 @@ JSON
             print_err "curl_missing"
             exit 1
         fi
-        if ! command -v python3 >/dev/null 2>&1; then
-            print_err "python_missing"
-            exit 1
-        fi
-
         auth_args=()
         if [ -n "$MIHOMO_SECRET" ]; then
             auth_args=(-H "Authorization: Bearer $MIHOMO_SECRET")
         fi
-        json="$(curl -s --max-time 2 "${auth_args[@]}" "$MIHOMO_CONTROLLER/configs" 2>/dev/null)"
+        json="$(curl -s --max-time 2 "${auth_args[@]}" "$MIHOMO_CONTROLLER/configs" 2>/dev/null | tr '\n' ' ')"
         if [ -z "$json" ]; then
             print_err "request_failed"
             exit 1
         fi
-        if ! python3 - "$json" <<'PY' >/tmp/clashfox_tun_status.json 2>/dev/null
-import json
-import sys
-
-raw = sys.argv[1]
-data = json.loads(raw)
-tun = data.get('tun') or {}
-enabled = tun.get('enable')
-stack = tun.get('stack')
-if enabled is None:
-    enabled = False
-if not stack:
-    stack = 'mixed'
-print(json.dumps({'enabled': bool(enabled), 'stack': stack}))
-PY
-        then
-            print_err "request_failed"
-            exit 1
+        enabled="$(printf '%s' "$json" | sed -nE 's/.*\"tun\"[[:space:]]*:[[:space:]]*\\{[^}]*\"enable\"[[:space:]]*:[[:space:]]*([^,}\\ ]+).*/\\1/p')"
+        stack="$(printf '%s' "$json" | sed -nE 's/.*\"tun\"[[:space:]]*:[[:space:]]*\\{[^}]*\"stack\"[[:space:]]*:[[:space:]]*\"([^\"]+)\".*/\\1/p')"
+        if [ -z "$enabled" ]; then
+            enabled="false"
         fi
-        print_ok "$(cat /tmp/clashfox_tun_status.json)"
+        if [ -z "$stack" ]; then
+            stack="mixed"
+        fi
+        print_ok "{\"enabled\":$enabled,\"stack\":\"$(json_escape "$stack")\"}"
         ;;
     tun)
         enable_value=""

@@ -923,12 +923,27 @@ app.whenReady().then(() => {
     try {
       ensureAppDirs();
       const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
+      const defaultConfigPath = path.join(APP_DATA_DIR, 'config', 'default.yaml');
       if (!fs.existsSync(settingsPath)) {
-        return { ok: true, data: {} };
+        const defaults = {
+          configPath: defaultConfigPath,
+        };
+        fs.writeFileSync(settingsPath, JSON.stringify(defaults, null, 2));
+        return { ok: true, data: defaults };
       }
       const raw = fs.readFileSync(settingsPath, 'utf8');
-      const parsed = JSON.parse(raw);
-      return { ok: true, data: parsed || {} };
+      const parsed = JSON.parse(raw) || {};
+      if (!parsed.configPath && parsed.configFile) {
+        parsed.configPath = parsed.configFile;
+      }
+      if (parsed.configFile) {
+        delete parsed.configFile;
+      }
+      if (!parsed.configPath) {
+        parsed.configPath = defaultConfigPath;
+        fs.writeFileSync(settingsPath, JSON.stringify(parsed, null, 2));
+      }
+      return { ok: true, data: parsed };
     } catch (err) {
       return { ok: false, error: err.message };
     }
