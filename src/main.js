@@ -313,7 +313,7 @@ function openDashboardPanel() {
       controller = `http://${controller}`;
     }
     controller = controller.replace(/\/+$/, '');
-    const url = `${controller}/ui/${panel}/?_ts=${Date.now()}`;//secret=${encodeURIComponent(secret)}&
+    const url = `${controller}/ui/${panel}/`;//?secret=${encodeURIComponent(secret)}&_ts=${Date.now()}
     shell.openExternal(url);
   } catch (err) {
     // fallback: just show main window

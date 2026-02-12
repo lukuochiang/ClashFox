@@ -1054,12 +1054,15 @@ body[data-theme="day"] .history-axis {
 }
 
 .paths-row-grid {
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px 16px;
 }
 
 .paths-row-grid .paths-item {
   flex-direction: column;
   align-items: stretch;
+  margin-bottom: 0;
 }
 
 .paths-item {
@@ -1135,7 +1138,7 @@ body[data-theme="day"] .mode-row {
   width: 1px;
   height: 20px;
   background: rgba(148, 171, 197, 0.35);
-  margin: 0px 45px;
+  /*margin: 0px 45px;*/
 }
 
 .history-totals {
@@ -1447,6 +1450,11 @@ body[data-theme="day"] input::placeholder {
   display: flex;
   gap: 10px;
   flex: 1;
+  align-items: stretch;
+}
+
+.paths-row-grid .input-group {
+  width: 100%;
 }
 
 .toggle {
