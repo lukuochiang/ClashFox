@@ -232,6 +232,7 @@ async function runTrayCommand(command, args = [], labels = TRAY_I18N.en, sudoPas
     });
     return { ok: false };
   }
+  createTrayMenu();
   return { ok: true, sudoPass };
 }
 
@@ -363,7 +364,7 @@ function applyAppMenu() {
   Menu.setApplicationMenu(menu);
 }
 
-function createTrayMenu() {
+async function createTrayMenu() {
   if (process.platform !== 'darwin') {
     return;
   }
@@ -378,10 +379,17 @@ function createTrayMenu() {
     tray.setToolTip('ClashFox');
   }
   const labels = getTrayLabels();
+  let dashboardEnabled = false;
+  try {
+    const status = await runBridge(['status']);
+    dashboardEnabled = Boolean(status && status.ok && status.data && status.data.running);
+  } catch {
+    dashboardEnabled = false;
+  }
   const trayMenu = Menu.buildFromTemplate([
     { label: labels.showMain, click: () => showMainWindow() },
     { type: 'separator' },
-    { label: labels.dashboard, click: () => openDashboardPanel() },
+    { label: labels.dashboard, enabled: dashboardEnabled, click: () => openDashboardPanel() },
     { type: 'separator' },
     // { label: 'About', click: () => createAboutWindow() },
     // { type: 'separator' },
@@ -854,8 +862,12 @@ app.whenReady().then(() => {
 
   applyAppMenu();
 
-  ipcMain.handle('clashfox:command', (_event, command, args = []) => {
-    return runBridge([command, ...args]);
+  ipcMain.handle('clashfox:command', async (_event, command, args = []) => {
+    const result = await runBridge([command, ...args]);
+    if (result && result.ok && ['start', 'stop', 'restart'].includes(command)) {
+      await createTrayMenu();
+    }
+    return result;
   });
   
   // 处理取消命令，只取消安装进程
@@ -977,13 +989,13 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('clashfox:writeSettings', (_event, data) => {
+  ipcMain.handle('clashfox:writeSettings', async (_event, data) => {
     try {
       ensureAppDirs();
       const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
       const json = JSON.stringify(data || {}, null, 2);
       fs.writeFileSync(settingsPath, `${json}\n`);
-      createTrayMenu();
+      await createTrayMenu();
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err.message };

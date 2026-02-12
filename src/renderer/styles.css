@@ -1053,6 +1053,15 @@ body[data-theme="day"] .history-axis {
   flex-direction: column;
 }
 
+.paths-row-grid {
+  gap: 10px;
+}
+
+.paths-row-grid .paths-item {
+  flex-direction: column;
+  align-items: stretch;
+}
+
 .paths-item {
   display: flex;
   align-items: center;
@@ -1064,6 +1073,8 @@ body[data-theme="day"] .history-axis {
   min-width: 140px;
   color: var(--muted);
   font-size: 13px;
+  display: inline-block;
+  margin-bottom: 6px;
 }
 
 .paths-input {

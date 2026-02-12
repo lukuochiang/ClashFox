@@ -39,6 +39,31 @@ let trafficUploadAxis = [];
 let trafficDownloadAxis = [];
 let tunToggle = document.getElementById('tunToggle');
 let tunStackSelect = document.getElementById('tunStackSelect');
+let tunSynced = false;
+
+async function fetchTunFromController() {
+  try {
+    const controller = (state.settings && state.settings.externalController)
+      || (state.fileSettings && state.fileSettings.externalController)
+      || '127.0.0.1:9090';
+    const secret = (state.settings && state.settings.secret)
+      || (state.fileSettings && state.fileSettings.secret)
+      || 'clashfox';
+    const url = controller.match(/^https?:\/\//) ? controller : `http://${controller}`;
+    const resp = await fetch(`${url.replace(/\/+$/, '')}/configs`, {
+      headers: secret ? { Authorization: `Bearer ${secret}` } : {},
+    });
+    if (!resp.ok) return null;
+    const json = await resp.json();
+    if (!json || !json.tun) return null;
+    return {
+      enabled: typeof json.tun.enable === 'boolean' ? json.tun.enable : undefined,
+      stack: json.tun.stack || undefined,
+    };
+  } catch {
+    return null;
+  }
+}
 let quickHintNodes = [];
 
 // IP地址隐私保护函数
@@ -1330,6 +1355,29 @@ async function loadTunStatus(showToastOnSuccess = false) {
   args.push(...getControllerArgs());
   const response = await runCommand('tun-status', args);
   if (!response.ok || !response.data) {
+    // fallback only once on first sync
+    if (!tunSynced) {
+      const statusResp = await runCommand('status', args);
+      const running = statusResp && statusResp.ok && statusResp.data && statusResp.data.running;
+      if (!running && tunToggle) {
+        tunToggle.checked = false;
+        saveSettings({ tunEnabled: false });
+        tunSynced = true;
+        return;
+      }
+      if (running) {
+        const fetched = await fetchTunFromController();
+        if (fetched && typeof fetched.enabled === 'boolean') {
+          if (tunToggle) tunToggle.checked = fetched.enabled;
+          if (tunStackSelect && fetched.stack) tunStackSelect.value = fetched.stack;
+          saveSettings({
+            tunEnabled: fetched.enabled,
+            ...(fetched.stack ? { tunStack: fetched.stack } : {}),
+          });
+          tunSynced = true;
+        }
+      }
+    }
     return;
   }
   if (tunToggle && typeof response.data.enabled === 'boolean') {
@@ -1347,6 +1395,7 @@ async function loadTunStatus(showToastOnSuccess = false) {
   if (showToastOnSuccess) {
     showToast(t('labels.tunRefreshed'));
   }
+  tunSynced = true;
 }
 
 async function loadOverviewLite() {
@@ -2729,7 +2778,7 @@ if (tunToggle) {
       tunToggle.checked = actual;
       const message = response.error === 'controller_missing'
         ? t('labels.controllerMissing')
-        : (response.error || 'TUN update failed');
+        : (response.error || t('labels.tunUpdateFailed') || 'TUN update failed');
       showToast(message, 'error');
       return;
     }
@@ -2748,7 +2797,7 @@ if (tunStackSelect) {
       tunStackSelect.value = fallback;
       const message = response.error === 'controller_missing'
         ? t('labels.controllerMissing')
-        : (response.error || 'TUN stack update failed');
+        : (response.error || t('labels.tunStackUpdateFailed') || 'TUN stack update failed');
       showToast(message, 'error');
       return;
     }
