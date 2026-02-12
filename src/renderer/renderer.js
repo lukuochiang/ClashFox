@@ -2722,15 +2722,18 @@ if (tunToggle) {
   tunToggle.addEventListener('change', async () => {
     const enabled = Boolean(tunToggle.checked);
     const response = await runCommand('tun', ['--enable', enabled ? 'true' : 'false', ...getControllerArgs()]);
-    if (!response.ok) {
-      tunToggle.checked = !enabled;
+    // Always re-sync from kernel to avoid divergence
+    await loadTunStatus(false);
+    const actual = tunToggle.checked;
+    if (!response.ok || actual !== enabled) {
+      tunToggle.checked = actual;
       const message = response.error === 'controller_missing'
         ? t('labels.controllerMissing')
         : (response.error || 'TUN update failed');
       showToast(message, 'error');
       return;
     }
-    saveSettings({ tunEnabled: enabled });
+    saveSettings({ tunEnabled: actual });
   });
 }
 
@@ -2738,7 +2741,9 @@ if (tunStackSelect) {
   tunStackSelect.addEventListener('change', async () => {
     const value = tunStackSelect.value || 'mixed';
     const response = await runCommand('tun', ['--stack', value, ...getControllerArgs()]);
-    if (!response.ok) {
+    await loadTunStatus(false);
+    const actual = tunStackSelect.value || 'mixed';
+    if (!response.ok || actual !== value) {
       const fallback = (state.settings && state.settings.tunStack) || 'mixed';
       tunStackSelect.value = fallback;
       const message = response.error === 'controller_missing'
@@ -2747,7 +2752,7 @@ if (tunStackSelect) {
       showToast(message, 'error');
       return;
     }
-    saveSettings({ tunStack: value });
+    saveSettings({ tunStack: actual });
   });
 }
 

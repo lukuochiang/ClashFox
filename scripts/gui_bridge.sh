@@ -1674,23 +1674,6 @@ JSON
             config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
         fi
         export CLASHFOX_CONFIG_PATH="$config_path"
-
-        # Ensure external-ui points to the shared ui directory for multi-panel support
-        if [ -n "$CLASHFOX_DATA_DIR" ] && [ -f "$config_path" ]; then
-            external_ui_dir="$CLASHFOX_DATA_DIR/ui"
-            if [ ! -d "$external_ui_dir" ]; then
-                mkdir -p "$external_ui_dir" 2>/dev/null || true
-            fi
-            case "$config_path" in
-                *.yaml|*.yml)
-                    if grep -qE '^[[:space:]]*external-ui:' "$config_path"; then
-                        sed -E -i '' "s#^[[:space:]]*external-ui:.*#external-ui: \"$external_ui_dir\"#g" "$config_path" || true
-                    else
-                        printf '\nexternal-ui: "%s"\n' "$external_ui_dir" >> "$config_path"
-                    fi
-                    ;;
-            esac
-        fi
         if ! ensure_sudo "$sudo_pass"; then
             exit 1
         fi
