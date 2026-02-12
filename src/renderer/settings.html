@@ -125,8 +125,13 @@
                         <option value="zashboard" data-i18n="settings.panelZashboard">Zashboard</option>
                         <option value="metacubexd" data-i18n="settings.panelMetacubexd">MetaCubeXD</option>
                       </select>
-                      <div class="panel-hint" data-i18n="settings.panelHint">将自动下载安装你选择的面板</div>
                     </div>
+                  </div>
+                </div>
+                <div class="paths-item">
+                  <span class="paths-label" data-i18n="settings.externalUi">External UI</span>
+                  <div class="input-group">
+                    <input id="settingsExternalUi" class="paths-input" type="text" placeholder="-" readonly />
                   </div>
                 </div>
                 <div class="paths-item">
@@ -196,6 +201,7 @@
     </div>
     <div id="overlayRoot"></div>
 
+    <script src="i18n.js"></script>
     <script src="renderer.js"></script>
   </body>
 </html>

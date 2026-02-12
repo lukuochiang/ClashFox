@@ -80,6 +80,7 @@ let browseConfigBtn = document.getElementById('browseConfig');
 let externalControllerInput = document.getElementById('externalController');
 let externalSecretInput = document.getElementById('externalSecret');
 let externalAuthInput = document.getElementById('externalAuth');
+let settingsExternalUi = document.getElementById('settingsExternalUi');
 let panelSelect = document.getElementById('panelSelect');
 let startBtn = document.getElementById('startBtn');
 let stopBtn = document.getElementById('stopBtn');
@@ -117,6 +118,8 @@ let logRefresh = document.getElementById('logRefresh');
 let logContent = document.getElementById('logContent');
 let logAutoRefresh = document.getElementById('logAutoRefresh');
 let logIntervalPreset = document.getElementById('logIntervalPreset');
+
+const LAYOUT_CACHE_VERSION = 'v2';
 let cleanBtn = document.getElementById('cleanBtn');
 let dashboardFrame = document.getElementById('dashboardFrame');
 let dashboardEmpty = document.getElementById('dashboardEmpty');
@@ -156,1789 +159,8 @@ let settingsDebugMode = document.getElementById('settingsDebugMode');
 
 let langButtons = Array.from(document.querySelectorAll('.lang-btn'));
 
-const I18N = {
-  en: {
-    language: 'Language',
-    nav: {
-      status: 'Overview',
-      install: 'Install / Update',
-      config: 'Config',
-      switch: 'Switch Kernel',
-      backups: 'Backups',
-      logs: 'Logs',
-      dashboard: 'Dashboard',
-      settings: 'Settings',
-      help: 'Help',
-    },
-    overview: {
-      runningTitle: 'Running Status',
-      networkTitle: 'Network Status',
-      uptime: 'Uptime',
-      connections: 'Connections',
-      memory: 'Memory',
-      statusLabel: 'Status',
-      kernel: 'Kernel',
-      system: 'System',
-      version: 'Version',
-      internet: 'Internet',
-      internetIp: 'Internet IP',
-      dns: 'DNS',
-      router: 'Router',
-      network: 'Network',
-      localIp: 'Local IP',
-      proxyIp: 'Proxy IP',
-      connected: 'Connected',
-    },
-    topbar: {
-      eyebrow: 'Kernel Dashboard',
-      title: 'Mihomo Control Center',
-    },
-    status: {
-      core: 'Core Status',
-      running: 'Running',
-      version: 'Version',
-      kernelPath: 'Kernel Path',
-      config: 'Default Config',
-      quick: 'Quick Actions',
-      quickHint: 'Actions use the default config unless a custom path is set in Control.',
-      quickHintMissing: 'Kernel not installed. Please install it first.',
-      proxyMode: 'Proxy Mode',
-      proxyGlobal: 'Global',
-      proxyRule: 'Rule',
-      proxyDirect: 'Direct',
-      trafficTitle: 'Network History',
-      trafficHint: 'Updated every 1 second.',
-      trafficSystemDown: 'Download',
-      trafficSystemUp: 'Upload',
-      trafficTotalDown: 'Download Total',
-      trafficTotalUp: 'Upload Total',
-      trafficTotal: 'Total',
-    },
-    install: {
-      title: 'Install / Update Mihomo',
-      github: 'GitHub Source',
-      externalUiUrl: 'External UI URL',
-      externalUiName: 'External UI Name',
-      externalUiDir: 'External UI Dir',
-      externalController: 'External Controller',
-      secret: 'Secret',
-      authentication: 'Authentication',
-      version: 'Version',
-      versionPlaceholder: 'e.g. v1.19.0',
-      action: 'Install / Update',
-      cancel: 'Cancel',
-      ready: 'Ready to install.',
-      progress: 'Installing kernel...',
-      done: 'Install completed.',
-      failed: 'Install failed.',
-      cancelSuccess: 'Installation cancelled',
-      cancelFailed: 'Failed to cancel installation',
-      hint: 'Downloads the latest kernel for your architecture and backs up the previous one.',
-      kernelsTitle: 'Kernel List',
-      kernelsHint: 'Read-only list of available cores.',
-    },
-    control: {
-      title: 'Config Control',
-      config: 'Config Path',
-      browse: 'Browse',
-      refresh: 'Refresh',
-      recommendationsTitle: 'Recommended Configs',
-    },
-    switch: {
-      title: 'Switch Kernel',
-      refresh: 'Refresh Backups',
-      action: 'Switch to Selected',
-    },
-    backups: {
-      title: 'Backup Inventory',
-      refresh: 'Refresh Backups',
-      selectAll: 'Select all',
-      delete: 'Delete',
-    },
-    logs: {
-      title: 'ClashFlox Logs',
-      lines: 'Lines',
-      refresh: 'Refresh',
-      auto: 'Auto refresh',
-      interval: 'Interval',
-    },
-    clean: {
-      title: 'Clean Logs',
-      all: 'Delete all backups',
-      '7d': 'Keep last 7 days',
-      '30d': 'Keep last 30 days',
-      action: 'Clean Logs',
-    },
-    pagination: {
-      size: 'Per page',
-    },
-    help: {
-      title: 'Help & Notes',
-      introTitle: 'Introduction',
-      sloganLabel: 'Slogan',
-      line1: 'This GUI invokes the original ClashFox Mihomo Toolkit script under the hood.',
-      line2: 'Some actions require sudo and may prompt for your macOS password.',
-      line3: 'If you are running on non-macOS, the toolkit functions are disabled.',
-      project: 'Project: ClashFox GUI for Mihomo',
-      githubLabel: 'GitHub:',
-      telegramLabel: 'Telegram:',
-    },
-    dashboard: {
-      title: 'Dashboard',
-      hint: 'If it does not load, please start the kernel first.',
-      unavailable: 'Dashboard is not reachable.',
-    },
-    actions: {
-      start: 'Start',
-      stop: 'Stop',
-      restart: 'Restart',
-      refresh: 'Refresh',
-      startTip: 'Start Mihomo with default config',
-      stopTip: 'Stop Mihomo service',
-      restartTip: 'Restart Mihomo immediately',
-    },
-    table: {
-      index: '#',
-      version: 'Version',
-      time: 'Backup Time',
-      name: 'Name',
-      path: 'Path',
-      modified: 'Modified',
-      size: 'Size',
-      current: 'Current',
-      recommendAuthor: 'Creator',
-      recommendGithub: 'GitHub URL',
-      recommendDir: 'Directory',
-      recommendRating: 'Rating',
-    },
-    labels: {
-      running: 'Running',
-      stopped: 'Stopped',
-      unknown: 'Unknown',
-      notInstalled: 'Version unavailable',
-      noBackups: 'No backups found.',
-      configsEmpty: 'No configs found.',
-      kernelsEmpty: 'No kernels found.',
-      current: 'Current',
-      backup: 'Backup',
-      configsRefreshed: 'Configs refreshed.',
-      statusRefreshed: 'Status refreshed.',
-      backupsRefreshed: 'Backups refreshed.',
-      startSuccess: 'Kernel started.',
-      restartSuccess: 'Kernel restarted.',
-      proxyModeUpdated: 'Proxy mode updated.',
-      controllerMissing: 'Controller is not configured.',
-      panelInstalled: 'Panel installed.',
-      panelInstallFailed: 'Panel install failed.',
-      bridgeMissing: 'Bridge unavailable.',
-      sudoInvalid: 'Password incorrect.',
-      alreadyRunning: 'Kernel is already running.',
-      alreadyStopped: 'Kernel is already stopped.',
-      restartStarts: 'Kernel is stopped, starting now.',
-      switchNeedsRestart: 'Switch completed. Please restart the kernel.',
-      configNeedsRestart: 'Config updated. Please restart the kernel.',
-      selectBackup: 'Select a backup first.',
-      installSuccess: 'Install request sent.',
-      installConfigHint: 'Please install or update the config file.',
-      installFailed: 'Install failed. Try using backups to restore.',
-      switchSuccess: 'Switch request sent.',
-      logMissing: 'Log file not found.',
-      cleanDone: 'Cleanup completed.',
-      deleteSuccess: 'Deleted selected backups.',
-      deleteEmpty: 'Select backups to delete.',
-    },
-    sudo: {
-      title: 'Authorization Required',
-      body: 'Enter your macOS password to continue.',
-      cancel: 'Cancel',
-      confirm: 'Authorize',
-      hint: 'Password is only used for this action and not stored.',
-    },
-    confirm: {
-      title: 'Please Confirm',
-      body: 'Are you sure you want to continue?',
-      resetTitle: 'Reset to Default?',
-      resetBody: 'Reset this path to the default location for',
-      resetConfirm: 'Reset',
-      deleteTitle: 'Delete Backups?',
-      deleteBody: 'This will delete the selected backups and cannot be undone.',
-      deleteConfirm: 'Delete',
-      switchTitle: 'Switch Kernel?',
-      switchBody: 'Switch to the selected backup version now?',
-      switchConfirm: 'Switch',
-      cancel: 'Cancel',
-      confirm: 'Confirm',
-    },
-    theme: {
-      toDay: 'Switch to day mode',
-      toNight: 'Switch to night mode',
-    },
-    settings: {
-      appearance: 'Appearance',
-      theme: 'Theme',
-      themeNight: 'Night',
-      themeDay: 'Day',
-      themeAuto: 'Auto',
-      language: 'Language',
-      defaults: 'Defaults',
-      panelManager: 'Panel Manager',
-      panelOption: 'Panel',
-      panelPlaceholder: 'Please select',
-      panelHint: 'Automatically download and install the panel you choose.',
-      panelZashboard: 'Zashboard',
-      panelMetacubexd: 'MetaCubeXD',
-      paths: 'User Data Paths',
-      pathsReset: 'Reset to Default',
-      reset: 'Reset',
-      github: 'GitHub Source',
-      externalUiUrl: 'External UI URL',
-      externalUiName: 'External UI Name',
-      externalUiDir: 'External UI Dir',
-      externalController: 'External Controller',
-      secret: 'Secret',
-      authentication: 'Authentication',
-      configPath: 'Config Path',
-      kernelPath: 'Kernel Path',
-      configDefault: 'Default Config',
-      logPath: 'Log Path',
-      configDir: 'Config Dir',
-      coreDir: 'Core Dir',
-      dataDir: 'Data Dir',
-      revealInFinder: 'Reveal in Finder',
-      logs: 'Log Settings',
-      pagination: 'Pagination',
-      kernelPageSize: 'Kernel Page Size',
-      backupsPageSize: 'General Page Size',
-      debugMode: 'Debug Mode',
-      debugModeLabel: 'Enable Debug Mode',
-    },
-  },
-  zh: {
-    language: '语言',
-    nav: {
-      status: '概览',
-      install: '安装 / 更新',
-      config: '配置',
-      switch: '切换内核',
-      backups: '备份',
-      logs: '日志',
-      dashboard: '仪表盘',
-      settings: '设置',
-      help: '帮助',
-    },
-    overview: {
-      runningTitle: '运行状态',
-      networkTitle: '网络状态',
-      uptime: '运行时长',
-      connections: '连接数',
-      memory: '内存',
-      statusLabel: '状态',
-      kernel: '内核',
-      system: '系统',
-      version: '版本',
-      internet: '互联网',
-      internetIp: '互联网 IP',
-      dns: 'DNS',
-      router: '路由器',
-      network: '网络',
-      localIp: '本地 IP',
-      proxyIp: '代理 IP',
-      connected: '已连接',
-    },
-    topbar: {
-      eyebrow: '内核仪表盘',
-      title: 'Mihomo 控制中心',
-    },
-    status: {
-      core: '内核状态',
-      running: '运行中',
-      version: '版本',
-      kernelPath: '内核路径',
-      config: '默认配置',
-      quick: '快捷操作',
-      quickHint: '快捷操作使用默认配置，除非在控制页指定自定义路径。',
-      quickHintMissing: '未安装内核，请先前往安装。',
-      proxyMode: '代理模式',
-      proxyGlobal: '全局',
-      proxyRule: '规则',
-      proxyDirect: '直连',
-      trafficTitle: '网络历史',
-      trafficHint: '每 1 秒更新一次。',
-      trafficSystemDown: '下载',
-      trafficSystemUp: '上传',
-      trafficTotalDown: '下载总量',
-      trafficTotalUp: '上传总量',
-      trafficTotal: '总量',
-    },
-    install: {
-      title: '安装 / 更新 Mihomo',
-      github: 'GitHub 源',
-      externalUiUrl: '管理面板地址',
-      externalUiName: '管理面板名称',
-      externalUiDir: '管理面板目录',
-      externalController: '管理面板端口',
-      secret: '密钥',
-      authentication: '认证账号',
-      version: '版本',
-      versionPlaceholder: '例如 v1.19.0',
-      action: '安装 / 更新',
-      ready: '准备安装。',
-      progress: '正在安装内核...',
-      done: '安装完成。',
-      failed: '安装失败。',
-      cancelSuccess: '安装已取消',
-      cancelFailed: '取消安装失败',
-      hint: '下载适配架构的最新内核，并备份当前版本。',
-      kernelsTitle: '内核列表',
-      kernelsHint: '仅供浏览的核心文件列表。',
-    },
-    control: {
-      title: '配置控制',
-      config: '配置路径',
-      browse: '浏览',
-      refresh: '刷新',
-      recommendationsTitle: '推荐配置',
-    },
-    switch: {
-      title: '切换内核',
-      refresh: '刷新备份',
-      action: '切换到所选版本',
-    },
-    backups: {
-      title: '备份清单',
-      refresh: '刷新备份',
-      selectAll: '全选',
-      delete: '删除所选',
-    },
-    logs: {
-      title: '内核日志',
-      lines: '行数',
-      refresh: '刷新',
-      auto: '自动刷新',
-      interval: '间隔',
-    },
-    clean: {
-      title: '清理日志',
-      all: '删除全部旧日志',
-      '7d': '保留最近 7 天',
-      '30d': '保留最近 30 天',
-      action: '清理日志',
-    },
-    pagination: {
-      size: '每页',
-    },
-    help: {
-      title: '帮助与说明',
-      introTitle: '项目介绍',
-      sloganLabel: '口号',
-      line1: '此 GUI 在后台调用 ClashFox Mihomo Toolkit 脚本。',
-      line2: '部分操作需要 sudo 权限，可能会提示输入 macOS 密码。',
-      line3: '如果运行在非 macOS 系统，工具功能会被禁用。',
-      project: '项目：ClashFox GUI for Mihomo',
-      githubLabel: 'GitHub：',
-      telegramLabel: 'Telegram：',
-    },
-    dashboard: {
-      title: 'Dashboard面板',
-      hint: '如果无法加载，请先启动内核。',
-      unavailable: 'Dashboard 无法访问。',
-    },
-    actions: {
-      start: '启动',
-      stop: '停止',
-      restart: '重启',
-      refresh: '刷新',
-      startTip: '使用默认配置启动',
-      stopTip: '停止内核服务',
-      restartTip: '立即重启内核',
-    },
-    table: {
-      index: '序号',
-      version: '版本',
-      time: '备份时间',
-      name: '文件名',
-      path: '路径',
-      modified: '修改时间',
-      size: '大小',
-      current: '当前',
-      recommendAuthor: '大佬',
-      recommendGithub: 'GitHub地址',
-      recommendDir: '目录',
-      recommendRating: '推荐指数',
-    },
-    labels: {
-      running: '运行中',
-      stopped: '已停止',
-      unknown: '未知',
-      notInstalled: '未获取到版本',
-      noBackups: '没有可用备份。',
-      configsEmpty: '没有可用配置。',
-      kernelsEmpty: '没有可用内核。',
-      current: '当前',
-      backup: '备份',
-      configsRefreshed: '配置已刷新。',
-      statusRefreshed: '状态已刷新。',
-      backupsRefreshed: '备份已刷新。',
-      startSuccess: '内核已启动。',
-      restartSuccess: '内核已重启。',
-      proxyModeUpdated: '代理模式已更新。',
-      controllerMissing: '控制器未配置。',
-      panelInstalled: '面板已安装。',
-      panelInstallFailed: '面板安装失败。',
-      bridgeMissing: '桥接服务不可用。',
-      sudoInvalid: '密码不正确。',
-      alreadyRunning: '内核已在运行。',
-      alreadyStopped: '内核已停止。',
-      restartStarts: '内核未运行，正在启动。',
-      switchNeedsRestart: '切换完成，请重启内核。',
-      configNeedsRestart: '配置已更新，请重启内核。',
-      selectBackup: '请先选择一个备份。',
-      installSuccess: '已发送安装请求。',
-      installConfigHint: '请安装或更新配置文件。',
-      installFailed: '安装失败。请尝试使用备份恢复。',
-      switchSuccess: '已发送切换请求。',
-      logMissing: '日志文件不存在。',
-      cleanDone: '清理完成。',
-      deleteSuccess: '已删除所选备份。',
-      deleteEmpty: '请选择要删除的备份。',
-    },
-    sudo: {
-      title: '授权请求',
-      body: '需要管理员权限才能继续操作。',
-      cancel: '取消',
-      confirm: '授权',
-      hint: '密码仅用于本次操作，不会被保存。',
-    },
-    confirm: {
-      title: '请确认',
-      body: '确定要继续吗？',
-      resetTitle: '重置为默认？',
-      resetBody: '重置为默认路径：',
-      resetConfirm: '重置',
-      deleteTitle: '删除备份？',
-      deleteBody: '将删除所选备份，且无法恢复。',
-      deleteConfirm: '删除',
-      switchTitle: '切换内核？',
-      switchBody: '确定切换到所选备份版本吗？',
-      switchConfirm: '切换',
-      cancel: '取消',
-      confirm: '确认',
-    },
-    theme: {
-      toDay: '切换到日间模式',
-      toNight: '切换到夜间模式',
-    },
-    settings: {
-      appearance: '外观',
-      theme: '主题',
-      themeNight: '夜间',
-      themeDay: '日间',
-      themeAuto: '自动',
-      language: '语言',
-      defaults: '默认设置',
-      panelManager: '面板管理',
-      panelOption: '面板选择',
-      panelPlaceholder: '请选择',
-      panelHint: '将自动下载安装你选择的面板。',
-      panelZashboard: 'Zashboard',
-      panelMetacubexd: 'MetaCubeXD',
-      paths: '用户数据路径',
-      pathsReset: '重置为默认',
-      reset: '重置',
-      github: 'GitHub 源',
-      externalUiUrl: '管理面板地址',
-      externalUiName: '管理面板名称',
-      externalUiDir: '管理面板目录',
-      externalController: '管理面板端口',
-      secret: '密钥',
-      authentication: '认证账号',
-      configPath: '配置路径',
-      kernelPath: '内核路径',
-      configDefault: '默认配置',
-      logPath: '日志路径',
-      configDir: '配置目录',
-      coreDir: '内核目录',
-      dataDir: '数据目录',
-      revealInFinder: '在 Finder 中显示',
-      logs: '日志设置',
-      pagination: '分页',
-      kernelPageSize: '内核页大小',
-      backupsPageSize: '通用页大小',
-      debugMode: '调试模式',
-      debugModeLabel: '启用调试模式',
-    },
-  },
-  ja: {
-    language: '言語',
-    nav: {
-      status: '概要',
-      install: 'インストール / 更新',
-      config: '設定',
-      switch: 'カーネル切替',
-      backups: 'バックアップ',
-      logs: 'ログ',
-      dashboard: 'ダッシュボード',
-      settings: '設定',
-      help: 'ヘルプ',
-    },
-    overview: {
-      runningTitle: '稼働状況',
-      networkTitle: 'ネットワーク状況',
-      uptime: '稼働時間',
-      connections: '接続数',
-      memory: 'メモリ',
-      statusLabel: '状態',
-      kernel: 'カーネル',
-      system: 'システム',
-      version: 'バージョン',
-      internet: 'インターネット',
-      internetIp: 'インターネット IP',
-      dns: 'DNS',
-      router: 'ルーター',
-      network: 'ネットワーク',
-      localIp: 'ローカル IP',
-      proxyIp: 'プロキシ IP',
-      connected: '接続済み',
-    },
-    topbar: {
-      eyebrow: 'カーネルダッシュボード',
-      title: 'Mihomo コントロールセンター',
-    },
-    status: {
-      core: 'コア状態',
-      running: '稼働中',
-      version: 'バージョン',
-      kernelPath: 'カーネルパス',
-      config: '既定の設定',
-      quick: 'クイック操作',
-      quickHint: 'コントロールでカスタムパスが設定されていない場合、既定の設定を使用します。',
-      quickHintMissing: 'カーネル未インストールです。先にインストールしてください。',
-      proxyMode: 'プロキシモード',
-      proxyGlobal: 'グローバル',
-      proxyRule: 'ルール',
-      proxyDirect: '直接',
-      trafficTitle: 'ネットワーク履歴',
-      trafficHint: '1 秒ごとに更新します。',
-      trafficSystemDown: '受信',
-      trafficSystemUp: '送信',
-      trafficTotalDown: 'ダウンロード合計',
-      trafficTotalUp: 'アップロード合計',
-      trafficTotal: '合計',
-    },
-    install: {
-      title: 'Mihomo のインストール / 更新',
-      github: 'GitHub ソース',
-      externalUiUrl: '管理パネルURL',
-      externalUiName: '管理パネル名',
-      externalUiDir: '管理パネルディレクトリ',
-      externalController: '管理パネルポート',
-      secret: 'シークレット',
-      authentication: '認証アカウント',
-      version: '版本',
-      versionPlaceholder: '例: v1.19.0',
-      action: 'インストール / 更新',
-      ready: 'インストールの準備ができました。',
-      progress: 'カーネルをインストール中...',
-      done: 'インストールが完了しました。',
-      failed: 'インストールに失敗しました。',
-      cancelSuccess: 'インストールはキャンセルされました',
-      cancelFailed: 'インストールのキャンセルに失敗しました',
-      hint: 'アーキテクチャに適した最新カーネルをダウンロードし、前のバージョンをバックアップします。',
-      kernelsTitle: 'カーネル一覧',
-      kernelsHint: '閲覧専用のコア一覧です。',
-    },
-    control: {
-      title: '設定コントロール',
-      config: '設定パス',
-      browse: '参照',
-      refresh: '更新',
-      recommendationsTitle: 'おすすめ設定',
-    },
-    switch: {
-      title: 'カーネル切替',
-      refresh: 'バックアップを更新',
-      action: '選択したバージョンへ切替',
-    },
-    backups: {
-      title: 'バックアップ一覧',
-      refresh: 'バックアップを更新',
-      selectAll: 'すべて選択',
-      delete: '削除',
-    },
-    logs: {
-      title: 'カーネルログ',
-      lines: '行数',
-      refresh: '更新',
-      auto: '自動更新',
-      interval: '間隔',
-    },
-    clean: {
-      title: 'ログの削除',
-      all: '古いログをすべて削除',
-      '7d': '最近 7 日間を保持',
-      '30d': '最近 30 日間を保持',
-      action: 'ログの削除',
-    },
-    pagination: {
-      size: '1ページあたり',
-    },
-    help: {
-      title: 'ヘルプ & メモ',
-      introTitle: '紹介',
-      sloganLabel: 'スローガン',
-      line1: 'この GUI は内部で ClashFox Mihomo Toolkit スクリプトを実行します。',
-      line2: '一部の操作には sudo が必要で、macOS のパスワードを求められる場合があります。',
-      line3: 'macOS 以外の場合、ツール機能は無効になります。',
-      project: 'プロジェクト：ClashFox GUI',
-      githubLabel: 'GitHub：',
-      telegramLabel: 'Telegram：',
-    },
-    dashboard: {
-      title: 'Dashboard パネル',
-      hint: '読み込めない場合は、先にカーネルを起動してください。',
-      unavailable: 'Dashboard に接続できません。',
-    },
-    actions: {
-      start: '開始',
-      stop: '停止',
-      restart: '再起動',
-      refresh: '更新',
-      startTip: '既定の設定で起動',
-      stopTip: 'カーネルを停止',
-      restartTip: 'すぐに再起動',
-    },
-    table: {
-      index: '番号',
-      version: 'バージョン',
-      time: 'バックアップ時間',
-      name: 'ファイル名',
-      path: 'パス',
-      modified: '更新日時',
-      size: 'サイズ',
-      current: '現在',
-      recommendAuthor: '作者',
-      recommendGithub: 'GitHub URL',
-      recommendDir: 'ディレクトリ',
-      recommendRating: '推薦指数',
-    },
-    labels: {
-      running: '稼働中',
-      stopped: '停止中',
-      unknown: '不明',
-      notInstalled: 'バージョン未取得',
-      noBackups: 'バックアップが見つかりません。',
-      configsEmpty: '設定が見つかりません。',
-      kernelsEmpty: 'カーネルが見つかりません。',
-      current: '現在',
-      backup: 'バックアップ',
-      configsRefreshed: '設定を更新しました。',
-      statusRefreshed: '状態を更新しました。',
-      backupsRefreshed: 'バックアップを更新しました。',
-      startSuccess: 'カーネルを起動しました。',
-      restartSuccess: 'カーネルを再起動しました。',
-      proxyModeUpdated: 'プロキシモードを更新しました。',
-      controllerMissing: 'コントローラが未設定です。',
-      panelInstalled: 'パネルをインストールしました。',
-      panelInstallFailed: 'パネルのインストールに失敗しました。',
-      bridgeMissing: 'ブリッジが利用できません。',
-      sudoInvalid: 'パスワードが正しくありません。',
-      alreadyRunning: 'カーネルは既に稼働中です。',
-      alreadyStopped: 'カーネルは停止しています。',
-      restartStarts: '停止中のため起動します。',
-      switchNeedsRestart: '切替完了。カーネルを再起動してください。',
-      configNeedsRestart: '設定を更新しました。カーネルを再起動してください。',
-      selectBackup: '先にバックアップを選択してください。',
-      installSuccess: 'インストール要求を送信しました。',
-      installConfigHint: '設定ファイルをインストールまたは更新してください。',
-      switchSuccess: '切替要求を送信しました。',
-      logMissing: 'ログファイルが見つかりません。',
-      cleanDone: '削除が完了しました。',
-      deleteSuccess: '選択したバックアップを削除しました。',
-      deleteEmpty: '削除するバックアップを選択してください。',
-    },
-    sudo: {
-      title: '認証が必要',
-      body: '続行するには macOS のパスワードを入力してください。',
-      cancel: 'キャンセル',
-      confirm: '認証',
-      hint: 'パスワードはこの操作のみに使用され、保存されません。',
-    },
-    confirm: {
-      title: '確認してください',
-      body: '続行してもよろしいですか？',
-      resetTitle: 'デフォルトに戻しますか？',
-      resetBody: 'このパスをデフォルトに戻します：',
-      resetConfirm: 'リセット',
-      deleteTitle: 'バックアップを削除しますか？',
-      deleteBody: '選択したバックアップは削除され、元に戻せません。',
-      deleteConfirm: '削除',
-      switchTitle: 'カーネルを切替えますか？',
-      switchBody: '選択したバックアップ版に切替えますか？',
-      switchConfirm: '切替',
-      cancel: 'キャンセル',
-      confirm: '確認',
-    },
-    theme: {
-      toDay: '日中モードに切り替え',
-      toNight: '夜間モードに切り替え',
-    },
-    settings: {
-      appearance: '外観',
-      theme: 'テーマ',
-      themeNight: '夜間',
-      themeDay: '日中',
-      themeAuto: '自動',
-      language: '言語',
-      defaults: '既定値',
-      panelManager: 'パネル管理',
-      panelOption: 'パネル',
-      panelPlaceholder: '選択してください',
-      panelHint: '選択したパネルを自動でダウンロードしてインストールします。',
-      panelZashboard: 'Zashboard',
-      panelMetacubexd: 'MetaCubeXD',
-      paths: 'ユーザーデータパス',
-      pathsReset: 'デフォルトにリセット',
-      reset: 'リセット',
-      github: 'GitHub ソース',
-      externalUiUrl: '管理パネルURL',
-      externalUiName: '管理パネル名',
-      externalUiDir: '管理パネルディレクトリ',
-      externalController: '管理パネルポート',
-      secret: 'シークレット',
-      authentication: '認証アカウント',
-      configPath: '設定パス',
-      kernelPath: 'カーネルパス',
-      configDefault: '既定設定',
-      logPath: 'ログパス',
-      configDir: '設定ディレクトリ',
-      coreDir: 'コアディレクトリ',
-      dataDir: 'データディレクトリ',
-      revealInFinder: 'Finder で表示',
-      logs: 'ログ設定',
-      pagination: 'ページング',
-      kernelPageSize: 'カーネルページサイズ',
-      backupsPageSize: '共通ページサイズ',
-      debugMode: 'デバッグモード',
-      debugModeLabel: 'デバッグモードを有効にする',
-    },
-  },
-  ko: {
-    language: '언어',
-    nav: {
-      status: '개요',
-      install: '설치 / 업데이트',
-      config: '설정',
-      switch: '커널 전환',
-      backups: '백업',
-      logs: '로그',
-      dashboard: '대시보드',
-      settings: '설정',
-      help: '도움말',
-    },
-    overview: {
-      runningTitle: '실행 상태',
-      networkTitle: '네트워크 상태',
-      uptime: '가동 시간',
-      connections: '연결 수',
-      memory: '메모리',
-      statusLabel: '상태',
-      kernel: '커널',
-      system: '시스템',
-      version: '버전',
-      internet: '인터넷',
-      internetIp: '인터넷 IP',
-      dns: 'DNS',
-      router: '라우터',
-      network: '네트워크',
-      localIp: '로컬 IP',
-      proxyIp: '프록시 IP',
-      connected: '연결됨',
-    },
-    topbar: {
-      eyebrow: '커널 대시보드',
-      title: 'Mihomo 제어 센터',
-    },
-    status: {
-      core: '코어 상태',
-      running: '실행 중',
-      version: '버전',
-      kernelPath: '커널 경로',
-      config: '기본 설정',
-      quick: '빠른 작업',
-      quickHint: '컨트롤에서 사용자 경로를 지정하지 않으면 기본 설정을 사용합니다.',
-      quickHintMissing: '커널이 설치되지 않았습니다. 먼저 설치하세요.',
-      proxyMode: '프록시 모드',
-      proxyGlobal: '전체',
-      proxyRule: '규칙',
-      proxyDirect: '직접',
-      trafficTitle: '네트워크 기록',
-      trafficHint: '1초마다 업데이트됩니다.',
-      trafficSystemDown: '다운로드',
-      trafficSystemUp: '업로드',
-      trafficTotalDown: '다운로드 합계',
-      trafficTotalUp: '업로드 합계',
-      trafficTotal: '총량',
-    },
-    install: {
-      title: 'Mihomo 설치 / 업데이트',
-      github: 'GitHub 소스',
-      externalUiUrl: '관리 패널 URL',
-      externalUiName: '관리 패널 이름',
-      externalUiDir: '관리 패널 디렉터리',
-      externalController: '관리 패널 포트',
-      secret: '시크릿',
-      authentication: '인증 계정',
-      version: '버전',
-      versionPlaceholder: '예: v1.19.0',
-      action: '설치 / 업데이트',
-      ready: '설치를 준비합니다.',
-      progress: '커널을 설치하는 중...',
-      done: '설치가 완료되었습니다.',
-      failed: '설치에 실패했습니다.',
-      cancelSuccess: '설치가 취소되었습니다',
-      cancelFailed: '설치 취소에 실패했습니다',
-      hint: '아키텍처에 맞는 최신 커널을 다운로드하고 이전 버전을 백업합니다.',
-      kernelsTitle: '커널 목록',
-      kernelsHint: '읽기 전용 코어 목록입니다.',
-    },
-    control: {
-      title: '설정 제어',
-      config: '설정 경로',
-      browse: '찾아보기',
-      refresh: '새로고침',
-      recommendationsTitle: '추천 구성',
-    },
-    switch: {
-      title: '커널 전환',
-      refresh: '백업 새로고침',
-      action: '선택한 버전으로 전환',
-    },
-    backups: {
-      title: '백업 목록',
-      refresh: '백업 새로고침',
-      selectAll: '전체 선택',
-      delete: '삭제',
-    },
-    logs: {
-      title: '커널 로그',
-      lines: '줄 수',
-      refresh: '새로고침',
-      auto: '자동 새로고침',
-      interval: '간격',
-    },
-    clean: {
-      title: '로그 정리',
-      all: '오래된 로그 모두 삭제',
-      '7d': '최근 7일 유지',
-      '30d': '최근 30일 유지',
-      action: '로그 정리',
-    },
-    pagination: {
-      size: '페이지당',
-    },
-    help: {
-      title: '도움말 및 안내',
-      introTitle: '소개',
-      sloganLabel: '슬로건',
-      line1: '이 GUI는 내부적으로 ClashFox Mihomo Toolkit 스크립트를 실행합니다.',
-      line2: '일부 작업은 sudo 권한이 필요하며 macOS 비밀번호를 요청할 수 있습니다.',
-      line3: 'macOS가 아닌 경우 도구 기능이 비활성화됩니다.',
-      project: '프로젝트: ClashFox GUI',
-      githubLabel: 'GitHub:',
-      telegramLabel: 'Telegram:',
-    },
-    dashboard: {
-      title: 'Dashboard 패널',
-      hint: '로드되지 않으면 먼저 커널을 시작하세요.',
-      unavailable: 'Dashboard에 연결할 수 없습니다.',
-    },
-    actions: {
-      start: '시작',
-      stop: '중지',
-      restart: '재시작',
-      refresh: '새로고침',
-      startTip: '기본 설정으로 시작',
-      stopTip: '커널을 중지',
-      restartTip: '즉시 재시작',
-    },
-    table: {
-      index: '#',
-      version: '버전',
-      time: '백업 시간',
-      name: '파일명',
-      path: '경로',
-      modified: '수정 시간',
-      size: '크기',
-      current: '현재',
-      recommendAuthor: '작성자',
-      recommendGithub: 'GitHub 주소',
-      recommendDir: '디렉터리',
-      recommendRating: '추천 지수',
-    },
-    labels: {
-      running: '실행 중',
-      stopped: '중지됨',
-      unknown: '알 수 없음',
-      notInstalled: '버전 정보를 가져오지 못했습니다',
-      noBackups: '백업이 없습니다.',
-      configsEmpty: '설정을 찾을 수 없습니다.',
-      kernelsEmpty: '커널을 찾을 수 없습니다.',
-      current: '현재',
-      backup: '백업',
-      configsRefreshed: '설정을 새로고침했습니다.',
-      statusRefreshed: '상태를 새로고침했습니다.',
-      backupsRefreshed: '백업을 새로고침했습니다.',
-      startSuccess: '커널을 시작했습니다.',
-      restartSuccess: '커널을 재시작했습니다.',
-      proxyModeUpdated: '프록시 모드가 업데이트되었습니다.',
-      controllerMissing: '컨트롤러가 설정되지 않았습니다.',
-      panelInstalled: '패널이 설치되었습니다.',
-      panelInstallFailed: '패널 설치에 실패했습니다.',
-      bridgeMissing: '브리지 서비스를 사용할 수 없습니다.',
-      sudoInvalid: '비밀번호가 올바르지 않습니다.',
-      alreadyRunning: '커널이 이미 실행 중입니다.',
-      alreadyStopped: '커널이 이미 중지되었습니다.',
-      restartStarts: '커널이 중지되어 있어 시작합니다.',
-      switchNeedsRestart: '전환 완료. 커널을 재시작하세요.',
-      configNeedsRestart: '설정을 업데이트했습니다. 커널을 재시작하세요.',
-      selectBackup: '먼저 백업을 선택하세요.',
-      installSuccess: '설치 요청을 보냈습니다.',
-      installConfigHint: '설정 파일을 설치하거나 업데이트하세요.',
-      switchSuccess: '전환 요청을 보냈습니다.',
-      logMissing: '로그 파일이 없습니다.',
-      cleanDone: '정리가 완료되었습니다.',
-      deleteSuccess: '선택한 백업을 삭제했습니다.',
-      deleteEmpty: '삭제할 백업을 선택하세요.',
-    },
-    sudo: {
-      title: '권한 필요',
-      body: '계속하려면 macOS 비밀번호를 입력하세요.',
-      cancel: '취소',
-      confirm: '인증',
-      hint: '비밀번호는 이번 작업에만 사용되며 저장되지 않습니다.',
-    },
-    confirm: {
-      title: '확인해주세요',
-      body: '계속하시겠습니까?',
-      resetTitle: '기본값으로 되돌릴까요?',
-      resetBody: '이 경로를 기본값으로 되돌립니다:',
-      resetConfirm: '재설정',
-      deleteTitle: '백업을 삭제할까요?',
-      deleteBody: '선택한 백업이 삭제되며 되돌릴 수 없습니다.',
-      deleteConfirm: '삭제',
-      switchTitle: '커널을 전환할까요?',
-      switchBody: '선택한 백업 버전으로 전환하시겠습니까?',
-      switchConfirm: '전환',
-      cancel: '취소',
-      confirm: '확인',
-    },
-    theme: {
-      toDay: '주간 모드로 전환',
-      toNight: '야간 모드로 전환',
-    },
-    settings: {
-      appearance: '모양',
-      theme: '테마',
-      themeNight: '야간',
-      themeDay: '주간',
-      themeAuto: '자동',
-      language: '언어',
-      defaults: '기본값',
-      panelManager: '패널 관리',
-      panelOption: '패널',
-      panelPlaceholder: '선택하세요',
-      panelHint: '선택한 패널을 자동으로 다운로드하여 설치합니다.',
-      panelZashboard: 'Zashboard',
-      panelMetacubexd: 'MetaCubeXD',
-      paths: '사용자 데이터 경로',
-      pathsReset: '기본값으로 재설정',
-      reset: '재설정',
-      github: 'GitHub 소스',
-      externalUiUrl: '관리 패널 URL',
-      externalUiName: '관리 패널 이름',
-      externalUiDir: '관리 패널 디렉터리',
-      externalController: '관리 패널 포트',
-      secret: '시크릿',
-      authentication: '인증 계정',
-      configPath: '설정 경로',
-      kernelPath: '커널 경로',
-      configDefault: '기본 설정',
-      logPath: '로그 경로',
-      configDir: '설정 디렉터리',
-      coreDir: '코어 디렉터리',
-      dataDir: '데이터 디렉터리',
-      revealInFinder: 'Finder에서 보기',
-      logs: '로그 설정',
-      pagination: '페이지네이션',
-      kernelPageSize: '커널 페이지 크기',
-      backupsPageSize: '일반 페이지 크기',
-      debugMode: '디버그 모드',
-      debugModeLabel: '디버그 모드 활성화',
-    },
-  },
-  fr: {
-    language: 'Langue',
-    nav: {
-      status: 'Apercu',
-      install: 'Installer / Mettre à jour',
-      config: 'Configuration',
-      switch: 'Changer le noyau',
-      backups: 'Sauvegardes',
-      logs: 'Journaux',
-      dashboard: 'Tableau de bord',
-      settings: 'Paramètres',
-      help: 'Aide',
-    },
-    overview: {
-      runningTitle: 'Statut d\'execution',
-      networkTitle: 'Statut du réseau',
-      uptime: 'Temps de fonctionnement',
-      connections: 'Connexions',
-      memory: 'Mémoire',
-      statusLabel: 'Statut',
-      kernel: 'Noyau',
-      system: 'Système',
-      version: 'Version',
-      internet: 'Internet',
-      internetIp: 'IP Internet',
-      dns: 'DNS',
-      router: 'Routeur',
-      network: 'Réseau',
-      localIp: 'IP locale',
-      proxyIp: 'IP proxy',
-      connected: 'Connecté',
-    },
-    topbar: {
-      eyebrow: 'Tableau de bord du noyau',
-      title: 'Centre de contrôle Mihomo',
-    },
-    status: {
-      core: 'État du noyau',
-      running: 'En marche',
-      version: 'Version',
-      kernelPath: 'Chemin du noyau',
-      config: 'Configuration par défaut',
-      quick: 'Actions rapides',
-      quickHint: 'Les actions utilisent la configuration par défaut sauf si un chemin personnalisé est défini dans Contrôle.',
-      quickHintMissing: 'Noyau non installé. Veuillez l’installer d’abord.',
-      proxyMode: 'Mode proxy',
-      proxyGlobal: 'Global',
-      proxyRule: 'Règle',
-      proxyDirect: 'Direct',
-      trafficTitle: 'Historique réseau',
-      trafficHint: 'Mise à jour toutes les 1 seconde.',
-      trafficSystemDown: 'Téléchargement',
-      trafficSystemUp: 'Téléversement',
-      trafficTotalDown: 'Total téléchargement',
-      trafficTotalUp: 'Total téléversement',
-      trafficTotal: 'Total',
-    },
-    install: {
-      title: 'Installer / Mettre à jour Mihomo',
-      github: 'Source GitHub',
-      externalUiUrl: 'URL du panneau',
-      externalUiName: 'Nom du panneau',
-      externalUiDir: 'Dossier du panneau',
-      externalController: 'Contrôleur externe',
-      secret: 'Secret',
-      authentication: 'Comptes d’authentification',
-      version: 'Version',
-      versionPlaceholder: 'ex : v1.19.0',
-      action: 'Installer / Mettre à jour',
-      ready: 'Prêt à installer.',
-      progress: 'Installation du noyau...',
-      done: 'Installation terminée.',
-      failed: 'Échec de l’installation.',
-      cancelSuccess: 'Installation annulée',
-      cancelFailed: 'Échec de l’annulation de l’installation',
-      hint: 'Télécharge le dernier noyau pour votre architecture et sauvegarde la version précédente.',
-      kernelsTitle: 'Liste des noyaux',
-      kernelsHint: 'Liste en lecture seule des cœurs disponibles.',
-    },
-    control: {
-      title: 'Contrôle de configuration',
-      config: 'Chemin de configuration',
-      browse: 'Parcourir',
-      refresh: 'Actualiser',
-      recommendationsTitle: 'Configurations recommandées',
-    },
-    switch: {
-      title: 'Changer le noyau',
-      refresh: 'Actualiser les sauvegardes',
-      action: 'Basculer vers la version sélectionnée',
-    },
-    backups: {
-      title: 'Inventaire des sauvegardes',
-      refresh: 'Actualiser les sauvegardes',
-      selectAll: 'Tout sélectionner',
-      delete: 'Supprimer',
-    },
-    logs: {
-      title: 'Journaux du noyau',
-      lines: 'Lignes',
-      refresh: 'Actualiser',
-      auto: 'Actualisation automatique',
-      interval: 'Intervalle',
-    },
-    clean: {
-      title: 'Nettoyer les journaux',
-      all: 'Supprimer tous les anciens journaux',
-      '7d': 'Conserver les 7 derniers jours',
-      '30d': 'Conserver les 30 derniers jours',
-      action: 'Nettoyer les journaux',
-    },
-    pagination: {
-      size: 'Par page',
-    },
-    help: {
-      title: 'Aide & Notes',
-      introTitle: 'Présentation',
-      sloganLabel: 'Slogan',
-      line1: 'Cette interface appelle le script ClashFox Mihomo Toolkit en arrière-plan.',
-      line2: 'Certaines actions exigent sudo et peuvent demander votre mot de passe macOS.',
-      line3: 'Si vous n’êtes pas sur macOS, les fonctions sont désactivées.',
-      project: 'Projet : ClashFox GUI for Mihomo',
-      githubLabel: 'GitHub :',
-      telegramLabel: 'Telegram :',
-    },
-    dashboard: {
-      title: 'Panneau Dashboard',
-      hint: "Si le chargement échoue, démarrez d'abord le noyau.",
-      unavailable: 'Dashboard est injoignable.',
-    },
-    actions: {
-      start: 'Démarrer',
-      stop: 'Arrêter',
-      restart: 'Redémarrer',
-      refresh: 'Actualiser',
-      startTip: 'Démarrer avec la configuration par défaut',
-      stopTip: 'Arrêter le noyau',
-      restartTip: 'Redémarrer immédiatement',
-    },
-    table: {
-      index: '#',
-      version: 'Version',
-      time: 'Heure de sauvegarde',
-      name: 'Nom',
-      path: 'Chemin',
-      modified: 'Modifié',
-      size: 'Taille',
-      current: 'Actuelle',
-      recommendAuthor: 'Auteur',
-      recommendGithub: 'URL GitHub',
-      recommendDir: 'Répertoire',
-      recommendRating: 'Indice de recommandation',
-    },
-    labels: {
-      running: 'En marche',
-      stopped: 'Arrêté',
-      unknown: 'Inconnu',
-      notInstalled: 'Version indisponible',
-      noBackups: 'Aucune sauvegarde trouvée.',
-      configsEmpty: 'Aucune configuration trouvée.',
-      kernelsEmpty: 'Aucun noyau trouvé.',
-      current: 'Actuelle',
-      backup: 'Sauvegarde',
-      configsRefreshed: 'Configurations actualisées.',
-      statusRefreshed: 'Statut actualisé.',
-      backupsRefreshed: 'Sauvegardes actualisées.',
-      startSuccess: 'Noyau démarré.',
-      restartSuccess: 'Noyau redémarré.',
-      proxyModeUpdated: 'Mode proxy mis à jour.',
-      controllerMissing: 'Contrôleur non configuré.',
-      panelInstalled: 'Panneau installé.',
-      panelInstallFailed: 'Échec de l’installation du panneau.',
-      bridgeMissing: 'Pont indisponible.',
-      sudoInvalid: 'Mot de passe incorrect.',
-      alreadyRunning: 'Le noyau est déjà en marche.',
-      alreadyStopped: 'Le noyau est déjà arrêté.',
-      restartStarts: 'Le noyau est arrêté, démarrage en cours.',
-      switchNeedsRestart: 'Bascule terminée. Redémarrez le noyau.',
-      configNeedsRestart: 'Configuration mise à jour. Redémarrez le noyau.',
-      selectBackup: 'Sélectionnez d’abord une sauvegarde.',
-      installSuccess: 'Demande d’installation envoyée.',
-      installConfigHint: 'Veuillez installer ou mettre à jour le fichier de configuration.',
-      switchSuccess: 'Demande de bascule envoyée.',
-      logMissing: 'Fichier journal introuvable.',
-      cleanDone: 'Nettoyage terminé.',
-      deleteSuccess: 'Sauvegardes sélectionnées supprimées.',
-      deleteEmpty: 'Sélectionnez des sauvegardes à supprimer.',
-    },
-    sudo: {
-      title: 'Autorisation requise',
-      body: 'Entrez votre mot de passe macOS pour continuer.',
-      cancel: 'Annuler',
-      confirm: 'Autoriser',
-      hint: 'Le mot de passe est utilisé uniquement pour cette action et n’est pas stocké.',
-    },
-    confirm: {
-      title: 'Veuillez confirmer',
-      body: 'Voulez-vous vraiment continuer ?',
-      resetTitle: 'Rétablir par défaut ?',
-      resetBody: 'Réinitialiser ce chemin par défaut :',
-      resetConfirm: 'Réinitialiser',
-      deleteTitle: 'Supprimer les sauvegardes ?',
-      deleteBody: 'Les sauvegardes sélectionnées seront supprimées définitivement.',
-      deleteConfirm: 'Supprimer',
-      switchTitle: 'Changer le noyau ?',
-      switchBody: 'Basculer vers la version sélectionnée ?',
-      switchConfirm: 'Basculer',
-      cancel: 'Annuler',
-      confirm: 'Confirmer',
-    },
-    theme: {
-      toDay: 'Passer en mode jour',
-      toNight: 'Passer en mode nuit',
-    },
-    settings: {
-      appearance: 'Apparence',
-      theme: 'Thème',
-      themeNight: 'Nuit',
-      themeDay: 'Jour',
-      themeAuto: 'Auto',
-      language: 'Langue',
-      defaults: 'Valeurs par défaut',
-      panelManager: 'Gestion du panneau',
-      panelOption: 'Panneau',
-      panelPlaceholder: 'Veuillez sélectionner',
-      panelHint: 'Télécharge et installe automatiquement le panneau choisi.',
-      panelZashboard: 'Zashboard',
-      panelMetacubexd: 'MetaCubeXD',
-      paths: 'Chemins des données utilisateur',
-      pathsReset: 'Réinitialiser par défaut',
-      reset: 'Réinitialiser',
-      github: 'Source GitHub',
-      externalUiUrl: 'URL du panneau',
-      externalUiName: 'Nom du panneau',
-      externalUiDir: 'Dossier du panneau',
-      externalController: 'Contrôleur externe',
-      secret: 'Secret',
-      authentication: 'Comptes d’authentification',
-      configPath: 'Chemin de configuration',
-      kernelPath: 'Chemin du noyau',
-      configDefault: 'Config par défaut',
-      logPath: 'Chemin des journaux',
-      configDir: 'Dossier config',
-      coreDir: 'Dossier core',
-      dataDir: 'Dossier data',
-      revealInFinder: 'Afficher dans le Finder',
-      logs: 'Paramètres des journaux',
-      pagination: 'Pagination',
-      kernelPageSize: 'Taille de page du noyau',
-      backupsPageSize: 'Taille de page générale',
-      debugMode: 'Mode débogage',
-      debugModeLabel: 'Activer le mode débogage',
-    },
-  },
-  de: {
-    language: 'Sprache',
-    nav: {
-      status: 'Übersicht',
-      install: 'Installieren / Aktualisieren',
-      config: 'Konfiguration',
-      switch: 'Kernel wechseln',
-      backups: 'Backups',
-      logs: 'Logs',
-      dashboard: 'Dashboard',
-      settings: 'Einstellungen',
-      help: 'Hilfe',
-    },
-    overview: {
-      runningTitle: 'Laufstatus',
-      networkTitle: 'Netzwerkstatus',
-      uptime: 'Laufzeit',
-      connections: 'Verbindungen',
-      memory: 'Speicher',
-      statusLabel: 'Status',
-      kernel: 'Kernel',
-      system: 'System',
-      version: 'Version',
-      internet: 'Internet',
-      internetIp: 'Internet IP',
-      dns: 'DNS',
-      router: 'Router',
-      network: 'Netzwerk',
-      localIp: 'Lokale IP',
-      proxyIp: 'Proxy-IP',
-      connected: 'Verbunden',
-    },
-    topbar: {
-      eyebrow: 'Kernel-Dashboard',
-      title: 'Mihomo Kontrollzentrum',
-    },
-    status: {
-      core: 'Kernelstatus',
-      running: 'Läuft',
-      version: 'Version',
-      kernelPath: 'Kernelpfad',
-      config: 'Standardkonfiguration',
-      quick: 'Schnellaktionen',
-      quickHint: 'Aktionen verwenden die Standardkonfiguration, sofern kein benutzerdefinierter Pfad in Steuerung gesetzt ist.',
-      quickHintMissing: 'Kernel nicht installiert. Bitte zuerst installieren.',
-      proxyMode: 'Proxy-Modus',
-      proxyGlobal: 'Global',
-      proxyRule: 'Regel',
-      proxyDirect: 'Direkt',
-      trafficTitle: 'Netzwerkverlauf',
-      trafficHint: 'Aktualisiert jede Sekunde.',
-      trafficSystemDown: 'Download',
-      trafficSystemUp: 'Upload',
-      trafficTotalDown: 'Download Gesamt',
-      trafficTotalUp: 'Upload Gesamt',
-      trafficTotal: 'Gesamt',
-    },
-    install: {
-      title: 'Mihomo installieren / aktualisieren',
-      github: 'GitHub-Quelle',
-      externalUiUrl: 'Panel-URL',
-      externalUiName: 'Panel-Name',
-      externalUiDir: 'Panel-Verzeichnis',
-      externalController: 'Externer Controller',
-      secret: 'Secret',
-      authentication: 'Authentifizierung',
-      version: 'Version',
-      versionPlaceholder: 'z. B. v1.19.0',
-      action: 'Installieren / Aktualisieren',
-      ready: 'Bereit zur Installation.',
-      progress: 'Kernel wird installiert...',
-      done: 'Installation abgeschlossen.',
-      failed: 'Installation fehlgeschlagen.',
-      cancelSuccess: 'Installation abgebrochen',
-      cancelFailed: 'Abbruch der Installation fehlgeschlagen',
-      hint: 'Lädt den neuesten Kernel für Ihre Architektur und sichert die vorherige Version.',
-      kernelsTitle: 'Kernel-Liste',
-      kernelsHint: 'Nur-Lesen-Liste der verfügbaren Kerne.',
-    },
-    control: {
-      title: 'Konfigurationssteuerung',
-      config: 'Konfigurationspfad',
-      browse: 'Durchsuchen',
-      refresh: 'Aktualisieren',
-      recommendationsTitle: 'Empfohlene Konfigurationen',
-    },
-    switch: {
-      title: 'Kernel wechseln',
-      refresh: 'Backups aktualisieren',
-      action: 'Auf ausgewählte Version wechseln',
-    },
-    backups: {
-      title: 'Backup-Übersicht',
-      refresh: 'Backups aktualisieren',
-      selectAll: 'Alle auswählen',
-      delete: 'Löschen',
-    },
-    logs: {
-      title: 'Kernel-Logs',
-      lines: 'Zeilen',
-      refresh: 'Aktualisieren',
-      auto: 'Automatisch aktualisieren',
-      interval: 'Intervall',
-    },
-    clean: {
-      title: 'Logs bereinigen',
-      all: 'Alle alten Logs löschen',
-      '7d': 'Letzte 7 Tage behalten',
-      '30d': 'Letzte 30 Tage behalten',
-      action: 'Logs bereinigen',
-    },
-    pagination: {
-      size: 'Pro Seite',
-    },
-    help: {
-      title: 'Hilfe & Hinweise',
-      introTitle: 'Einführung',
-      sloganLabel: 'Slogan',
-      line1: 'Diese GUI ruft im Hintergrund das ClashFox Mihomo Toolkit-Skript auf.',
-      line2: 'Einige Aktionen erfordern sudo und können nach Ihrem macOS-Passwort fragen.',
-      line3: 'Wenn Sie nicht unter macOS laufen, sind die Toolkit-Funktionen deaktiviert.',
-      project: 'Projekt: ClashFox GUI',
-      githubLabel: 'GitHub:',
-      telegramLabel: 'Telegram:',
-    },
-    dashboard: {
-      title: 'Dashboard-Panel',
-      hint: 'Wenn es nicht lädt, starten Sie zuerst den Kernel.',
-      unavailable: 'Dashboard ist nicht erreichbar.',
-    },
-    actions: {
-      start: 'Starten',
-      stop: 'Stoppen',
-      restart: 'Neu starten',
-      refresh: 'Aktualisieren',
-      startTip: 'Mit Standardkonfiguration starten',
-      stopTip: 'Kernel stoppen',
-      restartTip: 'Sofort neu starten',
-    },
-    table: {
-      index: '#',
-      version: 'Version',
-      time: 'Backup-Zeit',
-      name: 'Name',
-      path: 'Pfad',
-      modified: 'Geändert',
-      size: 'Größe',
-      current: 'Aktuell',
-      recommendAuthor: 'Autor',
-      recommendGithub: 'GitHub-Adresse',
-      recommendDir: 'Verzeichnis',
-      recommendRating: 'Empfehlung',
-    },
-    labels: {
-      running: 'Läuft',
-      stopped: 'Gestoppt',
-      unknown: 'Unbekannt',
-      notInstalled: 'Version nicht verfügbar',
-      noBackups: 'Keine Backups gefunden.',
-      configsEmpty: 'Keine Konfigurationen gefunden.',
-      kernelsEmpty: 'Keine Kernel gefunden.',
-      current: 'Aktuell',
-      backup: 'Backup',
-      configsRefreshed: 'Konfigurationen aktualisiert.',
-      statusRefreshed: 'Status aktualisiert.',
-      backupsRefreshed: 'Backups aktualisiert.',
-      startSuccess: 'Kernel gestartet.',
-      restartSuccess: 'Kernel neu gestartet.',
-      proxyModeUpdated: 'Proxy-Modus aktualisiert.',
-      controllerMissing: 'Controller ist nicht konfiguriert.',
-      panelInstalled: 'Panel installiert.',
-      panelInstallFailed: 'Panel-Installation fehlgeschlagen.',
-      bridgeMissing: 'Bridge nicht verfügbar.',
-      sudoInvalid: 'Passwort falsch.',
-      alreadyRunning: 'Kernel läuft bereits.',
-      alreadyStopped: 'Kernel ist bereits gestoppt.',
-      restartStarts: 'Kernel ist gestoppt, starte jetzt.',
-      switchNeedsRestart: 'Wechsel abgeschlossen. Kernel bitte neu starten.',
-      configNeedsRestart: 'Konfiguration aktualisiert. Kernel neu starten.',
-      selectBackup: 'Bitte zuerst ein Backup auswählen.',
-      installSuccess: 'Installationsanfrage gesendet.',
-      installConfigHint: 'Bitte die Konfigurationsdatei installieren oder aktualisieren.',
-      switchSuccess: 'Wechselanfrage gesendet.',
-      logMissing: 'Logdatei nicht gefunden.',
-      cleanDone: 'Bereinigung abgeschlossen.',
-      deleteSuccess: 'Ausgewählte Backups gelöscht.',
-      deleteEmpty: 'Backups zum Löschen auswählen.',
-    },
-    sudo: {
-      title: 'Autorisierung erforderlich',
-      body: 'Geben Sie Ihr macOS-Passwort ein, um fortzufahren.',
-      cancel: 'Abbrechen',
-      confirm: 'Autorisieren',
-      hint: 'Passwort wird nur für diese Aktion verwendet und nicht gespeichert.',
-    },
-    confirm: {
-      title: 'Bitte bestätigen',
-      body: 'Möchten Sie wirklich fortfahren?',
-      resetTitle: 'Auf Standard zurücksetzen?',
-      resetBody: 'Diesen Pfad auf Standard zurücksetzen:',
-      resetConfirm: 'Zurücksetzen',
-      deleteTitle: 'Backups löschen?',
-      deleteBody: 'Die ausgewählten Backups werden endgültig gelöscht.',
-      deleteConfirm: 'Löschen',
-      switchTitle: 'Kernel wechseln?',
-      switchBody: 'Zur ausgewählten Backup-Version wechseln?',
-      switchConfirm: 'Wechseln',
-      cancel: 'Abbrechen',
-      confirm: 'Bestätigen',
-    },
-    theme: {
-      toDay: 'Zum Tagmodus wechseln',
-      toNight: 'Zum Nachtmodus wechseln',
-    },
-    settings: {
-      appearance: 'Erscheinungsbild',
-      theme: 'Thema',
-      themeNight: 'Nacht',
-      themeDay: 'Tag',
-      themeAuto: 'Auto',
-      language: 'Sprache',
-      defaults: 'Voreinstellungen',
-      panelManager: 'Panel-Verwaltung',
-      panelOption: 'Panel',
-      panelPlaceholder: 'Bitte auswählen',
-      panelHint: 'Lädt das gewählte Panel automatisch herunter und installiert es.',
-      panelZashboard: 'Zashboard',
-      panelMetacubexd: 'MetaCubeXD',
-      paths: 'Benutzerdatenpfade',
-      pathsReset: 'Auf Standard zurücksetzen',
-      reset: 'Zurücksetzen',
-      github: 'GitHub-Quelle',
-      externalUiUrl: 'Panel-URL',
-      externalUiName: 'Panel-Name',
-      externalUiDir: 'Panel-Verzeichnis',
-      externalController: 'Externer Controller',
-      secret: 'Secret',
-      authentication: 'Authentifizierung',
-      configPath: 'Konfigurationspfad',
-      kernelPath: 'Kernelpfad',
-      configDefault: 'Standardkonfig',
-      logPath: 'Logpfad',
-      configDir: 'Konfigordner',
-      coreDir: 'Core-Ordner',
-      dataDir: 'Datenordner',
-      revealInFinder: 'Im Finder anzeigen',
-      logs: 'Log-Einstellungen',
-      pagination: 'Paginierung',
-      kernelPageSize: 'Kernel-Seitengröße',
-      backupsPageSize: 'Allgemeine Seitengröße',
-      debugMode: 'Debug-Modus',
-      debugModeLabel: 'Debug-Modus aktivieren',
-    },
-  },
-  ru: {
-    language: 'Язык',
-    nav: {
-      status: 'Обзор',
-      install: 'Установка / Обновление',
-      config: 'Конфигурация',
-      switch: 'Смена ядра',
-      backups: 'Резервные копии',
-      logs: 'Журналы',
-      dashboard: 'Панель управления',
-      settings: 'Настройки',
-      help: 'Помощь',
-    },
-    overview: {
-      runningTitle: 'Состояние работы',
-      networkTitle: 'Состояние сети',
-      uptime: 'Время работы',
-      connections: 'Подключения',
-      memory: 'Память',
-      statusLabel: 'Статус',
-      kernel: 'Ядро',
-      system: 'Система',
-      version: 'Версия',
-      internet: 'Интернет',
-      internetIp: 'Интернет IP',
-      dns: 'DNS',
-      router: 'Маршрутизатор',
-      network: 'Сеть',
-      localIp: 'Локальный IP',
-      proxyIp: 'Прокси IP',
-      connected: 'Подключено',
-    },
-    topbar: {
-      eyebrow: 'Панель ядра',
-      title: 'Центр управления Mihomo',
-    },
-    status: {
-      core: 'Состояние ядра',
-      running: 'Работает',
-      version: 'Версия',
-      kernelPath: 'Путь к ядру',
-      config: 'Конфигурация по умолчанию',
-      quick: 'Быстрые действия',
-      quickHint: 'Действия используют конфигурацию по умолчанию, если в разделе Управление не задан пользовательский путь.',
-      quickHintMissing: 'Ядро не установлено. Сначала установите его.',
-      proxyMode: 'Режим прокси',
-      proxyGlobal: 'Глобальный',
-      proxyRule: 'Правила',
-      proxyDirect: 'Напрямую',
-      trafficTitle: 'История сети',
-      trafficHint: 'Обновляется каждую секунду.',
-      trafficSystemDown: 'Загрузка',
-      trafficSystemUp: 'Отдача',
-      trafficTotalDown: 'Загрузка всего',
-      trafficTotalUp: 'Отдача всего',
-      trafficTotal: 'Всего',
-    },
-    install: {
-      title: 'Установка / обновление Mihomo',
-      github: 'Источник GitHub',
-      externalUiUrl: 'URL панели',
-      externalUiName: 'Имя панели',
-      externalUiDir: 'Каталог панели',
-      externalController: 'Внешний контроллер',
-      secret: 'Секрет',
-      authentication: 'Учетные записи',
-      version: 'Версия',
-      versionPlaceholder: 'например v1.19.0',
-      action: 'Установить / обновить',
-      ready: 'Готово к установке.',
-      progress: 'Установка ядра...',
-      done: 'Установка завершена.',
-      failed: 'Ошибка установки.',
-      cancelSuccess: 'Установка отменена',
-      cancelFailed: 'Не удалось отменить установку',
-      hint: 'Загружает последнюю версию ядра для вашей архитектуры и делает резервную копию предыдущей.',
-      kernelsTitle: 'Список ядер',
-      kernelsHint: 'Список доступных ядер только для просмотра.',
-    },
-    control: {
-      title: 'Управление конфигурацией',
-      config: 'Путь к конфигурации',
-      browse: 'Обзор',
-      refresh: 'Обновить',
-      recommendationsTitle: 'Рекомендуемые конфигурации',
-    },
-    switch: {
-      title: 'Смена ядра',
-      refresh: 'Обновить резервные копии',
-      action: 'Переключить на выбранную версию',
-    },
-    backups: {
-      title: 'Список резервных копий',
-      refresh: 'Обновить резервные копии',
-      selectAll: 'Выбрать все',
-      delete: 'Удалить',
-    },
-    logs: {
-      title: 'Журналы ядра',
-      lines: 'Строки',
-      refresh: 'Обновить',
-      auto: 'Автообновление',
-      interval: 'Интервал',
-    },
-    clean: {
-      title: 'Очистка журналов',
-      all: 'Удалить все старые журналы',
-      '7d': 'Хранить последние 7 дней',
-      '30d': 'Хранить последние 30 дней',
-      action: 'Очистить журналы',
-    },
-    pagination: {
-      size: 'На страницу',
-    },
-    help: {
-      title: 'Помощь и заметки',
-      introTitle: 'Введение',
-      sloganLabel: 'Слоган',
-      line1: 'Этот интерфейс вызывает скрипт ClashFox Mihomo Toolkit.',
-      line2: 'Некоторые действия требуют sudo и могут запросить пароль macOS.',
-      line3: 'Если вы не на macOS, функции инструмента отключены.',
-      project: 'Проект: ClashFox GUI',
-      githubLabel: 'GitHub:',
-      telegramLabel: 'Telegram:',
-    },
-    dashboard: {
-      title: 'Панель Dashboard',
-      hint: 'Если не загружается, сначала запустите ядро.',
-      unavailable: 'Dashboard недоступен.',
-    },
-    actions: {
-      start: 'Запустить',
-      stop: 'Остановить',
-      restart: 'Перезапустить',
-      refresh: 'Обновить',
-      startTip: 'Запуск с настройками по умолчанию',
-      stopTip: 'Остановить ядро',
-      restartTip: 'Перезапустить сразу',
-    },
-    table: {
-      index: '#',
-      version: 'Версия',
-      time: 'Время резервной копии',
-      name: 'Имя',
-      path: 'Путь',
-      modified: 'Изменено',
-      size: 'Размер',
-      current: 'Текущая',
-      recommendAuthor: 'Автор',
-      recommendGithub: 'GitHub-адрес',
-      recommendDir: 'Каталог',
-      recommendRating: 'Рейтинг',
-    },
-    labels: {
-      running: 'Работает',
-      stopped: 'Остановлено',
-      unknown: 'Неизвестно',
-      notInstalled: 'Версия недоступна',
-      noBackups: 'Резервные копии не найдены.',
-      configsEmpty: 'Конфигурации не найдены.',
-      kernelsEmpty: 'Ядра не найдены.',
-      current: 'Текущая',
-      backup: 'Бэкап',
-      configsRefreshed: 'Конфигурации обновлены.',
-      statusRefreshed: 'Статус обновлен.',
-      backupsRefreshed: 'Резервные копии обновлены.',
-      startSuccess: 'Ядро запущено.',
-      restartSuccess: 'Ядро перезапущено.',
-      proxyModeUpdated: 'Режим прокси обновлен.',
-      controllerMissing: 'Контроллер не настроен.',
-      panelInstalled: 'Панель установлена.',
-      panelInstallFailed: 'Не удалось установить панель.',
-      bridgeMissing: 'Мост недоступен.',
-      sudoInvalid: 'Пароль неверный.',
-      alreadyRunning: 'Ядро уже запущено.',
-      alreadyStopped: 'Ядро уже остановлено.',
-      restartStarts: 'Ядро остановлено, запускаем.',
-      switchNeedsRestart: 'Переключение завершено. Перезапустите ядро.',
-      configNeedsRestart: 'Конфигурация обновлена. Перезапустите ядро.',
-      selectBackup: 'Сначала выберите резервную копию.',
-      installSuccess: 'Запрос на установку отправлен.',
-      installConfigHint: 'Установите или обновите файл конфигурации.',
-      switchSuccess: 'Запрос на переключение отправлен.',
-      logMissing: 'Файл журнала не найден.',
-      cleanDone: 'Очистка завершена.',
-      deleteSuccess: 'Выбранные резервные копии удалены.',
-      deleteEmpty: 'Выберите резервные копии для удаления.',
-    },
-    sudo: {
-      title: 'Требуется авторизация',
-      body: 'Введите пароль macOS для продолжения.',
-      cancel: 'Отмена',
-      confirm: 'Авторизовать',
-      hint: 'Пароль используется только для этого действия и не сохраняется.',
-    },
-    confirm: {
-      title: 'Подтвердите действие',
-      body: 'Вы уверены, что хотите продолжить?',
-      resetTitle: 'Сбросить по умолчанию?',
-      resetBody: 'Сбросить путь по умолчанию:',
-      resetConfirm: 'Сбросить',
-      deleteTitle: 'Удалить резервные копии?',
-      deleteBody: 'Выбранные резервные копии будут удалены без возможности восстановления.',
-      deleteConfirm: 'Удалить',
-      switchTitle: 'Переключить ядро?',
-      switchBody: 'Переключить на выбранную резервную версию?',
-      switchConfirm: 'Переключить',
-      cancel: 'Отмена',
-      confirm: 'Подтвердить',
-    },
-    theme: {
-      toDay: 'Переключить на дневной режим',
-      toNight: 'Переключить на ночной режим',
-    },
-    settings: {
-      appearance: 'Внешний вид',
-      theme: 'Тема',
-      themeNight: 'Ночной',
-      themeDay: 'Дневной',
-      themeAuto: 'Авто',
-      language: 'Язык',
-      defaults: 'По умолчанию',
-      panelManager: 'Управление панелью',
-      panelOption: 'Панель',
-      panelPlaceholder: 'Выберите',
-      panelHint: 'Автоматически скачает и установит выбранную панель.',
-      panelZashboard: 'Zashboard',
-      panelMetacubexd: 'MetaCubeXD',
-      paths: 'Пути данных пользователя',
-      pathsReset: 'Сбросить по умолчанию',
-      reset: 'Сбросить',
-      github: 'Источник GitHub',
-      externalUiUrl: 'URL панели',
-      externalUiName: 'Имя панели',
-      externalUiDir: 'Каталог панели',
-      externalController: 'Внешний контроллер',
-      secret: 'Секрет',
-      authentication: 'Учетные записи',
-      configPath: 'Путь к конфигурации',
-      kernelPath: 'Путь ядра',
-      configDefault: 'Конфиг по умолчанию',
-      logPath: 'Путь логов',
-      configDir: 'Каталог конфигов',
-      coreDir: 'Каталог ядра',
-      dataDir: 'Каталог данных',
-      revealInFinder: 'Показать в Finder',
-      logs: 'Настройки журнала',
-      pagination: 'Пагинация',
-      kernelPageSize: 'Размер страницы ядер',
-      backupsPageSize: 'Общий размер страницы',
-      debugMode: 'Режим отладки',
-      debugModeLabel: 'Включить режим отладки',
-    },
-  },
-};
+const I18N = window.CLASHFOX_I18N || {};
+;
 
 const SETTINGS_KEY = 'clashfox-settings';
 const DEFAULT_SETTINGS = {
@@ -1950,6 +172,7 @@ const DEFAULT_SETTINGS = {
   coreDir: '',
   dataDir: '',
   panelChoice: '',
+  externalUi: 'ui',
   externalController: '127.0.0.1:9090',
   secret: 'clashfox',
   authentication: ['mihomo:clashfox'],
@@ -1962,25 +185,8 @@ const DEFAULT_SETTINGS = {
   debugMode: false,
 };
 
-let PANEL_PRESETS = {
-  zashboard: {
-    name: 'zashboard',
-    url: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
-  },
-  metacubexd: {
-    name: 'metacubexd',
-    url: 'https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz',
-  },
-};
-
-let RECOMMENDED_CONFIGS = [
-  {
-    name: '666OS',
-    github: 'https://github.com/666OS/YYDS',
-    dir: 'mihomo/config',
-    rating: '★★★★★',
-  },
-];
+let PANEL_PRESETS = {};
+let RECOMMENDED_CONFIGS = [];
 
 const STATIC_CONFIGS_URL = new URL('../../static/configs.json', window.location.href);
 
@@ -2005,6 +211,7 @@ const state = {
   dashboardAlerted: false,
   dashboardLoaded: false,
   autoPanelInstalled: false,
+  panelInstallRequested: false,
   overviewTimer: null,
   overviewTickTimer: null,
   overviewLoading: false,
@@ -2235,6 +442,13 @@ function applySettings(settings) {
     state.settings.panelChoice = 'zashboard';
     saveSettings({ panelChoice: 'zashboard' });
   }
+  if (!state.settings.externalUi) {
+    state.settings.externalUi = 'ui';
+    saveSettings({ externalUi: 'ui' });
+  }
+  const externalUi = state.settings.dataDir
+    ? `${String(state.settings.dataDir).replace(/\/+$/, '')}/ui`
+    : '';
   applyThemePreference(state.settings.themePreference, false);
   setLanguage(state.settings.lang, false, false);
   syncDebugMode(state.settings.debugMode);
@@ -2246,6 +460,9 @@ function applySettings(settings) {
   }
   if (settingsDataDir) {
     settingsDataDir.value = state.settings.dataDir;
+  }
+  if (settingsExternalUi) {
+    settingsExternalUi.value = state.settings.externalUi || 'ui';
   }
   if (githubUser) {
     githubUser.value = state.settings.githubUser;
@@ -2627,6 +844,9 @@ function updateStatusUI(data) {
   }
   if (settingsDataDir) {
     settingsDataDir.placeholder = data.dataDir || '-';
+  }
+  if (settingsExternalUi) {
+    settingsExternalUi.placeholder = 'ui';
   }
   if (statusPill) {
     statusPill.dataset.state = running ? 'running' : 'stopped';
@@ -3560,6 +1780,7 @@ function refreshPageRefs() {
   externalControllerInput = document.getElementById('externalController');
   externalSecretInput = document.getElementById('externalSecret');
   externalAuthInput = document.getElementById('externalAuth');
+  settingsExternalUi = document.getElementById('settingsExternalUi');
   panelSelect = document.getElementById('panelSelect');
   startBtn = document.getElementById('startBtn');
   stopBtn = document.getElementById('stopBtn');
@@ -3700,7 +1921,7 @@ function refreshPageView() {
   if (currentPage === 'install') {
     loadKernels();
   }
-  if (currentPage === 'status') {
+  if (currentPage === 'overview') {
     Promise.all([
       loadOverview(),
       loadOverviewLite(),
@@ -3709,23 +1930,30 @@ function refreshPageView() {
   }
 }
 
+function normalizePageName(page) {
+  if (page === 'status') return 'overview';
+  if (page === 'control') return 'config';
+  return page;
+}
+
 function getPageFromLocation() {
   const path = window.location.pathname || '';
   const match = path.match(/([^/]+)\.html$/);
-  return match ? match[1] : currentPage;
+  return normalizePageName(match ? match[1] : currentPage);
 }
 
 async function navigatePage(targetPage, pushState = true) {
-  if (!targetPage || targetPage === currentPage) {
+  const normalized = normalizePageName(targetPage);
+  if (!normalized || normalized === currentPage) {
     return;
   }
   if (!contentRoot) {
-    window.location.href = `${targetPage}.html`;
+    window.location.href = `${normalized}.html`;
     return;
   }
-  const response = await fetch(`${targetPage}.html`);
+  const response = await fetch(`${normalized}.html`);
   if (!response.ok) {
-    window.location.href = `${targetPage}.html`;
+    window.location.href = `${normalized}.html`;
     return;
   }
   const html = await response.text();
@@ -3740,21 +1968,21 @@ async function navigatePage(targetPage, pushState = true) {
   contentRoot.innerHTML = '';
   contentRoot.appendChild(newSection);
 
-  currentPage = targetPage;
+  currentPage = normalized;
   if (document.body) {
-    document.body.dataset.page = targetPage;
+    document.body.dataset.page = normalized;
   }
-  setActiveNav(targetPage);
+  setActiveNav(normalized);
   refreshPageRefs();
   applySettings(state.settings || readSettings());
   applyI18n();
   bindPageEvents();
   refreshPageView();
-  if (targetPage === 'dashboard') {
+  if (normalized === 'dashboard') {
     initDashboardFrame();
   }
   if (pushState) {
-    history.pushState({ page: targetPage }, '', `${targetPage}.html`);
+    history.pushState({ page: normalized }, '', `${normalized}.html`);
   }
 }
 
@@ -3782,11 +2010,12 @@ async function loadLayoutParts() {
   const topbarContainer = document.getElementById('topbarContainer');
   const overlayRoot = document.getElementById('overlayRoot');
   let hasCache = false;
+  const layoutKey = (key) => `layout:${LAYOUT_CACHE_VERSION}:${key}`;
   const applyCachedFragment = (key, target) => {
     if (!target) {
       return;
     }
-    const cached = sessionStorage.getItem(key);
+    const cached = sessionStorage.getItem(layoutKey(key));
     if (cached) {
       target.innerHTML = cached;
       hasCache = true;
@@ -3794,28 +2023,28 @@ async function loadLayoutParts() {
   };
   try {
     if (menuContainer) {
-      const cachedMenu = sessionStorage.getItem('layout:menu');
+      const cachedMenu = sessionStorage.getItem(layoutKey('menu'));
       if (cachedMenu) {
         menuContainer.innerHTML = cachedMenu;
         hasCache = true;
       }
     }
     if (topbarContainer) {
-      const cachedTopbar = sessionStorage.getItem('layout:topbar');
+      const cachedTopbar = sessionStorage.getItem(layoutKey('topbar'));
       if (cachedTopbar) {
         topbarContainer.innerHTML = cachedTopbar;
         hasCache = true;
       }
     }
     if (overlayRoot) {
-      const cachedOverlays = sessionStorage.getItem('layout:overlays');
+      const cachedOverlays = sessionStorage.getItem(layoutKey('overlays'));
       if (cachedOverlays) {
         overlayRoot.innerHTML = cachedOverlays;
         hasCache = true;
       }
       if (cachedOverlays) {
-        applyCachedFragment('layout:sudo', document.getElementById('sudoRoot'));
-        applyCachedFragment('layout:confirm', document.getElementById('confirmRoot'));
+        applyCachedFragment('sudo', document.getElementById('sudoRoot'));
+        applyCachedFragment('confirm', document.getElementById('confirmRoot'));
       }
     }
   } catch {
@@ -3837,7 +2066,7 @@ async function loadLayoutParts() {
           if (html) {
             menuContainer.innerHTML = html;
             try {
-              sessionStorage.setItem('layout:menu', html);
+              sessionStorage.setItem(layoutKey('menu'), html);
             } catch {
               // Ignore cache errors
             }
@@ -3853,7 +2082,7 @@ async function loadLayoutParts() {
           if (html) {
             topbarContainer.innerHTML = html;
             try {
-              sessionStorage.setItem('layout:topbar', html);
+              sessionStorage.setItem(layoutKey('topbar'), html);
             } catch {
               // Ignore cache errors
             }
@@ -3869,7 +2098,7 @@ async function loadLayoutParts() {
           if (html) {
             overlayRoot.innerHTML = html;
             try {
-              sessionStorage.setItem('layout:overlays', html);
+              sessionStorage.setItem(layoutKey('overlays'), html);
             } catch {
               // Ignore cache errors
             }
@@ -3885,13 +2114,13 @@ async function loadLayoutParts() {
   const fragmentTasks = [];
   if (sudoRoot) {
     fragmentTasks.push(
-      fetch('sudo.html')
+      fetch('authorize.html')
         .then((res) => (res.ok ? res.text() : ''))
         .then((html) => {
           if (html) {
             sudoRoot.innerHTML = html;
             try {
-              sessionStorage.setItem('layout:sudo', html);
+              sessionStorage.setItem(layoutKey('sudo'), html);
             } catch {
               // Ignore cache errors
             }
@@ -3907,7 +2136,7 @@ async function loadLayoutParts() {
           if (html) {
             confirmRoot.innerHTML = html;
             try {
-              sessionStorage.setItem('layout:confirm', html);
+              sessionStorage.setItem(layoutKey('confirm'), html);
             } catch {
               // Ignore cache errors
             }
@@ -4226,15 +2455,33 @@ if (panelSelect) {
     if (!value) {
       return;
     }
+    const currentChoice = (state.settings && state.settings.panelChoice) || 'zashboard';
+    if (value !== currentChoice) {
+      const confirmed = await promptConfirm({
+        title: t('confirm.panelTitle'),
+        body: t('confirm.panelBody'),
+        confirmLabel: t('confirm.panelConfirm'),
+        confirmTone: 'primary',
+      });
+      if (!confirmed) {
+        panelSelect.value = currentChoice;
+        return;
+      }
+    }
     const preset = PANEL_PRESETS[value];
     if (!preset) {
       return;
     }
+    state.panelInstallRequested = true;
+    showToast(t('labels.panelSwitchHint'), 'info');
     saveSettings({ panelChoice: value });
     updateDashboardFrameSrc();
     const response = await runCommand('panel-install', ['--name', preset.name, '--url', preset.url]);
     if (response.ok) {
-      showToast(t('labels.panelInstalled'));
+      if (state.panelInstallRequested) {
+        showToast(t('labels.panelInstalled'));
+      }
+      state.panelInstallRequested = false;
       return;
     }
     let errorMsg = t('labels.panelInstallFailed');
@@ -4244,7 +2491,10 @@ if (panelSelect) {
         errorMsg = `${errorMsg}: ${response.details}`;
       }
     }
-    showToast(errorMsg, 'error');
+    if (state.panelInstallRequested) {
+      showToast(errorMsg, 'error');
+    }
+    state.panelInstallRequested = false;
   });
 }
 if (externalControllerInput) {
@@ -4711,7 +2961,7 @@ function startOverviewTimer() {
     clearInterval(state.overviewTimer);
   }
   state.overviewTimer = setInterval(() => {
-    if (currentPage === 'status') {
+    if (currentPage === 'overview') {
       loadOverview();
     }
   }, 5000);
@@ -4727,7 +2977,7 @@ function startOverviewTimer() {
     clearInterval(state.overviewLiteTimer);
   }
   state.overviewLiteTimer = setInterval(() => {
-    if (currentPage === 'status') {
+    if (currentPage === 'overview') {
       loadOverviewLite();
     }
   }, 2000);
@@ -4736,7 +2986,7 @@ function startOverviewTimer() {
     clearInterval(state.overviewMemoryTimer);
   }
   state.overviewMemoryTimer = setInterval(() => {
-    if (currentPage === 'status') {
+    if (currentPage === 'overview') {
       loadOverviewMemory();
     }
   }, 1000);
@@ -4871,9 +3121,7 @@ async function initApp() {
     if (preset) {
       state.autoPanelInstalled = true;
       runCommand('panel-install', ['--name', preset.name, '--url', preset.url]).then((response) => {
-        if (response.ok) {
-          showToast(t('labels.panelInstalled'));
-        } else {
+        if (!response.ok && response.error && response.error !== 'cancelled') {
           const errorMsg = response.error ? `${t('labels.panelInstallFailed')} (${response.error})` : t('labels.panelInstallFailed');
           showToast(errorMsg, 'error');
         }
@@ -4883,7 +3131,7 @@ async function initApp() {
   loadStatus();
   setTimeout(() => loadStatus(), 1200);
   setTimeout(() => loadStatus(), 4000);
-  if (currentPage === 'status') {
+  if (currentPage === 'overview') {
     Promise.all([
       loadOverview(),
       loadOverviewLite(),

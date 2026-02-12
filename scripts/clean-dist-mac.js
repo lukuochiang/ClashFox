@@ -25,9 +25,6 @@ if (!fs.existsSync(versionDir)) {
 }
 
 if (isPreclean) {
-  for (const name of fs.readdirSync(versionDir)) {
-    fs.rmSync(path.join(versionDir, name), { recursive: true, force: true });
-  }
   process.exit(0);
 }
 
