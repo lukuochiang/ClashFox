@@ -219,10 +219,7 @@ let PANEL_PRESETS = {};
 let RECOMMENDED_CONFIGS = [];
 
 const STATIC_CONFIGS_URL = new URL('../../../static/configs.json', window.location.href);
-const PANEL_EXTERNAL_UI_URLS = {
-  zashboard: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
-  metacubexd: 'https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz',
-};
+let PANEL_EXTERNAL_UI_URLS = {};
 
 const state = {
   lang: 'auto',
@@ -853,6 +850,17 @@ async function loadStaticConfigs() {
     if (payload && typeof payload === 'object') {
       if (payload.panelPresets && typeof payload.panelPresets === 'object') {
         PANEL_PRESETS = payload.panelPresets;
+        // derive external UI URLs from presets if present
+        const derivedUrls = {};
+        Object.entries(PANEL_PRESETS).forEach(([key, preset]) => {
+          if (preset && typeof preset === 'object') {
+            const url = preset['external-ui-url'] || preset.externalUiUrl || preset.url;
+            if (url) {
+              derivedUrls[key] = url;
+            }
+          }
+        });
+        PANEL_EXTERNAL_UI_URLS = Object.keys(derivedUrls).length > 0 ? derivedUrls : {};
       }
       if (Array.isArray(payload.recommendedConfigs)) {
         RECOMMENDED_CONFIGS = payload.recommendedConfigs;
@@ -3256,7 +3264,7 @@ function updateExternalUiUrlField() {
   const preset = PANEL_PRESETS && PANEL_PRESETS[choice];
   let url = PANEL_EXTERNAL_UI_URLS[choice] || '';
   if (!url && preset) {
-    url = preset['external-ui-url'] || preset.externalUiUrl || '';
+    url = preset['external-ui-url'] || preset.externalUiUrl || preset.url || '';
   }
   settingsExternalUiUrl.value = url || '';
 }
