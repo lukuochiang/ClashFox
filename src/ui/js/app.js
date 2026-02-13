@@ -1000,7 +1000,12 @@ function updateInstallVersionVisibility() {
   if (!installVersionRow || !installVersion) {
     return;
   }
-  const isMetaCubeX = ((githubUser && githubUser.value) || '').toLowerCase() === 'metacubex';
+  const currentUser =
+    (githubUser && githubUser.value) ||
+    (settingsGithubUser && settingsGithubUser.value) ||
+    (state.settings && state.settings.githubUser) ||
+    '';
+  const isMetaCubeX = String(currentUser).toLowerCase() === 'metacubex';
   installVersionRow.classList.toggle('is-hidden', !isMetaCubeX);
   if (!isMetaCubeX) {
     installVersion.value = '';
