@@ -55,7 +55,9 @@ const I18N = {
       "trafficSystemUp": "Upload",
       "trafficTotal": "Total",
       "trafficTotalDown": "Download Total",
-      "trafficTotalUp": "Upload Total"
+      "trafficTotalUp": "Upload Total",
+      "trafficRateUp": "Upload Rate",
+      "trafficRateDown": "Download Rate"
     },
     "install": {
       "title": "Install / Update Mihomo",
@@ -326,7 +328,9 @@ const I18N = {
       "trafficSystemUp": "上传",
       "trafficTotal": "总量",
       "trafficTotalDown": "下载总量",
-      "trafficTotalUp": "上传总量"
+      "trafficTotalUp": "上传总量",
+      "trafficRateUp": "上传速率",
+      "trafficRateDown": "下载速率"
     },
     "install": {
       "title": "安装 / 更新 Mihomo",
@@ -597,7 +601,9 @@ const I18N = {
       "trafficSystemUp": "送信",
       "trafficTotal": "合計",
       "trafficTotalDown": "Download Total",
-      "trafficTotalUp": "Upload Total"
+      "trafficTotalUp": "Upload Total",
+      "trafficRateUp": "送信速度",
+      "trafficRateDown": "受信速度"
     },
     "install": {
       "title": "Mihomo のインストール / 更新",
@@ -868,7 +874,9 @@ const I18N = {
       "trafficSystemUp": "업로드",
       "trafficTotal": "총량",
       "trafficTotalDown": "Download Total",
-      "trafficTotalUp": "Upload Total"
+      "trafficTotalUp": "Upload Total",
+      "trafficRateUp": "업로드 속도",
+      "trafficRateDown": "다운로드 속도"
     },
     "install": {
       "title": "Mihomo 설치 / 업데이트",
@@ -1139,7 +1147,9 @@ const I18N = {
       "trafficSystemUp": "Téléversement",
       "trafficTotal": "Total",
       "trafficTotalDown": "Download Total",
-      "trafficTotalUp": "Upload Total"
+      "trafficTotalUp": "Upload Total",
+      "trafficRateUp": "Débit montant",
+      "trafficRateDown": "Débit descendant"
     },
     "install": {
       "title": "Installer / Mettre à jour Mihomo",
@@ -1410,7 +1420,9 @@ const I18N = {
       "trafficSystemUp": "Upload",
       "trafficTotal": "Gesamt",
       "trafficTotalDown": "Download Total",
-      "trafficTotalUp": "Upload Total"
+      "trafficTotalUp": "Upload Total",
+      "trafficRateUp": "Upload‑Rate",
+      "trafficRateDown": "Download‑Rate"
     },
     "install": {
       "title": "Mihomo installieren / aktualisieren",
@@ -1681,7 +1693,9 @@ const I18N = {
       "trafficSystemUp": "Отдача",
       "trafficTotal": "Всего",
       "trafficTotalDown": "Download Total",
-      "trafficTotalUp": "Upload Total"
+      "trafficTotalUp": "Upload Total",
+      "trafficRateUp": "Скорость отдачи",
+      "trafficRateDown": "Скорость загрузки"
     },
     "install": {
       "title": "Установка / обновление Mihomo",
