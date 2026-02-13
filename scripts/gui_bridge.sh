@@ -747,6 +747,29 @@ EOF
         internet_ms=""
         internet_ip_v4=""
         internet_ip_v6=""
+        proxy_ip=""
+        dns_ms=""
+        router_ms=""
+
+        cache_file="$CLASHFOX_PID_DIR/overview_cache"
+        cache_ttl=15
+        cache_valid=false
+        now_ts="$(date +%s)"
+        if [ -f "$cache_file" ]; then
+            # shellcheck disable=SC1090
+            . "$cache_file"
+            if [ -n "${ts:-}" ] && [ $((now_ts - ts)) -lt "$cache_ttl" ]; then
+                cache_valid=true
+                internet_ip_v4="${internet_ip_v4:-}"
+                internet_ip_v6="${internet_ip_v6:-}"
+                internet_ms="${internet_ms:-}"
+                proxy_ip="${proxy_ip:-}"
+                dns_ms="${dns_ms:-}"
+                router_ms="${router_ms:-}"
+            fi
+        fi
+
+        if [ "$cache_valid" = false ]; then
 
         internet_ip_resp="$(curl -4 -s --max-time 2 -w '\n%{time_total}' https://api.ipify.org 2>/dev/null)"
         if [ -n "$internet_ip_resp" ]; then
@@ -897,6 +920,38 @@ PY
             if [ -z "$router_ms" ]; then
                 router_ms="$(ping -c 1 -t 1 "$gateway" 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
             fi
+        fi
+
+        {
+            printf 'ts=%s\n' "$now_ts"
+            printf 'internet_ip_v4=%q\n' "$internet_ip_v4"
+            printf 'internet_ip_v6=%q\n' "$internet_ip_v6"
+            printf 'internet_ms=%q\n' "$internet_ms"
+            printf 'proxy_ip=%q\n' "$proxy_ip"
+            printf 'dns_ms=%q\n' "$dns_ms"
+            printf 'router_ms=%q\n' "$router_ms"
+        } > "$cache_file" 2>/dev/null || true
+        fi
+
+        if [ -n "$internet_ip_v4" ]; then
+            internet_ip="$internet_ip_v4"
+        elif [ -n "$internet_ip_v6" ]; then
+            internet_ip="$internet_ip_v6"
+        else
+            internet_ip="-"
+        fi
+
+        proxy_ip="$(printf '%s' "$proxy_ip" | tr -d '[:space:]')"
+        if [ -n "$proxy_ip" ]; then
+            if [ -n "$internet_ip_v4" ] && [ "$proxy_ip" = "$internet_ip_v4" ]; then
+                proxy_ip=""
+            fi
+            if [ -n "$internet_ip_v6" ] && [ "$proxy_ip" = "$internet_ip_v6" ]; then
+                proxy_ip=""
+            fi
+        fi
+        if [ -z "$proxy_ip" ]; then
+            proxy_ip="-"
         fi
 
         connections=""
