@@ -340,6 +340,7 @@ function applyCardIcons() {
     if (tname.includes('switch kernel')) return 'var(--icon-checklist)';
     if (tname.includes('config control')) return 'var(--icon-checklist)';
     if (tname.includes('panel manager')) return 'var(--icon-panels)';
+    if (tname.trim() === 'config') return 'var(--icon-config)';
     if (tname.includes('user data paths')) return 'var(--icon-folders)';
     if (tname.includes('pagination')) return 'var(--icon-slider-h)';
     if (tname.includes('appearance')) return 'var(--icon-palette)';
@@ -2225,7 +2226,7 @@ async function loadLayoutParts() {
   const tasks = [];
   if (menuContainer) {
     tasks.push(
-      fetch('menu.html')
+      fetch(new URL('menu.html', window.location.href))
         .then((res) => (res.ok ? res.text() : ''))
         .then((html) => {
           if (html) {
@@ -2241,7 +2242,7 @@ async function loadLayoutParts() {
   }
   if (topbarContainer) {
     tasks.push(
-      fetch('topbar.html')
+      fetch(new URL('topbar.html', window.location.href))
         .then((res) => (res.ok ? res.text() : ''))
         .then((html) => {
           if (html) {

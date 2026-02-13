@@ -6,6 +6,7 @@ const { spawn, execFileSync } = require('child_process');
 
 const isDev = !app.isPackaged;
 const ROOT_DIR = isDev ? path.join(__dirname, '..') : process.resourcesPath;
+const APP_PATH = app.getAppPath ? app.getAppPath() : ROOT_DIR;
 app.name = 'ClashFox';
 app.setName('ClashFox');
 const APP_DATA_DIR = path.join(app.getPath('appData'), app.getName());
@@ -42,7 +43,6 @@ let globalSettings = {
 };
 let isQuitting = false;
 
-const APP_PATH = app.getAppPath ? app.getAppPath() : ROOT_DIR;
 const I18N = require(path.join(APP_PATH, 'static', 'locales', 'i18n.js'));
 ;
 
@@ -372,7 +372,7 @@ async function createTrayMenu() {
     return;
   }
   if (!tray) {
-    const trayIconPath = path.join(ROOT_DIR, 'src', 'ui', 'assets', 'menu.png');
+    const trayIconPath = path.join(APP_PATH, 'src', 'ui', 'assets', 'menu.png');
     let trayIcon = nativeImage.createFromPath(trayIconPath);
     if (!trayIcon.isEmpty()) {
       trayIcon = trayIcon.resize({ width: 18, height: 18 });
@@ -685,7 +685,7 @@ function createWindow() {
     minWidth: 980,
     minHeight: 640,
     backgroundColor: '#0f1216',
-    icon: path.join(ROOT_DIR, 'src', 'ui', 'assets', 'logo.png'),
+    icon: path.join(APP_PATH, 'src', 'ui', 'assets', 'logo.png'),
     webPreferences: {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
@@ -809,7 +809,7 @@ function setDockIcon() {
   if (!app.dock) {
     return;
   }
-  const icnsPath = path.join(ROOT_DIR, 'src', 'ui', 'assets', 'logo.icns');
+  const icnsPath = path.join(APP_PATH, 'src', 'ui', 'assets', 'logo.icns');
   if (!fs.existsSync(icnsPath)) {
     // console.log('[dock] icns missing:', icnsPath);
     return;
