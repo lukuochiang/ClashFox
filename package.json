@@ -24,6 +24,7 @@
       "src/**/*",
       "scripts/**/*",
       "assets/**/*",
+      "static/**/*",
       "package.json",
       "!**/dist/**",
       "!**/node_modules/**",
