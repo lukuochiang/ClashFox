@@ -9,7 +9,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "node scripts/bump-version.js && CLASHFOX_DEV=1 electron .",
-    "build:mac": "node scripts/clean-dist-mac.js --pre; CLASHFOX_BUILD_NUMBER=$(node -p \"require('./package.json').buildNumber\") electron-builder --mac; code=$?; node scripts/clean-dist-mac.js; exit $code",
+    "build:mac": "node scripts/clean-dist-mac.js --pre; CLASHFOX_BUILD_NUMBER=$(node -p \"require('./package.json').buildNumber\") PYTHON=${PYTHON:-python3} electron-builder --mac; code=$?; node scripts/clean-dist-mac.js; exit $code",
     "clean:mac": "node scripts/clean-dist-mac.js"
   },
   "devDependencies": {
