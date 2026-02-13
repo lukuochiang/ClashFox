@@ -39,6 +39,7 @@
   --icon-slider-h: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 5a1 1 0 0 1 1-1h10a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1Zm2.5 10a1 1 0 0 1 1-1h5a1 1 0 1 1 0 2h-5a1 1 0 0 1-1-1Zm-2-4a1 1 0 0 1 1-1h9a1 1 0 1 1 0 2h-9a1 1 0 0 1-1-1Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-palette: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 2a7.5 7.5 0 0 0-7.5 7.5c0 3.4 2.5 5.82 4.74 7.26 1.42.91 3.26-.27 2.95-1.9l-.11-.61a1.25 1.25 0 0 1 1.23-1.48h1.69c1.95 0 3-1.67 3-3.5C16 5.36 13.33 2 10 2Zm-3 7.5a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Zm2-3.5a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Zm3.75 0a1.25 1.25 0 1 1 2.5 0 1.25 1.25 0 0 1-2.5 0Zm-1 3.5a1.25 1.25 0 1 1 2.5 0 1.25 1.25 0 0 1-2.5 0Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-defaults: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 2a1 1 0 0 1 .96.72l.7 2.44 2.5-.2a1 1 0 0 1 .87 1.6l-1.6 2.02 1.6 2.02a1 1 0 0 1-.87 1.6l-2.5-.2-.7 2.44a1 1 0 0 1-1.92 0l-.7-2.44-2.5.2a1 1 0 0 1-.87-1.6l1.6-2.02-1.6-2.02a1 1 0 0 1 .87-1.6l2.5.2.7-2.44A1 1 0 0 1 10 2Z' fill='%23000'/%3E%3C/svg%3E");
+  --icon-config: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5.5 2.75A1.75 1.75 0 0 0 3.75 4.5v11A1.75 1.75 0 0 0 5.5 17.25h9A1.75 1.75 0 0 0 16.25 15.5v-8a.75.75 0 0 0-.22-.53l-3.75-3.75a.75.75 0 0 0-.53-.22h-6.25Zm6 1.5V6a1 1 0 0 0 1 1h1.75v8.5a.25.25 0 0 1-.25.25h-9a.25.25 0 0 1-.25-.25v-11c0-.14.11-.25.25-.25h6.5Zm-4.5 4A.75.75 0 0 0 6.25 9h7.5a.75.75 0 0 0 0-1.5h-7.5ZM6.25 11a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 0 1.5h-3.5A.75.75 0 0 1 6.25 11Zm0 2.5a.75.75 0 0 1 .75-.75h2a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1-.75-.75Z' fill='%23000'/%3E%3C/svg%3E");
 }
 
 body[data-theme="night"] {
@@ -410,7 +411,7 @@ body[data-theme="day"] .sidebar {
 .nav-btn[data-page="overview"]::before { mask-image: var(--icon-overview); }
 .nav-btn[data-page="install"]::before { mask-image: var(--icon-download); }
 .nav-btn[data-page="switch"]::before { mask-image: var(--icon-switch); }
-.nav-btn[data-page="config"]::before { mask-image: var(--icon-gear); }
+.nav-btn[data-page="config"]::before { mask-image: var(--icon-config); }
 .nav-btn[data-page="backups"]::before { mask-image: var(--icon-backup); }
 .nav-btn[data-page="logs"]::before { mask-image: var(--icon-doc); }
 .nav-btn[data-page="settings"]::before { mask-image: var(--icon-sliders); }
