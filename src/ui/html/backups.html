@@ -6,7 +6,7 @@
     <title>ClashFox</title>
     <link rel="stylesheet" href="../css/styles.css" />
   </head>
-  <body data-page="switch">
+  <body data-page="backups">
     <div class="app">
       <aside class="sidebar" id="menuContainer"></aside>
 
@@ -14,23 +14,23 @@
         <header class="topbar" id="topbarContainer"></header>
 
         <div id="contentRoot" class="content-root">
-          <section id="switch" class="panel active">
+          <section id="backups" class="panel active">
           <div class="card">
-            <h3 data-i18n="switch.title">Switch Kernel</h3>
+            <h3 data-i18n="backups.title">Backup Inventory</h3>
             <div class="action-row">
-              <button class="btn" id="refreshBackups" data-i18n="actions.refresh">Refresh Backups</button>
-              <button class="btn primary" id="switchBtn" data-i18n="switch.action">Switch to Selected</button>
+              <button class="btn" id="backupsRefresh" data-i18n="actions.refresh">Refresh Backups</button>
+              <button class="btn danger" id="backupsDelete" data-i18n="backups.delete">Delete</button>
             </div>
-            <div class="table" id="backupTable"></div>
+            <div class="table" id="backupTableFull"></div>
             <div class="pagination">
               <div class="page-controls">
-                <button class="btn ghost" id="switchPrev">Prev</button>
-                <div class="page-info" id="switchPageInfo">1 / 1</div>
-                <button class="btn ghost" id="switchNext">Next</button>
+                <button class="btn ghost" id="backupsPrev">Prev</button>
+                <div class="page-info" id="backupsPageInfo">1 / 1</div>
+                <button class="btn ghost" id="backupsNext">Next</button>
               </div>
               <div class="page-size">
                 <span data-i18n="pagination.size">Per page</span>
-                <select id="kernelPageSize">
+                <select id="backupsPageSize">
                   <option value="5">5</option>
                   <option value="10" selected>10</option>
                   <option value="20">20</option>
@@ -46,6 +46,6 @@
     <div id="overlayRoot"></div>
 
     <script src="../i18n/i18n.js"></script>
-    <script src="../js/renderer.js"></script>
+    <script src="../js/app.js"></script>
   </body>
 </html>

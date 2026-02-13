@@ -4,7 +4,8 @@ const path = require('path');
 const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme, shell, Tray, session } = require('electron');
 const { spawn, execFileSync } = require('child_process');
 
-const ROOT_DIR = path.join(__dirname, '..');
+const isDev = !app.isPackaged;
+const ROOT_DIR = isDev ? path.join(__dirname, '..') : process.resourcesPath;
 app.name = 'ClashFox';
 app.setName('ClashFox');
 const APP_DATA_DIR = path.join(app.getPath('appData'), app.getName());
@@ -90,8 +91,8 @@ async function promptTraySudo(labels) {
     let sudoTemplate = '';
     let sharedStyles = '';
     try {
-      sudoTemplate = fs.readFileSync(path.join(__dirname, 'renderer', 'html', 'authorize.html'), 'utf8');
-      sharedStyles = fs.readFileSync(path.join(__dirname, 'renderer', 'css', 'styles.css'), 'utf8');
+      sudoTemplate = fs.readFileSync(path.join(__dirname, 'ui', 'html', 'authorize.html'), 'utf8');
+      sharedStyles = fs.readFileSync(path.join(__dirname, 'ui', 'css', 'styles.css'), 'utf8');
     } catch {
       sudoTemplate = '';
       sharedStyles = '';
@@ -369,7 +370,7 @@ async function createTrayMenu() {
     return;
   }
   if (!tray) {
-    const trayIconPath = path.join(ROOT_DIR, 'src', 'renderer', 'assets', 'menu.png');
+    const trayIconPath = path.join(ROOT_DIR, 'src', 'ui', 'assets', 'menu.png');
     let trayIcon = nativeImage.createFromPath(trayIconPath);
     if (!trayIcon.isEmpty()) {
       trayIcon = trayIcon.resize({ width: 18, height: 18 });
@@ -682,7 +683,7 @@ function createWindow() {
     minWidth: 980,
     minHeight: 640,
     backgroundColor: '#0f1216',
-    icon: path.join(ROOT_DIR, 'src', 'renderer', 'assets', 'logo.png'),
+    icon: path.join(ROOT_DIR, 'src', 'ui', 'assets', 'logo.png'),
     webPreferences: {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
@@ -690,7 +691,7 @@ function createWindow() {
     },
   });
 
-  win.loadFile(path.join(__dirname, 'renderer', 'html', 'index.html'));
+  win.loadFile(path.join(__dirname, 'ui', 'html', 'index.html'));
 
   mainWindow = win;
 
@@ -799,14 +800,14 @@ function createAboutWindow() {
     },
   });
 
-  aboutWindow.loadFile(path.join(__dirname, 'renderer', 'html', 'about.html'));
+  aboutWindow.loadFile(path.join(__dirname, 'ui', 'html', 'about.html'));
 }
 
 function setDockIcon() {
   if (!app.dock) {
     return;
   }
-  const icnsPath = path.join(ROOT_DIR, 'src', 'renderer', 'assets', 'logo.icns');
+  const icnsPath = path.join(ROOT_DIR, 'src', 'ui', 'assets', 'logo.icns');
   if (!fs.existsSync(icnsPath)) {
     // console.log('[dock] icns missing:', icnsPath);
     return;

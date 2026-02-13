@@ -1,7 +1,7 @@
 {
   "name": "ClashFox",
   "version": "0.3.7",
-  "buildNumber": 3,
+  "buildNumber": 5,
   "description": "ClashFox GUI for Mihomo",
   "author": "Kuochiang Lu <lukuochiang@gmail.com> (https://github.com/lukuochiang/ClashFox)",
   "main": "src/main.js",
@@ -34,7 +34,7 @@
     ],
     "mac": {
       "category": "public.app-category.utilities",
-      "icon": "src/renderer/assets/logo.icns",
+      "icon": "src/ui/assets/logo.icns",
       "artifactName": "${productName}-${version}(${env.CLASHFOX_BUILD_NUMBER})-mac-${arch}.${ext}",
       "target": [
         {
