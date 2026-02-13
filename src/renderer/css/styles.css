@@ -16,6 +16,16 @@
   --font-body: "Trebuchet MS", "Verdana", sans-serif;
   --tooltip-bg: rgba(0, 0, 0, 0.9);
   --tooltip-text: #ffffff;
+  /* SF-like monochrome icons encoded as SVG paths */
+  --icon-overview: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3' y='3' width='6' height='6' rx='1.3' fill='%23000'/%3E%3Crect x='11' y='3' width='6' height='4' rx='1.3' fill='%23000'/%3E%3Crect x='11' y='9' width='6' height='8' rx='1.3' fill='%23000'/%3E%3Crect x='3' y='11' width='6' height='6' rx='1.3' fill='%23000'/%3E%3C/svg%3E");
+  --icon-download: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 3.5v9.2l2.8-2.8a1 1 0 0 1 1.4 1.4l-4.6 4.6a1 1 0 0 1-1.4 0L3.6 11.3a1 1 0 1 1 1.4-1.4L7.8 12.8V3.5a1 1 0 1 1 2 0Z' fill='%23000'/%3E%3Cpath d='M4 16.5h12a1 1 0 1 1 0 2H4a1 1 0 1 1 0-2Z' fill='%23000'/%3E%3C/svg%3E");
+  --icon-switch: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5.2 5.5H16l-2.1-2.1a1 1 0 1 1 1.4-1.4l3.9 3.9a1 1 0 0 1 0 1.4l-3.9 3.9a1 1 0 1 1-1.4-1.4L16 7.5H5.2a1 1 0 0 1 0-2Z' fill='%23000'/%3E%3Cpath d='M14.8 14.5H4l2.1 2.1a1 1 0 0 1-1.4 1.4l-3.9-3.9a1 1 0 0 1 0-1.4l3.9-3.9a1 1 0 0 1 1.4 1.4L4 12.5h10.8a1 1 0 0 1 0 2Z' fill='%23000'/%3E%3C/svg%3E");
+  --icon-gear: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11.7 2.2 12 4a6.5 6.5 0 0 1 1.4.8l1.7-.7a1 1 0 0 1 1.3.5l.7 1.5a1 1 0 0 1-.4 1.3l-1.5.9a6.4 6.4 0 0 1 0 1.6l1.5.9a1 1 0 0 1 .4 1.3l-.7 1.5a1 1 0 0 1-1.3.5l-1.7-.7a6.5 6.5 0 0 1-1.4.8L11.7 18a1 1 0 0 1-1 .8h-1.4a1 1 0 0 1-1-.8l-.3-1.8a6.5 6.5 0 0 1-1.4-.8l-1.7.7a1 1 0 0 1-1.3-.5l-.7-1.5a1 1 0 0 1 .4-1.3l1.5-.9a6.4 6.4 0 0 1 0-1.6l-1.5-.9a1 1 0 0 1-.4-1.3l.7-1.5a1 1 0 0 1 1.3-.5l1.7.7a6.5 6.5 0 0 1 1.4-.8L8.3 2.2a1 1 0 0 1 1-.8h1.4a1 1 0 0 1 1 .8ZM10 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z' fill='%23000'/%3E%3C/svg%3E");
+  --icon-backup: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M6.5 4.5a4.5 4.5 0 0 1 8.75 1h.75A3.5 3.5 0 0 1 19.5 9c0 1.9-1.6 3.5-3.5 3.5H6a3.5 3.5 0 1 1 .5-6.97Z' fill='%23000' opacity='0.9'/%3E%3Cpath d='M10 9.2v4.6l1.5-1.5a1 1 0 1 1 1.4 1.4l-3.3 3.3a1 1 0 0 1-1.4 0l-3.3-3.3a1 1 0 1 1 1.4-1.4L9 13.8V9.2a1 1 0 1 1 2 0Z' fill='%23000'/%3E%3C/svg%3E");
+  --icon-doc: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11.2 2.2 15.8 6.8c.3.3.4.6.4 1v8.5a1.5 1.5 0 0 1-1.5 1.5h-9a1.5 1.5 0 0 1-1.5-1.5v-14A1.5 1.5 0 0 1 5.2 1h5c.4 0 .7.1 1 .4ZM11 3.9V6a1 1 0 0 0 1 1h2.1L11 3.9ZM6 9.5a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H7a1 1 0 0 1-1-1Zm0 3a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H7a1 1 0 0 1-1-1Z' fill='%23000'/%3E%3C/svg%3E");
+  --icon-sliders: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 4.5a1.5 1.5 0 1 1 3 0V5h8a1 1 0 1 1 0 2H7v.5a1.5 1.5 0 1 1-3 0V7H3a1 1 0 0 1 0-2h1V4.5ZM13 10.5a1.5 1.5 0 1 1 3 0V11h1a1 1 0 1 1 0 2h-1v.5a1.5 1.5 0 1 1-3 0V13H3a1 1 0 1 1 0-2h10v-.5Z' fill='%23000'/%3E%3C/svg%3E");
+  --icon-help: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16Zm0 11.8a1.05 1.05 0 1 0 0 2.1 1.05 1.05 0 0 0 0-2.1Zm.12-8c-1.32 0-2.37.82-2.37 2.08a1 1 0 0 0 2 0c0-.12.11-.08.26-.08.32 0 .62.1.78.3.2.2.21.55-.1.92l-.34.36c-.48.5-.75 1-.75 1.76V11a1 1 0 1 0 2 0v-.56c0-.24.05-.36.24-.56l.34-.35c.7-.73.96-1.66.7-2.55-.37-1.21-1.48-1.9-2.46-1.9Z' fill='%23000'/%3E%3C/svg%3E");
+  --icon-settings: var(--icon-sliders);
 }
 
 body[data-theme="night"] {
@@ -365,7 +375,33 @@ body[data-theme="day"] .sidebar {
   cursor: pointer;
   font-size: 14px;
   transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
+
+.nav-btn::before {
+  content: '';
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.9;
+  background: currentColor;
+  mask-size: 16px 16px;
+  mask-repeat: no-repeat;
+  mask-position: center;
+}
+
+.nav-btn[data-page="overview"]::before { mask-image: var(--icon-overview); }
+.nav-btn[data-page="install"]::before { mask-image: var(--icon-download); }
+.nav-btn[data-page="switch"]::before { mask-image: var(--icon-switch); }
+.nav-btn[data-page="config"]::before { mask-image: var(--icon-gear); }
+.nav-btn[data-page="backups"]::before { mask-image: var(--icon-backup); }
+.nav-btn[data-page="logs"]::before { mask-image: var(--icon-doc); }
+.nav-btn[data-page="settings"]::before { mask-image: var(--icon-sliders); }
+.nav-btn[data-page="help"]::before { mask-image: var(--icon-help); }
 
 .nav-btn.active,
 .nav-btn:hover {

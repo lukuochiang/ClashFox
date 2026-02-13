@@ -90,8 +90,8 @@ async function promptTraySudo(labels) {
     let sudoTemplate = '';
     let sharedStyles = '';
     try {
-      sudoTemplate = fs.readFileSync(path.join(__dirname, 'renderer', 'sudo.html'), 'utf8');
-      sharedStyles = fs.readFileSync(path.join(__dirname, 'renderer', 'styles.css'), 'utf8');
+      sudoTemplate = fs.readFileSync(path.join(__dirname, 'renderer', 'html', 'authorize.html'), 'utf8');
+      sharedStyles = fs.readFileSync(path.join(__dirname, 'renderer', 'css', 'styles.css'), 'utf8');
     } catch {
       sudoTemplate = '';
       sharedStyles = '';
@@ -369,7 +369,7 @@ async function createTrayMenu() {
     return;
   }
   if (!tray) {
-    const trayIconPath = path.join(ROOT_DIR, 'assets', 'menu.png');
+    const trayIconPath = path.join(ROOT_DIR, 'src', 'renderer', 'assets', 'menu.png');
     let trayIcon = nativeImage.createFromPath(trayIconPath);
     if (!trayIcon.isEmpty()) {
       trayIcon = trayIcon.resize({ width: 18, height: 18 });
@@ -682,7 +682,7 @@ function createWindow() {
     minWidth: 980,
     minHeight: 640,
     backgroundColor: '#0f1216',
-    icon: path.join(ROOT_DIR, 'assets', 'logo.png'),
+    icon: path.join(ROOT_DIR, 'src', 'renderer', 'assets', 'logo.png'),
     webPreferences: {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
@@ -690,7 +690,7 @@ function createWindow() {
     },
   });
 
-  win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  win.loadFile(path.join(__dirname, 'renderer', 'html', 'index.html'));
 
   mainWindow = win;
 
@@ -799,14 +799,14 @@ function createAboutWindow() {
     },
   });
 
-  aboutWindow.loadFile(path.join(__dirname, 'renderer', 'about.html'));
+  aboutWindow.loadFile(path.join(__dirname, 'renderer', 'html', 'about.html'));
 }
 
 function setDockIcon() {
   if (!app.dock) {
     return;
   }
-  const icnsPath = path.join(ROOT_DIR, 'assets', 'logo.icns');
+  const icnsPath = path.join(ROOT_DIR, 'src', 'renderer', 'assets', 'logo.icns');
   if (!fs.existsSync(icnsPath)) {
     // console.log('[dock] icns missing:', icnsPath);
     return;

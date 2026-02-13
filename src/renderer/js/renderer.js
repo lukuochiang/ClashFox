@@ -218,7 +218,7 @@ const DEFAULT_SETTINGS = {
 let PANEL_PRESETS = {};
 let RECOMMENDED_CONFIGS = [];
 
-const STATIC_CONFIGS_URL = new URL('../../static/configs.json', window.location.href);
+const STATIC_CONFIGS_URL = new URL('../../../static/configs.json', window.location.href);
 const PANEL_EXTERNAL_UI_URLS = {
   zashboard: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
   metacubexd: 'https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz',
