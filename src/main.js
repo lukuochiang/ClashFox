@@ -772,7 +772,8 @@ function createWindow() {
 
 function getBuildNumber() {
   try {
-    const pkgPath = path.join(ROOT_DIR, 'package.json');
+    // APP_PATH points to app.asar when packaged, ensuring package.json is found.
+    const pkgPath = path.join(APP_PATH, 'package.json');
     const raw = fs.readFileSync(pkgPath, 'utf8');
     const parsed = JSON.parse(raw);
     return parsed.buildNumber;
