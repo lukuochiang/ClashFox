@@ -218,7 +218,7 @@ const DEFAULT_SETTINGS = {
 let PANEL_PRESETS = {};
 let RECOMMENDED_CONFIGS = [];
 
-const STATIC_CONFIGS_URL = new URL('../../static/configs.json', window.location.href);
+const STATIC_CONFIGS_URL = new URL('../../../static/configs.json', window.location.href);
 const PANEL_EXTERNAL_UI_URLS = {
   zashboard: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
   metacubexd: 'https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz',
@@ -2175,7 +2175,6 @@ function updateScrollbarWidthVar() {
 async function loadLayoutParts() {
   const menuContainer = document.getElementById('menuContainer');
   const topbarContainer = document.getElementById('topbarContainer');
-  const overlayRoot = document.getElementById('overlayRoot');
   let hasCache = false;
   const layoutKey = (key) => `layout:${LAYOUT_CACHE_VERSION}:${key}`;
   const applyCachedFragment = (key, target) => {
@@ -2202,14 +2201,7 @@ async function loadLayoutParts() {
         topbarContainer.innerHTML = cachedTopbar;
         hasCache = true;
       }
-    }
-    if (overlayRoot) {
-      const cachedOverlays = sessionStorage.getItem(layoutKey('overlays'));
-      if (cachedOverlays) {
-        overlayRoot.innerHTML = cachedOverlays;
-        hasCache = true;
-      }
-      if (cachedOverlays) {
+      if (cachedTopbar) {
         applyCachedFragment('sudo', document.getElementById('sudoRoot'));
         applyCachedFragment('confirm', document.getElementById('confirmRoot'));
       }
@@ -2250,22 +2242,6 @@ async function loadLayoutParts() {
             topbarContainer.innerHTML = html;
             try {
               sessionStorage.setItem(layoutKey('topbar'), html);
-            } catch {
-              // Ignore cache errors
-            }
-          }
-        })
-    );
-  }
-  if (overlayRoot) {
-    tasks.push(
-      fetch('overlays.html')
-        .then((res) => (res.ok ? res.text() : ''))
-        .then((html) => {
-          if (html) {
-            overlayRoot.innerHTML = html;
-            try {
-              sessionStorage.setItem(layoutKey('overlays'), html);
             } catch {
               // Ignore cache errors
             }
@@ -3438,3 +3414,6 @@ if (document.readyState === 'loading') {
 } else {
   initApp();
 }
+
+// Common entry: load i18n first, then main app logic
+import '../../../static/locales/i18n.js';
