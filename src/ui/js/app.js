@@ -558,6 +558,7 @@ function applySettings(settings) {
   if (settingsGithubUser) {
     settingsGithubUser.value = state.settings.githubUser;
   }
+  updateInstallVersionVisibility();
   if (configPathInput) {
     configPathInput.value = state.settings.configPath;
   }
@@ -2100,7 +2101,7 @@ function refreshPageView() {
     loadLogs();
   }
   loadStatus();
-  if (currentPage === 'install') {
+  if (currentPage === 'install' || currentPage === 'switch') {
     loadKernels();
   }
   if (currentPage === 'overview') {

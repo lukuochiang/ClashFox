@@ -414,7 +414,7 @@ body[data-theme="day"] .sidebar {
 .nav-btn[data-page="config"]::before { mask-image: var(--icon-config); }
 .nav-btn[data-page="backups"]::before { mask-image: var(--icon-backup); }
 .nav-btn[data-page="logs"]::before { mask-image: var(--icon-doc); }
-.nav-btn[data-page="settings"]::before { mask-image: var(--icon-sliders); }
+.nav-btn[data-page="settings"]::before { mask-image: var(--icon-settings); }
 .nav-btn[data-page="help"]::before { mask-image: var(--icon-help); }
 
 .nav-btn.active,
