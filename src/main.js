@@ -42,7 +42,8 @@ let globalSettings = {
 };
 let isQuitting = false;
 
-const I18N = require(path.join(ROOT_DIR, 'static', 'locales', 'i18n.js'));
+const APP_PATH = app.getAppPath ? app.getAppPath() : ROOT_DIR;
+const I18N = require(path.join(APP_PATH, 'static', 'locales', 'i18n.js'));
 ;
 
 function resolveTrayLang() {
