@@ -42,7 +42,7 @@ let globalSettings = {
 };
 let isQuitting = false;
 
-const TRAY_I18N = require('./i18n_main');
+const I18N = require(path.join(ROOT_DIR, 'static', 'locales', 'i18n.js'));
 ;
 
 function resolveTrayLang() {
@@ -53,7 +53,7 @@ function resolveTrayLang() {
       const parsed = JSON.parse(raw);
       const lang = parsed && parsed.lang ? String(parsed.lang) : '';
       if (lang && lang !== 'auto') {
-        return TRAY_I18N[lang] ? lang : 'en';
+        return I18N[lang] ? lang : 'en';
       }
     }
   } catch {
@@ -71,7 +71,8 @@ function resolveTrayLang() {
 
 function getTrayLabels() {
   const lang = resolveTrayLang();
-  return TRAY_I18N[lang] || TRAY_I18N.en;
+  const tray = (I18N[lang] && I18N[lang].tray) || (I18N.en && I18N.en.tray) || {};
+  return tray;
 }
 
 function escapeHtml(value) {

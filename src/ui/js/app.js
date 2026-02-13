@@ -339,8 +339,14 @@ function applyCardIcons() {
     if (tname.includes('backup inventory')) return 'var(--icon-list)';
     if (tname.includes('switch kernel')) return 'var(--icon-checklist)';
     if (tname.includes('config control')) return 'var(--icon-checklist)';
+    if (tname.includes('panel manager')) return 'var(--icon-panels)';
+    if (tname.includes('user data paths')) return 'var(--icon-folders)';
+    if (tname.includes('pagination')) return 'var(--icon-slider-h)';
+    if (tname.includes('appearance')) return 'var(--icon-palette)';
+    if (tname.includes('defaults')) return 'var(--icon-defaults)';
     if (tname.includes('clashflox logs')) return 'var(--icon-journal)';
     if (tname.includes('clean logs')) return 'var(--icon-broom)';
+    if (tname.includes('introduction')) return 'var(--icon-info)';
     if (tname.includes('overview') || tname.includes('status')) return 'var(--icon-overview)';
     if (tname.includes('quick') || tname.includes('action')) return 'var(--icon-sliders)';
     if (tname.includes('install') || tname.includes('update') || tname.includes('download')) return 'var(--icon-download)';
