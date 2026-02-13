@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/clashfox.png" alt="ClashFox Logo" width="200">
+  <img src="src/ui/assets/clashfox.png" alt="ClashFox Logo" width="200">
 </div>
 
 # ClashFox - Native Proxy
