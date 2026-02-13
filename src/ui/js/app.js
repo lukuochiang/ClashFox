@@ -316,6 +316,8 @@ function applyI18n() {
     el.setAttribute('placeholder', t(key));
   });
 
+  applyCardIcons();
+
   if (statusPill) {
     statusPill.setAttribute('aria-label', t('labels.unknown'));
     statusPill.setAttribute('title', t('labels.unknown'));
@@ -324,6 +326,39 @@ function applyI18n() {
   updateThemeToggle();
   setInstallState(state.installState);
   renderConfigTable();
+}
+
+function applyCardIcons() {
+  const mapIcon = (text) => {
+    const tname = (text || '').toLowerCase();
+    if (tname.includes('network history')) return 'var(--icon-clock)';
+    if (tname.includes('running status')) return 'var(--icon-activity)';
+    if (tname.includes('network status')) return 'var(--icon-wifi)';
+    if (tname.includes('kernel list')) return 'var(--icon-list)';
+    if (tname.includes('recommended configs')) return 'var(--icon-list)';
+    if (tname.includes('backup inventory')) return 'var(--icon-list)';
+    if (tname.includes('switch kernel')) return 'var(--icon-checklist)';
+    if (tname.includes('config control')) return 'var(--icon-checklist)';
+    if (tname.includes('clashflox logs')) return 'var(--icon-journal)';
+    if (tname.includes('clean logs')) return 'var(--icon-broom)';
+    if (tname.includes('overview') || tname.includes('status')) return 'var(--icon-overview)';
+    if (tname.includes('quick') || tname.includes('action')) return 'var(--icon-sliders)';
+    if (tname.includes('install') || tname.includes('update') || tname.includes('download')) return 'var(--icon-download)';
+    if (tname.includes('switch')) return 'var(--icon-switch)';
+    if (tname.includes('config')) return 'var(--icon-gear)';
+    if (tname.includes('backup')) return 'var(--icon-backup)';
+    if (tname.includes('log')) return 'var(--icon-doc)';
+    if (tname.includes('network')) return 'var(--icon-overview)';
+    if (tname.includes('help')) return 'var(--icon-help)';
+    return 'var(--icon-gear)';
+  };
+
+  document.querySelectorAll('.card h3').forEach((h) => {
+    const text = h.textContent || '';
+    const icon = mapIcon(text);
+    h.classList.add('iconized');
+    h.style.setProperty('--card-icon-mask', icon);
+  });
 }
 
 function setLanguage(lang, persist = true, refreshStatus = true) {
