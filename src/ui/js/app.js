@@ -2106,8 +2106,11 @@ function refreshPageView() {
     loadLogs();
   }
   loadStatus();
-  if (currentPage === 'install' || currentPage === 'switch') {
+  if (currentPage === 'install') {
     loadKernels();
+  }
+  if (currentPage === 'switch') {
+    loadBackups();
   }
   if (currentPage === 'overview') {
     Promise.all([
