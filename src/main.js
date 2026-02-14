@@ -37,11 +37,18 @@ function getBridgePath() {
 }
 let mainWindow = null;
 let tray = null;
+let dashboardWindow = null;
 let currentInstallProcess = null; // 仅用于跟踪安装进程，支持取消功能
+let sudoKeepAliveTimer = null;
+let sudoKeepAliveInFlight = false;
+let sudoLastActivityAt = 0;
 let globalSettings = {
   debugMode: true, // 是否启用调试模式
 };
 let isQuitting = false;
+const SUDO_KEEPALIVE_INTERVAL_MS = 55 * 1000;
+const SUDO_KEEPALIVE_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+const PRIVILEGED_COMMANDS = new Set(['install', 'start', 'stop', 'restart', 'delete-backups']);
 
 const I18N = require(path.join(APP_PATH, 'static', 'locales', 'i18n.js'));
 ;
@@ -74,6 +81,78 @@ function getTrayLabels() {
   const lang = resolveTrayLang();
   const tray = (I18N[lang] && I18N[lang].tray) || (I18N.en && I18N.en.tray) || {};
   return tray;
+}
+
+function runSudoCheckNoPrompt() {
+  return new Promise((resolve) => {
+    const child = spawn('sudo', ['-n', 'true']);
+    child.on('error', () => resolve(false));
+    child.on('close', (code) => resolve(code === 0));
+  });
+}
+
+function stopSudoKeepAlive() {
+  if (sudoKeepAliveTimer) {
+    clearInterval(sudoKeepAliveTimer);
+    sudoKeepAliveTimer = null;
+  }
+  sudoLastActivityAt = 0;
+}
+
+function markSudoActivity() {
+  sudoLastActivityAt = Date.now();
+}
+
+function startSudoKeepAlive() {
+  if (!sudoLastActivityAt) {
+    markSudoActivity();
+  }
+  if (sudoKeepAliveTimer) {
+    return;
+  }
+  sudoKeepAliveTimer = setInterval(async () => {
+    if (sudoKeepAliveInFlight) {
+      return;
+    }
+    if (!sudoLastActivityAt || (Date.now() - sudoLastActivityAt) >= SUDO_KEEPALIVE_IDLE_TIMEOUT_MS) {
+      stopSudoKeepAlive();
+      return;
+    }
+    sudoKeepAliveInFlight = true;
+    try {
+      const ok = await runSudoCheckNoPrompt();
+      if (!ok) {
+        stopSudoKeepAlive();
+      }
+    } finally {
+      sudoKeepAliveInFlight = false;
+    }
+  }, SUDO_KEEPALIVE_INTERVAL_MS);
+  if (sudoKeepAliveTimer && typeof sudoKeepAliveTimer.unref === 'function') {
+    sudoKeepAliveTimer.unref();
+  }
+}
+
+function normalizeBridgeArgs(args = [], options = {}) {
+  const normalized = [];
+  let extractedSudoPass = '';
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+    if (value === '--sudo-pass') {
+      const nextValue = args[index + 1];
+      if (!extractedSudoPass && typeof nextValue === 'string') {
+        extractedSudoPass = nextValue;
+      }
+      index += 1;
+      continue;
+    }
+    normalized.push(value);
+  }
+  const optionSudoPass = options && typeof options.sudoPass === 'string' ? options.sudoPass : '';
+  return {
+    args: normalized,
+    sudoPass: optionSudoPass || extractedSudoPass,
+  };
 }
 
 function escapeHtml(value) {
@@ -206,8 +285,7 @@ function emitTrayRefresh() {
 }
 
 async function runTrayCommand(command, args = [], labels = TRAY_I18N.en, sudoPass = '') {
-  const baseArgs = sudoPass ? [...args, '--sudo-pass', sudoPass] : args;
-  const result = await runBridge([command, ...baseArgs]);
+  const result = await runBridge([command, ...args], { sudoPass });
   if (!result || !result.ok) {
     if (result && result.error === 'sudo_required') {
       const password = await promptTraySudo(labels);
@@ -261,7 +339,7 @@ async function getKernelRunning(labels) {
     if (!password) {
       return null;
     }
-    result = await runBridge(['status', '--sudo-pass', password]);
+    result = await runBridge(['status'], { sudoPass: password });
     if (result && result.ok) {
       return { running: Boolean(result.data && result.data.running), sudoPass: password };
     }
@@ -316,8 +394,45 @@ function openDashboardPanel() {
       controller = `http://${controller}`;
     }
     controller = controller.replace(/\/+$/, '');
-    const url = `${controller}/ui/${panel}/`;//?secret=${encodeURIComponent(secret)}&_ts=${Date.now()}
-    shell.openExternal(url);
+    const dashboardUrl = new URL(`${controller}/ui/${panel}/`);
+    if (secret) {
+      // Different dashboards use different query keys; set both for compatibility.
+      dashboardUrl.searchParams.set('token', secret);
+      dashboardUrl.searchParams.set('secret', secret);
+    }
+    dashboardUrl.searchParams.set('_ts', String(Date.now()));
+    const url = dashboardUrl.toString();
+    if (dashboardWindow && !dashboardWindow.isDestroyed()) {
+      dashboardWindow.show();
+      dashboardWindow.focus();
+      dashboardWindow.loadURL(url);
+      return;
+    }
+
+    dashboardWindow = new BrowserWindow({
+      width: 1280,
+      height: 820,
+      minWidth: 960,
+      minHeight: 640,
+      alwaysOnTop: false,
+      backgroundColor: '#0f1216',
+      autoHideMenuBar: true,
+      title: 'ClashFox Dashboard',
+      webPreferences: {
+        contextIsolation: true,
+      },
+    });
+
+    dashboardWindow.on('closed', () => {
+      dashboardWindow = null;
+    });
+    dashboardWindow.on('blur', () => {
+      if (dashboardWindow && !dashboardWindow.isDestroyed()) {
+        dashboardWindow.setAlwaysOnTop(false);
+      }
+    });
+
+    dashboardWindow.loadURL(url);
   } catch (err) {
     // fallback: just show main window
     showMainWindow();
@@ -492,14 +607,17 @@ if (process.env.CLASHFOX_DEV === '1') {
   });
 }
 
-function runBridge(args) {
+function runBridge(args, options = {}) {
   return new Promise((resolve) => {
     try {
+      const normalized = normalizeBridgeArgs(args, options);
+      const bridgeArgs = normalized.args;
+      const sudoPass = normalized.sudoPass;
       // console.log('[runBridge] Running command:', args);
-      const commandType = args[0];
+      const commandType = bridgeArgs[0];
 
       // 1. 如果是安装命令，终止当前正在运行的安装进程（如果有）
-      let isInstallCommand = commandType === 'install' || commandType === 'panel-install';
+      const isInstallCommand = commandType === 'install' || commandType === 'panel-install';
       
       if (isInstallCommand && currentInstallProcess) {
         const oldPid = currentInstallProcess.pid;
@@ -530,7 +648,11 @@ function runBridge(args) {
         }
       }
       const cwd = app.isPackaged ? APP_DATA_DIR : ROOT_DIR;
-      const child = spawn('bash', [bridgePath, ...args], { cwd });
+      const childEnv = { ...process.env };
+      if (sudoPass) {
+        childEnv.CLASHFOX_SUDO_PASS = sudoPass;
+      }
+      const child = spawn('bash', [bridgePath, ...bridgeArgs], { cwd, env: childEnv });
       const processId = child.pid;
       
       // 只跟踪安装进程
@@ -609,6 +731,13 @@ function runBridge(args) {
         
         try {
           const parsed = parseBridgeOutput(output);
+          if (parsed && parsed.ok && PRIVILEGED_COMMANDS.has(commandType)) {
+            markSudoActivity();
+            startSudoKeepAlive();
+          }
+          if (parsed && parsed.error === 'sudo_required') {
+            stopSudoKeepAlive();
+          }
           resolve(parsed);
         } catch (err) {
           console.error('[runBridge] JSON parse error:', err);
@@ -701,7 +830,12 @@ function createWindow() {
     const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
     win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
       const url = details.url || '';
-      if (!url.startsWith('http://127.0.0.1:9090/') && !url.startsWith('http://localhost:9090/')) {
+      const isLocalControllerRequest =
+        url.startsWith('http://127.0.0.1:9090/')
+        || url.startsWith('http://localhost:9090/')
+        || url.startsWith('ws://127.0.0.1:9090/')
+        || url.startsWith('ws://localhost:9090/');
+      if (!isLocalControllerRequest) {
         callback({ requestHeaders: details.requestHeaders });
         return;
       }
@@ -866,8 +1000,8 @@ app.whenReady().then(() => {
 
   applyAppMenu();
 
-  ipcMain.handle('clashfox:command', async (_event, command, args = []) => {
-    const result = await runBridge([command, ...args]);
+  ipcMain.handle('clashfox:command', async (_event, command, args = [], options = {}) => {
+    const result = await runBridge([command, ...args], options);
     if (result && result.ok && ['start', 'stop', 'restart'].includes(command)) {
       await createTrayMenu();
     }
@@ -1047,6 +1181,7 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  stopSudoKeepAlive();
 });
 
 app.on('window-all-closed', () => {

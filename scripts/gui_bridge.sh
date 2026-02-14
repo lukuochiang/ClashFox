@@ -197,6 +197,9 @@ force_kill() {
 
 ensure_sudo() {
     local sudo_pass="$1"
+    if [ -z "$sudo_pass" ] && [ -n "${CLASHFOX_SUDO_PASS:-}" ]; then
+        sudo_pass="$CLASHFOX_SUDO_PASS"
+    fi
     if sudo -n true 2>/dev/null; then
         return 0
     fi
@@ -1671,7 +1674,7 @@ JSON
     install)
         github_user=""
         version_branch=""
-        sudo_pass=""
+        sudo_pass="${CLASHFOX_SUDO_PASS:-}"
         while [ $# -gt 0 ]; do
             case "$1" in
                 --github-user)
@@ -1711,7 +1714,7 @@ JSON
         ;;
     start)
         config_path=""
-        sudo_pass=""
+        sudo_pass="${CLASHFOX_SUDO_PASS:-}"
         while [ $# -gt 0 ]; do
             case "$1" in
                 --config)
@@ -1744,7 +1747,7 @@ JSON
         fi
         ;;
     stop)
-        sudo_pass=""
+        sudo_pass="${CLASHFOX_SUDO_PASS:-}"
         while [ $# -gt 0 ]; do
             case "$1" in
                 --sudo-pass)
@@ -1779,7 +1782,7 @@ JSON
         fi
         ;;
     restart)
-        sudo_pass=""
+        sudo_pass="${CLASHFOX_SUDO_PASS:-}"
         while [ $# -gt 0 ]; do
             case "$1" in
                 --sudo-pass)
@@ -1934,7 +1937,7 @@ JSON
         print_ok "{}"
         ;;
     delete-backups)
-        sudo_pass=""
+        sudo_pass="${CLASHFOX_SUDO_PASS:-}"
         paths=()
         while [ $# -gt 0 ]; do
             case "$1" in

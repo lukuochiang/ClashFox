@@ -759,7 +759,7 @@ async function runCommandWithSudo(command, args = []) {
     return { ok: false, error: 'cancelled' };
   }
 
-  const retry = await runCommand(command, [...args, '--sudo-pass', password]);
+  const retry = await runCommand(command, args, { sudoPass: password });
   if (!retry.ok && retry.error === 'sudo_invalid') {
     showToast(t('labels.sudoInvalid'), 'error');
   }
@@ -823,7 +823,7 @@ function setActiveNav(page) {
   });
 }
 
-async function runCommand(command, args = []) {
+async function runCommand(command, args = [], options = {}) {
   if (!window.clashfox || typeof window.clashfox.runCommand !== 'function') {
     return { ok: false, error: 'bridge_missing' };
   }
@@ -838,7 +838,7 @@ async function runCommand(command, args = []) {
   if (effectiveSettings.dataDir) {
     pathArgs.push('--data-dir', effectiveSettings.dataDir);
   }
-  return window.clashfox.runCommand(command, [...pathArgs, ...args]);
+  return window.clashfox.runCommand(command, [...pathArgs, ...args], options);
 }
 
 async function loadStaticConfigs() {
