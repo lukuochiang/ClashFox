@@ -212,7 +212,7 @@ const DEFAULT_SETTINGS = {
   authentication: ['mihomo:clashfox'],
   proxyMode: 'rule',
   tunEnabled: false,
-  tunStack: 'mixed',
+  tunStack: 'Mixed',
   logLines: 10,
   logAutoRefresh: false,
   logIntervalPreset: '3',
@@ -637,7 +637,11 @@ function applySettings(settings) {
     tunToggle.checked = Boolean(state.settings.tunEnabled);
   }
   if (tunStackSelect) {
-    tunStackSelect.value = state.settings.tunStack || 'mixed';
+    const stack = normalizeTunStack(state.settings.tunStack);
+    tunStackSelect.value = stack;
+    if (state.settings.tunStack !== stack) {
+      saveSettings({ tunStack: stack });
+    }
   }
   if (panelSelect) {
     panelSelect.value = state.settings.panelChoice || '';
@@ -810,6 +814,21 @@ function setProxyModeValue(value) {
       fallback.checked = true;
     }
   }
+}
+
+function normalizeTunStack(value) {
+  const stack = String(value || '').trim();
+  const lower = stack.toLowerCase();
+  if (lower === 'mixed') {
+    return 'Mixed';
+  }
+  if (lower === 'gvisor') {
+    return 'gVisor';
+  }
+  if (lower === 'system') {
+    return 'System';
+  }
+  return 'Mixed';
 }
 
 function normalizeProxyMode(value) {
@@ -1620,10 +1639,11 @@ async function loadTunStatus(showToastOnSuccess = false) {
         const fetched = await fetchTunFromController();
         if (fetched && typeof fetched.enabled === 'boolean') {
           if (tunToggle) tunToggle.checked = fetched.enabled;
-          if (tunStackSelect && fetched.stack) tunStackSelect.value = fetched.stack;
+          const fetchedStack = normalizeTunStack(fetched.stack);
+          if (tunStackSelect) tunStackSelect.value = fetchedStack;
           saveSettings({
             tunEnabled: fetched.enabled,
-            ...(fetched.stack ? { tunStack: fetched.stack } : {}),
+            tunStack: fetchedStack,
           });
           tunSynced = true;
         }
@@ -1638,9 +1658,10 @@ async function loadTunStatus(showToastOnSuccess = false) {
     }
   }
   if (tunStackSelect && typeof response.data.stack === 'string') {
-    tunStackSelect.value = response.data.stack;
-    if (state.settings.tunStack !== response.data.stack) {
-      saveSettings({ tunStack: response.data.stack });
+    const stack = normalizeTunStack(response.data.stack);
+    tunStackSelect.value = stack;
+    if (state.settings.tunStack !== stack) {
+      saveSettings({ tunStack: stack });
     }
   }
   if (showToastOnSuccess) {
@@ -3024,12 +3045,13 @@ if (tunToggle) {
 
 if (tunStackSelect) {
   tunStackSelect.addEventListener('change', async () => {
-    const value = tunStackSelect.value || 'mixed';
+    const value = normalizeTunStack(tunStackSelect.value);
+    tunStackSelect.value = value;
     const response = await runCommand('tun', ['--stack', value, ...getControllerArgs()]);
     await loadTunStatus(false);
-    const actual = tunStackSelect.value || 'mixed';
+    const actual = normalizeTunStack(tunStackSelect.value);
     if (!response.ok || actual !== value) {
-      const fallback = (state.settings && state.settings.tunStack) || 'mixed';
+      const fallback = normalizeTunStack(state.settings && state.settings.tunStack);
       tunStackSelect.value = fallback;
       const message = response.error === 'controller_missing'
         ? t('labels.controllerMissing')

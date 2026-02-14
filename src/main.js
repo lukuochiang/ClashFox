@@ -155,6 +155,15 @@ function buildTrayIconWithMode(mode) {
   const safeMode = OUTBOUND_MODE_BADGE[mode] ? mode : 'rule';
   const badgeText = OUTBOUND_MODE_BADGE[safeMode];
   const badgeStyle = OUTBOUND_MODE_BADGE_STYLE[safeMode] || OUTBOUND_MODE_BADGE_STYLE.rule;
+  const canvasSize = 48;
+  const baseScale = 2.2;
+  const scaledSize = canvasSize * baseScale;
+  const baseOffset = (canvasSize - scaledSize) / 2;
+  const badgeRadius = Math.round(canvasSize * 0.19);
+  const badgeCx = canvasSize - badgeRadius - 1.5;
+  const badgeCy = canvasSize - badgeRadius - 1.5;
+  const badgeFontSize = Math.round(badgeRadius * 1.25);
+  const badgeTextY = badgeCy + Math.round(badgeRadius * 0.45);
   let icon = nativeImage.createFromPath(trayIconPath);
   if (icon.isEmpty()) {
     return icon;
@@ -163,15 +172,15 @@ function buildTrayIconWithMode(mode) {
   try {
     const baseBuffer = fs.readFileSync(trayIconPath);
     const base64 = baseBuffer.toString('base64');
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvasSize}" height="${canvasSize}" viewBox="0 0 ${canvasSize} ${canvasSize}">
 <defs>
   <mask id="iconMask">
-    <image href="data:image/png;base64,${base64}" x="0" y="0" width="20" height="20"/>
+    <image href="data:image/png;base64,${base64}" x="${baseOffset}" y="${baseOffset}" width="${scaledSize}" height="${scaledSize}"/>
   </mask>
 </defs>
-<rect x="0" y="0" width="20" height="20" fill="#ffffff" mask="url(#iconMask)"/>
-<circle cx="15.2" cy="15.2" r="4.8" fill="${badgeStyle.bg}" stroke="#0b1118" stroke-opacity="0.35" stroke-width="1"/>
-<text x="15.2" y="17.2" text-anchor="middle" font-family="Arial, sans-serif" font-size="7.8" font-weight="900" fill="${badgeStyle.fg}">${badgeText}</text>
+<rect x="0" y="0" width="${canvasSize}" height="${canvasSize}" fill="#ffffff" mask="url(#iconMask)"/>
+<circle cx="${badgeCx}" cy="${badgeCy}" r="${badgeRadius}" fill="${badgeStyle.bg}" stroke="#0b1118" stroke-opacity="0.35" stroke-width="1"/>
+<text x="${badgeCx}" y="${badgeTextY}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${badgeFontSize}" font-weight="900" fill="${badgeStyle.fg}">${badgeText}</text>
 </svg>`;
     icon = nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`);
     if (icon.isEmpty()) {
@@ -182,7 +191,7 @@ function buildTrayIconWithMode(mode) {
   }
 
   if (!icon.isEmpty()) {
-    icon = icon.resize({ width: 18, height: 18 });
+    icon = icon.resize({ width: 32, height: 32 });
     if (process.platform === 'darwin' && typeof icon.setTemplateImage === 'function') {
       icon.setTemplateImage(false);
     }

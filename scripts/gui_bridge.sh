@@ -1585,6 +1585,12 @@ JSON
         fi
         if [ -n "$stack_value" ]; then
             case "$stack_value" in
+                Mixed) stack_value="mixed" ;;
+                gVisor) stack_value="gvisor" ;;
+                System) stack_value="system" ;;
+                Lwip|LWIP) stack_value="lwip" ;;
+            esac
+            case "$stack_value" in
                 mixed|gvisor|system|lwip) ;;
                 *) print_err "invalid_tun"; exit 1 ;;
             esac

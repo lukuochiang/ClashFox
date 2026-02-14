@@ -330,6 +330,22 @@ body[data-theme="day"] .sidebar {
   object-fit: cover;
 }
 
+.brand-mark .logo-light {
+  display: none;
+}
+
+.brand-mark .logo-night {
+  display: block;
+}
+
+body[data-theme="day"] .brand-mark .logo-light {
+  display: block;
+}
+
+body[data-theme="day"] .brand-mark .logo-night {
+  display: none;
+}
+
 .brand-title {
   font-family: var(--font-display);
   font-size: 20px;
@@ -1329,8 +1345,8 @@ body[data-theme="day"] .quick-group {
 
 .quick-stack-row select {
   flex: 0 0 auto;
-  width: 120px;
-  min-width: 120px;
+  width: 90px;
+  min-width: 90px;
   margin-left: auto;
   padding: 6px 10px;
   border-radius: 10px;
@@ -1366,8 +1382,8 @@ body[data-theme="day"] .mode-row {
 }
 
 .mode-row select {
-  flex: 0 0 120px;
-  min-width: 120px;
+  flex: 0 0 90px;
+  min-width: 90px;
   padding: 7px 10px;
   border-radius: 10px;
 }
@@ -1465,8 +1481,8 @@ body[data-theme="day"] .conn-live-chart {
   grid-template-columns: 1fr;
   gap: 0;
   border-radius: 14px;
-  border: 1px solid rgba(148, 171, 197, 0.22);
-  background: rgba(6, 9, 13, 0.82);
+  border: 1px solid rgba(126, 156, 190, 0.24);
+  background: linear-gradient(180deg, rgba(16, 24, 34, 0.94), rgba(12, 18, 27, 0.92));
   overflow: hidden;
 }
 
@@ -1475,8 +1491,8 @@ body[data-theme="day"] .conn-live-chart {
   align-items: flex-start;
   gap: 10px;
   padding: 10px 14px 10px 28px;
-  border-top: 1px solid rgba(148, 171, 197, 0.2);
-  background: transparent;
+  border-top: 1px solid rgba(126, 156, 190, 0.2);
+  background: rgba(22, 32, 46, 0.68);
   color: rgba(233, 238, 243, 0.86);
   cursor: pointer;
   user-select: none;
@@ -1494,7 +1510,11 @@ body[data-theme="day"] .conn-live-chart {
 }
 
 .radio-pill:has(input[type="radio"]:checked) {
-  background: rgba(255, 255, 255, 0.04);
+  background: linear-gradient(90deg, rgba(92, 140, 205, 0.2), rgba(92, 140, 205, 0.1));
+}
+
+body[data-theme="night"] .radio-pill:not(:has(input[type="radio"]:checked)):hover {
+  background: rgba(30, 43, 61, 0.74);
 }
 
 .radio-pill::before {
