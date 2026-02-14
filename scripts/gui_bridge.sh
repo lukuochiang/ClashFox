@@ -188,7 +188,7 @@ is_running() {
 }
 
 force_kill() {
-    sudo pkill -x "$ACTIVE_CORE" >/dev/null 2>&1 || true
+    sudo -n pkill -x "$ACTIVE_CORE" >/dev/null 2>&1 || true
     local pid_file="$CLASHFOX_PID_DIR/clashfox.pid"
     if [ -f "$pid_file" ]; then
         rm -f "$pid_file"
@@ -1798,17 +1798,6 @@ JSON
         export CLASHFOX_SUDO_PASS="$sudo_pass"
 
         if kill_mihomo_kernel; then
-            if is_running; then
-                force_kill
-            fi
-        fi
-        if is_running; then
-            unset CLASHFOX_SUDO_PASS
-            print_err "stop_failed"
-            exit 1
-        fi
-
-        if stop_mihomo_kernel; then
             if is_running; then
                 force_kill
             fi

@@ -689,7 +689,8 @@ if (window.clashfox && typeof window.clashfox.onSystemThemeChange === 'function'
 }
 
 if (window.clashfox && typeof window.clashfox.onTrayRefresh === 'function') {
-  window.clashfox.onTrayRefresh(() => {
+  window.clashfox.onTrayRefresh(async () => {
+    await syncProxyModeFromFile();
     loadStatus();
   });
 }
@@ -809,6 +810,31 @@ function setProxyModeValue(value) {
       fallback.checked = true;
     }
   }
+}
+
+function normalizeProxyMode(value) {
+  const mode = String(value || '').trim().toLowerCase();
+  if (mode === 'global' || mode === 'direct' || mode === 'rule') {
+    return mode;
+  }
+  return 'rule';
+}
+
+async function syncProxyModeFromFile() {
+  if (!window.clashfox || typeof window.clashfox.readSettings !== 'function') {
+    return;
+  }
+  const response = await window.clashfox.readSettings();
+  if (!response || !response.ok || !response.data) {
+    return;
+  }
+  const nextMode = normalizeProxyMode(response.data.proxyMode);
+  const currentMode = normalizeProxyMode(state.settings && state.settings.proxyMode);
+  if (nextMode === currentMode) {
+    return;
+  }
+  saveSettings({ proxyMode: nextMode });
+  setProxyModeValue(nextMode);
 }
 
 async function runCommandWithSudo(command, args = []) {
@@ -2885,39 +2911,26 @@ async function handleCoreAction(action, button) {
       return;
     }
     
-    // 重启操作的特殊处理
-    if (action === 'restart') {
-      if (!state.coreRunning) {
-        showToast(t('labels.restartStarts'));
-        // 直接调用启动操作
-        handleCoreAction('start', startBtn);
-        return;
-      }
-      
-      // 先停止
-      setStatusInterim(false);
-      const stopResponse = await runCommandWithSudo('stop');
-      if (!stopResponse.ok) {
-        showToast(stopResponse.error || 'Stop failed', 'error');
-        return;
-      }
-      await loadStatus();
-      loadOverviewLite();
-      setTimeout(() => loadStatus(), 3000);
+    let command = action;
+    if (action === 'restart' && !state.coreRunning) {
+      showToast(t('labels.restartStarts'));
+      command = 'start';
     }
-    
-    // 准备启动参数
+
+    // 准备命令参数
     const args = [];
-    if (action === 'start' || action === 'restart') {
+    if (command === 'start') {
       const configPath = getCurrentConfigPath();
       if (configPath) {
         args.push('--config', configPath);
       }
       setStatusInterim(true);
+    } else if (command === 'stop') {
+      setStatusInterim(false);
     }
     
     // 执行操作
-    const response = await runCommandWithSudo(action === 'restart' ? 'start' : action, args);
+    const response = await runCommandWithSudo(command, args);
     if (response.ok) {
       if (action === 'start' || action === 'restart') {
         await loadStatus();

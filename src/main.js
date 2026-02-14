@@ -93,21 +93,61 @@ function getTrayLabels() {
   return tray;
 }
 
-function resolveOutboundModeFromSettings() {
+function readAppSettings() {
   try {
     const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
-    if (fs.existsSync(settingsPath)) {
-      const raw = fs.readFileSync(settingsPath, 'utf8');
-      const parsed = JSON.parse(raw);
-      const mode = parsed && typeof parsed.proxyMode === 'string' ? parsed.proxyMode.trim().toLowerCase() : '';
-      if (OUTBOUND_MODE_BADGE[mode]) {
-        return mode;
-      }
+    if (!fs.existsSync(settingsPath)) {
+      return {};
     }
+    const raw = fs.readFileSync(settingsPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
   } catch {
-    // ignore
+    return {};
+  }
+}
+
+function resolveOutboundModeFromSettings() {
+  const parsed = readAppSettings();
+  const mode = parsed && typeof parsed.proxyMode === 'string' ? parsed.proxyMode.trim().toLowerCase() : '';
+  if (OUTBOUND_MODE_BADGE[mode]) {
+    return mode;
   }
   return 'rule';
+}
+
+function persistOutboundModeToSettings(mode) {
+  if (!OUTBOUND_MODE_BADGE[mode]) {
+    return false;
+  }
+  try {
+    ensureAppDirs();
+    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
+    const parsed = readAppSettings();
+    parsed.proxyMode = mode;
+    fs.writeFileSync(settingsPath, `${JSON.stringify(parsed, null, 2)}\n`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getControllerArgsFromSettings() {
+  const settings = readAppSettings();
+  const args = [];
+  const controller = settings && typeof settings.externalController === 'string'
+    ? settings.externalController.trim()
+    : '';
+  const secret = settings && typeof settings.secret === 'string'
+    ? settings.secret.trim()
+    : '';
+  if (controller) {
+    args.push('--controller', controller);
+  }
+  if (secret) {
+    args.push('--secret', secret);
+  }
+  return args;
 }
 
 function buildTrayIconWithMode(mode) {
@@ -552,6 +592,7 @@ function applyAppMenu() {
 async function createTrayMenu() {
   if (process.platform !== 'darwin') {
     return;
+    return;
   }
   if (!tray) {
     const trayIcon = buildTrayIconWithMode(resolveOutboundModeFromSettings());
@@ -570,6 +611,8 @@ async function createTrayMenu() {
     }
   }
   const labels = getTrayLabels();
+  const currentOutboundMode = resolveOutboundModeFromSettings();
+  const currentOutboundBadge = OUTBOUND_MODE_BADGE[currentOutboundMode] || OUTBOUND_MODE_BADGE.rule;
   let dashboardEnabled = false;
   try {
     const status = await runBridge(['status']);
@@ -579,6 +622,54 @@ async function createTrayMenu() {
   }
   const trayMenu = Menu.buildFromTemplate([
     { label: labels.showMain, click: () => showMainWindow() },
+    { type: 'separator' },
+    {
+      label: `${labels.outboundMode || 'Outbound Mode'}\t[${currentOutboundBadge}]`,
+      submenu: [
+        {
+          type: 'radio',
+          label: labels.modeGlobalTitle || 'Global Proxy',
+          sublabel: labels.modeGlobalDesc || 'All requests will be forwarded to a proxy server',
+          checked: currentOutboundMode === 'global',
+          click: async () => {
+            const response = await runTrayCommand('mode', ['--mode', 'global', ...getControllerArgsFromSettings()], labels);
+            if (response.ok) {
+              persistOutboundModeToSettings('global');
+              await createTrayMenu();
+              emitTrayRefresh();
+            }
+          },
+        },
+        {
+          type: 'radio',
+          label: labels.modeRuleTitle || 'Rule-Based Proxy',
+          sublabel: labels.modeRuleDesc || 'Using rule system to determine how to process requests',
+          checked: currentOutboundMode === 'rule',
+          click: async () => {
+            const response = await runTrayCommand('mode', ['--mode', 'rule', ...getControllerArgsFromSettings()], labels);
+            if (response.ok) {
+              persistOutboundModeToSettings('rule');
+              await createTrayMenu();
+              emitTrayRefresh();
+            }
+          },
+        },
+        {
+          type: 'radio',
+          label: labels.modeDirectTitle || 'Direct Outbound',
+          sublabel: labels.modeDirectDesc || 'All requests will be sent to the target server directly',
+          checked: currentOutboundMode === 'direct',
+          click: async () => {
+            const response = await runTrayCommand('mode', ['--mode', 'direct', ...getControllerArgsFromSettings()], labels);
+            if (response.ok) {
+              persistOutboundModeToSettings('direct');
+              await createTrayMenu();
+              emitTrayRefresh();
+            }
+          },
+        },
+      ],
+    },
     { type: 'separator' },
     { label: labels.dashboard, enabled: dashboardEnabled, click: () => openDashboardPanel() },
     { type: 'separator' },
