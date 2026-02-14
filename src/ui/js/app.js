@@ -25,6 +25,12 @@ let overviewNetwork = document.getElementById('overviewNetwork');
 let overviewLocalIp = document.getElementById('overviewLocalIp');
 let overviewProxyIp = document.getElementById('overviewProxyIp');
 let overviewInternetIp = document.getElementById('overviewInternetIp');
+let overviewConnCurrent = document.getElementById('overviewConnCurrent');
+let overviewConnPeak = document.getElementById('overviewConnPeak');
+let overviewConnAvg = document.getElementById('overviewConnAvg');
+let overviewConnTrend = document.getElementById('overviewConnTrend');
+let overviewConnLine = document.getElementById('overviewConnLine');
+let overviewConnArea = document.getElementById('overviewConnArea');
 let trafficSystemDownloadRate = document.getElementById('trafficSystemDownloadRate');
 let trafficSystemDownloadTotal = document.getElementById('trafficSystemDownloadTotal');
 let trafficSystemUploadRate = document.getElementById('trafficSystemUploadRate');
@@ -263,6 +269,9 @@ const state = {
   overviewRunning: false,
   overviewUptimeBaseSec: 0,
   overviewUptimeAt: 0,
+  connSamples: [],
+  connPeak: 0,
+  connLast: null,
   configDefault: '',
   settings: { ...DEFAULT_SETTINGS },
 };
@@ -330,6 +339,7 @@ function applyCardIcons() {
     const tname = (text || '').toLowerCase();
     if (tname.includes('network history')) return 'var(--icon-clock)';
     if (tname.includes('running status')) return 'var(--icon-activity)';
+    if (tname.includes('realtime connections') || tname.includes('real-time connections') || tname.includes('实时连接')) return 'var(--icon-connections)';
     if (tname.includes('network status')) return 'var(--icon-wifi)';
     if (tname.includes('kernel list')) return 'var(--icon-list)';
     if (tname.includes('recommended configs')) return 'var(--icon-list)';
@@ -337,7 +347,7 @@ function applyCardIcons() {
     if (tname.includes('switch kernel')) return 'var(--icon-checklist)';
     if (tname.includes('config control')) return 'var(--icon-checklist)';
     if (tname.includes('panel manager')) return 'var(--icon-panels)';
-    if (tname.trim() === 'outbound mode') return 'var(--icon-outbound)';
+    if (tname.includes('outbound mode')) return 'var(--icon-outbound)';
     if (tname.includes('user data paths')) return 'var(--icon-folders)';
     if (tname.includes('pagination')) return 'var(--icon-slider-h)';
     if (tname.includes('appearance')) return 'var(--icon-palette)';
@@ -1097,6 +1107,7 @@ function formatBitrate(bytesPerSec) {
 }
 
 const TRAFFIC_HISTORY_POINTS = 26;
+const CONNECTION_HISTORY_MS = 30000;
 
 function niceMaxValue(value) {
   if (!Number.isFinite(value) || value <= 0) {
@@ -1303,6 +1314,97 @@ function formatKernelDisplay(value) {
   return first || '-';
 }
 
+function parseConnectionCount(value) {
+  if (value === '' || value === null || value === undefined) {
+    return null;
+  }
+  const text = String(value).trim();
+  if (!text) {
+    return null;
+  }
+  const matched = text.match(/-?\d+/);
+  if (!matched) {
+    return null;
+  }
+  const parsed = Number.parseInt(matched[0], 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null;
+  }
+  return parsed;
+}
+
+function renderConnectionHistoryChart(samples) {
+  if (!overviewConnLine || !overviewConnArea) {
+    return;
+  }
+  if (!Array.isArray(samples) || !samples.length) {
+    overviewConnLine.setAttribute('d', '');
+    overviewConnArea.setAttribute('d', '');
+    return;
+  }
+
+  const values = samples.map((item) => Number.parseInt(item.value, 10)).filter((item) => Number.isFinite(item) && item >= 0);
+  if (!values.length) {
+    overviewConnLine.setAttribute('d', '');
+    overviewConnArea.setAttribute('d', '');
+    return;
+  }
+
+  let maxValue = niceMaxValue(Math.max(...values, 0));
+  if (maxValue < 4) {
+    maxValue = 4;
+  }
+  overviewConnLine.setAttribute('d', buildSparkPath(values, maxValue));
+  overviewConnArea.setAttribute('d', buildSparkArea(values, maxValue));
+}
+
+function updateRealtimeConnections(value) {
+  if (!overviewConnCurrent || !overviewConnPeak || !overviewConnAvg || !overviewConnTrend) {
+    return;
+  }
+  const current = parseConnectionCount(value);
+  if (current === null) {
+    overviewConnCurrent.textContent = '-';
+    overviewConnPeak.textContent = '-';
+    overviewConnAvg.textContent = '-';
+    overviewConnTrend.textContent = '-';
+    overviewConnTrend.dataset.trend = 'flat';
+    state.connSamples = [];
+    state.connPeak = 0;
+    state.connLast = null;
+    renderConnectionHistoryChart([]);
+    return;
+  }
+
+  const now = Date.now();
+  state.connSamples.push({ at: now, value: current });
+  const threshold = now - CONNECTION_HISTORY_MS;
+  state.connSamples = state.connSamples.filter((item) => item.at >= threshold);
+  state.connPeak = Math.max(state.connPeak || 0, current);
+
+  const total = state.connSamples.reduce((sum, item) => sum + item.value, 0);
+  const avg = state.connSamples.length ? Math.round(total / state.connSamples.length) : current;
+  const delta = state.connLast === null ? 0 : (current - state.connLast);
+  state.connLast = current;
+
+  overviewConnCurrent.textContent = String(current);
+  overviewConnPeak.textContent = String(state.connPeak);
+  overviewConnAvg.textContent = String(avg);
+
+  if (delta > 0) {
+    overviewConnTrend.textContent = `▲ +${delta}`;
+    overviewConnTrend.dataset.trend = 'up';
+  } else if (delta < 0) {
+    overviewConnTrend.textContent = `▼ ${delta}`;
+    overviewConnTrend.dataset.trend = 'down';
+  } else {
+    overviewConnTrend.textContent = '• 0';
+    overviewConnTrend.dataset.trend = 'flat';
+  }
+
+  renderConnectionHistoryChart(state.connSamples);
+}
+
 function updateOverviewUI(data) {
   if (!data) {
     return;
@@ -1339,6 +1441,7 @@ function updateOverviewUI(data) {
       ? '-'
       : data.connections;
   }
+  updateRealtimeConnections(data.connections);
   if (overviewMemory) {
     overviewMemory.textContent = data.memory === '' || data.memory === null || data.memory === undefined
       ? '-'
@@ -1399,6 +1502,7 @@ function updateOverviewRuntimeUI(data) {
       ? '-'
       : data.connections;
   }
+  updateRealtimeConnections(data.connections);
   
   if (overviewMemory) {
     overviewMemory.textContent = data.memory === '' || data.memory === null || data.memory === undefined
@@ -1956,6 +2060,12 @@ function refreshPageRefs() {
   overviewLocalIp = document.getElementById('overviewLocalIp');
   overviewProxyIp = document.getElementById('overviewProxyIp');
   overviewInternetIp = document.getElementById('overviewInternetIp');
+  overviewConnCurrent = document.getElementById('overviewConnCurrent');
+  overviewConnPeak = document.getElementById('overviewConnPeak');
+  overviewConnAvg = document.getElementById('overviewConnAvg');
+  overviewConnTrend = document.getElementById('overviewConnTrend');
+  overviewConnLine = document.getElementById('overviewConnLine');
+  overviewConnArea = document.getElementById('overviewConnArea');
   trafficSystemDownloadRate = document.getElementById('trafficSystemDownloadRate');
   trafficSystemDownloadTotal = document.getElementById('trafficSystemDownloadTotal');
   trafficSystemUploadRate = document.getElementById('trafficSystemUploadRate');

@@ -41,6 +41,7 @@
   --icon-defaults: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 2a1 1 0 0 1 .96.72l.7 2.44 2.5-.2a1 1 0 0 1 .87 1.6l-1.6 2.02 1.6 2.02a1 1 0 0 1-.87 1.6l-2.5-.2-.7 2.44a1 1 0 0 1-1.92 0l-.7-2.44-2.5.2a1 1 0 0 1-.87-1.6l1.6-2.02-1.6-2.02a1 1 0 0 1 .87-1.6l2.5.2.7-2.44A1 1 0 0 1 10 2Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-config: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3' y='2.5' width='14' height='15' rx='2' stroke='%23000' stroke-width='1.5' fill='none'/%3E%3Cpath d='M6 6.5h4' stroke='%23000' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M6 9.5h3' stroke='%23000' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M6 12.5h5' stroke='%23000' stroke-width='1.5' stroke-linecap='round'/%3E%3Crect x='11.5' y='6' width='5' height='6.5' rx='0.8' stroke='%23000' stroke-width='1.2' fill='none'/%3E%3Cpath d='M13 7.5h2.5' stroke='%23000' stroke-width='1.1' stroke-linecap='round'/%3E%3Cpath d='M13 9h1.6' stroke='%23000' stroke-width='1.1' stroke-linecap='round'/%3E%3Cpath d='M13 10.5h2' stroke='%23000' stroke-width='1.1' stroke-linecap='round'/%3E%3C/svg%3E");
   --icon-outbound: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 7h8V4l6 5-6 5v-3H4V7Zm16 10H12v3l-6-5 6-5v3h8v4Z' fill='%23000'/%3E%3C/svg%3E");
+  --icon-connections: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='7' cy='12' r='3' fill='%23000'/%3E%3Ccircle cx='17' cy='7' r='3' fill='%23000'/%3E%3Ccircle cx='17' cy='17' r='3' fill='%23000'/%3E%3Cpath d='M9.8 10.8l4.4-2.6M9.8 13.2l4.4 2.6' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 
 body[data-theme="night"] {
@@ -974,6 +975,10 @@ body[data-page="settings"] .card h3 {
   --card-icon-mask: var(--icon-outbound);
 }
 
+.conn-live-icon {
+  --card-icon-mask: var(--icon-connections);
+}
+
 .card-hint {
   font-size: 12px;
   color: var(--muted);
@@ -1018,7 +1023,7 @@ body[data-page="settings"] .card h3 {
 .history-panel {
   border-radius: 16px;
   padding: 12px 14px;
-  border: 1px solid rgba(148, 171, 197, 0.15);
+  /*border: 1px solid rgba(148, 171, 197, 0.15);*/
   background: rgba(17, 23, 30, 0.4);
   display: grid;
   gap: 8px;
@@ -1174,6 +1179,79 @@ body[data-theme="day"] .paths-input::placeholder {
   /*margin-top: 10px;*/
 }
 
+.quick-actions-card {
+  display: grid;
+  gap: 12px;
+}
+
+.quick-actions-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.quick-actions-buttons .btn {
+  width: 100%;
+  min-height: 40px;
+}
+
+.quick-controls-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.quick-control {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  margin-top: 0;
+  min-height: 54px;
+  padding: 10px 12px;
+}
+
+.quick-tun-row {
+  justify-content: space-between;
+}
+
+.quick-tun-row .toggle {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.quick-tun-row .toggle span {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+.quick-stack-row {
+  justify-content: space-between;
+}
+
+.quick-stack-row .mode-label {
+  letter-spacing: 0.14em;
+  margin-right: auto;
+}
+
+.quick-stack-row select {
+  flex: 0 0 auto;
+  width: 120px;
+  min-width: 120px;
+  margin-left: auto;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border-color: rgba(133, 190, 255, 0.82);
+  box-shadow: inset 0 0 0 1px rgba(133, 190, 255, 0.2);
+}
+
+body[data-theme="day"] .quick-stack-row select {
+  border-color: rgba(52, 124, 212, 0.68);
+  box-shadow: inset 0 0 0 1px rgba(52, 124, 212, 0.15);
+}
+
 .mode-row {
   align-items: center;
   gap: 10px;
@@ -1197,8 +1275,8 @@ body[data-theme="day"] .mode-row {
 }
 
 .mode-row select {
-  flex: 0 0 150px;
-  min-width: 150px;
+  flex: 0 0 120px;
+  min-width: 120px;
   padding: 7px 10px;
   border-radius: 10px;
 }
@@ -1206,6 +1284,74 @@ body[data-theme="day"] .mode-row {
 .outbound-card {
   display: grid;
   gap: 12px;
+}
+
+.conn-live-card {
+  display: grid;
+  gap: 12px;
+}
+
+.conn-live-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.conn-live-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 171, 197, 0.2);
+  background: rgba(148, 171, 197, 0.07);
+}
+
+.conn-live-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.conn-live-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #27c2a7;
+}
+
+.conn-live-trend {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.conn-live-trend[data-trend="up"] {
+  color: #40c057;
+}
+
+.conn-live-trend[data-trend="down"] {
+  color: #ff8a3c;
+}
+
+.conn-live-chart {
+  position: relative;
+  height: 72px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 171, 197, 0.18);
+  background: rgba(12, 17, 24, 0.78);
+}
+
+body[data-theme="day"] .conn-live-chart {
+  background: rgba(247, 250, 255, 0.92);
+}
+
+.history-area.conn {
+  fill: rgba(39, 194, 167, 0.2);
+}
+
+.history-line.conn {
+  stroke: #27c2a7;
 }
 
 .outbound-body {
@@ -1324,6 +1470,18 @@ body[data-theme="day"] .radio-hint {
 
 @media (max-width: 720px) {
   .outbound-options {
+    grid-template-columns: 1fr;
+  }
+
+  .conn-live-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-actions-buttons {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-controls-grid {
     grid-template-columns: 1fr;
   }
 }

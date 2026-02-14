@@ -49,6 +49,16 @@ let isQuitting = false;
 const SUDO_KEEPALIVE_INTERVAL_MS = 55 * 1000;
 const SUDO_KEEPALIVE_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 const PRIVILEGED_COMMANDS = new Set(['install', 'start', 'stop', 'restart', 'delete-backups']);
+const OUTBOUND_MODE_BADGE = {
+  rule: 'R',
+  global: 'G',
+  direct: 'D',
+};
+const OUTBOUND_MODE_BADGE_STYLE = {
+  rule: { bg: '#ffffff', fg: '#0b1118' },
+  global: { bg: '#ffffff', fg: '#0b1118' },
+  direct: { bg: '#ffffff', fg: '#0b1118' },
+};
 
 const I18N = require(path.join(APP_PATH, 'static', 'locales', 'i18n.js'));
 ;
@@ -81,6 +91,63 @@ function getTrayLabels() {
   const lang = resolveTrayLang();
   const tray = (I18N[lang] && I18N[lang].tray) || (I18N.en && I18N.en.tray) || {};
   return tray;
+}
+
+function resolveOutboundModeFromSettings() {
+  try {
+    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
+    if (fs.existsSync(settingsPath)) {
+      const raw = fs.readFileSync(settingsPath, 'utf8');
+      const parsed = JSON.parse(raw);
+      const mode = parsed && typeof parsed.proxyMode === 'string' ? parsed.proxyMode.trim().toLowerCase() : '';
+      if (OUTBOUND_MODE_BADGE[mode]) {
+        return mode;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return 'rule';
+}
+
+function buildTrayIconWithMode(mode) {
+  const trayIconPath = path.join(APP_PATH, 'src', 'ui', 'assets', 'menu.png');
+  const safeMode = OUTBOUND_MODE_BADGE[mode] ? mode : 'rule';
+  const badgeText = OUTBOUND_MODE_BADGE[safeMode];
+  const badgeStyle = OUTBOUND_MODE_BADGE_STYLE[safeMode] || OUTBOUND_MODE_BADGE_STYLE.rule;
+  let icon = nativeImage.createFromPath(trayIconPath);
+  if (icon.isEmpty()) {
+    return icon;
+  }
+
+  try {
+    const baseBuffer = fs.readFileSync(trayIconPath);
+    const base64 = baseBuffer.toString('base64');
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
+<defs>
+  <mask id="iconMask">
+    <image href="data:image/png;base64,${base64}" x="0" y="0" width="20" height="20"/>
+  </mask>
+</defs>
+<rect x="0" y="0" width="20" height="20" fill="#ffffff" mask="url(#iconMask)"/>
+<circle cx="15.2" cy="15.2" r="4.8" fill="${badgeStyle.bg}" stroke="#0b1118" stroke-opacity="0.35" stroke-width="1"/>
+<text x="15.2" y="17.2" text-anchor="middle" font-family="Arial, sans-serif" font-size="7.8" font-weight="900" fill="${badgeStyle.fg}">${badgeText}</text>
+</svg>`;
+    icon = nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`);
+    if (icon.isEmpty()) {
+      icon = nativeImage.createFromPath(trayIconPath);
+    }
+  } catch {
+    icon = nativeImage.createFromPath(trayIconPath);
+  }
+
+  if (!icon.isEmpty()) {
+    icon = icon.resize({ width: 18, height: 18 });
+    if (process.platform === 'darwin' && typeof icon.setTemplateImage === 'function') {
+      icon.setTemplateImage(false);
+    }
+  }
+  return icon;
 }
 
 function runSudoCheckNoPrompt() {
@@ -487,14 +554,20 @@ async function createTrayMenu() {
     return;
   }
   if (!tray) {
-    const trayIconPath = path.join(APP_PATH, 'src', 'ui', 'assets', 'menu.png');
-    let trayIcon = nativeImage.createFromPath(trayIconPath);
-    if (!trayIcon.isEmpty()) {
-      trayIcon = trayIcon.resize({ width: 18, height: 18 });
-      trayIcon.setTemplateImage(true);
-    }
+    const trayIcon = buildTrayIconWithMode(resolveOutboundModeFromSettings());
     tray = new Tray(trayIcon);
+    if (process.platform === 'darwin' && trayIcon && typeof trayIcon.setTemplateImage === 'function') {
+      trayIcon.setTemplateImage(false);
+    }
     tray.setToolTip('ClashFox');
+  } else {
+    const trayIcon = buildTrayIconWithMode(resolveOutboundModeFromSettings());
+    if (!trayIcon.isEmpty()) {
+      if (process.platform === 'darwin' && typeof trayIcon.setTemplateImage === 'function') {
+        trayIcon.setTemplateImage(false);
+      }
+      tray.setImage(trayIcon);
+    }
   }
   const labels = getTrayLabels();
   let dashboardEnabled = false;
@@ -1002,7 +1075,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:command', async (_event, command, args = [], options = {}) => {
     const result = await runBridge([command, ...args], options);
-    if (result && result.ok && ['start', 'stop', 'restart'].includes(command)) {
+    if (result && result.ok && ['start', 'stop', 'restart', 'mode'].includes(command)) {
       await createTrayMenu();
     }
     return result;
