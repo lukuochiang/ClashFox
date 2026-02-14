@@ -2323,6 +2323,11 @@ wait_for_key() {
 # 请求 sudo 权限
 #========================
 request_sudo_permission() {
+    # GUI 模式由上层处理授权弹窗，这里跳过交互式 sudo 提示
+    if [ "${CLASHFOX_GUI_MODE:-0}" = "1" ]; then
+        return 0
+    fi
+
     # 先静默检查是否已经有 sudo 权限
     if sudo -n true 2>/dev/null; then
         # 保持 sudo 权限有效期（后台进程，每60秒刷新一次）

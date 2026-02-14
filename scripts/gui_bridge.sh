@@ -1732,10 +1732,13 @@ JSON
         if ! ensure_sudo "$sudo_pass"; then
             exit 1
         fi
+        export CLASHFOX_SUDO_PASS="$sudo_pass"
 
         if start_mihomo_kernel; then
+            unset CLASHFOX_SUDO_PASS
             print_ok "{}"
         else
+            unset CLASHFOX_SUDO_PASS
             print_err "start_failed"
             exit 1
         fi
@@ -1754,6 +1757,7 @@ JSON
         if ! ensure_sudo "$sudo_pass"; then
             exit 1
         fi
+        export CLASHFOX_SUDO_PASS="$sudo_pass"
 
         if kill_mihomo_kernel; then
             if is_running; then
@@ -1766,9 +1770,11 @@ JSON
         fi
 
         if is_running; then
+            unset CLASHFOX_SUDO_PASS
             print_err "stop_failed"
             exit 1
         else
+            unset CLASHFOX_SUDO_PASS
             print_ok "{}"
         fi
         ;;
@@ -1786,6 +1792,7 @@ JSON
         if ! ensure_sudo "$sudo_pass"; then
             exit 1
         fi
+        export CLASHFOX_SUDO_PASS="$sudo_pass"
 
         if kill_mihomo_kernel; then
             if is_running; then
@@ -1793,6 +1800,7 @@ JSON
             fi
         fi
         if is_running; then
+            unset CLASHFOX_SUDO_PASS
             print_err "stop_failed"
             exit 1
         fi
@@ -1803,18 +1811,22 @@ JSON
             fi
         fi
         if is_running; then
+            unset CLASHFOX_SUDO_PASS
             print_err "stop_failed"
             exit 1
         fi
 
         if start_mihomo_kernel; then
             if is_running; then
+                unset CLASHFOX_SUDO_PASS
                 print_ok "{}"
             else
+                unset CLASHFOX_SUDO_PASS
                 print_err "start_failed"
                 exit 1
             fi
         else
+            unset CLASHFOX_SUDO_PASS
             print_err "restart_failed"
             exit 1
         fi
