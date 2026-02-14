@@ -335,6 +335,15 @@ function applyI18n() {
 }
 
 function applyCardIcons() {
+  const mapIconByI18nKey = (key) => {
+    if (!key) return '';
+    if (key === 'status.quick') return 'var(--icon-sliders)';
+    if (key === 'status.proxyMode') return 'var(--icon-outbound)';
+    if (key === 'status.connLiveTitle') return 'var(--icon-connections)';
+    if (key === 'status.trafficTitle') return 'var(--icon-clock)';
+    return '';
+  };
+
   const mapIcon = (text) => {
     const tname = (text || '').toLowerCase();
     if (tname.includes('network history')) return 'var(--icon-clock)';
@@ -368,9 +377,22 @@ function applyCardIcons() {
   };
 
   document.querySelectorAll('.card h3').forEach((h) => {
+    h.classList.add('iconized');
+
+    // Respect explicit icon classes to avoid i18n text matching side effects.
+    if (h.classList.contains('outbound-icon') || h.classList.contains('conn-live-icon') || h.classList.contains('quick-actions-icon')) {
+      h.style.removeProperty('--card-icon-mask');
+      return;
+    }
+
+    const iconByKey = mapIconByI18nKey(h.dataset.i18n || '');
+    if (iconByKey) {
+      h.style.setProperty('--card-icon-mask', iconByKey);
+      return;
+    }
+
     const text = h.textContent || '';
     const icon = mapIcon(text);
-    h.classList.add('iconized');
     h.style.setProperty('--card-icon-mask', icon);
   });
 }

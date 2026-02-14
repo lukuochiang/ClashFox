@@ -16,32 +16,40 @@
         <div id="contentRoot" class="content-root">
           <section id="overview" class="panel active">
           <div class="panel-grid">
-            <div class="card quick-actions quick-actions-card">
-              <h3 data-i18n="status.quick">Quick Actions</h3>
-              <div class="action-row quick-actions-buttons">
-                <button class="btn primary" id="startBtn" data-i18n="actions.start">Start</button>
-                <button class="btn" id="stopBtn" data-i18n="actions.stop">Stop</button>
-                <button class="btn" id="restartBtn" data-i18n="actions.restart">Restart</button>
+            <div class="card quick-actions-card">
+              <div class="card-header-row">
+                <h3 class="iconized quick-actions-icon" data-i18n="status.quick">Quick Actions</h3>
               </div>
-              <div class="quick-controls-grid">
-                <div class="action-row mode-row quick-control quick-tun-row">
-                  <label class="toggle">
-                    <span data-i18n="status.tun">TUN</span>
-                    <input id="tunToggle" type="checkbox" />
-                    <span class="toggle-pill" aria-hidden="true"></span>
-                  </label>
+              <div class="quick-group">
+                <div class="quick-group-label">Kernel Control</div>
+                <div class="action-row quick-actions-buttons">
+                  <button class="btn primary" id="startBtn" data-i18n="actions.start">Start</button>
+                  <button class="btn" id="stopBtn" data-i18n="actions.stop">Stop</button>
+                  <button class="btn" id="restartBtn" data-i18n="actions.restart">Restart</button>
                 </div>
-                <div class="action-row mode-row quick-control quick-stack-row">
-                  <span class="mode-label" data-i18n="status.tunStack">Stack</span>
-                  <select id="tunStackSelect" aria-label="TUN Stack">
-                    <option value="Mixed" data-i18n="status.tunStackMixed" selected>Mixed</option>
-                    <option value="gVisor" data-i18n="status.tunStackGvisor">gVisor</option>
-                    <option value="System" data-i18n="status.tunStackSystem">System</option>
-                  </select>
+              </div>
+              <div class="quick-group">
+                <div class="quick-group-label">Core Config</div>
+                <div class="quick-controls-grid">
+                  <div class="action-row mode-row quick-control quick-tun-row">
+                    <label class="toggle">
+                      <span data-i18n="status.tun">TUN</span>
+                      <input id="tunToggle" type="checkbox" />
+                      <span class="toggle-pill" aria-hidden="true"></span>
+                    </label>
+                  </div>
+                  <div class="action-row mode-row quick-control quick-stack-row">
+                    <span class="mode-label" data-i18n="status.tunStack">Stack</span>
+                    <select id="tunStackSelect" aria-label="TUN Stack">
+                      <option value="Mixed" data-i18n="status.tunStackMixed" selected>Mixed</option>
+                      <option value="gVisor" data-i18n="status.tunStackGvisor">gVisor</option>
+                      <option value="System" data-i18n="status.tunStackSystem">System</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
-            <div class="card quick-actions outbound-card">
+            <div class="card outbound-card">
               <div class="card-header-row">
                 <h3 class="iconized outbound-icon" data-i18n="status.proxyMode">Outbound Mode</h3>
               </div>
@@ -73,19 +81,19 @@
             </div>
             <div class="card quick-actions conn-live-card">
               <div class="card-header-row">
-                <h3 class="iconized conn-live-icon">Realtime Connections</h3>
+                <h3 class="iconized conn-live-icon" data-i18n="status.connLiveTitle">Realtime Connections</h3>
               </div>
               <div class="conn-live-grid">
                 <div class="conn-live-item">
-                  <span class="conn-live-label">Current</span>
+                  <span class="conn-live-label" data-i18n="status.connLiveCurrent">Current</span>
                   <span class="conn-live-value" id="overviewConnCurrent">-</span>
                 </div>
                 <div class="conn-live-item">
-                  <span class="conn-live-label">Peak</span>
+                  <span class="conn-live-label" data-i18n="status.connLivePeak">Peak</span>
                   <span class="conn-live-value" id="overviewConnPeak">-</span>
                 </div>
                 <div class="conn-live-item">
-                  <span class="conn-live-label">Avg(30s)</span>
+                  <span class="conn-live-label" data-i18n="status.connLiveAvg30">Avg(30s)</span>
                   <span class="conn-live-value" id="overviewConnAvg">-</span>
                 </div>
               </div>

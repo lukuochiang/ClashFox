@@ -57,7 +57,11 @@ const I18N = {
       "trafficTotalDown": "Download Total",
       "trafficTotalUp": "Upload Total",
       "trafficRateUp": "Upload Rate",
-      "trafficRateDown": "Download Rate"
+      "trafficRateDown": "Download Rate",
+      "connLiveTitle": "Realtime Connections",
+      "connLiveCurrent": "Current",
+      "connLivePeak": "Peak",
+      "connLiveAvg30": "Avg(30s)"
     },
     "install": {
       "title": "Install / Update Mihomo",
@@ -330,7 +334,11 @@ const I18N = {
       "trafficTotalDown": "下载总量",
       "trafficTotalUp": "上传总量",
       "trafficRateUp": "上传速率",
-      "trafficRateDown": "下载速率"
+      "trafficRateDown": "下载速率",
+      "connLiveTitle": "实时连接",
+      "connLiveCurrent": "当前",
+      "connLivePeak": "峰值",
+      "connLiveAvg30": "30秒均值"
     },
     "install": {
       "title": "安装 / 更新 Mihomo",
@@ -603,7 +611,11 @@ const I18N = {
       "trafficTotalDown": "Download Total",
       "trafficTotalUp": "Upload Total",
       "trafficRateUp": "送信速度",
-      "trafficRateDown": "受信速度"
+      "trafficRateDown": "受信速度",
+      "connLiveTitle": "リアルタイム接続",
+      "connLiveCurrent": "現在値",
+      "connLivePeak": "ピーク",
+      "connLiveAvg30": "30秒平均"
     },
     "install": {
       "title": "Mihomo のインストール / 更新",
@@ -876,7 +888,11 @@ const I18N = {
       "trafficTotalDown": "Download Total",
       "trafficTotalUp": "Upload Total",
       "trafficRateUp": "업로드 속도",
-      "trafficRateDown": "다운로드 속도"
+      "trafficRateDown": "다운로드 속도",
+      "connLiveTitle": "실시간 연결",
+      "connLiveCurrent": "현재",
+      "connLivePeak": "최대",
+      "connLiveAvg30": "30초 평균"
     },
     "install": {
       "title": "Mihomo 설치 / 업데이트",
@@ -1149,7 +1165,11 @@ const I18N = {
       "trafficTotalDown": "Download Total",
       "trafficTotalUp": "Upload Total",
       "trafficRateUp": "Débit montant",
-      "trafficRateDown": "Débit descendant"
+      "trafficRateDown": "Débit descendant",
+      "connLiveTitle": "Connexions en temps réel",
+      "connLiveCurrent": "Actuel",
+      "connLivePeak": "Pic",
+      "connLiveAvg30": "Moy(30s)"
     },
     "install": {
       "title": "Installer / Mettre à jour Mihomo",
@@ -1422,7 +1442,11 @@ const I18N = {
       "trafficTotalDown": "Download Total",
       "trafficTotalUp": "Upload Total",
       "trafficRateUp": "Upload‑Rate",
-      "trafficRateDown": "Download‑Rate"
+      "trafficRateDown": "Download‑Rate",
+      "connLiveTitle": "Echtzeitverbindungen",
+      "connLiveCurrent": "Aktuell",
+      "connLivePeak": "Spitze",
+      "connLiveAvg30": "Ø(30s)"
     },
     "install": {
       "title": "Mihomo installieren / aktualisieren",
@@ -1695,7 +1719,11 @@ const I18N = {
       "trafficTotalDown": "Download Total",
       "trafficTotalUp": "Upload Total",
       "trafficRateUp": "Скорость отдачи",
-      "trafficRateDown": "Скорость загрузки"
+      "trafficRateDown": "Скорость загрузки",
+      "connLiveTitle": "Соединения в реальном времени",
+      "connLiveCurrent": "Текущее",
+      "connLivePeak": "Пик",
+      "connLiveAvg30": "Сред.(30с)"
     },
     "install": {
       "title": "Установка / обновление Mihomo",
