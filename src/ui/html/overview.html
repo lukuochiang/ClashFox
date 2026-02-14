@@ -24,26 +24,49 @@
                 <button class="btn" id="restartBtn" data-i18n="actions.restart">Restart</button>
               </div>
               <div class="action-row mode-row">
-                <span class="mode-label" data-i18n="status.proxyMode">Outbound Mode</span>
-                <select id="proxyModeSelect" aria-label="Outbound Mode">
-                  <option value="global" data-i18n="status.proxyGlobal">Global</option>
-                  <option value="rule" data-i18n="status.proxyRule" selected>Rule</option>
-                  <option value="direct" data-i18n="status.proxyDirect">Direct</option>
-                </select>
-              </div>
-              <div class="action-row mode-row">
                 <label class="toggle">
                   <span data-i18n="status.tun">TUN</span>
                   <input id="tunToggle" type="checkbox" />
                   <span class="toggle-pill" aria-hidden="true"></span>
                 </label>
-                <span class="action-divider" aria-hidden="true"></span>
+              </div>
+              <div class="action-row mode-row">
                 <span class="mode-label" data-i18n="status.tunStack">Stack</span>
                 <select id="tunStackSelect" aria-label="TUN Stack">
                   <option value="Mixed" data-i18n="status.tunStackMixed" selected>Mixed</option>
                   <option value="gVisor" data-i18n="status.tunStackGvisor">gVisor</option>
                   <option value="System" data-i18n="status.tunStackSystem">System</option>
                 </select>
+              </div>
+            </div>
+            <div class="card quick-actions outbound-card">
+              <div class="card-header-row">
+                <h3 class="iconized outbound-icon" data-i18n="status.proxyMode">Outbound Mode</h3>
+              </div>
+              <div class="outbound-body">
+                <div id="proxyModeSelect" class="outbound-options" role="radiogroup" aria-label="Outbound Mode">
+                  <label class="radio-pill">
+                    <input type="radio" name="proxyMode" value="global" />
+                    <span class="radio-copy">
+                      <span class="radio-title" data-i18n="status.proxyGlobal">Global</span>
+                      <span class="radio-hint">All requests will be forwarded to a proxy server</span>
+                    </span>
+                  </label>
+                  <label class="radio-pill">
+                    <input type="radio" name="proxyMode" value="rule" checked />
+                    <span class="radio-copy">
+                      <span class="radio-title" data-i18n="status.proxyRule">Rule</span>
+                      <span class="radio-hint">Using rule system to determine how to process requests</span>
+                    </span>
+                  </label>
+                  <label class="radio-pill">
+                    <input type="radio" name="proxyMode" value="direct" />
+                    <span class="radio-copy">
+                      <span class="radio-title" data-i18n="status.proxyDirect">Direct</span>
+                      <span class="radio-hint">All requests will be sent to the target server directly</span>
+                    </span>
+                  </label>
+                </div>
               </div>
             </div>
             <div class="card quick-actions">

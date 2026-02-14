@@ -337,7 +337,7 @@ function applyCardIcons() {
     if (tname.includes('switch kernel')) return 'var(--icon-checklist)';
     if (tname.includes('config control')) return 'var(--icon-checklist)';
     if (tname.includes('panel manager')) return 'var(--icon-panels)';
-    if (tname.trim() === 'config') return 'var(--icon-config)';
+    if (tname.trim() === 'outbound mode') return 'var(--icon-outbound)';
     if (tname.includes('user data paths')) return 'var(--icon-folders)';
     if (tname.includes('pagination')) return 'var(--icon-slider-h)';
     if (tname.includes('appearance')) return 'var(--icon-palette)';
@@ -599,7 +599,7 @@ function applySettings(settings) {
   }
   setLogAutoRefresh(state.settings.logAutoRefresh);
   if (proxyModeSelect) {
-    proxyModeSelect.value = state.settings.proxyMode || 'rule';
+    setProxyModeValue(state.settings.proxyMode || 'rule');
   }
   if (tunToggle) {
     tunToggle.checked = Boolean(state.settings.tunEnabled);
@@ -746,6 +746,37 @@ function promptConfirm({ title, body, confirmLabel, confirmTone = 'danger' }) {
     confirmModal.addEventListener('keydown', onKeydown);
     confirmOk.focus();
   });
+}
+
+function getProxyModeInputs() {
+  if (!proxyModeSelect) {
+    return [];
+  }
+  return Array.from(proxyModeSelect.querySelectorAll('input[name="proxyMode"]'));
+}
+
+function getProxyModeValue() {
+  const selected = getProxyModeInputs().find((input) => input.checked);
+  return selected ? selected.value : 'rule';
+}
+
+function setProxyModeValue(value) {
+  const target = value || 'rule';
+  const inputs = getProxyModeInputs();
+  let matched = false;
+  inputs.forEach((input) => {
+    const isMatch = input.value === target;
+    input.checked = isMatch;
+    if (isMatch) {
+      matched = true;
+    }
+  });
+  if (!matched) {
+    const fallback = inputs.find((input) => input.value === 'rule') || inputs[0];
+    if (fallback) {
+      fallback.checked = true;
+    }
+  }
 }
 
 async function runCommandWithSudo(command, args = []) {
@@ -2804,21 +2835,26 @@ if (restartBtn) {
 }
 
 if (proxyModeSelect) {
-  proxyModeSelect.addEventListener('change', async () => {
-    const value = proxyModeSelect.value || 'rule';
-    const previous = (state.settings && state.settings.proxyMode) || 'rule';
-    saveSettings({ proxyMode: value });
-    const response = await runCommand('mode', ['--mode', value, ...getControllerArgs()]);
-    if (response.ok) {
-      showToast(t('labels.proxyModeUpdated'));
-      return;
-    }
-    proxyModeSelect.value = previous;
-    saveSettings({ proxyMode: previous });
-    const message = response.error === 'controller_missing'
-      ? t('labels.controllerMissing')
-      : (response.error || 'Mode update failed');
-    showToast(message, 'error');
+  getProxyModeInputs().forEach((input) => {
+    input.addEventListener('change', async () => {
+      if (!input.checked) {
+        return;
+      }
+      const value = getProxyModeValue();
+      const previous = (state.settings && state.settings.proxyMode) || 'rule';
+      saveSettings({ proxyMode: value });
+      const response = await runCommand('mode', ['--mode', value, ...getControllerArgs()]);
+      if (response.ok) {
+        showToast(t('labels.proxyModeUpdated'));
+        return;
+      }
+      setProxyModeValue(previous);
+      saveSettings({ proxyMode: previous });
+      const message = response.error === 'controller_missing'
+        ? t('labels.controllerMissing')
+        : (response.error || 'Mode update failed');
+      showToast(message, 'error');
+    });
   });
 }
 

@@ -40,6 +40,7 @@
   --icon-palette: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 2a7.5 7.5 0 0 0-7.5 7.5c0 3.4 2.5 5.82 4.74 7.26 1.42.91 3.26-.27 2.95-1.9l-.11-.61a1.25 1.25 0 0 1 1.23-1.48h1.69c1.95 0 3-1.67 3-3.5C16 5.36 13.33 2 10 2Zm-3 7.5a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Zm2-3.5a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Zm3.75 0a1.25 1.25 0 1 1 2.5 0 1.25 1.25 0 0 1-2.5 0Zm-1 3.5a1.25 1.25 0 1 1 2.5 0 1.25 1.25 0 0 1-2.5 0Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-defaults: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 2a1 1 0 0 1 .96.72l.7 2.44 2.5-.2a1 1 0 0 1 .87 1.6l-1.6 2.02 1.6 2.02a1 1 0 0 1-.87 1.6l-2.5-.2-.7 2.44a1 1 0 0 1-1.92 0l-.7-2.44-2.5.2a1 1 0 0 1-.87-1.6l1.6-2.02-1.6-2.02a1 1 0 0 1 .87-1.6l2.5.2.7-2.44A1 1 0 0 1 10 2Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-config: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3' y='2.5' width='14' height='15' rx='2' stroke='%23000' stroke-width='1.5' fill='none'/%3E%3Cpath d='M6 6.5h4' stroke='%23000' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M6 9.5h3' stroke='%23000' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M6 12.5h5' stroke='%23000' stroke-width='1.5' stroke-linecap='round'/%3E%3Crect x='11.5' y='6' width='5' height='6.5' rx='0.8' stroke='%23000' stroke-width='1.2' fill='none'/%3E%3Cpath d='M13 7.5h2.5' stroke='%23000' stroke-width='1.1' stroke-linecap='round'/%3E%3Cpath d='M13 9h1.6' stroke='%23000' stroke-width='1.1' stroke-linecap='round'/%3E%3Cpath d='M13 10.5h2' stroke='%23000' stroke-width='1.1' stroke-linecap='round'/%3E%3C/svg%3E");
+  --icon-outbound: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 7h8V4l6 5-6 5v-3H4V7Zm16 10H12v3l-6-5 6-5v3h8v4Z' fill='%23000'/%3E%3C/svg%3E");
 }
 
 body[data-theme="night"] {
@@ -966,7 +967,11 @@ body[data-page="settings"] .card h3 {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  /*margin-bottom: 12px;*/
+}
+
+.outbound-icon {
+  --card-icon-mask: var(--icon-outbound);
 }
 
 .card-hint {
@@ -1196,6 +1201,131 @@ body[data-theme="day"] .mode-row {
   min-width: 150px;
   padding: 7px 10px;
   border-radius: 10px;
+}
+
+.outbound-card {
+  display: grid;
+  gap: 12px;
+}
+
+.outbound-body {
+  display: grid;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.outbound-body .mode-label {
+  letter-spacing: 0.14em;
+}
+
+.outbound-body #proxyModeSelect {
+  width: 100%;
+  min-width: 0;
+}
+
+.outbound-options {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 171, 197, 0.22);
+  background: rgba(6, 9, 13, 0.82);
+  overflow: hidden;
+}
+
+.radio-pill {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px 10px 28px;
+  border-top: 1px solid rgba(148, 171, 197, 0.2);
+  background: transparent;
+  color: rgba(233, 238, 243, 0.86);
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+
+.radio-pill:first-child {
+  border-top: none;
+}
+
+.radio-pill input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.radio-pill:has(input[type="radio"]:checked) {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.radio-pill::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 15px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.radio-pill:has(input[type="radio"]:checked)::before {
+  content: "✓";
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  top: 13px;
+  left: 11px;
+}
+
+.radio-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.radio-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(233, 238, 243, 0.95);
+}
+
+.radio-hint {
+  font-size: 11px;
+  line-height: 1.25;
+  color: rgba(173, 186, 200, 0.88);
+}
+
+body[data-theme="day"] .radio-pill {
+  color: #1f2a36;
+}
+
+body[data-theme="day"] .radio-pill:has(input[type="radio"]:checked) {
+  background: rgba(15, 21, 29, 0.05);
+}
+
+body[data-theme="day"] .outbound-options {
+  background: rgba(28, 36, 48, 0.94);
+}
+
+body[data-theme="day"] .radio-title {
+  color: #f0f4f8;
+}
+
+body[data-theme="day"] .radio-hint {
+  color: rgba(203, 214, 226, 0.9);
+}
+
+@media (max-width: 720px) {
+  .outbound-options {
+    grid-template-columns: 1fr;
+  }
 }
 
 .action-divider {
