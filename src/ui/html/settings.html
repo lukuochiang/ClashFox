@@ -16,47 +16,49 @@
         <div id="contentRoot" class="content-root">
           <section id="settings" class="panel active">
           <div class="panel-grid">
-            <div class="card">
-              <h3 data-i18n="settings.appearance">Appearance</h3>
-              <div class="form-row">
-                <label data-i18n="settings.theme">Theme</label>
-                <select id="settingsTheme">
-                  <option value="night" data-i18n="settings.themeNight">Night</option>
-                  <option value="day" data-i18n="settings.themeDay">Day</option>
-                  <option value="auto" data-i18n="settings.themeAuto">Auto</option>
-                </select>
-              </div>
-              <div class="form-row">
-                <label data-i18n="settings.language">Language</label>
-                <select id="settingsLang">
-                  <option value="auto">Auto</option>
-                  <option value="en">EN</option>
-                  <option value="zh">中文</option>
-                  <option value="ja">日本語</option>
-                  <option value="ko">한국어</option>
-                  <option value="fr">Français</option>
-                  <option value="de">Deutsch</option>
-                  <option value="ru">Русский</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="card">
-              <h3 data-i18n="settings.defaults">Defaults</h3>
-              <div class="form-row">
-                <label data-i18n="settings.github">GitHub Source</label>
-                <select id="settingsGithubUser">
-                  <option value="vernesong">vernesong</option>
-                  <option value="MetaCubeX">MetaCubeX</option>
-                </select>
-              </div>
-              <div class="form-row">
-                <label data-i18n="settings.debugMode">Debug Mode</label>
-                <label class="toggle">
-                  <input id="settingsDebugMode" type="checkbox" />
-                  <span class="toggle-pill"></span>
-                  <span data-i18n="settings.debugModeLabel">Enable Debug Tools</span>
-                </label>
+            <div class="card card-full">
+              <div class="settings-top-columns">
+                <div class="settings-top-column">
+                  <h3 data-i18n="settings.appearance">Appearance</h3>
+                  <div class="form-row">
+                    <label data-i18n="settings.theme">Theme</label>
+                    <select id="settingsTheme">
+                      <option value="night" data-i18n="settings.themeNight">Night</option>
+                      <option value="day" data-i18n="settings.themeDay">Day</option>
+                      <option value="auto" data-i18n="settings.themeAuto">Auto</option>
+                    </select>
+                  </div>
+                  <div class="form-row">
+                    <label data-i18n="settings.language">Language</label>
+                    <select id="settingsLang">
+                      <option value="auto">Auto</option>
+                      <option value="en">EN</option>
+                      <option value="zh">中文</option>
+                      <option value="ja">日本語</option>
+                      <option value="ko">한국어</option>
+                      <option value="fr">Français</option>
+                      <option value="de">Deutsch</option>
+                      <option value="ru">Русский</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="settings-top-column settings-top-column-right">
+                  <div class="form-row">
+                    <label data-i18n="settings.github">GitHub Source</label>
+                    <select id="settingsGithubUser">
+                      <option value="vernesong">vernesong</option>
+                      <option value="MetaCubeX">MetaCubeX</option>
+                    </select>
+                  </div>
+                  <div class="form-row">
+                    <label data-i18n="settings.debugMode">Debug Mode</label>
+                    <label class="toggle">
+                      <input id="settingsDebugMode" type="checkbox" />
+                      <span class="toggle-pill"></span>
+                      <span data-i18n="settings.debugModeLabel">Enable Debug Tools</span>
+                    </label>
+                  </div>
+                </div>
               </div>
 <!--              <div class="form-row">-->
 <!--                <label data-i18n="settings.configPath">Config Path</label>-->
