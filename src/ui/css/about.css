@@ -87,15 +87,34 @@ body[data-theme="day"]::after {
   margin-top: 25px;
 }
 
-.logo {
+.about-logo {
   width: 96px;
   height: 96px;
   border-radius: 24px;
   box-shadow: 0 20px 40px var(--shadow);
-  background: rgba(255, 255, 255, 0.95);
-  border: none;
+  overflow: hidden;
+}
+
+.about-logo img {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
+}
+
+.about-logo .logo-light {
+  display: none;
+}
+
+.about-logo .logo-night {
   display: block;
+}
+
+body[data-theme="day"] .about-logo .logo-light {
+  display: block;
+}
+
+body[data-theme="day"] .about-logo .logo-night {
+  display: none;
 }
 
 .name {

@@ -1107,6 +1107,7 @@ function createWindow() {
   });
 
   const sendSystemTheme = () => {
+    setDockIcon(true);
     BrowserWindow.getAllWindows().forEach((window) => {
       if (!window || window.isDestroyed()) {
         return;
@@ -1377,6 +1378,7 @@ app.whenReady().then(() => {
     const allowed = new Set(['system', 'light', 'dark']);
     const next = allowed.has(source) ? source : 'system';
     nativeTheme.themeSource = next;
+    setDockIcon(true);
     return { ok: true };
   });
 
