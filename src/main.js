@@ -164,47 +164,21 @@ function getControllerArgsFromSettings() {
 }
 
 function buildTrayIconWithMode(mode) {
-  const trayIconPath = path.join(APP_PATH, 'src', 'ui', 'assets', 'menu.png');
   const safeMode = OUTBOUND_MODE_BADGE[mode] ? mode : 'rule';
-  const badgeText = OUTBOUND_MODE_BADGE[safeMode];
-  const badgeStyle = OUTBOUND_MODE_BADGE_STYLE[safeMode] || OUTBOUND_MODE_BADGE_STYLE.rule;
-  const canvasSize = 48;
-  const baseScale = 2.2;
-  const scaledSize = canvasSize * baseScale;
-  const baseOffset = (canvasSize - scaledSize) / 2;
-  const badgeRadius = Math.round(canvasSize * 0.19);
-  const badgeCx = canvasSize - badgeRadius - 1.5;
-  const badgeCy = canvasSize - badgeRadius - 1.5;
-  const badgeFontSize = Math.round(badgeRadius * 1.25);
-  const badgeTextY = badgeCy + Math.round(badgeRadius * 0.45);
-  let icon = nativeImage.createFromPath(trayIconPath);
+  const modeIconMap = {
+    rule: 'menu_r.png',
+    global: 'menu_g.png',
+    direct: 'menu_d.png',
+  };
+  const modeIconPath = path.join(APP_PATH, 'src', 'ui', 'assets', modeIconMap[safeMode] || 'menu_r.png');
+  let icon = nativeImage.createFromPath(modeIconPath);
   if (icon.isEmpty()) {
-    return icon;
-  }
-
-  try {
-    const baseBuffer = fs.readFileSync(trayIconPath);
-    const base64 = baseBuffer.toString('base64');
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvasSize}" height="${canvasSize}" viewBox="0 0 ${canvasSize} ${canvasSize}">
-<defs>
-  <mask id="iconMask">
-    <image href="data:image/png;base64,${base64}" x="${baseOffset}" y="${baseOffset}" width="${scaledSize}" height="${scaledSize}"/>
-  </mask>
-</defs>
-<rect x="0" y="0" width="${canvasSize}" height="${canvasSize}" fill="#ffffff" mask="url(#iconMask)"/>
-<circle cx="${badgeCx}" cy="${badgeCy}" r="${badgeRadius}" fill="${badgeStyle.bg}" stroke="#0b1118" stroke-opacity="0.35" stroke-width="1"/>
-<text x="${badgeCx}" y="${badgeTextY}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${badgeFontSize}" font-weight="900" fill="${badgeStyle.fg}">${badgeText}</text>
-</svg>`;
-    icon = nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`);
-    if (icon.isEmpty()) {
-      icon = nativeImage.createFromPath(trayIconPath);
-    }
-  } catch {
-    icon = nativeImage.createFromPath(trayIconPath);
+    const fallback = path.join(APP_PATH, 'src', 'ui', 'assets', 'menu.png');
+    icon = nativeImage.createFromPath(fallback);
   }
 
   if (!icon.isEmpty()) {
-    icon = icon.resize({ width: 32, height: 32 });
+    icon = icon.resize({ width: 21, height: 21 });
     if (process.platform === 'darwin' && typeof icon.setTemplateImage === 'function') {
       icon.setTemplateImage(false);
     }
