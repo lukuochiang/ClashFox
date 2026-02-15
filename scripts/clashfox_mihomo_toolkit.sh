@@ -3306,7 +3306,7 @@ clean_logs() {
     show_separator
 
     LOG_FILE="$CLASHFOX_LOG_DIR/clashfox.log"
-    LOG_BACKUPS="$CLASHFOX_LOG_DIR/clashfox.log.*.gz"
+    LOG_BACKUPS="$CLASHFOX_LOG_DIR/clashfox.log.*.log"
 
     log_fmt "${BLUE}$(tr_msg MSG_CLEAN_CURRENT_LOG "$LOG_FILE")"
     log_fmt "${BLUE}$(tr_msg MSG_CLEAN_LOG_SIZE "$(du -h "$LOG_FILE" 2>/dev/null | cut -f1)")"
@@ -3326,15 +3326,18 @@ clean_logs() {
     case "$CHOICE" in
         1)
             rm -f $LOG_BACKUPS
+            rm -f "$CLASHFOX_LOG_DIR"/clashfox.log.*.gz
             log_success "$(tr_msg MSG_CLEAN_DONE_ALL)"
             ;;
         2)
             # 保留最近7天的日志
+            find "$CLASHFOX_LOG_DIR" -name "clashfox.log.*.log" -mtime +7 -delete
             find "$CLASHFOX_LOG_DIR" -name "clashfox.log.*.gz" -mtime +7 -delete
             log_success "$(tr_msg MSG_CLEAN_DONE_7D)"
             ;;
         3)
             # 保留最近30天的日志
+            find "$CLASHFOX_LOG_DIR" -name "clashfox.log.*.log" -mtime +30 -delete
             find "$CLASHFOX_LOG_DIR" -name "clashfox.log.*.gz" -mtime +30 -delete
             log_success "$(tr_msg MSG_CLEAN_DONE_30D)"
             ;;
@@ -3369,15 +3372,15 @@ rotate_logs() {
 
         # 如果日志是昨天或更早的，进行日期备份（文件名包含日期+时分秒）
         if [ "$LOG_MODIFY_DATE" != "$CURRENT_DATE" ]; then
-            DATE_BACKUP_FILE="$BACKUP_DIR/clashfox.log.$LOG_MODIFY_TS.gz"
+            DATE_BACKUP_FILE="$BACKUP_DIR/clashfox.log.$LOG_MODIFY_TS.log"
 
             # 如果备份文件已存在，添加时间戳避免覆盖
             if [ -f "$DATE_BACKUP_FILE" ]; then
-                DATE_BACKUP_FILE="$BACKUP_DIR/clashfox.log.$LOG_MODIFY_TS.$(date +%H%M%S).gz"
+                DATE_BACKUP_FILE="$BACKUP_DIR/clashfox.log.$LOG_MODIFY_TS.$(date +%H%M%S).log"
             fi
 
-            # 压缩并备份旧日志
-            gzip -c "$LOG_FILE" > "$DATE_BACKUP_FILE"
+            # 直接复制日志，不做压缩
+            cp "$LOG_FILE" "$DATE_BACKUP_FILE"
             # 清空当前日志
             > "$LOG_FILE"
             log_warning "$(tr_msg MSG_LOG_ROTATE_DATE "$DATE_BACKUP_FILE")"
@@ -3388,8 +3391,8 @@ rotate_logs() {
     LOG_SIZE=$(du -m "$LOG_FILE" | cut -f1)
     if [ "$LOG_SIZE" -ge "$MAX_SIZE" ]; then
         # 创建带时间戳的备份文件
-        SIZE_BACKUP_FILE="$BACKUP_DIR/clashfox.log.$(date +%Y%m%d_%H%M%S).gz"
-        gzip -c "$LOG_FILE" > "$SIZE_BACKUP_FILE"
+        SIZE_BACKUP_FILE="$BACKUP_DIR/clashfox.log.$(date +%Y%m%d_%H%M%S).log"
+        cp "$LOG_FILE" "$SIZE_BACKUP_FILE"
         # 清空当前日志
         > "$LOG_FILE"
         log_warning "$(tr_msg MSG_LOG_ROTATE_SIZE "$SIZE_BACKUP_FILE")"

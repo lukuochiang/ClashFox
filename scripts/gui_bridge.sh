@@ -1915,12 +1915,15 @@ JSON
 
         case "$mode" in
             all)
+                rm -f "$CLASHFOX_LOG_DIR"/clashfox.log.*.log
                 rm -f "$CLASHFOX_LOG_DIR"/clashfox.log.*.gz
                 ;;
             7d)
+                find "$CLASHFOX_LOG_DIR" -name "clashfox.log.*.log" -mtime +7 -delete
                 find "$CLASHFOX_LOG_DIR" -name "clashfox.log.*.gz" -mtime +7 -delete
                 ;;
             30d)
+                find "$CLASHFOX_LOG_DIR" -name "clashfox.log.*.log" -mtime +30 -delete
                 find "$CLASHFOX_LOG_DIR" -name "clashfox.log.*.gz" -mtime +30 -delete
                 ;;
             *)
