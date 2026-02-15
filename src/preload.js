@@ -31,4 +31,20 @@ contextBridge.exposeInMainWorld('clashfox', {
     ipcRenderer.on('clashfox:trayRefresh', listener);
     return () => ipcRenderer.removeListener('clashfox:trayRefresh', listener);
   },
+  onMainToast: (handler) => {
+    if (typeof handler !== 'function') {
+      return () => {};
+    }
+    const listener = (_event, payload) => handler(payload);
+    ipcRenderer.on('clashfox:mainToast', listener);
+    return () => ipcRenderer.removeListener('clashfox:mainToast', listener);
+  },
+  onMainCoreAction: (handler) => {
+    if (typeof handler !== 'function') {
+      return () => {};
+    }
+    const listener = (_event, payload) => handler(payload);
+    ipcRenderer.on('clashfox:mainCoreAction', listener);
+    return () => ipcRenderer.removeListener('clashfox:mainCoreAction', listener);
+  },
 });

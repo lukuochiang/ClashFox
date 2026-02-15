@@ -266,6 +266,9 @@ const state = {
   proxyTxBytes: null,
   proxyAt: 0,
   coreActionInFlight: false,
+  coreStartupEstimateMs: 1500,
+  coreStatusTransitionUntil: 0,
+  coreStatusTransitionTimer: null,
   overviewRunning: false,
   overviewUptimeBaseSec: 0,
   overviewUptimeAt: 0,
@@ -275,6 +278,70 @@ const state = {
   configDefault: '',
   settings: { ...DEFAULT_SETTINGS },
 };
+
+const CORE_STARTUP_ESTIMATE_MIN_MS = 900;
+const CORE_STARTUP_ESTIMATE_MAX_MS = 10000;
+const RESTART_TRANSITION_MIN_MS = 450;
+const RESTART_TRANSITION_MAX_MS = 4000;
+const RESTART_TRANSITION_RATIO = 0.5;
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getRestartTransitionDelayMs() {
+  const estimate = Number.isFinite(state.coreStartupEstimateMs) ? state.coreStartupEstimateMs : 1500;
+  return clamp(
+    Math.round(estimate * RESTART_TRANSITION_RATIO),
+    RESTART_TRANSITION_MIN_MS,
+    RESTART_TRANSITION_MAX_MS,
+  );
+}
+
+function beginStatusTransition(running, durationMs = 0) {
+  const ms = Math.max(0, Number.parseInt(durationMs, 10) || 0);
+  if (state.coreStatusTransitionTimer) {
+    clearTimeout(state.coreStatusTransitionTimer);
+    state.coreStatusTransitionTimer = null;
+  }
+  state.coreStatusTransitionUntil = Date.now() + ms;
+  if (statusPill) {
+    statusPill.dataset.state = 'transition';
+  }
+  syncRunningIndicators(running, { allowTransitionOverride: true });
+  if (ms <= 0) {
+    state.coreStatusTransitionUntil = 0;
+    if (statusPill) {
+      statusPill.dataset.state = state.coreRunning ? 'running' : 'stopped';
+    }
+    return;
+  }
+  state.coreStatusTransitionTimer = setTimeout(async () => {
+    state.coreStatusTransitionUntil = 0;
+    state.coreStatusTransitionTimer = null;
+    if (statusPill && statusPill.dataset.state === 'transition') {
+      statusPill.dataset.state = state.coreRunning ? 'running' : 'stopped';
+    }
+    await loadStatusSilently();
+  }, ms);
+}
+
+function updateCoreStartupEstimate(measuredMs) {
+  if (!Number.isFinite(measuredMs) || measuredMs <= 0) {
+    return;
+  }
+  const safeMeasured = clamp(Math.round(measuredMs), CORE_STARTUP_ESTIMATE_MIN_MS, CORE_STARTUP_ESTIMATE_MAX_MS);
+  const previous = Number.isFinite(state.coreStartupEstimateMs) ? state.coreStartupEstimateMs : safeMeasured;
+  state.coreStartupEstimateMs = clamp(
+    Math.round(previous * 0.65 + safeMeasured * 0.35),
+    CORE_STARTUP_ESTIMATE_MIN_MS,
+    CORE_STARTUP_ESTIMATE_MAX_MS,
+  );
+}
 
 function t(path) {
   const lang = state.lang === 'auto' ? getAutoLanguage() : state.lang;
@@ -699,6 +766,30 @@ if (window.clashfox && typeof window.clashfox.onTrayRefresh === 'function') {
   });
 }
 
+if (window.clashfox && typeof window.clashfox.onMainToast === 'function') {
+  window.clashfox.onMainToast((payload) => {
+    if (!payload || !payload.message) {
+      return;
+    }
+    showToast(payload.message, payload.type || 'info');
+  });
+}
+
+if (window.clashfox && typeof window.clashfox.onMainCoreAction === 'function') {
+  window.clashfox.onMainCoreAction((payload) => {
+    if (!payload || !payload.action) {
+      return;
+    }
+    if (payload.action === 'restart' && payload.phase === 'transition') {
+      beginStatusTransition(false, payload.delayMs || getRestartTransitionDelayMs());
+      return;
+    }
+    if (payload.action === 'start' && payload.phase === 'start') {
+      setStatusInterim(true);
+    }
+  });
+}
+
 function promptSudoPassword() {
   sudoPassword.value = '';
   sudoModal.classList.add('show');
@@ -857,21 +948,7 @@ async function syncProxyModeFromFile() {
 }
 
 async function runCommandWithSudo(command, args = []) {
-  const response = await runCommand(command, args);
-  if (response.ok || response.error !== 'sudo_required') {
-    return response;
-  }
-
-  const password = await promptSudoPassword();
-  if (!password) {
-    return { ok: false, error: 'cancelled' };
-  }
-
-  const retry = await runCommand(command, args, { sudoPass: password });
-  if (!retry.ok && retry.error === 'sudo_invalid') {
-    showToast(t('labels.sudoInvalid'), 'error');
-  }
-  return retry;
+  return runCommand(command, args);
 }
 
 function showToast(message, type = 'info') {
@@ -1071,7 +1148,7 @@ function updateStatusUI(data) {
     // ensure value reflects current panel
     updateExternalUiUrlField();
   }
-  syncRunningIndicators(running, { allowTransitionOverride: true });
+  syncRunningIndicators(running, { allowTransitionOverride: false });
   renderConfigTable();
 }
 
@@ -1087,6 +1164,10 @@ function setCoreActionState(inFlight) {
 }
 
 function syncRunningIndicators(running, { allowTransitionOverride = false } = {}) {
+  const inTransition = Date.now() < (state.coreStatusTransitionUntil || 0);
+  if (inTransition && !allowTransitionOverride) {
+    return;
+  }
   const label = running ? t('labels.running') : t('labels.stopped');
   if (statusRunning) {
     statusRunning.textContent = label;
@@ -1578,17 +1659,39 @@ function updateOverviewRuntimeUI(data) {
   }
 }
 
-async function loadStatus() {
+async function loadStatusSilently() {
   const configPath = getCurrentConfigPath();
   const args = configPath ? ['--config', configPath] : [];
   const response = await runCommand('status', args);
   if (!response.ok) {
-    const msg = response.error === 'bridge_missing' ? t('labels.bridgeMissing') : (response.error || 'Status error');
-    showToast(msg, 'error');
-    return;
+    return response;
   }
   updateStatusUI(response.data);
   loadTunStatus(false);
+  return response;
+}
+
+async function loadStatus() {
+  const response = await loadStatusSilently();
+  if (!response.ok) {
+    const msg = response.error === 'bridge_missing' ? t('labels.bridgeMissing') : (response.error || 'Status error');
+    showToast(msg, 'error');
+  }
+}
+
+async function waitForCoreRunning(timeoutMs = 12000, intervalMs = 350) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() <= deadline) {
+    const response = await loadStatusSilently();
+    if (!response.ok) {
+      return false;
+    }
+    if (state.coreRunning) {
+      return true;
+    }
+    await sleep(intervalMs);
+  }
+  return false;
 }
 
 async function loadOverview(showToastOnSuccess = false) {
@@ -2860,11 +2963,9 @@ if (panelSelect) {
     showToast(t('labels.panelSwitchHint'), 'info');
     saveSettings({ panelChoice: value });
     updateDashboardFrameSrc();
-    const response = await runCommand('panel-install', ['--name', preset.name, '--url', preset.url]);
+    const response = await ensurePanelInstalledAndActivated(preset);
     if (response.ok) {
-      await runCommand('panel-activate', ['--name', preset.name]);
-      const installed = response.data && response.data.installed === true;
-      if (state.panelInstallRequested && installed) {
+      if (state.panelInstallRequested && response.installed) {
         showToast(t('labels.panelInstalled'));
       }
       state.panelInstallRequested = false;
@@ -2938,6 +3039,12 @@ async function handleCoreAction(action, button) {
       command = 'start';
     }
 
+    if (action === 'restart' && state.coreRunning) {
+      // Make restart transition visible to user instead of appearing always-running.
+      setStatusInterim(false);
+      await sleep(getRestartTransitionDelayMs());
+    }
+
     // 准备命令参数
     const args = [];
     if (command === 'start') {
@@ -2951,19 +3058,24 @@ async function handleCoreAction(action, button) {
     }
     
     // 执行操作
+    const commandStartedAt = Date.now();
     const response = await runCommandWithSudo(command, args);
     if (response.ok) {
       if (action === 'start' || action === 'restart') {
-        await loadStatus();
+        const running = await waitForCoreRunning();
+        if (!running) {
+          await loadStatus();
+        } else {
+          const startupElapsedMs = Date.now() - commandStartedAt;
+          updateCoreStartupEstimate(startupElapsedMs);
+        }
         loadOverviewLite();
       }
-      if (action === 'start' || action === 'restart') {
+      if (action === 'restart') {
+        showToast(t('labels.restartSuccess'));
+      } else if (action === 'start') {
         if (state.coreRunning) {
-          const successMessages = {
-            'start': t('labels.startSuccess'),
-            'restart': t('labels.restartSuccess')
-          };
-          showToast(successMessages[action]);
+          showToast(t('labels.startSuccess'));
         } else {
           showToast('Start failed', 'error');
         }
@@ -2979,7 +3091,9 @@ async function handleCoreAction(action, button) {
   } finally {
     // 无论成功失败，都更新状态
     await loadStatus();
-    const delay = action === 'restart' ? 1500 : 1200;
+    const delay = action === 'restart'
+      ? clamp(Math.round(state.coreStartupEstimateMs * 0.8), 1200, 6000)
+      : 1200;
     setTimeout(() => loadStatus(), delay);
     
     // 重置操作中状态
@@ -3540,6 +3654,28 @@ function updateDashboardFrameSrc() {
   applyFrameSrc();
 }
 
+async function ensurePanelInstalledAndActivated(preset) {
+  if (!preset || !preset.name) {
+    return { ok: false, error: 'panel_preset_missing' };
+  }
+  const activateFirst = await runCommand('panel-activate', ['--name', preset.name]);
+  if (activateFirst && activateFirst.ok) {
+    return { ok: true, installed: false };
+  }
+  if (activateFirst && activateFirst.error && activateFirst.error !== 'panel_missing') {
+    return activateFirst;
+  }
+  const install = await runCommand('panel-install', ['--name', preset.name, '--url', preset.url]);
+  if (!install || !install.ok) {
+    return install || { ok: false, error: 'panel_install_failed' };
+  }
+  const activateAfter = await runCommand('panel-activate', ['--name', preset.name]);
+  if (!activateAfter || !activateAfter.ok) {
+    return activateAfter || { ok: false, error: 'panel_activate_failed' };
+  }
+  return { ok: true, installed: true };
+}
+
 function initDashboardFrame() {
   if (!dashboardFrame || !dashboardEmpty) {
     return;
@@ -3602,9 +3738,9 @@ async function initApp() {
     const preset = PANEL_PRESETS[state.settings.panelChoice];
     if (preset) {
       state.autoPanelInstalled = true;
-      runCommand('panel-install', ['--name', preset.name, '--url', preset.url]).then((response) => {
+      ensurePanelInstalledAndActivated(preset).then((response) => {
         if (response.ok) {
-          runCommand('panel-activate', ['--name', preset.name]);
+          return;
         }
         if (!response.ok && response.error && response.error !== 'cancelled') {
           const errorMsg = response.error ? `${t('labels.panelInstallFailed')} (${response.error})` : t('labels.panelInstallFailed');

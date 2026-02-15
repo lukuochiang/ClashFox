@@ -42,12 +42,20 @@ let currentInstallProcess = null; // 仅用于跟踪安装进程，支持取消�
 let sudoKeepAliveTimer = null;
 let sudoKeepAliveInFlight = false;
 let sudoLastActivityAt = 0;
+let sudoAuthorizeInFlight = null;
 let globalSettings = {
   debugMode: true, // 是否启用调试模式
 };
 let isQuitting = false;
 const SUDO_KEEPALIVE_INTERVAL_MS = 55 * 1000;
-const SUDO_KEEPALIVE_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+const SUDO_KEEPALIVE_IDLE_TIMEOUT_MS = 45 * 60 * 1000;
+const SUDO_AUTH_TIMEOUT_MS = 45 * 1000;
+const CORE_STARTUP_ESTIMATE_MIN_MS = 900;
+const CORE_STARTUP_ESTIMATE_MAX_MS = 10000;
+const RESTART_TRANSITION_MIN_MS = 450;
+const RESTART_TRANSITION_MAX_MS = 4000;
+const RESTART_TRANSITION_RATIO = 0.5;
+let trayCoreStartupEstimateMs = 1500;
 const PRIVILEGED_COMMANDS = new Set(['install', 'start', 'stop', 'restart', 'delete-backups']);
 const OUTBOUND_MODE_BADGE = {
   rule: 'R',
@@ -91,6 +99,11 @@ function getTrayLabels() {
   const lang = resolveTrayLang();
   const tray = (I18N[lang] && I18N[lang].tray) || (I18N.en && I18N.en.tray) || {};
   return tray;
+}
+
+function getUiLabels() {
+  const lang = resolveTrayLang();
+  return (I18N[lang] && I18N[lang].labels) || (I18N.en && I18N.en.labels) || {};
 }
 
 function readAppSettings() {
@@ -249,6 +262,57 @@ function startSudoKeepAlive() {
   }
 }
 
+function runSudoValidateInteractive() {
+  if (sudoAuthorizeInFlight) {
+    return sudoAuthorizeInFlight;
+  }
+  sudoAuthorizeInFlight = new Promise((resolve) => {
+    const child = spawn('sudo', ['-v']);
+    let finished = false;
+    const finalize = (ok) => {
+      if (finished) return;
+      finished = true;
+      resolve(Boolean(ok));
+    };
+    const timer = setTimeout(() => {
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        // ignore
+      }
+      finalize(false);
+    }, SUDO_AUTH_TIMEOUT_MS);
+    child.on('error', () => {
+      clearTimeout(timer);
+      finalize(false);
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      finalize(code === 0);
+    });
+  }).finally(() => {
+    sudoAuthorizeInFlight = null;
+  });
+  return sudoAuthorizeInFlight;
+}
+
+async function ensureSudoSession() {
+  const ready = await runSudoCheckNoPrompt();
+  if (ready) {
+    markSudoActivity();
+    startSudoKeepAlive();
+    return true;
+  }
+  const authed = await runSudoValidateInteractive();
+  if (!authed) {
+    stopSudoKeepAlive();
+    return false;
+  }
+  markSudoActivity();
+  startSudoKeepAlive();
+  return true;
+}
+
 function normalizeBridgeArgs(args = [], options = {}) {
   const normalized = [];
   let extractedSudoPass = '';
@@ -281,117 +345,8 @@ function escapeHtml(value) {
 }
 
 async function promptTraySudo(labels) {
-  return new Promise((resolve) => {
-    const channel = `clashfox:traySudo:${Date.now()}`;
-    let resolved = false;
-    const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
-    let sudoTemplate = '';
-    let sharedStyles = '';
-    try {
-      sudoTemplate = fs.readFileSync(path.join(__dirname, 'ui', 'html', 'authorize.html'), 'utf8');
-      sharedStyles = fs.readFileSync(path.join(__dirname, 'ui', 'css', 'styles.css'), 'utf8');
-    } catch {
-      sudoTemplate = '';
-      sharedStyles = '';
-    }
-    const win = new BrowserWindow({
-      width: 420,
-      height: 240,
-      resizable: false,
-      minimizable: false,
-      maximizable: false,
-      parent: parent || undefined,
-      modal: Boolean(parent),
-      alwaysOnTop: true,
-      title: labels.sudoTitle || 'Administrator permission required',
-      backgroundColor: '#0f1216',
-      webPreferences: {
-        contextIsolation: false,
-        nodeIntegration: true,
-      },
-    });
-
-    const isDark = nativeTheme && nativeTheme.shouldUseDarkColors;
-    const html = `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${escapeHtml(labels.sudoTitle)}</title>
-    <style>${sharedStyles}</style>
-    <style>
-      html,
-      body {
-        height: 100%;
-      }
-      body {
-        margin: 0;
-        overflow: hidden;
-      }
-    </style>
-  </head>
-  <body data-theme="${isDark ? 'night' : 'day'}">
-    ${sudoTemplate}
-    <script>
-      const { ipcRenderer } = require('electron');
-      const labels = ${JSON.stringify(labels)};
-      const modal = document.getElementById('sudoModal');
-      const title = modal ? modal.querySelector('.modal-title') : null;
-      const body = modal ? modal.querySelector('.modal-body') : null;
-      const hint = modal ? modal.querySelector('.modal-hint') : null;
-      const cancel = document.getElementById('sudoCancel');
-      const confirm = document.getElementById('sudoConfirm');
-      const password = document.getElementById('sudoPassword');
-      if (title) title.textContent = labels.sudoTitle || 'Authorization Required';
-      if (body) body.textContent = labels.sudoMessage || 'Enter your macOS password to continue.';
-      if (hint) hint.textContent = labels.sudoHint || '';
-      if (cancel) cancel.textContent = labels.cancel || 'Cancel';
-      if (confirm) confirm.textContent = labels.ok || 'Authorize';
-      if (password) {
-        password.placeholder = labels.sudoPlaceholder || '••••••••';
-        password.focus();
-      }
-      if (modal) {
-        modal.classList.add('show');
-        modal.setAttribute('aria-hidden', 'false');
-      }
-      if (cancel) cancel.addEventListener('click', () => {
-        ipcRenderer.send('${channel}', { ok: false });
-      });
-      if (confirm) confirm.addEventListener('click', () => {
-        ipcRenderer.send('${channel}', { ok: true, password: password ? password.value : '' });
-      });
-      window.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
-          ipcRenderer.send('${channel}', { ok: true, password: password ? password.value : '' });
-        }
-        if (event.key === 'Escape') {
-          ipcRenderer.send('${channel}', { ok: false });
-        }
-      });
-    </script>
-  </body>
-</html>`;
-
-    win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-
-    const cleanup = (payload) => {
-      if (resolved) return;
-      resolved = true;
-      if (!win.isDestroyed()) {
-        win.close();
-      }
-      resolve(payload && payload.ok ? String(payload.password || '') : null);
-    };
-
-    ipcMain.once(channel, (_event, payload) => {
-      cleanup(payload);
-    });
-
-    win.on('closed', () => {
-      cleanup({ ok: false });
-    });
-  });
+  // Deprecated: keep disabled to avoid custom auth modal when system auth is used.
+  return null;
 }
 
 function emitTrayRefresh() {
@@ -400,15 +355,90 @@ function emitTrayRefresh() {
   }
 }
 
+function emitMainToast(message, type = 'info') {
+  const text = String(message || '').trim();
+  if (!text) {
+    return;
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('clashfox:mainToast', { message: text, type });
+  }
+}
+
+function emitMainCoreAction(payload = {}) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('clashfox:mainCoreAction', payload);
+  }
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getTrayRestartTransitionDelayMs() {
+  const estimate = Number.isFinite(trayCoreStartupEstimateMs) ? trayCoreStartupEstimateMs : 1500;
+  return clamp(
+    Math.round(estimate * RESTART_TRANSITION_RATIO),
+    RESTART_TRANSITION_MIN_MS,
+    RESTART_TRANSITION_MAX_MS,
+  );
+}
+
+function updateTrayCoreStartupEstimate(measuredMs) {
+  if (!Number.isFinite(measuredMs) || measuredMs <= 0) {
+    return;
+  }
+  const safeMeasured = clamp(Math.round(measuredMs), CORE_STARTUP_ESTIMATE_MIN_MS, CORE_STARTUP_ESTIMATE_MAX_MS);
+  const previous = Number.isFinite(trayCoreStartupEstimateMs) ? trayCoreStartupEstimateMs : safeMeasured;
+  trayCoreStartupEstimateMs = clamp(
+    Math.round(previous * 0.65 + safeMeasured * 0.35),
+    CORE_STARTUP_ESTIMATE_MIN_MS,
+    CORE_STARTUP_ESTIMATE_MAX_MS,
+  );
+}
+
+async function getKernelRunningSilently(sudoPass = '') {
+  try {
+    const response = await runBridge(['status'], { sudoPass });
+    if (!response || !response.ok) {
+      return null;
+    }
+    return Boolean(response.data && response.data.running);
+  } catch {
+    return null;
+  }
+}
+
+async function waitForKernelRunningFromTray(sudoPass = '', timeoutMs = 12000, intervalMs = 350) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() <= deadline) {
+    const running = await getKernelRunningSilently(sudoPass);
+    if (running === null) {
+      return false;
+    }
+    if (running) {
+      return true;
+    }
+    await sleep(intervalMs);
+  }
+  return false;
+}
+
 async function runTrayCommand(command, args = [], labels = TRAY_I18N.en, sudoPass = '') {
   const result = await runBridge([command, ...args], { sudoPass });
   if (!result || !result.ok) {
     if (result && result.error === 'sudo_required') {
-      const password = await promptTraySudo(labels);
-      if (!password) {
-        return { ok: false };
-      }
-      return runTrayCommand(command, args, labels, password);
+      await dialog.showMessageBox({
+        type: 'warning',
+        buttons: [labels.ok || 'OK'],
+        title: labels.errorTitle || 'Operation Cancelled',
+        message: labels.sudoRequired || 'Administrator authorization was not granted.',
+      });
+      return { ok: false };
     }
     if (result && result.error === 'sudo_invalid') {
       await dialog.showMessageBox({
@@ -451,22 +481,13 @@ async function getKernelRunning(labels) {
     return { running: Boolean(result.data && result.data.running), sudoPass: '' };
   }
   if (result && result.error === 'sudo_required') {
-    const password = await promptTraySudo(labels);
-    if (!password) {
+    const ok = await ensureSudoSession();
+    if (!ok) {
       return null;
     }
-    result = await runBridge(['status'], { sudoPass: password });
+    result = await runBridge(['status']);
     if (result && result.ok) {
-      return { running: Boolean(result.data && result.data.running), sudoPass: password };
-    }
-    if (result && result.error === 'sudo_invalid') {
-      await dialog.showMessageBox({
-        type: 'error',
-        buttons: [labels.ok || 'OK'],
-        title: labels.errorTitle || 'Operation Failed',
-        message: labels.sudoInvalid || 'Password incorrect.',
-      });
-      return null;
+      return { running: Boolean(result.data && result.data.running), sudoPass: '' };
     }
   }
   const message = (result && (result.error || result.message)) ? String(result.error || result.message) : 'Unknown error';
@@ -620,6 +641,7 @@ async function createTrayMenu() {
     }
   }
   const labels = getTrayLabels();
+  const uiLabels = getUiLabels();
   const currentOutboundMode = resolveOutboundModeFromSettings();
   const currentOutboundBadge = OUTBOUND_MODE_BADGE[currentOutboundMode] || OUTBOUND_MODE_BADGE.rule;
   let dashboardEnabled = false;
@@ -696,9 +718,19 @@ async function createTrayMenu() {
                 return;
               }
               if (status.running) {
+                emitMainToast(uiLabels.alreadyRunning || 'Kernel is already running.', 'info');
                 return;
               }
-              await runTrayCommand('start', [], labels, status.sudoPass);
+              emitMainCoreAction({ action: 'start', phase: 'start' });
+              const commandStartedAt = Date.now();
+              const started = await runTrayCommand('start', [], labels, status.sudoPass);
+              if (started.ok) {
+                const running = await waitForKernelRunningFromTray(started.sudoPass || status.sudoPass || '');
+                if (running) {
+                  updateTrayCoreStartupEstimate(Date.now() - commandStartedAt);
+                }
+                emitMainToast(uiLabels.startSuccess || 'Kernel started.', 'info');
+              }
             } finally {
               emitTrayRefresh();
             }
@@ -714,9 +746,13 @@ async function createTrayMenu() {
                 return;
               }
               if (!status.running) {
+                emitMainToast(uiLabels.alreadyStopped || 'Kernel is already stopped.', 'info');
                 return;
               }
-              await runTrayCommand('stop', [], labels, status.sudoPass);
+              const stopped = await runTrayCommand('stop', [], labels, status.sudoPass);
+              if (stopped.ok) {
+                emitMainToast(uiLabels.stopSuccess || uiLabels.stopped || 'Kernel stopped.', 'info');
+              }
             } finally {
               emitTrayRefresh();
             }
@@ -725,24 +761,39 @@ async function createTrayMenu() {
         { type: 'separator' },
         {
           label: labels.restartKernel,
+          enabled: dashboardEnabled,
           click: async () => {
             try {
-              const ok = await confirmTrayRestart(labels);
-              if (!ok) {
-                return;
-              }
               const status = await getKernelRunning(labels);
               if (status === null) {
                 return;
               }
               if (!status.running) {
+                emitMainToast(uiLabels.restartStarts || 'Kernel is stopped, starting now.', 'info');
+                emitMainCoreAction({ action: 'start', phase: 'start' });
+                const commandStartedAt = Date.now();
+                const started = await runTrayCommand('start', [], labels, status.sudoPass);
+                if (started.ok) {
+                  const running = await waitForKernelRunningFromTray(started.sudoPass || status.sudoPass || '');
+                  if (running) {
+                    updateTrayCoreStartupEstimate(Date.now() - commandStartedAt);
+                  }
+                  emitMainToast(uiLabels.startSuccess || 'Kernel started.', 'info');
+                }
                 return;
               }
-              const stopped = await runTrayCommand('stop', [], labels, status.sudoPass);
-              if (!stopped.ok) {
-                return;
+              const transitionDelayMs = getTrayRestartTransitionDelayMs();
+              emitMainCoreAction({ action: 'restart', phase: 'transition', delayMs: transitionDelayMs });
+              await sleep(transitionDelayMs);
+              const commandStartedAt = Date.now();
+              const restarted = await runTrayCommand('restart', [], labels, status.sudoPass);
+              if (restarted.ok) {
+                const running = await waitForKernelRunningFromTray(restarted.sudoPass || status.sudoPass || '');
+                if (running) {
+                  updateTrayCoreStartupEstimate(Date.now() - commandStartedAt);
+                }
+                emitMainToast(uiLabels.restartSuccess || 'Kernel restarted.', 'info');
               }
-              await runTrayCommand('start', [], labels, stopped.sudoPass || status.sudoPass);
             } finally {
               emitTrayRefresh();
             }
@@ -788,6 +839,8 @@ function runBridge(args, options = {}) {
       const sudoPass = normalized.sudoPass;
       // console.log('[runBridge] Running command:', args);
       const commandType = bridgeArgs[0];
+      const needsSudo = PRIVILEGED_COMMANDS.has(commandType);
+      const startBridgeProcess = () => {
 
       // 1. 如果是安装命令，终止当前正在运行的安装进程（如果有）
       const isInstallCommand = commandType === 'install' || commandType === 'panel-install';
@@ -943,7 +996,26 @@ function runBridge(args, options = {}) {
           details: err.message 
         });
       });
-      
+      };
+      if (needsSudo && !sudoPass) {
+        ensureSudoSession()
+          .then((ok) => {
+            if (!ok) {
+              resolve({ ok: false, error: 'sudo_required' });
+              return;
+            }
+            startBridgeProcess();
+          })
+          .catch((err) => {
+            resolve({
+              ok: false,
+              error: 'sudo_required',
+              details: err && err.message ? err.message : String(err),
+            });
+          });
+        return;
+      }
+      startBridgeProcess();
     } catch (err) {
       // console.error('Error in runBridge:', err);
       resolve({ 
