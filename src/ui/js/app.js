@@ -355,6 +355,11 @@ function t(path) {
   return current || '';
 }
 
+function ti(path, fallback = '') {
+  const value = t(path);
+  return value && String(value).trim() !== '' ? value : fallback;
+}
+
 function getAutoLanguage() {
   const lang = (navigator.language || '').toLowerCase();
   if (lang.startsWith('zh')) return 'zh';
@@ -949,6 +954,46 @@ async function syncProxyModeFromFile() {
 
 async function runCommandWithSudo(command, args = []) {
   return runCommand(command, args);
+}
+
+function isTunConflictError(message) {
+  const text = String(message || '').toLowerCase();
+  if (!text) return false;
+  const tunMarkers = [
+    'tun',
+    'utun',
+    'gvisor',
+    'stack',
+    'configure tun',
+    'start tun',
+    'create tun',
+  ];
+  const conflictMarkers = [
+    'device or resource busy',
+    'resource busy',
+    'file exists',
+    'already in use',
+    'address already in use',
+    'conflict',
+    'operation not permitted',
+    'permission denied',
+    'cannot assign requested address',
+  ];
+  const hasTunMarker = tunMarkers.some((marker) => text.includes(marker));
+  const hasConflictMarker = conflictMarkers.some((marker) => text.includes(marker));
+  return hasTunMarker && hasConflictMarker;
+}
+
+function formatCoreActionError(action, response) {
+  const fallback = response?.error || response?.details || response?.message
+    || `${action.charAt(0).toUpperCase() + action.slice(1)} failed`;
+  const combined = [response?.error, response?.details, response?.message]
+    .filter(Boolean)
+    .join(' | ');
+  if ((action === 'start' || action === 'restart') && isTunConflictError(combined)) {
+    return ti('labels.tunConflictHint', 'TUN conflict detected. Turn off TUN mode in other proxy apps, then try again.');
+  }
+  return fallback;
 }
 
 function showToast(message, type = 'info') {
@@ -1674,7 +1719,7 @@ async function loadStatusSilently() {
 async function loadStatus() {
   const response = await loadStatusSilently();
   if (!response.ok) {
-    const msg = response.error === 'bridge_missing' ? t('labels.bridgeMissing') : (response.error || 'Status error');
+    const msg = response.error === 'bridge_missing' ? t('labels.bridgeMissing') : (response.error || ti('labels.statusError', 'Status error'));
     showToast(msg, 'error');
   }
 }
@@ -1706,7 +1751,7 @@ async function loadOverview(showToastOnSuccess = false) {
   if (!response.ok) {
     state.overviewLoading = false;
     if (showToastOnSuccess) {
-      showToast(response.error || 'Overview error', 'error');
+      showToast(response.error || ti('labels.overviewError', 'Overview error'), 'error');
     }
     return false;
   }
@@ -2039,7 +2084,7 @@ function renderKernelTable() {
 async function loadConfigs(showToastOnSuccess = false) {
   const response = await runCommand('configs');
   if (!response.ok) {
-    showToast(response.error || 'Configs error', 'error');
+    showToast(response.error || ti('labels.configsError', 'Configs error'), 'error');
     return;
   }
   state.configs = response.data || [];
@@ -2065,7 +2110,7 @@ async function loadKernels() {
 async function loadBackups(showToastOnSuccess = false) {
   const response = await runCommand('backups');
   if (!response.ok) {
-    showToast(response.error || 'Backups error', 'error');
+    showToast(response.error || ti('labels.backupsError', 'Backups error'), 'error');
     return;
   }
   state.lastBackups = response.data;
@@ -3077,17 +3122,17 @@ async function handleCoreAction(action, button) {
         if (state.coreRunning) {
           showToast(t('labels.startSuccess'));
         } else {
-          showToast('Start failed', 'error');
+          showToast(ti('labels.startFailed', 'Start failed'), 'error');
         }
       } else {
         showToast(t('labels.stopped'));
       }
     } else {
-      showToast(response.error || `${action.charAt(0).toUpperCase() + action.slice(1)} failed`, 'error');
+      showToast(formatCoreActionError(action, response), 'error');
     }
     
   } catch (error) {
-    showToast(error.message || 'An unexpected error occurred', 'error');
+    showToast(error.message || ti('labels.unexpectedError', 'An unexpected error occurred'), 'error');
   } finally {
     // 无论成功失败，都更新状态
     await loadStatus();
@@ -3132,7 +3177,7 @@ if (proxyModeSelect) {
       saveSettings({ proxyMode: previous });
       const message = response.error === 'controller_missing'
         ? t('labels.controllerMissing')
-        : (response.error || 'Mode update failed');
+        : (response.error || ti('labels.modeUpdateFailed', 'Mode update failed'));
       showToast(message, 'error');
     });
   });
@@ -3149,7 +3194,7 @@ if (tunToggle) {
       tunToggle.checked = actual;
       const message = response.error === 'controller_missing'
         ? t('labels.controllerMissing')
-        : (response.error || t('labels.tunUpdateFailed') || 'TUN update failed');
+        : (response.error || ti('labels.tunUpdateFailed', 'TUN update failed'));
       showToast(message, 'error');
       return;
     }
@@ -3169,7 +3214,7 @@ if (tunStackSelect) {
       tunStackSelect.value = fallback;
       const message = response.error === 'controller_missing'
         ? t('labels.controllerMissing')
-        : (response.error || t('labels.tunStackUpdateFailed') || 'TUN stack update failed');
+        : (response.error || ti('labels.tunStackUpdateFailed', 'TUN stack update failed'));
       showToast(message, 'error');
       return;
     }
@@ -3396,7 +3441,7 @@ if (backupsDelete) {
       showToast(t('labels.deleteSuccess'));
       loadBackups();
     } else {
-      showToast(response.error || 'Delete failed', 'error');
+      showToast(response.error || ti('labels.deleteFailed', 'Delete failed'), 'error');
     }
   });
 }
@@ -3422,7 +3467,7 @@ if (switchBtn) {
       showToast(t('labels.switchNeedsRestart'));
       loadStatus();
     } else {
-      showToast(response.error || 'Switch failed', 'error');
+      showToast(response.error || ti('labels.switchFailed', 'Switch failed'), 'error');
     }
   });
 }
@@ -3488,7 +3533,7 @@ if (cleanBtn) {
     if (response.ok) {
       showToast(t('labels.cleanDone'));
     } else {
-      showToast(response.error || 'Clean failed', 'error');
+      showToast(response.error || ti('labels.cleanFailed', 'Clean failed'), 'error');
     }
   });
 }
