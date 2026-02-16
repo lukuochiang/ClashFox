@@ -2049,6 +2049,8 @@ CLASHFOX_USER_DATA_DIR="$HOME/Library/Application Support/ClashFox"
 set_clashfox_subdirectories() {
     # ClashFox 内核目录
     CLASHFOX_CORE_DIR="$CLASHFOX_USER_DATA_DIR/core"
+    # ClashFox 内核备份目录
+    CLASHFOX_BACKUP_DIR="$CLASHFOX_CORE_DIR/cfox-backup"
     # ClashFox 默认配置文件路径
     CLASHFOX_CONFIG_DIR="$CLASHFOX_USER_DATA_DIR/config"
     # ClashFox 数据目录
@@ -2391,6 +2393,13 @@ check_and_create_directories() {
     fi
     log_success "$(tr_msg MSG_CORE_DIR_EXISTS "$CLASHFOX_CORE_DIR")"
 
+    # 检查并创建内核备份目录
+    if [ ! -d "$CLASHFOX_BACKUP_DIR" ]; then
+        log_warning "$(tr_msg MSG_CORE_DIR_CREATE "$CLASHFOX_BACKUP_DIR")"
+        sudo mkdir -p "$CLASHFOX_BACKUP_DIR"
+    fi
+    log_success "$(tr_msg MSG_CORE_DIR_EXISTS "$CLASHFOX_BACKUP_DIR")"
+
     # 检查并创建配置目录
     if [ ! -d "$CLASHFOX_CONFIG_DIR" ]; then
         log_warning "$(tr_msg MSG_CONFIG_DIR_CREATE "$CLASHFOX_CONFIG_DIR")"
@@ -2446,6 +2455,10 @@ require_core_dir() {
         return 1
     }
     return 0
+}
+
+get_backup_files_sorted() {
+    ls -1t "$CLASHFOX_BACKUP_DIR"/mihomo.backup.* 2>/dev/null | awk 'NF'
 }
 
 #============================
@@ -2545,13 +2558,13 @@ show_status() {
 
         # 备份信息检查
         log_fmt "\n${BLUE}$(tr_msg MSG_BACKUP_SECTION)${NC}"
-        LATEST=$(ls -1t mihomo.backup.* 2>/dev/null | head -n1)
+        LATEST=$(get_backup_files_sorted | head -n1)
 
         if [ -n "$LATEST" ]; then
             log_fmt "  ${GREEN}$(tr_msg MSG_BACKUP_FOUND)${NC}"
-            log_fmt "  ${BLUE}$(tr_msg MSG_BACKUP_LATEST "$LATEST")"
+            log_fmt "  ${BLUE}$(tr_msg MSG_BACKUP_LATEST "$(basename "$LATEST")")"
 
-            if [[ "$LATEST" =~ ^mihomo\.backup\.mihomo-darwin-(amd64|arm64)-(.+)\.([0-9]{8}_[0-9]{6})$ ]]; then
+            if [[ "$(basename "$LATEST")" =~ ^mihomo\.backup\.mihomo-darwin-(amd64|arm64)-(.+)\.([0-9]{8}_[0-9]{6})$ ]]; then
                 BACKUP_VER="${BASH_REMATCH[2]}"
                 BACKUP_TIMESTAMP="${BASH_REMATCH[3]}"
                 log_fmt "  ${BLUE}$(tr_msg MSG_BACKUP_VERSION "${RED}$BACKUP_VER${NC}")"
@@ -2580,7 +2593,7 @@ show_list_backups() {
         return
     fi
 
-    BACKUP_FILES=$(ls -1 mihomo.backup.* 2>/dev/null)
+    BACKUP_FILES=$(get_backup_files_sorted)
     if [ -z "$BACKUP_FILES" ]; then
         log_fmt "${YELLOW}$(tr_msg MSG_NO_BACKUPS)${NC}"
         wait_for_key
@@ -2594,7 +2607,8 @@ show_list_backups() {
 
     # 收集所有备份文件的时间戳和文件名
     while read -r f; do
-        if [[ "$f" =~ ^mihomo\.backup\.mihomo-darwin-(amd64|arm64)-.+\.([0-9]{8}_[0-9]{6})$ ]]; then
+        base="$(basename "$f")"
+        if [[ "$base" =~ ^mihomo\.backup\.mihomo-darwin-(amd64|arm64)-.+\.([0-9]{8}_[0-9]{6})$ ]]; then
             TS="${BASH_REMATCH[2]}"
             # 格式：时间戳 文件名（时间戳在前以便排序）
             backup_list+=("$TS $f")
@@ -2613,7 +2627,8 @@ show_list_backups() {
         f=$(echo "$backup" | cut -d' ' -f2-)
 
         # 提取版本信息
-        if [[ "$f" =~ ^mihomo\.backup\.(mihomo-darwin-(amd64|arm64)-.+)\.[0-9]{8}_[0-9]{6}$ ]]; then
+        base="$(basename "$f")"
+        if [[ "$base" =~ ^mihomo\.backup\.(mihomo-darwin-(amd64|arm64)-.+)\.[0-9]{8}_[0-9]{6}$ ]]; then
             VERSION_CLEAN="${BASH_REMATCH[1]}"
             printf "   %2d   | ${RED}%s${NC} | ${YELLOW}%s${NC}\n" "$i" "$VERSION_CLEAN" "$TS"
             i=$((i+1))
@@ -2659,7 +2674,7 @@ switch_core() {
     fi
 
     # 获取所有备份文件并排序
-    BACKUP_FILES_SORTED=$(ls -1t mihomo.backup.* 2>/dev/null | sort -r)
+    BACKUP_FILES_SORTED=$(get_backup_files_sorted)
 
     # 根据选择获取目标备份
     TARGET_BACKUP=$(echo "$BACKUP_FILES_SORTED" | sed -n "${CHOICE}p")
@@ -2672,7 +2687,7 @@ switch_core() {
 
     log_blank
     log_fmt "${BLUE}$(tr_msg MSG_SWITCH_START)"
-    log_fmt "${BLUE}$(tr_msg MSG_BACKUP_SELECTED "$TARGET_BACKUP")"
+    log_fmt "${BLUE}$(tr_msg MSG_BACKUP_SELECTED "$(basename "$TARGET_BACKUP")")"
 
     # 显示当前内核信息
     if [ -f "$ACTIVE_CORE" ]; then
@@ -2707,7 +2722,7 @@ switch_core() {
     cp "$TARGET_BACKUP" "$TMP_CORE"
     mv -f "$TMP_CORE" "$ACTIVE_CORE"
     chmod +x "$ACTIVE_CORE"
-    log_fmt "${BLUE}$(tr_msg MSG_KERNEL_REPLACED "$TARGET_BACKUP")"
+    log_fmt "${BLUE}$(tr_msg MSG_KERNEL_REPLACED "$(basename "$TARGET_BACKUP")")"
 
     # 删除临时备份
     rm -f "$ROLLBACK_FILE"
@@ -2721,7 +2736,7 @@ switch_core() {
 # 列出备份内容（用于切换功能）
 #========================
 list_backups_content() {
-    BACKUP_FILES=$(ls -1 mihomo.backup.* 2>/dev/null)
+    BACKUP_FILES=$(get_backup_files_sorted)
     if [ -z "$BACKUP_FILES" ]; then
         log_fmt "${YELLOW}$(tr_msg MSG_NO_BACKUPS)${NC}"
         wait_for_key
@@ -2734,10 +2749,12 @@ list_backups_content() {
 
     i=1
     echo "$BACKUP_FILES" | while read -r f; do
-        TS=$(echo "$f" | sed -E 's/^mihomo\.backup\.mihomo-darwin-(amd64|arm64)-.+\.([0-9]{8}_[0-9]{6})$/\2/')
+        base="$(basename "$f")"
+        TS=$(echo "$base" | sed -E 's/^mihomo\.backup\.mihomo-darwin-(amd64|arm64)-.+\.([0-9]{8}_[0-9]{6})$/\2/')
         echo "$TS $f"
     done | sort -r | while read -r TS f; do
-        VERSION_CLEAN=$(echo "$f" | sed -E 's/^mihomo\.backup\.(mihomo-darwin-(amd64|arm64)-.+)\.[0-9]{8}_[0-9]{6}$/\1/')
+        base="$(basename "$f")"
+        VERSION_CLEAN=$(echo "$base" | sed -E 's/^mihomo\.backup\.(mihomo-darwin-(amd64|arm64)-.+)\.[0-9]{8}_[0-9]{6}$/\1/')
         printf "%2d   | ${RED}%s${NC} | ${YELLOW}%s${NC}\n" "$i" "$VERSION_CLEAN" "$TS"
         i=$((i+1))
     done
@@ -2874,7 +2891,8 @@ install_core() {
 
             # 备份新安装的内核（无论是否是首次安装）
             TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-            BACKUP_FILE="mihomo.backup.${VERSION}.${TIMESTAMP}"
+            mkdir -p "$CLASHFOX_BACKUP_DIR"
+            BACKUP_FILE="$CLASHFOX_BACKUP_DIR/mihomo.backup.${VERSION}.${TIMESTAMP}"
             cp "$ACTIVE_CORE" "$BACKUP_FILE"
             log_fmt "${BLUE}$(tr_msg MSG_BACKUP_NEW_KERNEL "${YELLOW}$BACKUP_FILE${NC}")"
 

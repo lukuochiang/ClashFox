@@ -27,6 +27,7 @@ set_clashfox_subdirectories
 ensure_runtime_dirs() {
     mkdir -p "$CLASHFOX_USER_DATA_DIR" \
       "$CLASHFOX_CORE_DIR" \
+      "$CLASHFOX_BACKUP_DIR" \
       "$CLASHFOX_CONFIG_DIR" \
       "$CLASHFOX_DATA_DIR" \
       "$CLASHFOX_LOG_DIR" \
@@ -34,6 +35,10 @@ ensure_runtime_dirs() {
 }
 
 ensure_runtime_dirs
+
+get_backup_files_sorted() {
+    ls -1t "$CLASHFOX_BACKUP_DIR"/mihomo.backup.* 2>/dev/null | awk 'NF'
+}
 
 json_escape() {
     local s="$1"
@@ -1618,20 +1623,15 @@ JSON
         fi
         ;;
     cores)
-        if [ ! -d "$CLASHFOX_CORE_DIR" ]; then
-            print_ok "[]"
-            exit 0
-        fi
-        shopt -s nullglob
-        files=( "$CLASHFOX_CORE_DIR"/* )
-        shopt -u nullglob
-        if [ ${#files[@]} -eq 0 ]; then
+        files_sorted="$(ls -1t "$CLASHFOX_CORE_DIR"/* "$CLASHFOX_BACKUP_DIR"/mihomo.backup.* 2>/dev/null | awk 'NF')"
+        if [ -z "$files_sorted" ]; then
             print_ok "[]"
             exit 0
         fi
         json="["
         first=true
-        for file in "${files[@]}"; do
+        while IFS= read -r file; do
+            [ -z "$file" ] && continue
             if [ ! -f "$file" ]; then
                 continue
             fi
@@ -1650,14 +1650,14 @@ JSON
                 json+=","
             fi
             json+="{\"name\":\"$(json_escape "$name")\",\"path\":\"$(json_escape "$file")\",\"modified\":\"$(json_escape "$modified")\",\"size\":\"$(json_escape "$size_bytes")\"}"
-        done
+        done <<< "$files_sorted"
         json+="]"
         print_ok "$json"
         ;;
     backups)
         items=""
         index=1
-        backup_files="$(ls -1t "$CLASHFOX_CORE_DIR"/mihomo.backup.* 2>/dev/null)"
+        backup_files="$(get_backup_files_sorted)"
         while IFS= read -r line; do
             [ -z "$line" ] && continue
             base="$(basename "$line")"
@@ -1854,7 +1854,7 @@ JSON
             exit 1
         }
 
-        backup_files="$(ls -1t mihomo.backup.* 2>/dev/null)"
+        backup_files="$(get_backup_files_sorted)"
         if [ -z "$backup_files" ]; then
             print_err "no_backups"
             exit 1
@@ -1959,7 +1959,7 @@ JSON
         fi
         for p in "${paths[@]}"; do
             case "$p" in
-                "$CLASHFOX_CORE_DIR"/mihomo.backup.*)
+                "$CLASHFOX_BACKUP_DIR"/mihomo.backup.*)
                     sudo rm -f "$p"
                     ;;
             esac

@@ -2225,6 +2225,53 @@ body[data-theme="day"] .toggle-pill::after {
   grid-template-columns: 1fr 160px;
 }
 
+.kernel-current-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(144, 170, 198, 0.08), rgba(144, 170, 198, 0.03));
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.kernel-current-meta {
+  display: grid;
+  grid-template-columns: 1fr 160px;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.kernel-current-title,
+.kernel-current-time-label {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.kernel-current-main {
+  display: grid;
+  grid-template-columns: 1fr 160px;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+}
+
+.kernel-backups-title {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin: 6px 16px 8px;
+}
+
+@media (max-width: 720px) {
+  .kernel-current-meta,
+  .kernel-current-main {
+    grid-template-columns: 1fr;
+  }
+}
+
 .tag-group {
   display: inline-flex;
   gap: 6px;

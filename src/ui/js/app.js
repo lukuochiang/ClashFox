@@ -249,6 +249,7 @@ const state = {
   dashboardLoaded: false,
   autoPanelInstalled: false,
   panelInstallRequested: false,
+  coreVersionRaw: '',
   overviewTimer: null,
   overviewTickTimer: null,
   overviewLoading: false,
@@ -1144,6 +1145,7 @@ async function loadAppInfo() {
 function updateStatusUI(data) {
   const running = data.running;
   state.coreRunning = running;
+  state.coreVersionRaw = data.version || '';
   state.configDefault = data.configDefault || '';
   const configValue = getCurrentConfigPath() || data.configDefault || '-';
   const hasKernel = Boolean(data.kernelExists);
@@ -2056,29 +2058,80 @@ function renderKernelTable() {
     return;
   }
   const items = state.kernels || [];
+  const backupItems = [];
+  let currentItem = null;
+  const backupRe = /^mihomo\.backup\.(mihomo-darwin-(amd64|arm64)-.+)\.([0-9]{8}_[0-9]{6})$/;
+
+  items.forEach((item) => {
+    const name = item && item.name ? item.name : '';
+    const isBackup = backupRe.test(name);
+    if (isBackup) {
+      backupItems.push(item);
+      return;
+    }
+    const isCurrentCandidate = name === 'mihomo' || name.startsWith('mihomo-darwin-');
+    if (!isCurrentCandidate) {
+      return;
+    }
+    // Prefer the active kernel symlink/binary name for "Current" display.
+    if (!currentItem || (currentItem.name !== 'mihomo' && name === 'mihomo')) {
+      currentItem = item;
+    }
+  });
+
   const pageSizeRaw = state.kernelPageSizeLocal || (kernelPageSize && kernelPageSize.value) || state.settings.kernelPageSize || '10';
   const size = Number.parseInt(pageSizeRaw, 10) || 10;
-  const pageData = paginate(items, state.kernelsPage, size);
+  const pageData = paginate(backupItems, state.kernelsPage, size);
   state.kernelsPage = pageData.page;
-  kernelPageInfo.textContent = `${pageData.page} / ${pageData.totalPages} · ${items.length}`;
+  kernelPageInfo.textContent = `${pageData.page} / ${pageData.totalPages} · ${backupItems.length}`;
   kernelPrev.disabled = pageData.page <= 1;
   kernelNext.disabled = pageData.page >= pageData.totalPages;
 
-  let html = '<div class="table-row header kernel">';
+  const currentName = currentItem && currentItem.name ? currentItem.name : '-';
+  let currentDisplayName = currentName === '-' ? '-' : currentName;
+  if (currentName === 'mihomo' && state.coreVersionRaw) {
+    const versionShort = formatKernelDisplay(state.coreVersionRaw);
+    if (versionShort && versionShort !== '-') {
+      currentDisplayName = `mihomo (${versionShort})`;
+    }
+  }
+  const currentTimestamp = currentItem && currentItem.modified ? currentItem.modified : '-';
+  const formatBackupTimestamp = (raw, fallback = '-') => {
+    if (!raw || typeof raw !== 'string') {
+      return fallback;
+    }
+    const match = raw.match(/^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/);
+    if (!match) {
+      return fallback;
+    }
+    return `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]}:${match[6]}`;
+  };
+
+  let html = '<div class="kernel-current-card">';
+  html += '<div class="kernel-current-meta">';
+  html += `<div class="kernel-current-title">${t('labels.current')} ${t('status.kernel')}</div>`;
+  html += `<div class="kernel-current-time-label">${ti('table.installTime', t('table.time'))}</div>`;
+  html += '</div>';
+  html += '<div class="kernel-current-main">';
+  html += `<div class="version-cell"><span class="kernel-name">${currentDisplayName}</span> <span class="tag-group"><span class="tag current">${t('labels.current')}</span></span></div>`;
+  html += `<div class="time-cell">${currentTimestamp}</div>`;
+  html += '</div>';
+  html += '</div>';
+
+  html += `<div class="kernel-backups-title">${t('nav.backups')}</div>`;
+  html += '<div class="table-row header kernel">';
   html += `<div class="version-head">${t('table.version')}</div>`;
   html += `<div class="time-head">${t('table.time')}</div></div>`;
 
   pageData.items.forEach((item) => {
     const name = item && item.name ? item.name : '-';
-    const backupMatch = /^mihomo\\.backup\\.(mihomo-darwin-(amd64|arm64)-.+)\\.([0-9]{8}_[0-9]{6})$/.exec(name);
+    const backupMatch = backupRe.exec(name);
     const isBackup = Boolean(backupMatch);
-    const isCurrent = !isBackup && (name === 'mihomo' || name.startsWith('mihomo-darwin-'));
     const displayName = backupMatch ? backupMatch[1] : name;
-    const timestamp = backupMatch ? backupMatch[4] : (item.modified || '-');
+    const timestamp = backupMatch
+      ? formatBackupTimestamp(backupMatch[3], item.modified || '-')
+      : (item.modified || '-');
     const tags = [];
-    if (isCurrent) {
-      tags.push(`<span class="tag current">${t('labels.current')}</span>`);
-    }
     if (isBackup) {
       tags.push(`<span class="tag backup">${t('labels.backup')}</span>`);
     }
@@ -2087,8 +2140,8 @@ function renderKernelTable() {
     html += `<div class="time-cell">${timestamp}</div></div>`;
   });
 
-  if (items.length === 0) {
-    html += `<div class="table-row kernel empty"><div class="empty-cell">${t('labels.kernelsEmpty')}</div></div>`;
+  if (backupItems.length === 0) {
+    html += `<div class="table-row kernel empty"><div class="empty-cell">${t('labels.noBackups')}</div></div>`;
   }
 
   kernelTable.innerHTML = html;
