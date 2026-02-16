@@ -1160,52 +1160,74 @@ function createAboutWindow() {
   aboutWindow.loadFile(path.join(__dirname, 'ui', 'html', 'about.html'));
 }
 
+function loadDockIconFromIcns(iconPath) {
+  if (!fs.existsSync(iconPath)) {
+    return null;
+  }
+  try {
+    const iconFromPath = nativeImage.createFromPath(iconPath);
+    if (!iconFromPath.isEmpty()) {
+      return { image: iconFromPath, via: 'path' };
+    }
+  } catch {
+    // ignore and continue fallback chain
+  }
+  try {
+    const iconBuffer = fs.readFileSync(iconPath);
+    const iconFromBuffer = nativeImage.createFromBuffer(iconBuffer);
+    if (!iconFromBuffer.isEmpty()) {
+      return { image: iconFromBuffer, via: 'buffer' };
+    }
+  } catch {
+    // ignore and continue fallback chain
+  }
+  try {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clashfox-dock-'));
+    const iconsetDir = path.join(tmpDir, 'icon.iconset');
+    execFileSync('iconutil', ['-c', 'iconset', iconPath, '-o', iconsetDir]);
+    const pngPath = path.join(iconsetDir, 'icon_512x512@2x.png');
+    if (fs.existsSync(pngPath)) {
+      const iconFromPng = nativeImage.createFromPath(pngPath);
+      if (!iconFromPng.isEmpty()) {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+        return { image: iconFromPng, via: 'iconutil-png' };
+      }
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 function setDockIcon() {
   if (!app.dock) {
     return;
   }
-  const icnsPath = path.join(APP_PATH, 'src', 'ui', 'assets', 'logo.icns');
-  if (!fs.existsSync(icnsPath)) {
-    // console.log('[dock] icns missing:', icnsPath);
-    return;
-  }
-  let dockIcon = nativeImage.createFromPath(icnsPath);
-  if (dockIcon.isEmpty()) {
-    const icnsBuffer = fs.readFileSync(icnsPath);
-    dockIcon = nativeImage.createFromBuffer(icnsBuffer);
-  }
+  const isDark = nativeTheme.shouldUseDarkColors;
+  const icnsDir = path.join(APP_PATH, 'src', 'ui', 'assets', 'icns');
+  const iconCandidates = isDark
+    ? [
+      path.join(icnsDir, 'logo_night.icns'),
+      path.join(icnsDir, 'logo.icns'),
+    ]
+    : [
+      path.join(icnsDir, 'logo_light.icns'),
+      path.join(icnsDir, 'logo.icns'),
+    ];
 
-  try {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clashfox-icon-'));
-    const iconsetDir = path.join(tmpDir, 'logo.iconset');
-    execFileSync('iconutil', ['-c', 'iconset', icnsPath, '-o', iconsetDir]);
-    const pngPath = path.join(iconsetDir, 'icon_512x512@2x.png');
-    if (fs.existsSync(pngPath)) {
-      const pngBuffer = fs.readFileSync(pngPath);
-      const pngBase64 = pngBuffer.toString('base64');
-      const padScale = 0.82;
-      const size = 1024;
-      const padded = Math.round(size * padScale);
-      const offset = Math.round((size - padded) / 2);
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><image href="data:image/png;base64,${pngBase64}" x="${offset}" y="${offset}" width="${padded}" height="${padded}"/></svg>`;
-      const svgDataUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
-      const paddedIcon = nativeImage.createFromDataURL(svgDataUrl);
-      if (!paddedIcon.isEmpty()) {
-        dockIcon = paddedIcon;
-      } else {
-        const pngIcon = nativeImage.createFromPath(pngPath);
-        if (!pngIcon.isEmpty()) {
-          dockIcon = pngIcon;
-        }
+  for (const iconPath of iconCandidates) {
+    const loaded = loadDockIconFromIcns(iconPath);
+    if (loaded && loaded.image && !loaded.image.isEmpty()) {
+      app.dock.setIcon(loaded.image);
+      if (isDev) {
+        // console.log(`[dock] icon hit (${loaded.via}):`, iconPath);
       }
+      return;
     }
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  } catch (error) {
-    // console.log('[dock] iconutil fallback failed:', error.message);
   }
-
-  if (!dockIcon.isEmpty()) {
-    app.dock.setIcon(dockIcon);
+  if (isDev) {
+    console.log('[dock] icon not set: all candidates failed');
   }
 }
 
