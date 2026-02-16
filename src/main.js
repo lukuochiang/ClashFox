@@ -10,15 +10,15 @@ const APP_PATH = app.getAppPath ? app.getAppPath() : ROOT_DIR;
 app.name = 'ClashFox';
 app.setName('ClashFox');
 const APP_DATA_DIR = path.join(app.getPath('appData'), app.getName());
-const CHROMIUM_DIR = path.join(APP_DATA_DIR, 'others');
-app.setPath('userData', CHROMIUM_DIR);
-// app.setPath('cache', path.join(CHROMIUM_DIR, 'Cache'));
-// app.setPath('logs', path.join(CHROMIUM_DIR, 'Logs'));
+const WORK_DIR = path.join(APP_DATA_DIR, 'work');
+app.setPath('userData', WORK_DIR);
+// app.setPath('cache', path.join(WORK_DIR, 'Cache'));
+// app.setPath('logs', path.join(WORK_DIR, 'Logs'));
 
 function ensureAppDirs() {
   try {
     fs.mkdirSync(APP_DATA_DIR, { recursive: true });
-    fs.mkdirSync(CHROMIUM_DIR, { recursive: true });
+    fs.mkdirSync(WORK_DIR, { recursive: true });
     fs.mkdirSync(path.join(APP_DATA_DIR, 'core'), { recursive: true });
     fs.mkdirSync(path.join(APP_DATA_DIR, 'config'), { recursive: true });
     fs.mkdirSync(path.join(APP_DATA_DIR, 'data'), { recursive: true });
@@ -1346,22 +1346,28 @@ app.whenReady().then(() => {
       const defaultConfigPath = path.join(APP_DATA_DIR, 'config', 'default.yaml');
       if (!fs.existsSync(settingsPath)) {
         const defaults = {
-          configPath: defaultConfigPath,
+          configFile: defaultConfigPath,
         };
-        fs.writeFileSync(settingsPath, JSON.stringify(defaults, null, 2));
+        fs.writeFileSync(settingsPath, `${JSON.stringify(defaults, null, 2)}\n`);
         return { ok: true, data: defaults };
       }
       const raw = fs.readFileSync(settingsPath, 'utf8');
       const parsed = JSON.parse(raw) || {};
-      if (!parsed.configPath && parsed.configFile) {
-        parsed.configPath = parsed.configFile;
+      let changed = false;
+      if (!parsed.configFile && typeof parsed.configPath === 'string') {
+        parsed.configFile = parsed.configPath;
+        changed = true;
       }
-      if (parsed.configFile) {
-        delete parsed.configFile;
+      if (Object.prototype.hasOwnProperty.call(parsed, 'configPath')) {
+        delete parsed.configPath;
+        changed = true;
       }
-      if (!parsed.configPath) {
-        parsed.configPath = defaultConfigPath;
-        fs.writeFileSync(settingsPath, JSON.stringify(parsed, null, 2));
+      if (!parsed.configFile) {
+        parsed.configFile = defaultConfigPath;
+        changed = true;
+      }
+      if (changed) {
+        fs.writeFileSync(settingsPath, `${JSON.stringify(parsed, null, 2)}\n`);
       }
       return { ok: true, data: parsed };
     } catch (err) {
@@ -1373,7 +1379,14 @@ app.whenReady().then(() => {
     try {
       ensureAppDirs();
       const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
-      const json = JSON.stringify(data || {}, null, 2);
+      const payload = data && typeof data === 'object' ? { ...data } : {};
+      if (!payload.configFile && typeof payload.configPath === 'string') {
+        payload.configFile = payload.configPath;
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'configPath')) {
+        delete payload.configPath;
+      }
+      const json = JSON.stringify(payload, null, 2);
       fs.writeFileSync(settingsPath, `${json}\n`);
       await createTrayMenu();
       return { ok: true };

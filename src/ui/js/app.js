@@ -486,18 +486,35 @@ function setLanguage(lang, persist = true, refreshStatus = true) {
   }
 }
 
+function normalizeSettingsForUi(settings) {
+  const normalized = { ...(settings || {}) };
+  if (!normalized.configPath && typeof normalized.configFile === 'string') {
+    normalized.configPath = normalized.configFile;
+  }
+  if (Object.prototype.hasOwnProperty.call(normalized, 'configFile')) {
+    delete normalized.configFile;
+  }
+  return normalized;
+}
+
+function mapSettingsForFile(settings) {
+  const mapped = { ...(settings || {}) };
+  if (typeof mapped.configPath === 'string') {
+    mapped.configFile = mapped.configPath;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'configPath')) {
+    delete mapped.configPath;
+  }
+  return mapped;
+}
+
 function readSettings() {
   const raw = localStorage.getItem(SETTINGS_KEY);
   if (!raw) {
     return { ...DEFAULT_SETTINGS, ...(state.fileSettings || {}) };
   }
   try {
-    const parsed = JSON.parse(raw);
-    if (parsed && parsed.configFile && !parsed.configPath) {
-      parsed.configPath = parsed.configFile;
-      delete parsed.configFile;
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(parsed));
-    }
+    const parsed = normalizeSettingsForUi(JSON.parse(raw));
     const merged = { ...DEFAULT_SETTINGS, ...parsed };
     if (state.fileSettings) {
       if (!merged.configPath && state.fileSettings.configPath) merged.configPath = state.fileSettings.configPath;
@@ -524,13 +541,7 @@ async function syncSettingsFromFile() {
   if (!response || !response.ok || !response.data) {
     return;
   }
-  const merged = { ...DEFAULT_SETTINGS, ...response.data };
-  if (merged.configFile && !merged.configPath) {
-    merged.configPath = merged.configFile;
-  }
-  if (merged.configFile) {
-    delete merged.configFile;
-  }
+  const merged = normalizeSettingsForUi({ ...DEFAULT_SETTINGS, ...response.data });
   if (window.clashfox && typeof window.clashfox.getUserDataPath === 'function') {
     const userData = await window.clashfox.getUserDataPath();
     if (userData && userData.ok && userData.path) {
@@ -555,7 +566,8 @@ async function syncSettingsFromFile() {
   state.fileSettings = { ...merged };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
   if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
-    const { externalUiUrl, externalUiName, ...fileSettings } = merged;
+    const { externalUiUrl, externalUiName, ...restSettings } = merged;
+    const fileSettings = mapSettingsForFile(restSettings);
     window.clashfox.writeSettings(fileSettings);
   }
 }
@@ -565,7 +577,8 @@ function saveSettings(patch) {
   state.fileSettings = { ...state.fileSettings, ...patch };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
   if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
-    const { externalUiUrl, externalUiName, ...fileSettings } = state.settings;
+    const { externalUiUrl, externalUiName, ...restSettings } = state.settings;
+    const fileSettings = mapSettingsForFile(restSettings);
     window.clashfox.writeSettings(fileSettings);
   }
 }
