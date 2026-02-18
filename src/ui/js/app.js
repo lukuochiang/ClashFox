@@ -1091,6 +1091,17 @@ function normalizeProxyMode(value) {
   return 'rule';
 }
 
+function formatBackupTimestamp(raw, fallback = '-') {
+  if (!raw || typeof raw !== 'string') {
+    return fallback;
+  }
+  const match = raw.match(/^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/);
+  if (!match) {
+    return raw || fallback;
+  }
+  return `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]}:${match[6]}`;
+}
+
 async function syncProxyModeFromFile() {
   if (!window.clashfox || typeof window.clashfox.readSettings !== 'function') {
     return;
@@ -2058,7 +2069,8 @@ function renderBackups(targetEl, withRadio, pageInfo, pageSize, multiSelect) {
       html += `<td class="check-col"><input type="checkbox" data-path="${item.path}" ${checked} /></td>`;
       html += `<td class="index-col">${item.index}</td>`;
       html += `<td class="version-col">${item.version || item.name}</td>`;
-      html += `<td class="time-col">${item.timestamp || '-'}</td>`;
+      const displayTime = formatBackupTimestamp(item.timestamp, item.timestamp || '-');
+      html += `<td class="time-col">${displayTime}</td>`;
       html += '</tr>';
     });
 
@@ -2083,7 +2095,8 @@ function renderBackups(targetEl, withRadio, pageInfo, pageSize, multiSelect) {
     } else {
       html += `<div class="index-cell">${item.index}</div>`;
     }
-    html += `<div class="version-cell">${item.version || item.name}</div><div class="time-cell">${item.timestamp || '-'}</div></div>`;
+    const displayTime = formatBackupTimestamp(item.timestamp, item.timestamp || '-');
+    html += `<div class="version-cell">${item.version || item.name}</div><div class="time-cell">${displayTime}</div></div>`;
   });
 
   if (items.length === 0) {
@@ -2239,17 +2252,6 @@ function renderKernelTable() {
     }
   }
   const currentTimestamp = currentItem && currentItem.modified ? currentItem.modified : '-';
-  const formatBackupTimestamp = (raw, fallback = '-') => {
-    if (!raw || typeof raw !== 'string') {
-      return fallback;
-    }
-    const match = raw.match(/^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/);
-    if (!match) {
-      return fallback;
-    }
-    return `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]}:${match[6]}`;
-  };
-
   let html = '<div class="kernel-current-card">';
   html += '<div class="kernel-current-meta">';
   html += `<div class="kernel-current-title">${t('labels.current')} ${t('status.kernel')}</div>`;
