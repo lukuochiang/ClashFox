@@ -829,10 +829,6 @@ h1 {
   opacity: 0.65;
 }
 
-.overview-grid.is-dragging .overview-card {
-  transition: transform 160ms ease;
-}
-
 .overview-title {
   display: flex;
   align-items: center;

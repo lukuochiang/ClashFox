@@ -704,13 +704,16 @@ function bindOverviewDrag() {
     }
     grid.dataset.dragBound = 'true';
     let draggingCard = null;
+    const cards = () => Array.from(grid.querySelectorAll('[draggable="true"][data-module]'));
 
     const clearDragging = () => {
-      if (draggingCard) {
-        draggingCard.classList.remove('is-dragging');
-        draggingCard.dataset.dragArmed = '';
-        draggingCard = null;
-      }
+      cards().forEach((card) => {
+        card.classList.remove('is-dragging');
+        card.dataset.dragArmed = '';
+        card.style.removeProperty('transform');
+        card.style.removeProperty('transition');
+      });
+      draggingCard = null;
       grid.classList.remove('is-dragging');
     };
 
@@ -760,6 +763,7 @@ function bindOverviewDrag() {
       }
       event.preventDefault();
       saveOverviewOrder(grid);
+      clearDragging();
     });
 
     grid.addEventListener('dragend', () => {
