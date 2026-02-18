@@ -731,6 +731,55 @@ h1 {
   border-bottom: 1px solid var(--border);
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.overview-drag-handle {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 8px;
+  cursor: grab;
+}
+
+.overview-drag-handle:active {
+  cursor: grabbing;
+}
+
+.overview-drag-handle .drag-grip {
+  width: 14px;
+  height: 14px;
+  background-color: currentColor;
+  opacity: 0.65;
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><g fill='black'><circle cx='4' cy='4' r='1.3'/><circle cx='12' cy='4' r='1.3'/><circle cx='4' cy='8' r='1.3'/><circle cx='12' cy='8' r='1.3'/><circle cx='4' cy='12' r='1.3'/><circle cx='12' cy='12' r='1.3'/></g></svg>");
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><g fill='black'><circle cx='4' cy='4' r='1.3'/><circle cx='12' cy='4' r='1.3'/><circle cx='4' cy='8' r='1.3'/><circle cx='12' cy='8' r='1.3'/><circle cx='4' cy='12' r='1.3'/><circle cx='12' cy='12' r='1.3'/></g></svg>");
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+}
+
+.overview-card.is-dragging {
+  opacity: 0.65;
+}
+
+.overview-grid.is-dragging .overview-card {
+  transition: transform 160ms ease;
+}
+
 .overview-title {
   display: flex;
   align-items: center;

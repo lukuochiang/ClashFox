@@ -31,6 +31,7 @@ let overviewConnAvg = document.getElementById('overviewConnAvg');
 let overviewConnTrend = document.getElementById('overviewConnTrend');
 let overviewConnLine = document.getElementById('overviewConnLine');
 let overviewConnArea = document.getElementById('overviewConnArea');
+let overviewGrid = document.querySelector('.overview-grid');
 let trafficSystemDownloadRate = document.getElementById('trafficSystemDownloadRate');
 let trafficSystemDownloadTotal = document.getElementById('trafficSystemDownloadTotal');
 let trafficSystemUploadRate = document.getElementById('trafficSystemUploadRate');
@@ -213,6 +214,7 @@ const DEFAULT_SETTINGS = {
   proxyMode: 'rule',
   tunEnabled: false,
   tunStack: 'Mixed',
+  overviewOrder: [],
   logLines: 10,
   logAutoRefresh: false,
   logIntervalPreset: '3',
@@ -382,12 +384,14 @@ function applyI18n() {
     el.textContent = tip;
   });
   document.querySelectorAll('[data-i18n-tip]').forEach((el) => {
-    const key = el.dataset.i18nTip;
+    const key = el.dataset.i18nTipKey || el.dataset.i18nTip;
+    if (!el.dataset.i18nTipKey) {
+      el.dataset.i18nTipKey = el.dataset.i18nTip;
+    }
     const tip = t(key);
+    el.dataset.i18nTip = tip;
     el.dataset.tip = tip;
-    // 替换现有的title设置
     el.setAttribute('data-tooltip', tip);
-    // 保持title属性用于可访问性
     el.setAttribute('title', tip);
   });
   document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
@@ -604,6 +608,143 @@ function updateThemeToggle() {
   themeToggle.setAttribute('title', label);
 }
 
+function applyOverviewOrder() {
+  if (!overviewGrid) {
+    return;
+  }
+  const order = Array.isArray(state.settings && state.settings.overviewOrder)
+    ? state.settings.overviewOrder
+    : [];
+  if (order.length === 0) {
+    return;
+  }
+  const cards = Array.from(overviewGrid.querySelectorAll('.overview-card'));
+  if (cards.length === 0) {
+    return;
+  }
+  const cardMap = new Map(cards.map((card) => [card.dataset.module, card]));
+  const fragment = document.createDocumentFragment();
+  order.forEach((key) => {
+    const card = cardMap.get(key);
+    if (card) {
+      fragment.appendChild(card);
+      cardMap.delete(key);
+    }
+  });
+  cardMap.forEach((card) => fragment.appendChild(card));
+  overviewGrid.appendChild(fragment);
+}
+
+function saveOverviewOrder() {
+  if (!overviewGrid) {
+    return;
+  }
+  const order = Array.from(overviewGrid.querySelectorAll('.overview-card'))
+    .map((card) => card.dataset.module)
+    .filter(Boolean);
+  if (order.length === 0) {
+    return;
+  }
+  saveSettings({ overviewOrder: order });
+}
+
+function getOverviewInsertTarget(container, x, y) {
+  const cards = Array.from(container.querySelectorAll('.overview-card:not(.is-dragging)'));
+  let closest = null;
+  let closestDist = Number.POSITIVE_INFINITY;
+  let insertBefore = true;
+  cards.forEach((card) => {
+    const rect = card.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = x - cx;
+    const dy = y - cy;
+    const dist = Math.hypot(dx, dy);
+    if (dist < closestDist) {
+      closestDist = dist;
+      closest = card;
+      const nearRow = Math.abs(dy) < rect.height * 0.2;
+      insertBefore = nearRow ? x < cx : y < cy;
+    }
+  });
+  if (!closest) {
+    return null;
+  }
+  return { element: closest, insertBefore };
+}
+
+function bindOverviewDrag() {
+  if (!overviewGrid || overviewGrid.dataset.dragBound === 'true') {
+    return;
+  }
+  overviewGrid.dataset.dragBound = 'true';
+  let draggingCard = null;
+
+  const clearDragging = () => {
+    if (draggingCard) {
+      draggingCard.classList.remove('is-dragging');
+      draggingCard.dataset.dragArmed = '';
+      draggingCard = null;
+    }
+    overviewGrid.classList.remove('is-dragging');
+  };
+
+  overviewGrid.addEventListener('mousedown', (event) => {
+    const handle = event.target.closest('.overview-drag-handle');
+    if (!handle) {
+      return;
+    }
+    const card = handle.closest('.overview-card');
+    if (card) {
+      card.dataset.dragArmed = 'true';
+    }
+  });
+
+  overviewGrid.addEventListener('dragstart', (event) => {
+    const card = event.target.closest('.overview-card');
+    if (!card || card.dataset.dragArmed !== 'true') {
+      event.preventDefault();
+      return;
+    }
+    draggingCard = card;
+    draggingCard.classList.add('is-dragging');
+    overviewGrid.classList.add('is-dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', card.dataset.module || '');
+  });
+
+  overviewGrid.addEventListener('dragover', (event) => {
+    if (!draggingCard) {
+      return;
+    }
+    event.preventDefault();
+    const target = getOverviewInsertTarget(overviewGrid, event.clientX, event.clientY);
+    if (!target || target.element === draggingCard) {
+      return;
+    }
+    if (target.insertBefore) {
+      overviewGrid.insertBefore(draggingCard, target.element);
+    } else {
+      overviewGrid.insertBefore(draggingCard, target.element.nextSibling);
+    }
+  });
+
+  overviewGrid.addEventListener('drop', (event) => {
+    if (!draggingCard) {
+      return;
+    }
+    event.preventDefault();
+    saveOverviewOrder();
+  });
+
+  overviewGrid.addEventListener('dragend', () => {
+    saveOverviewOrder();
+    clearDragging();
+  });
+
+  overviewGrid.addEventListener('mouseup', clearDragging);
+}
+
 function applyTheme(theme) {
   state.theme = theme;
   document.body.dataset.theme = theme;
@@ -686,6 +827,7 @@ function applySettings(settings) {
   if (settingsConfigPath) {
     settingsConfigPath.value = state.settings.configPath;
   }
+  applyOverviewOrder();
   if (externalControllerInput) {
     externalControllerInput.value = state.settings.externalController || '';
   }
@@ -2350,6 +2492,7 @@ function refreshPageRefs() {
   overviewConnTrend = document.getElementById('overviewConnTrend');
   overviewConnLine = document.getElementById('overviewConnLine');
   overviewConnArea = document.getElementById('overviewConnArea');
+  overviewGrid = document.querySelector('.overview-grid');
   trafficSystemDownloadRate = document.getElementById('trafficSystemDownloadRate');
   trafficSystemDownloadTotal = document.getElementById('trafficSystemDownloadTotal');
   trafficSystemUploadRate = document.getElementById('trafficSystemUploadRate');
@@ -2766,6 +2909,7 @@ externalLinks.forEach((link) => {
     }
   });
 });
+bindOverviewDrag();
 langButtons.forEach((btn) => {
   btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
 });
