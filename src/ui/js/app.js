@@ -1781,7 +1781,7 @@ async function loadOverview(showToastOnSuccess = false) {
 
 async function loadTunStatus(showToastOnSuccess = false) {
   if (!tunToggle && !tunStackSelect) {
-    return;
+    return null;
   }
   const configPath = getCurrentConfigPath();
   const args = configPath ? ['--config', configPath] : [];
@@ -1812,7 +1812,7 @@ async function loadTunStatus(showToastOnSuccess = false) {
         }
       }
     }
-    return;
+    return response;
   }
   if (tunToggle && typeof response.data.enabled === 'boolean') {
     tunToggle.checked = response.data.enabled;
@@ -1831,6 +1831,7 @@ async function loadTunStatus(showToastOnSuccess = false) {
     showToast(t('labels.tunRefreshed'));
   }
   tunSynced = true;
+  return response;
 }
 
 async function loadOverviewLite() {
@@ -3252,15 +3253,22 @@ if (proxyModeSelect) {
 if (tunToggle) {
   tunToggle.addEventListener('change', async () => {
     const enabled = Boolean(tunToggle.checked);
+    const previous = !enabled;
     const response = await runCommand('tun', ['--enable', enabled ? 'true' : 'false', ...getControllerArgs()]);
     // Always re-sync from kernel to avoid divergence
-    await loadTunStatus(false);
+    const statusResponse = await loadTunStatus(false);
     const actual = tunToggle.checked;
-    if (!response.ok || actual !== enabled) {
-      tunToggle.checked = actual;
-      const message = response.error === 'controller_missing'
+    const statusOk = statusResponse && statusResponse.ok && statusResponse.data;
+    if (!response.ok || !statusOk || actual !== enabled) {
+      const nextChecked = statusOk ? actual : previous;
+      tunToggle.checked = nextChecked;
+      saveSettings({ tunEnabled: nextChecked });
+      const mergedError = response.error || statusResponse?.error;
+      const message = mergedError === 'controller_missing'
         ? t('labels.controllerMissing')
-        : (response.error || ti('labels.tunUpdateFailed', 'TUN update failed'));
+        : (mergedError || (!statusOk
+          ? ti('labels.tunStatusFailed', 'TUN status unavailable')
+          : ti('labels.tunUpdateFailed', 'TUN update failed')));
       showToast(message, 'error');
       return;
     }
@@ -3270,17 +3278,23 @@ if (tunToggle) {
 
 if (tunStackSelect) {
   tunStackSelect.addEventListener('change', async () => {
+    const previous = normalizeTunStack(state.settings && state.settings.tunStack);
     const value = normalizeTunStack(tunStackSelect.value);
     tunStackSelect.value = value;
     const response = await runCommand('tun', ['--stack', value, ...getControllerArgs()]);
-    await loadTunStatus(false);
+    const statusResponse = await loadTunStatus(false);
     const actual = normalizeTunStack(tunStackSelect.value);
-    if (!response.ok || actual !== value) {
-      const fallback = normalizeTunStack(state.settings && state.settings.tunStack);
-      tunStackSelect.value = fallback;
-      const message = response.error === 'controller_missing'
+    const statusOk = statusResponse && statusResponse.ok && statusResponse.data;
+    if (!response.ok || !statusOk || actual !== value) {
+      const nextValue = statusOk ? actual : previous;
+      tunStackSelect.value = nextValue;
+      saveSettings({ tunStack: nextValue });
+      const mergedError = response.error || statusResponse?.error;
+      const message = mergedError === 'controller_missing'
         ? t('labels.controllerMissing')
-        : (response.error || ti('labels.tunStackUpdateFailed', 'TUN stack update failed'));
+        : (mergedError || (!statusOk
+          ? ti('labels.tunStatusFailed', 'TUN status unavailable')
+          : ti('labels.tunStackUpdateFailed', 'TUN stack update failed')));
       showToast(message, 'error');
       return;
     }
