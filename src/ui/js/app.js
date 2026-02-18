@@ -1941,29 +1941,25 @@ async function loadTunStatus(showToastOnSuccess = false) {
   args.push(...getControllerArgs());
   const response = await runCommand('tun-status', args);
   if (!response.ok || !response.data) {
-    // fallback only once on first sync
-    if (!tunSynced) {
-      const statusResp = await runCommand('status', args);
-      const running = statusResp && statusResp.ok && statusResp.data && statusResp.data.running;
-      if (!running && tunToggle) {
-        tunToggle.checked = false;
-        saveSettings({ tunEnabled: false });
-        tunSynced = true;
-        return;
-      }
-      if (running) {
-        const fetched = await fetchTunFromController();
-        if (fetched && typeof fetched.enabled === 'boolean') {
-          if (tunToggle) tunToggle.checked = fetched.enabled;
-          const fetchedStack = normalizeTunStack(fetched.stack);
-          if (tunStackSelect) tunStackSelect.value = fetchedStack;
-          saveSettings({
-            tunEnabled: fetched.enabled,
-            tunStack: fetchedStack,
-          });
-          tunSynced = true;
-        }
-      }
+    const statusResp = await runCommand('status', args);
+    const running = statusResp && statusResp.ok && statusResp.data && statusResp.data.running;
+    if (!running) {
+      if (tunToggle) tunToggle.checked = false;
+      saveSettings({ tunEnabled: false });
+      tunSynced = true;
+      return { ok: true, data: { enabled: false }, error: response.error };
+    }
+    const fetched = await fetchTunFromController();
+    if (fetched && typeof fetched.enabled === 'boolean') {
+      if (tunToggle) tunToggle.checked = fetched.enabled;
+      const fetchedStack = normalizeTunStack(fetched.stack);
+      if (tunStackSelect) tunStackSelect.value = fetchedStack;
+      saveSettings({
+        tunEnabled: fetched.enabled,
+        tunStack: fetchedStack,
+      });
+      tunSynced = true;
+      return { ok: true, data: { enabled: fetched.enabled, stack: fetchedStack }, error: response.error };
     }
     return response;
   }
