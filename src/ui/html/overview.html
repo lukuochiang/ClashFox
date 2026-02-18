@@ -15,10 +15,14 @@
 
         <div id="contentRoot" class="content-root">
           <section id="overview" class="panel active">
-          <div class="panel-grid">
-            <div class="card quick-actions-card">
+          <div class="panel-grid overview-drag-grid" data-order-key="overviewOrder">
+            <div class="card quick-actions-card" data-module="quick-actions" draggable="true">
               <div class="card-header-row">
                 <h3 class="iconized quick-actions-icon" data-i18n="status.quick">Quick Actions</h3>
+                <button class="icon-btn ghost small overview-drag-handle" type="button" data-i18n-tip="labels.dragToReorder">
+                  <span class="sr-only" data-i18n="labels.dragToReorder">Drag to reorder</span>
+                  <span class="drag-grip" aria-hidden="true"></span>
+                </button>
               </div>
               <div class="quick-group">
                 <div class="quick-group-label">Kernel Control</div>
@@ -49,9 +53,13 @@
                 </div>
               </div>
             </div>
-            <div class="card outbound-card">
+            <div class="card outbound-card" data-module="outbound-mode" draggable="true">
               <div class="card-header-row">
                 <h3 class="iconized outbound-icon" data-i18n="status.proxyMode">Outbound Mode</h3>
+                <button class="icon-btn ghost small overview-drag-handle" type="button" data-i18n-tip="labels.dragToReorder">
+                  <span class="sr-only" data-i18n="labels.dragToReorder">Drag to reorder</span>
+                  <span class="drag-grip" aria-hidden="true"></span>
+                </button>
               </div>
               <div class="outbound-body">
                 <div id="proxyModeSelect" class="outbound-options" role="radiogroup" aria-label="Outbound Mode">
@@ -79,9 +87,13 @@
                 </div>
               </div>
             </div>
-            <div class="card quick-actions conn-live-card">
+            <div class="card quick-actions conn-live-card" data-module="conn-live" draggable="true">
               <div class="card-header-row">
                 <h3 class="iconized conn-live-icon" data-i18n="status.connLiveTitle">Realtime Connections</h3>
+                <button class="icon-btn ghost small overview-drag-handle" type="button" data-i18n-tip="labels.dragToReorder">
+                  <span class="sr-only" data-i18n="labels.dragToReorder">Drag to reorder</span>
+                  <span class="drag-grip" aria-hidden="true"></span>
+                </button>
               </div>
               <div class="conn-live-grid">
                 <div class="conn-live-item">
@@ -105,9 +117,13 @@
                 </svg>
               </div>
             </div>
-            <div class="card quick-actions">
+            <div class="card quick-actions" data-module="network-history" draggable="true">
               <div class="card-header-row">
                 <h3 data-i18n="status.trafficTitle">Network History</h3>
+                <button class="icon-btn ghost small overview-drag-handle" type="button" data-i18n-tip="labels.dragToReorder">
+                  <span class="sr-only" data-i18n="labels.dragToReorder">Drag to reorder</span>
+                  <span class="drag-grip" aria-hidden="true"></span>
+                </button>
               </div>
               <div class="history-totals">
                 <div class="history-total-item">
@@ -152,10 +168,7 @@
                 </div>
               </div>
             </div>
-          </div>
-
-          <div class="panel-grid overview-grid">
-            <div class="card overview-card" data-module="running" draggable="true">
+            <div class="card overview-card" data-module="running" data-span="full" draggable="true">
               <div class="overview-header">
                 <div class="overview-title">
 <!--                  <span class="card-icon running" aria-hidden="true"></span>-->
@@ -213,7 +226,7 @@
               </div>
             </div>
 
-            <div class="card overview-card" data-module="network" draggable="true">
+            <div class="card overview-card" data-module="network" data-span="full" draggable="true">
               <div class="overview-header">
                 <div class="overview-title">
 <!--                  <span class="card-icon network" aria-hidden="true"></span>-->

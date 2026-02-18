@@ -31,7 +31,7 @@ let overviewConnAvg = document.getElementById('overviewConnAvg');
 let overviewConnTrend = document.getElementById('overviewConnTrend');
 let overviewConnLine = document.getElementById('overviewConnLine');
 let overviewConnArea = document.getElementById('overviewConnArea');
-let overviewGrid = document.querySelector('.overview-grid');
+let overviewGrids = Array.from(document.querySelectorAll('.overview-drag-grid'));
 let trafficSystemDownloadRate = document.getElementById('trafficSystemDownloadRate');
 let trafficSystemDownloadTotal = document.getElementById('trafficSystemDownloadTotal');
 let trafficSystemUploadRate = document.getElementById('trafficSystemUploadRate');
@@ -215,6 +215,7 @@ const DEFAULT_SETTINGS = {
   tunEnabled: false,
   tunStack: 'Mixed',
   overviewOrder: [],
+  overviewTopOrder: [],
   logLines: 10,
   logAutoRefresh: false,
   logIntervalPreset: '3',
@@ -378,9 +379,6 @@ function applyI18n() {
   document.querySelectorAll('[data-i18n]').forEach((el) => {
     const key = el.dataset.i18n;
     const tip = t(key);
-    if (tip && tip.trim() !== '') {
-      el.setAttribute('title', tip);
-    }
     el.textContent = tip;
   });
   document.querySelectorAll('[data-i18n-tip]').forEach((el) => {
@@ -388,11 +386,14 @@ function applyI18n() {
     if (!el.dataset.i18nTipKey) {
       el.dataset.i18nTipKey = el.dataset.i18nTip;
     }
-    const tip = t(key);
-    el.dataset.i18nTip = tip;
+    if (el.dataset.i18nTipKey) {
+      el.dataset.i18nTip = el.dataset.i18nTipKey;
+    }
+    const tip = t(key) || '';
     el.dataset.tip = tip;
     el.setAttribute('data-tooltip', tip);
     el.setAttribute('title', tip);
+    el.setAttribute('aria-label', tip);
   });
   document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
     const key = el.dataset.i18nPlaceholder;
@@ -402,8 +403,6 @@ function applyI18n() {
   applyCardIcons();
 
   if (statusPill) {
-    statusPill.setAttribute('aria-label', t('labels.unknown'));
-    statusPill.setAttribute('title', t('labels.unknown'));
     statusPill.dataset.state = 'unknown';
   }
   updateThemeToggle();
@@ -603,22 +602,36 @@ function updateThemeToggle() {
     return;
   }
   const nextTheme = state.theme === 'night' ? 'day' : 'night';
-  const label = t(nextTheme === 'day' ? 'theme.toDay' : 'theme.toNight');
-  themeToggle.setAttribute('aria-label', label);
+  const key = nextTheme === 'day' ? 'theme.toDay' : 'theme.toNight';
+  const label = t(key);
+  themeToggle.dataset.i18nTipKey = key;
+  themeToggle.dataset.i18nTip = key;
+  themeToggle.dataset.tip = label;
   themeToggle.setAttribute('title', label);
+  themeToggle.setAttribute('aria-label', label);
 }
 
-function applyOverviewOrder() {
-  if (!overviewGrid) {
+function applyOverviewOrder(grid) {
+  if (!grid) {
     return;
   }
-  const order = Array.isArray(state.settings && state.settings.overviewOrder)
-    ? state.settings.overviewOrder
+  const orderKey = grid.dataset.orderKey || 'overviewOrder';
+  let order = Array.isArray(state.settings && state.settings[orderKey])
+    ? state.settings[orderKey]
     : [];
+  if (orderKey === 'overviewOrder') {
+    const topOrder = Array.isArray(state.settings && state.settings.overviewTopOrder)
+      ? state.settings.overviewTopOrder
+      : [];
+    if (topOrder.length && !order.some((item) => topOrder.includes(item))) {
+      const merged = [...topOrder, ...order];
+      order = merged.filter((item, index) => merged.indexOf(item) === index);
+    }
+  }
   if (order.length === 0) {
     return;
   }
-  const cards = Array.from(overviewGrid.querySelectorAll('.overview-card'));
+  const cards = Array.from(grid.querySelectorAll('[draggable="true"][data-module]'));
   if (cards.length === 0) {
     return;
   }
@@ -632,24 +645,32 @@ function applyOverviewOrder() {
     }
   });
   cardMap.forEach((card) => fragment.appendChild(card));
-  overviewGrid.appendChild(fragment);
+  grid.appendChild(fragment);
 }
 
-function saveOverviewOrder() {
-  if (!overviewGrid) {
+function applyOverviewOrders() {
+  if (!overviewGrids || overviewGrids.length === 0) {
     return;
   }
-  const order = Array.from(overviewGrid.querySelectorAll('.overview-card'))
+  overviewGrids.forEach((grid) => applyOverviewOrder(grid));
+}
+
+function saveOverviewOrder(grid) {
+  if (!grid) {
+    return;
+  }
+  const orderKey = grid.dataset.orderKey || 'overviewOrder';
+  const order = Array.from(grid.querySelectorAll('[draggable="true"][data-module]'))
     .map((card) => card.dataset.module)
     .filter(Boolean);
   if (order.length === 0) {
     return;
   }
-  saveSettings({ overviewOrder: order });
+  saveSettings({ [orderKey]: order });
 }
 
 function getOverviewInsertTarget(container, x, y) {
-  const cards = Array.from(container.querySelectorAll('.overview-card:not(.is-dragging)'));
+  const cards = Array.from(container.querySelectorAll('[draggable="true"][data-module]:not(.is-dragging)'));
   let closest = null;
   let closestDist = Number.POSITIVE_INFINITY;
   let insertBefore = true;
@@ -674,75 +695,105 @@ function getOverviewInsertTarget(container, x, y) {
 }
 
 function bindOverviewDrag() {
-  if (!overviewGrid || overviewGrid.dataset.dragBound === 'true') {
+  if (!overviewGrids || overviewGrids.length === 0) {
     return;
   }
-  overviewGrid.dataset.dragBound = 'true';
-  let draggingCard = null;
-
-  const clearDragging = () => {
-    if (draggingCard) {
-      draggingCard.classList.remove('is-dragging');
-      draggingCard.dataset.dragArmed = '';
-      draggingCard = null;
-    }
-    overviewGrid.classList.remove('is-dragging');
-  };
-
-  overviewGrid.addEventListener('mousedown', (event) => {
-    const handle = event.target.closest('.overview-drag-handle');
-    if (!handle) {
+  overviewGrids.forEach((grid) => {
+    if (grid.dataset.dragBound === 'true') {
       return;
     }
-    const card = handle.closest('.overview-card');
-    if (card) {
-      card.dataset.dragArmed = 'true';
-    }
-  });
+    grid.dataset.dragBound = 'true';
+    let draggingCard = null;
 
-  overviewGrid.addEventListener('dragstart', (event) => {
-    const card = event.target.closest('.overview-card');
-    if (!card || card.dataset.dragArmed !== 'true') {
+    const clearDragging = () => {
+      if (draggingCard) {
+        draggingCard.classList.remove('is-dragging');
+        draggingCard.dataset.dragArmed = '';
+        draggingCard = null;
+      }
+      grid.classList.remove('is-dragging');
+    };
+
+    grid.addEventListener('mousedown', (event) => {
+      const handle = event.target.closest('.overview-drag-handle');
+      if (!handle || !grid.contains(handle)) {
+        return;
+      }
+      const card = handle.closest('[draggable="true"][data-module]');
+      if (card) {
+        card.dataset.dragArmed = 'true';
+      }
+    });
+
+    grid.addEventListener('dragstart', (event) => {
+      const card = event.target.closest('[draggable="true"][data-module]');
+      if (!card || !grid.contains(card) || card.dataset.dragArmed !== 'true') {
+        event.preventDefault();
+        return;
+      }
+      draggingCard = card;
+      draggingCard.classList.add('is-dragging');
+      grid.classList.add('is-dragging');
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', card.dataset.module || '');
+    });
+
+    grid.addEventListener('dragover', (event) => {
+      if (!draggingCard) {
+        return;
+      }
       event.preventDefault();
-      return;
-    }
-    draggingCard = card;
-    draggingCard.classList.add('is-dragging');
-    overviewGrid.classList.add('is-dragging');
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', card.dataset.module || '');
-  });
+      const target = getOverviewInsertTarget(grid, event.clientX, event.clientY);
+      if (!target || target.element === draggingCard) {
+        return;
+      }
+      if (target.insertBefore) {
+        grid.insertBefore(draggingCard, target.element);
+      } else {
+        grid.insertBefore(draggingCard, target.element.nextSibling);
+      }
+    });
 
-  overviewGrid.addEventListener('dragover', (event) => {
-    if (!draggingCard) {
-      return;
-    }
-    event.preventDefault();
-    const target = getOverviewInsertTarget(overviewGrid, event.clientX, event.clientY);
-    if (!target || target.element === draggingCard) {
-      return;
-    }
-    if (target.insertBefore) {
-      overviewGrid.insertBefore(draggingCard, target.element);
-    } else {
-      overviewGrid.insertBefore(draggingCard, target.element.nextSibling);
-    }
-  });
+    grid.addEventListener('drop', (event) => {
+      if (!draggingCard) {
+        return;
+      }
+      event.preventDefault();
+      saveOverviewOrder(grid);
+    });
 
-  overviewGrid.addEventListener('drop', (event) => {
-    if (!draggingCard) {
-      return;
-    }
-    event.preventDefault();
-    saveOverviewOrder();
-  });
+    grid.addEventListener('dragend', () => {
+      saveOverviewOrder(grid);
+      clearDragging();
+    });
 
-  overviewGrid.addEventListener('dragend', () => {
-    saveOverviewOrder();
-    clearDragging();
+    grid.addEventListener('mouseup', clearDragging);
   });
+}
 
-  overviewGrid.addEventListener('mouseup', clearDragging);
+function updateTipPosition(el) {
+  if (!el || !contentRoot) {
+    return;
+  }
+  const rootRect = contentRoot.getBoundingClientRect();
+  const rect = el.getBoundingClientRect();
+  const topGap = rect.top - rootRect.top;
+  const bottomGap = rootRect.bottom - rect.bottom;
+  const leftGap = rect.left - rootRect.left;
+  const rightGap = rootRect.right - rect.right;
+  const tipPad = 140;
+  if (topGap < 36 && bottomGap > 36) {
+    el.dataset.position = 'bottom';
+  } else if (bottomGap < 36 && topGap > 36) {
+    el.dataset.position = 'top';
+  } else {
+    el.dataset.position = 'top';
+  }
+  if (rightGap < tipPad && leftGap > tipPad) {
+    el.dataset.position = 'left';
+  } else if (leftGap < tipPad && rightGap > tipPad) {
+    el.dataset.position = 'right';
+  }
 }
 
 function applyTheme(theme) {
@@ -827,7 +878,7 @@ function applySettings(settings) {
   if (settingsConfigPath) {
     settingsConfigPath.value = state.settings.configPath;
   }
-  applyOverviewOrder();
+  applyOverviewOrders();
   if (externalControllerInput) {
     externalControllerInput.value = state.settings.externalController || '';
   }
@@ -1393,6 +1444,9 @@ function syncRunningIndicators(running, { allowTransitionOverride = false } = {}
       return;
     }
     statusPill.dataset.state = running ? 'running' : 'stopped';
+    statusPill.dataset.i18nTipKey = running ? 'labels.running' : 'labels.stopped';
+    statusPill.dataset.i18nTip = statusPill.dataset.i18nTipKey;
+    statusPill.dataset.tip = label;
     statusPill.setAttribute('aria-label', label);
     statusPill.setAttribute('title', label);
   }
@@ -2490,7 +2544,7 @@ function refreshPageRefs() {
   overviewConnTrend = document.getElementById('overviewConnTrend');
   overviewConnLine = document.getElementById('overviewConnLine');
   overviewConnArea = document.getElementById('overviewConnArea');
-  overviewGrid = document.querySelector('.overview-grid');
+  overviewGrids = Array.from(document.querySelectorAll('.overview-drag-grid'));
   trafficSystemDownloadRate = document.getElementById('trafficSystemDownloadRate');
   trafficSystemDownloadTotal = document.getElementById('trafficSystemDownloadTotal');
   trafficSystemUploadRate = document.getElementById('trafficSystemUploadRate');
@@ -2908,6 +2962,14 @@ externalLinks.forEach((link) => {
   });
 });
 bindOverviewDrag();
+document.querySelectorAll('[data-i18n-tip]').forEach((el) => {
+  if (el.dataset.tipBound === 'true') {
+    return;
+  }
+  el.dataset.tipBound = 'true';
+  el.addEventListener('mouseenter', () => updateTipPosition(el));
+  el.addEventListener('focus', () => updateTipPosition(el));
+});
 langButtons.forEach((btn) => {
   btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
 });

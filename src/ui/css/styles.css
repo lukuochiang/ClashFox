@@ -143,7 +143,7 @@ body[data-theme="day"]::after {
 }
 
 [data-i18n-tip]::after {
-  content: attr(data-i18n-tip);
+  content: attr(data-tip);
   position: absolute;
   bottom: 100%;
   left: 50%;
@@ -182,6 +182,55 @@ body[data-theme="day"]::after {
 [data-i18n-tip]:hover::before {
   opacity: 1;
   visibility: visible;
+}
+
+[data-i18n-tip][data-position="bottom"]::after {
+  top: 100%;
+  bottom: auto;
+  transform: translateX(-50%) translateY(8px);
+}
+
+[data-i18n-tip][data-position="bottom"]::before {
+  top: 100%;
+  bottom: auto;
+  transform: translateX(-50%) translateY(0);
+  border-color: transparent transparent var(--tooltip-bg) transparent;
+  margin-bottom: 0;
+  margin-top: -1px;
+}
+
+[data-i18n-tip][data-position="left"]::after {
+  left: auto;
+  right: 100%;
+  bottom: 50%;
+  top: auto;
+  transform: translateX(-8px) translateY(50%);
+}
+
+[data-i18n-tip][data-position="left"]::before {
+  left: auto;
+  right: 100%;
+  bottom: 50%;
+  top: auto;
+  transform: translateX(-2px) translateY(50%);
+  border-color: transparent transparent transparent var(--tooltip-bg);
+  margin: 0;
+}
+
+[data-i18n-tip][data-position="right"]::after {
+  left: 100%;
+  bottom: 50%;
+  top: auto;
+  transform: translateX(8px) translateY(50%);
+}
+
+[data-i18n-tip][data-position="right"]::before {
+  left: 100%;
+  bottom: 50%;
+  top: auto;
+  transform: translateX(2px) translateY(50%);
+  border-color: transparent var(--tooltip-bg) transparent transparent;
+  margin: 0;
 }
 
 /* 自定义WebKit滚动条样式 - 预留空间避免抖动 */
@@ -715,6 +764,10 @@ h1 {
 .overview-grid {
   margin-bottom: 10px;
   grid-template-columns: 1fr;
+}
+
+.overview-drag-grid [data-span="full"] {
+  grid-column: 1 / -1;
 }
 
 .overview-card {
