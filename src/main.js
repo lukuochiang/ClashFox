@@ -1,8 +1,8 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme, shell, Tray, session } = require('electron');
-const { spawn, execFileSync } = require('child_process');
+const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme, shell, Tray, session, clipboard } = require('electron');
+const { spawn, execFileSync, execFile } = require('child_process');
 
 const isDev = !app.isPackaged;
 const ROOT_DIR = isDev ? path.join(__dirname, '..') : process.resourcesPath;
@@ -39,17 +39,10 @@ let mainWindow = null;
 let tray = null;
 let dashboardWindow = null;
 let currentInstallProcess = null; // 仅用于跟踪安装进程，支持取消功能
-let sudoKeepAliveTimer = null;
-let sudoKeepAliveInFlight = false;
-let sudoLastActivityAt = 0;
-let sudoAuthorizeInFlight = null;
 let globalSettings = {
   debugMode: true, // 是否启用调试模式
 };
 let isQuitting = false;
-const SUDO_KEEPALIVE_INTERVAL_MS = 55 * 1000;
-const SUDO_KEEPALIVE_IDLE_TIMEOUT_MS = 45 * 60 * 1000;
-const SUDO_AUTH_TIMEOUT_MS = 45 * 1000;
 const CORE_STARTUP_ESTIMATE_MIN_MS = 900;
 const CORE_STARTUP_ESTIMATE_MAX_MS = 10000;
 const RESTART_TRANSITION_MIN_MS = 450;
@@ -57,26 +50,12 @@ const RESTART_TRANSITION_MAX_MS = 4000;
 const RESTART_TRANSITION_RATIO = 0.5;
 let trayCoreStartupEstimateMs = 1500;
 const PRIVILEGED_COMMANDS = new Set(['install', 'start', 'stop', 'restart', 'delete-backups', 'system-proxy-enable', 'system-proxy-disable']);
+const SYSTEM_AUTH_ERROR_PREFIX = '__CLASHFOX_SYSTEM_AUTH_ERROR__';
 const OUTBOUND_MODE_BADGE = {
   rule: 'R',
   global: 'G',
   direct: 'D',
 };
-const OUTBOUND_MODE_BADGE_STYLE = {
-  rule: { bg: '#ffffff', fg: '#0b1118' },
-  global: { bg: '#ffffff', fg: '#0b1118' },
-  direct: { bg: '#ffffff', fg: '#0b1118' },
-};
-const TRAY_MENU_ICON_SVGS = {
-  showMain: "<svg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'><rect x='3' y='3' width='6' height='6' rx='1.3' fill='#000'/><rect x='11' y='3' width='6' height='4' rx='1.3' fill='#000'/><rect x='11' y='9' width='6' height='8' rx='1.3' fill='#000'/><rect x='3' y='11' width='6' height='6' rx='1.3' fill='#000'/></svg>",
-  networkTakeover: "<svg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M10 15.75a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5Zm-3.2-3.2a.75.75 0 0 1 1.06 0 3.5 3.5 0 0 1 4.9 0 .75.75 0 1 1 1.06 1.06 5 5 0 0 0-7.02 0 .75.75 0 0 1-1.06-1.06Zm-2.3-2.3a.75.75 0 0 1 1.06 0 7 7 0 0 1 9.88 0 .75.75 0 1 1 1.06-1.06 8.5 8.5 0 0 0-12 0 .75.75 0 0 1-1.06 0A.75.75 0 0 1 4.5 10.25Zm-2.34-3.3a.75.75 0 0 1 1.06 0 11 11 0 0 1 15.56 0 .75.75 0 1 1 1.06-1.06 12.5 12.5 0 0 0-17.68 0 .75.75 0 0 1-1.06 0A.75.75 0 0 1 2.16 6.94Z' fill='#000'/></svg>",
-  outboundMode: "<svg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M4 7h8V4l6 5-6 5v-3H4V7Zm16 10H12v3l-6-5 6-5v3h8v4Z' fill='#000'/></svg>",
-  dashboard: "<svg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M3.5 4A1.5 1.5 0 0 1 5 2.5h10A1.5 1.5 0 0 1 16.5 4v4A1.5 1.5 0 0 1 15 9.5H5A1.5 1.5 0 0 1 3.5 8V4Zm0 8A1.5 1.5 0 0 1 5 10.5h4A1.5 1.5 0 0 1 10.5 12v4A1.5 1.5 0 0 1 9 17.5H5A1.5 1.5 0 0 1 3.5 16v-4Zm7.5-1.5H15a1.5 1.5 0 0 1 1.5 1.5v4A1.5 1.5 0 0 1 15 17.5h-4A1.5 1.5 0 0 1 9.5 16v-4A1.5 1.5 0 0 1 11 10.5Z' fill='#000'/></svg>",
-  kernelManager: "<svg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M4.28 4.22a.75.75 0 0 1 0 1.06l-.97.97.47.47a.75.75 0 1 1-1.06 1.06l-1-1a.75.75 0 0 1 0-1.06l1.5-1.5a.75.75 0 0 1 1.06 0Z' fill='#000'/><path d='M4.28 10.22a.75.75 0 0 1 0 1.06l-.97.97.47.47a.75.75 0 1 1-1.06 1.06l-1-1a.75.75 0 0 1 0-1.06l1.5-1.5a.75.75 0 0 1 1.06 0Z' fill='#000'/><path d='M4.28 16.22a.75.75 0 0 1 0 1.06l-.97.97.47.47a.75.75 0 1 1-1.06 1.06l-1-1a.75.75 0 0 1 0-1.06l1.5-1.5a.75.75 0 0 1 1.06 0Z' fill='#000'/><path d='M7.5 5.25a.75.75 0 0 1 .75-.75h8a.75.75 0 0 1 0 1.5h-8a.75.75 0 0 1-.75-.75Zm0 6a.75.75 0 0 1 .75-.75h8a.75.75 0 1 1 0 1.5h-8a.75.75 0 0 1-.75-.75Zm0 6a.75.75 0 0 1 .75-.75h8a.75.75 0 1 1 0 1.5h-8a.75.75 0 0 1-.75-.75Z' fill='#000'/></svg>",
-  settings: "<svg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M11.7 2.2 12 4a6.5 6.5 0 0 1 1.4.8l1.7-.7a1 1 0 0 1 1.3.5l.7 1.5a1 1 0 0 1-.4 1.3l-1.5.9a6.4 6.4 0 0 1 0 1.6l1.5.9a1 1 0 0 1 .4 1.3l-.7 1.5a1 1 0 0 1-1.3.5l-1.7-.7a6.5 6.5 0 0 1-1.4.8L11.7 18a1 1 0 0 1-1 .8h-1.4a1 1 0 0 1-1-.8l-.3-1.8a6.5 6.5 0 0 1-1.4-.8l-1.7.7a1 1 0 0 1-1.3-.5l-.7-1.5a1 1 0 0 1 .4-1.3l1.5-.9a6.4 6.4 0 0 1 0-1.6l-1.5-.9a1 1 0 0 1-.4-1.3l.7-1.5a1 1 0 0 1 1.3-.5l1.7.7a6.5 6.5 0 0 1 1.4-.8L8.3 2.2a1 1 0 0 1 1-.8h1.4a1 1 0 0 1 1 .8ZM10 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z' fill='#000'/></svg>",
-  quit: "<svg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M10 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm0 3a1.05 1.05 0 1 1 0 2.1A1.05 1.05 0 0 1 10 5Zm0 3.5c.41 0 .75.34.75.75v4.5a.75.75 0 1 1-1.5 0V9.25c0-.41.34-.75.75-.75Z' fill='#000'/></svg>",
-};
-const trayMenuItemIconCache = new Map();
 
 const I18N = require(path.join(APP_PATH, 'static', 'locales', 'i18n.js'));
 ;
@@ -130,29 +109,22 @@ function getNavLabels() {
   return (I18N[lang] && I18N[lang].nav) || (I18N.en && I18N.en.nav) || {};
 }
 
-function getTrayMenuItemIcon(key) {
-  if (process.platform !== 'darwin') {
-    return undefined;
+function withMacTrayGlyph(key, label) {
+  const text = String(label || '').trim();
+  if (process.platform !== 'darwin' || !text) {
+    return text;
   }
-  const svg = TRAY_MENU_ICON_SVGS[key];
-  if (!svg) {
-    return undefined;
-  }
-  if (trayMenuItemIconCache.has(key)) {
-    return trayMenuItemIconCache.get(key);
-  }
-  const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-  let icon = nativeImage.createFromDataURL(dataUrl);
-  if (icon.isEmpty()) {
-    trayMenuItemIconCache.set(key, undefined);
-    return undefined;
-  }
-  icon = icon.resize({ width: 16, height: 16 });
-  if (typeof icon.setTemplateImage === 'function') {
-    icon.setTemplateImage(true);
-  }
-  trayMenuItemIconCache.set(key, icon);
-  return icon;
+  const glyphs = {
+    showMain: 'Ⓜ',
+    networkTakeover: 'Ⓟ',
+    outboundMode: 'Ⓞ',
+    dashboard: 'Ⓓ',
+    kernelManager: 'Ⓚ',
+    settings: 'Ⓢ',
+    quit: 'Ⓠ',
+  };
+  const glyph = glyphs[key] || '';
+  return glyph ? `${glyph} ${text}` : text;
 }
 
 function readAppSettings() {
@@ -207,6 +179,12 @@ function persistTunEnabledToSettings(enabled) {
   }
 }
 
+function buildShellExportCommand(portValue) {
+  const port = String(portValue || '').trim();
+  const safePort = /^[0-9]+$/.test(port) ? port : '7890';
+  return `export http_proxy="http://127.0.0.1:${safePort}" https_proxy="http://127.0.0.1:${safePort}" all_proxy="socks5://127.0.0.1:${safePort}" no_proxy="localhost,127.0.0.1,::1"`;
+}
+
 function getControllerArgsFromSettings() {
   const settings = readAppSettings();
   const args = [];
@@ -248,105 +226,62 @@ function buildTrayIconWithMode(mode) {
   return icon;
 }
 
-function runSudoCheckNoPrompt() {
+function runBridgeWithSystemAuth(bridgeArgs = []) {
   return new Promise((resolve) => {
-    const child = spawn('sudo', ['-n', 'true']);
-    child.on('error', () => resolve(false));
-    child.on('close', (code) => resolve(code === 0));
-  });
-}
-
-function stopSudoKeepAlive() {
-  if (sudoKeepAliveTimer) {
-    clearInterval(sudoKeepAliveTimer);
-    sudoKeepAliveTimer = null;
-  }
-  sudoLastActivityAt = 0;
-}
-
-function markSudoActivity() {
-  sudoLastActivityAt = Date.now();
-}
-
-function startSudoKeepAlive() {
-  if (!sudoLastActivityAt) {
-    markSudoActivity();
-  }
-  if (sudoKeepAliveTimer) {
-    return;
-  }
-  sudoKeepAliveTimer = setInterval(async () => {
-    if (sudoKeepAliveInFlight) {
+    const bridgePath = getBridgePath();
+    if (!fs.existsSync(bridgePath)) {
+      resolve({ ok: false, error: 'script_missing', details: bridgePath });
       return;
     }
-    if (!sudoLastActivityAt || (Date.now() - sudoLastActivityAt) >= SUDO_KEEPALIVE_IDLE_TIMEOUT_MS) {
-      stopSudoKeepAlive();
-      return;
-    }
-    sudoKeepAliveInFlight = true;
-    try {
-      const ok = await runSudoCheckNoPrompt();
-      if (!ok) {
-        stopSudoKeepAlive();
+    const cwd = app.isPackaged ? APP_DATA_DIR : ROOT_DIR;
+    const quote = (value) => `'${String(value || '').replace(/'/g, `'\\''`)}'`;
+    const command = `cd ${quote(cwd)}; /bin/bash ${quote(bridgePath)} ${bridgeArgs.map((arg) => quote(arg)).join(' ')}`;
+    const script = [
+      'try',
+      `set out to do shell script ${JSON.stringify(command)} with administrator privileges`,
+      'return out',
+      'on error errMsg number errNum',
+      `return "${SYSTEM_AUTH_ERROR_PREFIX}:" & (errNum as text) & ":" & errMsg`,
+      'end try',
+    ].join('\n');
+    execFile('osascript', ['-e', script], { timeout: 180 * 1000 }, (error, stdout) => {
+      if (error) {
+        resolve({
+          ok: false,
+          error: 'system_auth_failed',
+          details: error.message || String(error),
+        });
+        return;
       }
-    } finally {
-      sudoKeepAliveInFlight = false;
-    }
-  }, SUDO_KEEPALIVE_INTERVAL_MS);
-  if (sudoKeepAliveTimer && typeof sudoKeepAliveTimer.unref === 'function') {
-    sudoKeepAliveTimer.unref();
-  }
-}
-
-function runSudoValidateInteractive() {
-  if (sudoAuthorizeInFlight) {
-    return sudoAuthorizeInFlight;
-  }
-  sudoAuthorizeInFlight = new Promise((resolve) => {
-    const child = spawn('sudo', ['-v']);
-    let finished = false;
-    const finalize = (ok) => {
-      if (finished) return;
-      finished = true;
-      resolve(Boolean(ok));
-    };
-    const timer = setTimeout(() => {
       try {
-        child.kill('SIGTERM');
+        const output = String(stdout || '').trim();
+        if (output.startsWith(`${SYSTEM_AUTH_ERROR_PREFIX}:`)) {
+          const payload = output.slice(SYSTEM_AUTH_ERROR_PREFIX.length + 1);
+          const firstColonIndex = payload.indexOf(':');
+          const errNumRaw = firstColonIndex >= 0 ? payload.slice(0, firstColonIndex) : payload;
+          const errMsg = firstColonIndex >= 0 ? payload.slice(firstColonIndex + 1).trim() : '';
+          const errNum = Number.parseInt(String(errNumRaw || '').trim(), 10);
+          if (errNum === -128) {
+            resolve({ ok: false, error: 'sudo_required' });
+            return;
+          }
+          resolve({
+            ok: false,
+            error: 'system_auth_failed',
+            details: errMsg || 'system_authorization_failed',
+          });
+          return;
+        }
+        resolve(parseBridgeOutput(output));
       } catch {
-        // ignore
+        resolve({
+          ok: false,
+          error: 'system_auth_failed',
+          details: String(stdout || '').trim(),
+        });
       }
-      finalize(false);
-    }, SUDO_AUTH_TIMEOUT_MS);
-    child.on('error', () => {
-      clearTimeout(timer);
-      finalize(false);
     });
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      finalize(code === 0);
-    });
-  }).finally(() => {
-    sudoAuthorizeInFlight = null;
   });
-  return sudoAuthorizeInFlight;
-}
-
-async function ensureSudoSession() {
-  const ready = await runSudoCheckNoPrompt();
-  if (ready) {
-    markSudoActivity();
-    startSudoKeepAlive();
-    return true;
-  }
-  const authed = await runSudoValidateInteractive();
-  if (!authed) {
-    stopSudoKeepAlive();
-    return false;
-  }
-  markSudoActivity();
-  startSudoKeepAlive();
-  return true;
 }
 
 function normalizeBridgeArgs(args = [], options = {}) {
@@ -371,18 +306,22 @@ function normalizeBridgeArgs(args = [], options = {}) {
   };
 }
 
-function escapeHtml(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-async function promptTraySudo(labels) {
-  // Deprecated: keep disabled to avoid custom auth modal when system auth is used.
-  return null;
+async function runBridgeWithAutoAuth(command, args = [], options = {}) {
+  const cmd = String(command || '').trim();
+  if (!cmd) {
+    return { ok: false, error: 'unknown_command' };
+  }
+  const cmdArgs = Array.isArray(args) ? args : [];
+  let result = await runBridge([cmd, ...cmdArgs], options);
+  if (
+    result
+    && result.error === 'sudo_required'
+    && process.platform === 'darwin'
+    && PRIVILEGED_COMMANDS.has(cmd)
+  ) {
+    result = await runBridgeWithSystemAuth([cmd, ...cmdArgs]);
+  }
+  return result;
 }
 
 function emitTrayRefresh() {
@@ -465,7 +404,8 @@ async function waitForKernelRunningFromTray(sudoPass = '', timeoutMs = 12000, in
 }
 
 async function runTrayCommand(command, args = [], labels = TRAY_I18N.en, sudoPass = '') {
-  const result = await runBridge([command, ...args], { sudoPass });
+  let effectiveSudoPass = sudoPass || '';
+  let result = await runBridgeWithAutoAuth(command, args, { sudoPass: effectiveSudoPass });
   if (!result || !result.ok) {
     if (result && result.error === 'sudo_required') {
       await dialog.showMessageBox({
@@ -496,7 +436,7 @@ async function runTrayCommand(command, args = [], labels = TRAY_I18N.en, sudoPas
     return { ok: false };
   }
   createTrayMenu();
-  return { ok: true, sudoPass };
+  return { ok: true, sudoPass: effectiveSudoPass };
 }
 
 async function confirmTrayRestart(labels) {
@@ -512,19 +452,9 @@ async function confirmTrayRestart(labels) {
 }
 
 async function getKernelRunning(labels) {
-  let result = await runBridge(['status']);
+  const result = await runBridgeWithAutoAuth('status');
   if (result && result.ok) {
     return { running: Boolean(result.data && result.data.running), sudoPass: '' };
-  }
-  if (result && result.error === 'sudo_required') {
-    const ok = await ensureSudoSession();
-    if (!ok) {
-      return null;
-    }
-    result = await runBridge(['status']);
-    if (result && result.ok) {
-      return { running: Boolean(result.data && result.data.running), sudoPass: '' };
-    }
   }
   const message = (result && (result.error || result.message)) ? String(result.error || result.message) : 'Unknown error';
   await dialog.showMessageBox({
@@ -703,6 +633,9 @@ async function createTrayMenu() {
   let dashboardEnabled = false;
   let networkTakeoverEnabled = false;
   let networkTakeoverService = '';
+  let networkTakeoverPort = '7890';
+  let connectivityQuality = '-';
+  let connectivityBadge = '⬜ -';
   let tunEnabled = Boolean(readAppSettings().tunEnabled);
   let tunAvailable = true;
   try {
@@ -717,9 +650,35 @@ async function createTrayMenu() {
     networkTakeoverService = (takeover && takeover.ok && takeover.data && takeover.data.service)
       ? String(takeover.data.service)
       : '';
+    networkTakeoverPort = (takeover && takeover.ok && takeover.data && takeover.data.port)
+      ? String(takeover.data.port).trim()
+      : '7890';
   } catch {
     networkTakeoverEnabled = false;
     networkTakeoverService = '';
+    networkTakeoverPort = '7890';
+  }
+  try {
+    const overview = await runBridge(['overview', '--config', configPath, ...getControllerArgsFromSettings()]);
+    const internetMs = overview && overview.ok && overview.data ? String(overview.data.internetMs || '').trim() : '';
+    if (internetMs && internetMs !== '-') {
+      connectivityQuality = `${internetMs} ms`;
+      const latency = Number.parseFloat(internetMs);
+      if (Number.isFinite(latency)) {
+        if (latency <= 50) {
+          connectivityBadge = `🟩 ${connectivityQuality}`;
+        } else if (latency <= 120) {
+          connectivityBadge = `🟨 ${connectivityQuality}`;
+        } else {
+          connectivityBadge = `🟥 ${connectivityQuality}`;
+        }
+      } else {
+        connectivityBadge = `⬜ ${connectivityQuality}`;
+      }
+    }
+  } catch {
+    connectivityQuality = '-';
+    connectivityBadge = '⬜ -';
   }
   try {
     const tunStatus = await runBridge(['tun-status', '--config', configPath, ...getControllerArgsFromSettings()]);
@@ -733,12 +692,21 @@ async function createTrayMenu() {
   } catch {
     // Keep fallback from local settings when controller is unavailable.
   }
+  const runningLabel = uiLabels.running || labels.on || 'Running';
+  const stoppedLabel = uiLabels.stopped || labels.off || 'Stopped';
+  const trayStatusLabel = dashboardEnabled ? runningLabel : stoppedLabel;
+  const trayStatusDot = dashboardEnabled ? '🟢' : '⚪';
+  const trayHeaderLabel = `${app.getName()}\t\t${trayStatusDot} ${trayStatusLabel}`;
   const trayMenu = Menu.buildFromTemplate([
-    { label: labels.showMain, icon: getTrayMenuItemIcon('showMain'), click: () => showMainWindow() },
+    {
+      label: trayHeaderLabel,
+      enabled: false,
+    },
+    { type: 'separator' },
+    { label: withMacTrayGlyph('showMain', labels.showMain), click: () => showMainWindow() },
     { type: 'separator' },
     {
-      icon: getTrayMenuItemIcon('networkTakeover'),
-      label: labels.networkTakeover || 'Network Takeover',
+      label: withMacTrayGlyph('networkTakeover', labels.networkTakeover || 'Network Takeover'),
       submenu: [
         {
           type: 'checkbox',
@@ -777,12 +745,27 @@ async function createTrayMenu() {
           label: `${labels.currentService || 'Current Service'}: ${networkTakeoverService || '-'}`,
           enabled: false,
         },
+        { type: 'separator' },
+        {
+          label: `${labels.connectivityQuality || 'Connectivity Quality'}\t${connectivityBadge}`,
+          enabled: false,
+        },
+        { type: 'separator' },
+        {
+          label: labels.copyShellExportCommand || 'Copy Shell Export Command',
+          accelerator: 'Command+C',
+          registerAccelerator: false,
+          click: () => {
+            const shellExportCommand = buildShellExportCommand(networkTakeoverPort);
+            clipboard.writeText(shellExportCommand);
+            emitMainToast(labels.shellExportCopied || 'Shell export command copied.', 'info');
+          },
+        },
       ],
     },
     { type: 'separator' },
     {
-      icon: getTrayMenuItemIcon('outboundMode'),
-      label: `${labels.outboundMode || 'Outbound Mode'}\t[${currentOutboundBadge}]`,
+      label: `${withMacTrayGlyph('outboundMode', labels.outboundMode || 'Outbound Mode')}\t[${currentOutboundBadge}]`,
       submenu: [
         {
           type: 'radio',
@@ -829,13 +812,12 @@ async function createTrayMenu() {
       ],
     },
     { type: 'separator' },
-    { label: labels.dashboard, icon: getTrayMenuItemIcon('dashboard'), enabled: dashboardEnabled, click: () => openDashboardPanel() },
+    { label: withMacTrayGlyph('dashboard', labels.dashboard), enabled: dashboardEnabled, click: () => openDashboardPanel() },
     { type: 'separator' },
     // { label: 'About', click: () => createAboutWindow() },
     // { type: 'separator' },
     {
-      icon: getTrayMenuItemIcon('kernelManager'),
-      label: labels.kernelManager,
+      label: withMacTrayGlyph('kernelManager', labels.kernelManager),
       submenu: [
         {
           label: labels.startKernel,
@@ -930,9 +912,9 @@ async function createTrayMenu() {
       ],
     },
     { type: 'separator' },
-    { label: navLabels.settings || 'Settings', icon: getTrayMenuItemIcon('settings'), click: () => openMainPage('settings') },
+    { label: withMacTrayGlyph('settings', navLabels.settings || 'Settings'), click: () => openMainPage('settings') },
     { type: 'separator' },
-    { label: labels.quit, icon: getTrayMenuItemIcon('quit'), click: () => app.quit() },
+    { label: withMacTrayGlyph('quit', labels.quit), click: () => app.quit() },
   ]);
   tray.setContextMenu(trayMenu);
 }
@@ -969,7 +951,6 @@ function runBridge(args, options = {}) {
       const sudoPass = normalized.sudoPass;
       // console.log('[runBridge] Running command:', args);
       const commandType = bridgeArgs[0];
-      const needsSudo = PRIVILEGED_COMMANDS.has(commandType);
       const startBridgeProcess = () => {
 
       // 1. 如果是安装命令，终止当前正在运行的安装进程（如果有）
@@ -1087,13 +1068,6 @@ function runBridge(args, options = {}) {
         
         try {
           const parsed = parseBridgeOutput(output);
-          if (parsed && parsed.ok && PRIVILEGED_COMMANDS.has(commandType)) {
-            markSudoActivity();
-            startSudoKeepAlive();
-          }
-          if (parsed && parsed.error === 'sudo_required') {
-            stopSudoKeepAlive();
-          }
           resolve(parsed);
         } catch (err) {
           console.error('[runBridge] JSON parse error:', err);
@@ -1127,24 +1101,6 @@ function runBridge(args, options = {}) {
         });
       });
       };
-      if (needsSudo && !sudoPass) {
-        ensureSudoSession()
-          .then((ok) => {
-            if (!ok) {
-              resolve({ ok: false, error: 'sudo_required' });
-              return;
-            }
-            startBridgeProcess();
-          })
-          .catch((err) => {
-            resolve({
-              ok: false,
-              error: 'sudo_required',
-              details: err && err.message ? err.message : String(err),
-            });
-          });
-        return;
-      }
       startBridgeProcess();
     } catch (err) {
       // console.error('Error in runBridge:', err);
@@ -1399,7 +1355,7 @@ app.whenReady().then(() => {
   applyAppMenu();
 
   ipcMain.handle('clashfox:command', async (_event, command, args = [], options = {}) => {
-    const result = await runBridge([command, ...args], options);
+    const result = await runBridgeWithAutoAuth(command, args, options);
     if (result && result.ok && ['start', 'stop', 'restart', 'mode'].includes(command)) {
       await createTrayMenu();
     }
@@ -1593,7 +1549,6 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   isQuitting = true;
-  stopSudoKeepAlive();
 });
 
 app.on('window-all-closed', () => {
