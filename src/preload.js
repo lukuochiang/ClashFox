@@ -55,4 +55,16 @@ contextBridge.exposeInMainWorld('clashfox', {
     ipcRenderer.on('clashfox:mainNavigate', listener);
     return () => ipcRenderer.removeListener('clashfox:mainNavigate', listener);
   },
+  trayMenuGetData: () => ipcRenderer.invoke('clashfox:trayMenu:getData'),
+  trayMenuAction: (action, payload = {}) => ipcRenderer.invoke('clashfox:trayMenu:action', action, payload),
+  trayMenuHide: () => ipcRenderer.send('clashfox:trayMenu:hide'),
+  trayMenuSetExpanded: (expanded, payload = {}) => ipcRenderer.send('clashfox:trayMenu:setExpanded', Boolean(expanded), payload),
+  onTrayMenuUpdate: (handler) => {
+    if (typeof handler !== 'function') {
+      return () => {};
+    }
+    const listener = (_event, payload) => handler(payload);
+    ipcRenderer.on('clashfox:trayMenu:update', listener);
+    return () => ipcRenderer.removeListener('clashfox:trayMenu:update', listener);
+  },
 });

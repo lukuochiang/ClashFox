@@ -1,7 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme, shell, Tray, session, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme, shell, Tray, session, clipboard, screen } = require('electron');
 const { spawn, execFileSync, execFile } = require('child_process');
 
 const isDev = !app.isPackaged;
@@ -37,6 +37,10 @@ function getBridgePath() {
 }
 let mainWindow = null;
 let tray = null;
+let trayMenuWindow = null;
+let trayMenuVisible = false;
+let trayMenuData = null;
+let trayMenuContentHeight = 420;
 let dashboardWindow = null;
 let currentInstallProcess = null; // 仅用于跟踪安装进程，支持取消功能
 let globalSettings = {
@@ -606,7 +610,6 @@ function applyAppMenu() {
 async function createTrayMenu() {
   if (process.platform !== 'darwin') {
     return;
-    return;
   }
   if (!tray) {
     const trayIcon = buildTrayIconWithMode(resolveOutboundModeFromSettings());
@@ -615,6 +618,23 @@ async function createTrayMenu() {
       trayIcon.setTemplateImage(false);
     }
     tray.setToolTip('ClashFox');
+    if (typeof tray.setIgnoreDoubleClickEvents === 'function') {
+      tray.setIgnoreDoubleClickEvents(true);
+    }
+    tray.on('click', () => {
+      try {
+        toggleTrayMenuWindow();
+      } catch (err) {
+        console.error('[tray] click handler failed:', err && err.message ? err.message : err);
+      }
+    });
+    tray.on('right-click', () => {
+      try {
+        toggleTrayMenuWindow();
+      } catch (err) {
+        console.error('[tray] right-click handler failed:', err && err.message ? err.message : err);
+      }
+    });
   } else {
     const trayIcon = buildTrayIconWithMode(resolveOutboundModeFromSettings());
     if (!trayIcon.isEmpty()) {
@@ -626,7 +646,6 @@ async function createTrayMenu() {
   }
   const labels = getTrayLabels();
   const uiLabels = getUiLabels();
-  const navLabels = getNavLabels();
   const currentOutboundMode = resolveOutboundModeFromSettings();
   const currentOutboundBadge = OUTBOUND_MODE_BADGE[currentOutboundMode] || OUTBOUND_MODE_BADGE.rule;
   const configPath = getConfigPathFromSettings();
@@ -635,7 +654,7 @@ async function createTrayMenu() {
   let networkTakeoverService = '';
   let networkTakeoverPort = '7890';
   let connectivityQuality = '-';
-  let connectivityBadge = '⬜ -';
+  let connectivityTone = 'neutral';
   let tunEnabled = Boolean(readAppSettings().tunEnabled);
   let tunAvailable = true;
   try {
@@ -666,19 +685,19 @@ async function createTrayMenu() {
       const latency = Number.parseFloat(internetMs);
       if (Number.isFinite(latency)) {
         if (latency <= 50) {
-          connectivityBadge = `🟩 ${connectivityQuality}`;
+          connectivityTone = 'good';
         } else if (latency <= 120) {
-          connectivityBadge = `🟨 ${connectivityQuality}`;
+          connectivityTone = 'warn';
         } else {
-          connectivityBadge = `🟥 ${connectivityQuality}`;
+          connectivityTone = 'bad';
         }
       } else {
-        connectivityBadge = `⬜ ${connectivityQuality}`;
+        connectivityTone = 'neutral';
       }
     }
   } catch {
     connectivityQuality = '-';
-    connectivityBadge = '⬜ -';
+    connectivityTone = 'neutral';
   }
   try {
     const tunStatus = await runBridge(['tun-status', '--config', configPath, ...getControllerArgsFromSettings()]);
@@ -694,229 +713,384 @@ async function createTrayMenu() {
   }
   const runningLabel = uiLabels.running || labels.on || 'Running';
   const stoppedLabel = uiLabels.stopped || labels.off || 'Stopped';
-  const trayStatusLabel = dashboardEnabled ? runningLabel : stoppedLabel;
-  const trayStatusDot = dashboardEnabled ? '🟢' : '⚪';
-  const trayHeaderLabel = `${app.getName()}\t\t${trayStatusDot} ${trayStatusLabel}`;
-  const trayMenu = Menu.buildFromTemplate([
-    {
-      label: trayHeaderLabel,
-      enabled: false,
+  const trayStatusLabel = dashboardEnabled ? `🟢 ${runningLabel}` : `⚪ ${stoppedLabel}`;
+
+  trayMenuData = {
+    header: {
+      title: app.getName(),
+      status: trayStatusLabel,
     },
-    { type: 'separator' },
-    { label: withMacTrayGlyph('showMain', labels.showMain), click: () => showMainWindow() },
-    { type: 'separator' },
-    {
-      label: withMacTrayGlyph('networkTakeover', labels.networkTakeover || 'Network Takeover'),
-      submenu: [
+    backLabel: '‹ Back',
+    meta: {
+      configPath,
+      networkTakeoverPort,
+      dashboardEnabled,
+      currentOutboundMode,
+      submenuSide: 'right',
+    },
+    items: [
+      { type: 'action', label: labels.showMain, action: 'show-main', iconKey: 'showMain' },
+      { type: 'separator' },
+      { type: 'action', label: labels.networkTakeover || 'Network Takeover', submenu: 'network', iconKey: 'networkTakeover' },
+      { type: 'separator' },
+      { type: 'action', label: labels.outboundMode || 'Outbound Mode', rightText: `[${currentOutboundBadge}]`, submenu: 'outbound', iconKey: 'outboundMode' },
+      { type: 'separator' },
+      { type: 'action', label: labels.dashboard, action: 'open-dashboard', enabled: dashboardEnabled, iconKey: 'dashboard' },
+      { type: 'separator' },
+      { type: 'action', label: labels.kernelManager, submenu: 'kernel', iconKey: 'kernelManager' },
+      { type: 'separator' },
+      { type: 'action', label: getNavLabels().settings || 'Settings', action: 'open-settings', iconKey: 'settings' },
+      { type: 'separator' },
+      { type: 'action', label: labels.quit, action: 'quit', iconKey: 'quit' },
+    ],
+    submenus: {
+      network: [
         {
-          type: 'checkbox',
+          type: 'action',
           label: labels.systemProxy || 'System Proxy',
+          action: 'toggle-system-proxy',
           checked: networkTakeoverEnabled,
-          click: async (menuItem) => {
-            const command = menuItem && menuItem.checked ? 'system-proxy-enable' : 'system-proxy-disable';
-            const response = await runTrayCommand(command, ['--config', configPath], labels);
-            if (response.ok) {
-              await createTrayMenu();
-              emitTrayRefresh();
-              return;
-            }
-            await createTrayMenu();
-          },
+          iconKey: 'systemProxy',
         },
         {
-          type: 'checkbox',
+          type: 'action',
           label: labels.tun || 'TUN',
-          enabled: tunAvailable,
+          action: 'toggle-tun',
           checked: tunEnabled,
-          click: async (menuItem) => {
-            const target = menuItem && menuItem.checked ? 'true' : 'false';
-            const response = await runTrayCommand('tun', ['--enable', target, ...getControllerArgsFromSettings()], labels);
-            if (response.ok) {
-              persistTunEnabledToSettings(target === 'true');
-              await createTrayMenu();
-              emitTrayRefresh();
-              return;
-            }
-            await createTrayMenu();
-          },
+          enabled: tunAvailable,
+          iconKey: 'tun',
         },
         { type: 'separator' },
+        { type: 'action', label: `${labels.currentService || 'Current Service'}: ${networkTakeoverService || '-'}`, enabled: false, iconKey: 'currentService' },
+        { type: 'separator' },
         {
-          label: `${labels.currentService || 'Current Service'}: ${networkTakeoverService || '-'}`,
+          type: 'action',
+          label: labels.connectivityQuality || 'Connectivity Quality',
+          rightBadge: {
+            text: connectivityQuality,
+            tone: connectivityTone,
+          },
           enabled: false,
+          iconKey: 'connectivityQuality',
         },
         { type: 'separator' },
-        {
-          label: `${labels.connectivityQuality || 'Connectivity Quality'}\t${connectivityBadge}`,
-          enabled: false,
-        },
+        { type: 'action', label: labels.copyShellExportCommand || 'Copy Shell Export Command', action: 'copy-shell-export', rightText: '⌘ C', iconKey: 'copyShellExport' },
+      ],
+      outbound: [
+        { type: 'action', label: labels.modeGlobalTitle || 'Global Proxy', action: 'mode-change', value: 'global', checked: currentOutboundMode === 'global', iconKey: 'modeGlobal' },
+        { type: 'action', label: labels.modeRuleTitle || 'Rule-Based Proxy', action: 'mode-change', value: 'rule', checked: currentOutboundMode === 'rule', iconKey: 'modeRule' },
+        { type: 'action', label: labels.modeDirectTitle || 'Direct Outbound', action: 'mode-change', value: 'direct', checked: currentOutboundMode === 'direct', iconKey: 'modeDirect' },
+      ],
+      kernel: [
+        { type: 'action', label: labels.startKernel, action: 'kernel-start', iconKey: 'kernelStart' },
         { type: 'separator' },
-        {
-          label: labels.copyShellExportCommand || 'Copy Shell Export Command',
-          accelerator: 'Command+C',
-          registerAccelerator: false,
-          click: () => {
-            const shellExportCommand = buildShellExportCommand(networkTakeoverPort);
-            clipboard.writeText(shellExportCommand);
-            emitMainToast(labels.shellExportCopied || 'Shell export command copied.', 'info');
-          },
-        },
+        { type: 'action', label: labels.stopKernel, action: 'kernel-stop', iconKey: 'kernelStop' },
+        { type: 'separator' },
+        { type: 'action', label: labels.restartKernel, action: 'kernel-restart', enabled: dashboardEnabled, iconKey: 'kernelRestart' },
       ],
     },
-    { type: 'separator' },
-    {
-      label: `${withMacTrayGlyph('outboundMode', labels.outboundMode || 'Outbound Mode')}\t[${currentOutboundBadge}]`,
-      submenu: [
-        {
-          type: 'radio',
-          label: labels.modeGlobalTitle || 'Global Proxy',
-          sublabel: labels.modeGlobalDesc || 'All requests will be forwarded to a proxy server',
-          checked: currentOutboundMode === 'global',
-          click: async () => {
-            const response = await runTrayCommand('mode', ['--mode', 'global', ...getControllerArgsFromSettings()], labels);
-            if (response.ok) {
-              persistOutboundModeToSettings('global');
-              await createTrayMenu();
-              emitTrayRefresh();
-            }
-          },
-        },
-        {
-          type: 'radio',
-          label: labels.modeRuleTitle || 'Rule-Based Proxy',
-          sublabel: labels.modeRuleDesc || 'Using rule system to determine how to process requests',
-          checked: currentOutboundMode === 'rule',
-          click: async () => {
-            const response = await runTrayCommand('mode', ['--mode', 'rule', ...getControllerArgsFromSettings()], labels);
-            if (response.ok) {
-              persistOutboundModeToSettings('rule');
-              await createTrayMenu();
-              emitTrayRefresh();
-            }
-          },
-        },
-        {
-          type: 'radio',
-          label: labels.modeDirectTitle || 'Direct Outbound',
-          sublabel: labels.modeDirectDesc || 'All requests will be sent to the target server directly',
-          checked: currentOutboundMode === 'direct',
-          click: async () => {
-            const response = await runTrayCommand('mode', ['--mode', 'direct', ...getControllerArgsFromSettings()], labels);
-            if (response.ok) {
-              persistOutboundModeToSettings('direct');
-              await createTrayMenu();
-              emitTrayRefresh();
-            }
-          },
-        },
-      ],
+  };
+  if (trayMenuWindow && !trayMenuWindow.isDestroyed()) {
+    trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
+  }
+  return trayMenuData;
+}
+
+function ensureTrayMenuWindow() {
+  if (trayMenuWindow && !trayMenuWindow.isDestroyed()) {
+    return trayMenuWindow;
+  }
+  trayMenuWindow = new BrowserWindow({
+    width: 640,
+    height: 420,
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    hasShadow: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    webPreferences: {
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+      devTools: isDev,
     },
-    { type: 'separator' },
-    { label: withMacTrayGlyph('dashboard', labels.dashboard), enabled: dashboardEnabled, click: () => openDashboardPanel() },
-    { type: 'separator' },
-    // { label: 'About', click: () => createAboutWindow() },
-    // { type: 'separator' },
-    {
-      label: withMacTrayGlyph('kernelManager', labels.kernelManager),
-      submenu: [
-        {
-          label: labels.startKernel,
-          click: async () => {
-            try {
-              const status = await getKernelRunning(labels);
-              if (status === null) {
-                return;
-              }
-              if (status.running) {
-                emitMainToast(uiLabels.alreadyRunning || 'Kernel is already running.', 'info');
-                return;
-              }
-              emitMainCoreAction({ action: 'start', phase: 'start' });
-              const commandStartedAt = Date.now();
-              const started = await runTrayCommand('start', [], labels, status.sudoPass);
-              if (started.ok) {
-                const running = await waitForKernelRunningFromTray(started.sudoPass || status.sudoPass || '');
-                if (running) {
-                  updateTrayCoreStartupEstimate(Date.now() - commandStartedAt);
-                }
-                emitMainToast(uiLabels.startSuccess || 'Kernel started.', 'info');
-              }
-            } finally {
-              emitTrayRefresh();
+  });
+  trayMenuWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  trayMenuWindow.setAlwaysOnTop(true, 'pop-up-menu');
+  trayMenuWindow.loadFile(path.join(__dirname, 'ui', 'html', 'tray-menu.html'));
+  trayMenuWindow.on('blur', () => {
+    hideTrayMenuWindow();
+  });
+  trayMenuWindow.on('closed', () => {
+    trayMenuWindow = null;
+    trayMenuVisible = false;
+  });
+  return trayMenuWindow;
+}
+
+function hideTrayMenuWindow() {
+  if (!trayMenuWindow || trayMenuWindow.isDestroyed()) {
+    trayMenuVisible = false;
+    return;
+  }
+  trayMenuVisible = false;
+  trayMenuWindow.hide();
+}
+
+function computeTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, explicitWidth = 640) {
+  if (!tray) {
+    return null;
+  }
+  const trayBounds = tray.getBounds();
+  const display = screen.getDisplayNearestPoint({ x: trayBounds.x, y: trayBounds.y });
+  const area = display.workArea;
+  const mainMenuWidth = 320;
+  const submenuGap = 0;
+  const submenuWidth = 320;
+  const popupWidth = Number.isFinite(explicitWidth) ? Math.max(mainMenuWidth, Math.round(explicitWidth)) : (mainMenuWidth + submenuGap + submenuWidth);
+  const popupHeight = Math.max(200, Math.min(Number(contentHeight) || 420, 620));
+  const anchorX = trayBounds.x + Math.round(trayBounds.width / 2);
+  let submenuSide = 'right';
+  const rightNeed = anchorX + Math.round(mainMenuWidth / 2) + submenuGap + submenuWidth;
+  const leftNeed = anchorX - Math.round(mainMenuWidth / 2) - submenuGap - submenuWidth;
+  const canUseRightSubmenu = rightNeed <= (area.x + area.width - 8);
+  const canUseLeftSubmenu = leftNeed >= (area.x + 8);
+  if (!canUseRightSubmenu && canUseLeftSubmenu) {
+    submenuSide = 'left';
+  } else if (!canUseRightSubmenu && !canUseLeftSubmenu) {
+    const rightOverflow = rightNeed - (area.x + area.width - 8);
+    const leftOverflow = (area.x + 8) - leftNeed;
+    submenuSide = rightOverflow <= leftOverflow ? 'right' : 'left';
+  }
+
+  const mainOffset = submenuSide === 'left' ? (submenuWidth + submenuGap) : 0;
+  const desiredX = anchorX - Math.round(mainMenuWidth / 2) - mainOffset;
+  const x = Math.max(area.x + 8, Math.min(desiredX, area.x + area.width - popupWidth - 8));
+  const y = Math.max(area.y + 8, Math.min(trayBounds.y + trayBounds.height + 6, area.y + area.height - popupHeight - 8));
+  return {
+    bounds: { x, y, width: popupWidth, height: popupHeight },
+    submenuSide,
+  };
+}
+
+function applyTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, preservePosition = false, explicitWidth = 640) {
+  if (!trayMenuWindow || trayMenuWindow.isDestroyed()) {
+    return;
+  }
+  let computed = computeTrayMenuWindowBounds(contentHeight, explicitWidth);
+  if (!computed) {
+    return;
+  }
+  if (preservePosition) {
+    const current = trayMenuWindow.getBounds();
+    const display = screen.getDisplayNearestPoint({ x: current.x, y: current.y });
+    const area = display.workArea;
+    const boundedX = Math.max(area.x + 8, Math.min(current.x, area.x + area.width - computed.bounds.width - 8));
+    const boundedY = Math.max(area.y + 8, Math.min(current.y, area.y + area.height - computed.bounds.height - 8));
+    computed = {
+      ...computed,
+      bounds: {
+        ...computed.bounds,
+        x: boundedX,
+        y: boundedY,
+      },
+    };
+  }
+  trayMenuContentHeight = Math.max(200, Math.min(Number(contentHeight) || trayMenuContentHeight || 420, 620));
+  trayMenuWindow.setBounds(computed.bounds);
+  if (trayMenuData) {
+    trayMenuData.meta = {
+      ...(trayMenuData.meta || {}),
+      submenuSide: computed.submenuSide,
+    };
+    const sendUpdate = () => {
+      if (!trayMenuWindow || trayMenuWindow.isDestroyed()) {
+        return;
+      }
+      trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
+    };
+    if (trayMenuWindow.webContents.isLoadingMainFrame()) {
+      trayMenuWindow.webContents.once('did-finish-load', sendUpdate);
+    } else {
+      sendUpdate();
+    }
+  }
+}
+
+async function showTrayMenuWindow() {
+  if (!tray) {
+    return;
+  }
+  const popup = ensureTrayMenuWindow();
+  const currentBounds = popup.getBounds();
+  if (currentBounds && Number.isFinite(currentBounds.height) && currentBounds.height > 0) {
+    trayMenuContentHeight = currentBounds.height;
+  }
+  if (!trayMenuData) {
+    createTrayMenu().catch(() => {});
+  } else {
+    // Show cached menu immediately, then refresh in background for responsiveness.
+    createTrayMenu().catch(() => {});
+  }
+  applyTrayMenuWindowBounds(trayMenuContentHeight, false, 640);
+  popup.show();
+  popup.focus();
+  trayMenuVisible = true;
+}
+
+function toggleTrayMenuWindow() {
+  if (trayMenuVisible) {
+    hideTrayMenuWindow();
+    return;
+  }
+  showTrayMenuWindow().catch((err) => {
+    console.error('[tray] show menu failed:', err && err.message ? err.message : err);
+  });
+}
+
+async function handleTrayMenuAction(action, payload = {}) {
+  const labels = getTrayLabels();
+  const uiLabels = getUiLabels();
+  const configPath = getConfigPathFromSettings();
+  switch (action) {
+    case 'show-main':
+      hideTrayMenuWindow();
+      showMainWindow();
+      return { ok: true, hide: true };
+    case 'open-dashboard':
+      hideTrayMenuWindow();
+      openDashboardPanel();
+      return { ok: true, hide: true };
+    case 'open-settings':
+      hideTrayMenuWindow();
+      openMainPage('settings');
+      return { ok: true, hide: true };
+    case 'quit':
+      app.quit();
+      return { ok: true, hide: true };
+    case 'toggle-system-proxy': {
+      const command = payload && payload.checked ? 'system-proxy-enable' : 'system-proxy-disable';
+      await runTrayCommand(command, ['--config', configPath], labels);
+      emitTrayRefresh();
+      return { ok: true, submenu: 'network', data: trayMenuData };
+    }
+    case 'toggle-tun': {
+      const target = payload && payload.checked ? 'true' : 'false';
+      const response = await runTrayCommand('tun', ['--enable', target, ...getControllerArgsFromSettings()], labels);
+      if (response.ok) {
+        persistTunEnabledToSettings(target === 'true');
+      }
+      emitTrayRefresh();
+      return { ok: true, submenu: 'network', data: trayMenuData };
+    }
+    case 'copy-shell-export': {
+      const shellExportCommand = buildShellExportCommand((trayMenuData && trayMenuData.meta && trayMenuData.meta.networkTakeoverPort) || '7890');
+      clipboard.writeText(shellExportCommand);
+      emitMainToast(labels.shellExportCopied || 'Shell export command copied.', 'info');
+      await createTrayMenu();
+      return { ok: true, submenu: 'network', data: trayMenuData };
+    }
+    case 'mode-change': {
+      const nextMode = payload && payload.value ? String(payload.value) : '';
+      if (!OUTBOUND_MODE_BADGE[nextMode]) {
+        return { ok: false };
+      }
+      const response = await runTrayCommand('mode', ['--mode', nextMode, ...getControllerArgsFromSettings()], labels);
+      if (response.ok) {
+        persistOutboundModeToSettings(nextMode);
+        emitTrayRefresh();
+      }
+      return { ok: true, submenu: 'outbound', data: trayMenuData };
+    }
+    case 'kernel-start': {
+      try {
+        const status = await getKernelRunning(labels);
+        if (!status) {
+          return { ok: false, submenu: 'kernel', data: trayMenuData };
+        }
+        if (status.running) {
+          emitMainToast(uiLabels.alreadyRunning || 'Kernel is already running.', 'info');
+          return { ok: true, submenu: 'kernel', data: trayMenuData };
+        }
+        emitMainCoreAction({ action: 'start', phase: 'start' });
+        const commandStartedAt = Date.now();
+        const started = await runTrayCommand('start', [], labels, status.sudoPass);
+        if (started.ok) {
+          const running = await waitForKernelRunningFromTray(started.sudoPass || status.sudoPass || '');
+          if (running) {
+            updateTrayCoreStartupEstimate(Date.now() - commandStartedAt);
+          }
+          emitMainToast(uiLabels.startSuccess || 'Kernel started.', 'info');
+        }
+      } finally {
+        emitTrayRefresh();
+      }
+      return { ok: true, submenu: 'kernel', data: trayMenuData };
+    }
+    case 'kernel-stop': {
+      try {
+        const status = await getKernelRunning(labels);
+        if (!status) {
+          return { ok: false, submenu: 'kernel', data: trayMenuData };
+        }
+        if (!status.running) {
+          emitMainToast(uiLabels.alreadyStopped || 'Kernel is already stopped.', 'info');
+          return { ok: true, submenu: 'kernel', data: trayMenuData };
+        }
+        const stopped = await runTrayCommand('stop', [], labels, status.sudoPass);
+        if (stopped.ok) {
+          emitMainToast(uiLabels.stopSuccess || uiLabels.stopped || 'Kernel stopped.', 'info');
+        }
+      } finally {
+        emitTrayRefresh();
+      }
+      return { ok: true, submenu: 'kernel', data: trayMenuData };
+    }
+    case 'kernel-restart': {
+      try {
+        const status = await getKernelRunning(labels);
+        if (!status) {
+          return { ok: false, submenu: 'kernel', data: trayMenuData };
+        }
+        if (!status.running) {
+          emitMainToast(uiLabels.restartStarts || 'Kernel is stopped, starting now.', 'info');
+          emitMainCoreAction({ action: 'start', phase: 'start' });
+          const commandStartedAt = Date.now();
+          const started = await runTrayCommand('start', [], labels, status.sudoPass);
+          if (started.ok) {
+            const running = await waitForKernelRunningFromTray(started.sudoPass || status.sudoPass || '');
+            if (running) {
+              updateTrayCoreStartupEstimate(Date.now() - commandStartedAt);
             }
-          },
-        },
-        { type: 'separator' },
-        {
-          label: labels.stopKernel,
-          click: async () => {
-            try {
-              const status = await getKernelRunning(labels);
-              if (status === null) {
-                return;
-              }
-              if (!status.running) {
-                emitMainToast(uiLabels.alreadyStopped || 'Kernel is already stopped.', 'info');
-                return;
-              }
-              const stopped = await runTrayCommand('stop', [], labels, status.sudoPass);
-              if (stopped.ok) {
-                emitMainToast(uiLabels.stopSuccess || uiLabels.stopped || 'Kernel stopped.', 'info');
-              }
-            } finally {
-              emitTrayRefresh();
-            }
-          },
-        },
-        { type: 'separator' },
-        {
-          label: labels.restartKernel,
-          enabled: dashboardEnabled,
-          click: async () => {
-            try {
-              const status = await getKernelRunning(labels);
-              if (status === null) {
-                return;
-              }
-              if (!status.running) {
-                emitMainToast(uiLabels.restartStarts || 'Kernel is stopped, starting now.', 'info');
-                emitMainCoreAction({ action: 'start', phase: 'start' });
-                const commandStartedAt = Date.now();
-                const started = await runTrayCommand('start', [], labels, status.sudoPass);
-                if (started.ok) {
-                  const running = await waitForKernelRunningFromTray(started.sudoPass || status.sudoPass || '');
-                  if (running) {
-                    updateTrayCoreStartupEstimate(Date.now() - commandStartedAt);
-                  }
-                  emitMainToast(uiLabels.startSuccess || 'Kernel started.', 'info');
-                }
-                return;
-              }
-              const transitionDelayMs = getTrayRestartTransitionDelayMs();
-              emitMainCoreAction({ action: 'restart', phase: 'transition', delayMs: transitionDelayMs });
-              await sleep(transitionDelayMs);
-              const commandStartedAt = Date.now();
-              const restarted = await runTrayCommand('restart', [], labels, status.sudoPass);
-              if (restarted.ok) {
-                const running = await waitForKernelRunningFromTray(restarted.sudoPass || status.sudoPass || '');
-                if (running) {
-                  updateTrayCoreStartupEstimate(Date.now() - commandStartedAt);
-                }
-                emitMainToast(uiLabels.restartSuccess || 'Kernel restarted.', 'info');
-              }
-            } finally {
-              emitTrayRefresh();
-            }
-          },
-        },
-      ],
-    },
-    { type: 'separator' },
-    { label: withMacTrayGlyph('settings', navLabels.settings || 'Settings'), click: () => openMainPage('settings') },
-    { type: 'separator' },
-    { label: withMacTrayGlyph('quit', labels.quit), click: () => app.quit() },
-  ]);
-  tray.setContextMenu(trayMenu);
+            emitMainToast(uiLabels.startSuccess || 'Kernel started.', 'info');
+          }
+          return { ok: true, submenu: 'kernel', data: trayMenuData };
+        }
+        const transitionDelayMs = getTrayRestartTransitionDelayMs();
+        emitMainCoreAction({ action: 'restart', phase: 'transition', delayMs: transitionDelayMs });
+        await sleep(transitionDelayMs);
+        const commandStartedAt = Date.now();
+        const restarted = await runTrayCommand('restart', [], labels, status.sudoPass);
+        if (restarted.ok) {
+          const running = await waitForKernelRunningFromTray(restarted.sudoPass || status.sudoPass || '');
+          if (running) {
+            updateTrayCoreStartupEstimate(Date.now() - commandStartedAt);
+          }
+          emitMainToast(uiLabels.restartSuccess || 'Kernel restarted.', 'info');
+        }
+      } finally {
+        emitTrayRefresh();
+      }
+      return { ok: true, submenu: 'kernel', data: trayMenuData };
+    }
+    default:
+      return { ok: false, error: 'unknown_action' };
+  }
 }
 
 function applyDevToolsState() {
@@ -1348,6 +1522,7 @@ app.whenReady().then(() => {
   setDockIcon();
   createTrayMenu();
   createWindow();
+  ensureTrayMenuWindow();
   setTimeout(setDockIcon, 500);
   setTimeout(setDockIcon, 1500);
   setTimeout(setDockIcon, 3000);
@@ -1360,6 +1535,31 @@ app.whenReady().then(() => {
       await createTrayMenu();
     }
     return result;
+  });
+
+  ipcMain.handle('clashfox:trayMenu:getData', async () => {
+    const data = await createTrayMenu();
+    return data || trayMenuData || {};
+  });
+
+  ipcMain.handle('clashfox:trayMenu:action', async (_event, action, payload = {}) => {
+    const result = await handleTrayMenuAction(action, payload);
+    await createTrayMenu();
+    return {
+      ...(result || { ok: false }),
+      data: trayMenuData || null,
+    };
+  });
+
+  ipcMain.on('clashfox:trayMenu:hide', () => {
+    hideTrayMenuWindow();
+  });
+
+  ipcMain.on('clashfox:trayMenu:setExpanded', (_event, expanded, payload = {}) => {
+    // Keep geometry stable while hovering submenu to avoid flicker.
+    // The renderer still reports state for future tuning.
+    const requestedHeight = payload && Number.isFinite(payload.height) ? Number(payload.height) : trayMenuContentHeight;
+    trayMenuContentHeight = Math.max(200, Math.min(requestedHeight || trayMenuContentHeight || 420, 620));
   });
   
   // 处理取消命令，只取消安装进程
@@ -1549,6 +1749,7 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  hideTrayMenuWindow();
 });
 
 app.on('window-all-closed', () => {
