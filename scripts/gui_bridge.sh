@@ -50,6 +50,37 @@ json_escape() {
     printf '%s' "$s"
 }
 
+extract_ipip_ip() {
+    local response="$1"
+    local parsed=""
+    if [ -n "$response" ] && command -v python3 >/dev/null 2>&1; then
+        parsed="$(CLASHFOX_IPIP_RESPONSE="$response" python3 - <<'PY'
+import json, os
+raw = os.environ.get("CLASHFOX_IPIP_RESPONSE", "")
+if not raw:
+    raise SystemExit
+try:
+    data = json.loads(raw)
+except Exception:
+    raise SystemExit
+ip = ""
+if isinstance(data, dict):
+    d = data.get("data")
+    if isinstance(d, dict):
+        ip = d.get("ip") or ""
+    if not ip:
+        ip = data.get("ip") or ""
+if ip:
+    print(str(ip).strip())
+PY
+)"
+    fi
+    if [ -z "$parsed" ] && [ -n "$response" ]; then
+        parsed="$(printf '%s' "$response" | grep -Eo '([0-9]{1,3}\.){3}(\*|[0-9]{1,3})|([0-9a-fA-F]{0,4}:){2,}[0-9a-fA-F]{0,4}' | head -n 1)"
+    fi
+    printf '%s' "$parsed"
+}
+
 MIHOMO_CONTROLLER=""
 MIHOMO_SECRET=""
 MIHOMO_PROXY_PORT=""
@@ -959,6 +990,7 @@ EOF
         internet_ms=""
         internet_ip_v4=""
         internet_ip_v6=""
+        internet_ip_direct=""
         proxy_ip=""
         dns_ms=""
         router_ms=""
@@ -978,81 +1010,105 @@ EOF
                 proxy_ip="${proxy_ip:-}"
                 dns_ms="${dns_ms:-}"
                 router_ms="${router_ms:-}"
+                if [ -n "$internet_ip_v6" ] && ! echo "$internet_ip_v6" | grep -q ':'; then
+                    if [ -z "$internet_ip_v4" ] && echo "$internet_ip_v6" | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$'; then
+                        internet_ip_v4="$internet_ip_v6"
+                    fi
+                    internet_ip_v6=""
+                fi
+                if [ -n "$internet_ip_v4" ] && ! echo "$internet_ip_v4" | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$'; then
+                    internet_ip_v4=""
+                fi
+                # Avoid reusing incomplete cache where preferred IPv4 is missing.
+                if [ -z "$internet_ip_v4" ]; then
+                    cache_valid=false
+                fi
             fi
         fi
 
         if [ "$cache_valid" = false ]; then
+        curl_env=(
+            env
+            -u http_proxy
+            -u https_proxy
+            -u all_proxy
+            -u HTTP_PROXY
+            -u HTTPS_PROXY
+            -u ALL_PROXY
+            -u no_proxy
+            -u NO_PROXY
+        )
+        direct_iface_curl_args=()
+        if [ -n "$iface" ]; then
+            case "$iface" in
+                en*|bridge*|pdp_ip*)
+                    direct_iface_curl_args=(--interface "$iface")
+                    ;;
+            esac
+        fi
+        direct_curl_args=()
+        if [ -n "${CLASHFOX_CURL_BIND_IFACE:-}" ]; then
+            direct_curl_args=(--interface "$CLASHFOX_CURL_BIND_IFACE")
+        fi
 
-        internet_ip_resp="$(curl -4 -s --max-time 2 -w '\n%{time_total}' https://api.ipify.org 2>/dev/null)"
+        ipip_curl_args=("${direct_curl_args[@]}")
+        if [ ${#ipip_curl_args[@]} -eq 0 ] && [ -n "$iface" ]; then
+            case "$iface" in
+                en*|bridge*|pdp_ip*)
+                    ipip_curl_args=(--interface "$iface")
+                    ;;
+            esac
+        fi
+        ipip_url="https://myip.ipip.net/json?t=$(date +%s)$RANDOM"
+
+        # Primary source: assign Internet IP directly from ipip JSON endpoint.
+        internet_ip_resp="$("${curl_env[@]}" curl "${ipip_curl_args[@]}" -s --connect-timeout 3 --max-time 8 --noproxy '*' "$ipip_url" 2>/dev/null)"
         if [ -n "$internet_ip_resp" ]; then
-            internet_ip_v4="$(printf '%s\n' "$internet_ip_resp" | head -n 1 | tr -d '[:space:]')"
-            internet_time="$(printf '%s\n' "$internet_ip_resp" | tail -n 1)"
-            internet_ms="$(printf '%s' "$internet_time" | awk '{if ($1>0) printf "%.0f", $1*1000}')"
+            internet_ip_direct="$(extract_ipip_ip "$internet_ip_resp")"
         fi
-        if [ -z "$internet_ip_v4" ]; then
-            internet_ip_resp="$(curl -4 -s --max-time 2 -w '\n%{time_total}' https://ifconfig.me/ip 2>/dev/null)"
+
+        # Optional retry with the same endpoint without interface binding.
+        if [ -z "$internet_ip_direct" ]; then
+            internet_ip_resp="$("${curl_env[@]}" curl -s --connect-timeout 3 --max-time 8 --noproxy '*' "$ipip_url" 2>/dev/null)"
             if [ -n "$internet_ip_resp" ]; then
-                internet_ip_v4="$(printf '%s\n' "$internet_ip_resp" | head -n 1 | tr -d '[:space:]')"
-                if [ -z "$internet_ms" ]; then
-                    internet_time="$(printf '%s\n' "$internet_ip_resp" | tail -n 1)"
-                    internet_ms="$(printf '%s' "$internet_time" | awk '{if ($1>0) printf "%.0f", $1*1000}')"
-                fi
+                internet_ip_direct="$(extract_ipip_ip "$internet_ip_resp")"
             fi
         fi
-        if [ -z "$internet_ip_v4" ]; then
-            internet_ip_resp="$(curl -4 -s --max-time 2 -w '\n%{time_total}' https://icanhazip.com 2>/dev/null)"
+        # Final retry: use plain curl path (same behavior as manual command).
+        if [ -z "$internet_ip_direct" ]; then
+            internet_ip_resp="$(curl -s "$ipip_url" 2>/dev/null)"
             if [ -n "$internet_ip_resp" ]; then
-                internet_ip_v4="$(printf '%s\n' "$internet_ip_resp" | head -n 1 | tr -d '[:space:]')"
-                if [ -z "$internet_ms" ]; then
-                    internet_time="$(printf '%s\n' "$internet_ip_resp" | tail -n 1)"
-                    internet_ms="$(printf '%s' "$internet_time" | awk '{if ($1>0) printf "%.0f", $1*1000}')"
-                fi
+                internet_ip_direct="$(extract_ipip_ip "$internet_ip_resp")"
             fi
         fi
-        if [ -z "$internet_ip_v4" ]; then
-            internet_ip_resp="$(curl -4 -s --max-time 2 -w '\n%{time_total}' https://ipv4.icanhazip.com 2>/dev/null)"
-            if [ -n "$internet_ip_resp" ]; then
-                internet_ip_v4="$(printf '%s\n' "$internet_ip_resp" | head -n 1 | tr -d '[:space:]')"
-                if [ -z "$internet_ms" ]; then
-                    internet_time="$(printf '%s\n' "$internet_ip_resp" | tail -n 1)"
-                    internet_ms="$(printf '%s' "$internet_time" | awk '{if ($1>0) printf "%.0f", $1*1000}')"
-                fi
+        if [ -n "$internet_ip_direct" ]; then
+            if echo "$internet_ip_direct" | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$'; then
+                internet_ip_v4="$internet_ip_direct"
+                internet_ip_v6=""
+            elif echo "$internet_ip_direct" | grep -qE '^[0-9]+\\.[0-9]+\\.\\*\\.[0-9]+$'; then
+                # ipip may return masked IPv4 such as 36.4.*.226
+                internet_ip_v4="$internet_ip_direct"
+                internet_ip_v6=""
+            elif echo "$internet_ip_direct" | grep -q ':'; then
+                internet_ip_v6="$internet_ip_direct"
+                internet_ip_v4=""
             fi
         fi
-        if [ -z "$internet_ip_v4" ] && command -v dig >/dev/null 2>&1; then
-            internet_ip_v4="$(dig +short -4 myip.opendns.com @resolver1.opendns.com 2>/dev/null | head -n 1)"
+
+        if [ -n "$internet_ip_v6" ] && ! echo "$internet_ip_v6" | grep -q ':'; then
+            if [ -z "$internet_ip_v4" ] && echo "$internet_ip_v6" | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$'; then
+                internet_ip_v4="$internet_ip_v6"
+            fi
+            internet_ip_v6=""
         fi
-        if [ -z "$internet_ip_v4" ] && command -v nslookup >/dev/null 2>&1; then
-            internet_ip_v4="$(nslookup myip.opendns.com resolver1.opendns.com 2>/dev/null | awk '/Address: /{print $2}' | tail -n 1)"
-        fi
-        if [ -n "$internet_ip_v4" ] && ! echo "$internet_ip_v4" | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$'; then
+
+        if [ -n "$internet_ip_v4" ] && ! echo "$internet_ip_v4" | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$|^[0-9]+\\.[0-9]+\\.\\*\\.[0-9]+$'; then
             internet_ip_v4=""
         fi
-        if [ -z "$internet_ip_v4" ]; then
-            internet_ip_resp="$(curl -6 -s --max-time 2 -w '\n%{time_total}' https://api64.ipify.org 2>/dev/null)"
-            if [ -n "$internet_ip_resp" ]; then
-                internet_ip_v6="$(printf '%s\n' "$internet_ip_resp" | head -n 1 | tr -d '[:space:]')"
-                if [ -z "$internet_ms" ]; then
-                    internet_time="$(printf '%s\n' "$internet_ip_resp" | tail -n 1)"
-                    internet_ms="$(printf '%s' "$internet_time" | awk '{if ($1>0) printf "%.0f", $1*1000}')"
-                fi
-            fi
-        fi
-        if [ -z "$internet_ip_v6" ]; then
-            internet_ip_resp="$(curl -6 -s --max-time 2 -w '\n%{time_total}' https://ifconfig.me/ip 2>/dev/null)"
-            if [ -n "$internet_ip_resp" ]; then
-                internet_ip_v6="$(printf '%s\n' "$internet_ip_resp" | head -n 1 | tr -d '[:space:]')"
-                if [ -z "$internet_ms" ]; then
-                    internet_time="$(printf '%s\n' "$internet_ip_resp" | tail -n 1)"
-                    internet_ms="$(printf '%s' "$internet_time" | awk '{if ($1>0) printf "%.0f", $1*1000}')"
-                fi
-            fi
-        fi
-
-        if [ -n "$internet_ip_v4" ]; then
+        if [ -n "$internet_ip_direct" ]; then
+            internet_ip="$internet_ip_direct"
+        elif [ -n "$internet_ip_v4" ]; then
             internet_ip="$internet_ip_v4"
-        elif [ -n "$internet_ip_v6" ]; then
-            internet_ip="$internet_ip_v6"
         else
             internet_ip="-"
         fi
@@ -1065,23 +1121,15 @@ EOF
 
         proxy_ip=""
         if [ -n "$MIHOMO_PROXY_PORT" ]; then
-            proxy_ip="$(curl -x "http://127.0.0.1:$MIHOMO_PROXY_PORT" -s --max-time 3 https://api.ipify.org 2>/dev/null)"
+            proxy_ip="$("${curl_env[@]}" curl --proxy "http://127.0.0.1:$MIHOMO_PROXY_PORT" --noproxy '' -s --max-time 3 https://api.ipify.org 2>/dev/null)"
             if [ -z "$proxy_ip" ]; then
-                proxy_ip="$(curl -x "http://127.0.0.1:$MIHOMO_PROXY_PORT" -s --max-time 3 https://ifconfig.me/ip 2>/dev/null)"
+                proxy_ip="$("${curl_env[@]}" curl --proxy "http://127.0.0.1:$MIHOMO_PROXY_PORT" --noproxy '' -s --max-time 3 https://ifconfig.me/ip 2>/dev/null)"
             fi
             if [ -z "$proxy_ip" ]; then
-                proxy_ip="$(curl -x "http://127.0.0.1:$MIHOMO_PROXY_PORT" -s --max-time 3 https://icanhazip.com 2>/dev/null | tr -d '[:space:]')"
+                proxy_ip="$("${curl_env[@]}" curl --proxy "http://127.0.0.1:$MIHOMO_PROXY_PORT" --noproxy '' -s --max-time 3 https://icanhazip.com 2>/dev/null | tr -d '[:space:]')"
             fi
         fi
         proxy_ip="$(printf '%s' "$proxy_ip" | tr -d '[:space:]')"
-        if [ -n "$proxy_ip" ]; then
-            if [ -n "$internet_ip_v4" ] && [ "$proxy_ip" = "$internet_ip_v4" ]; then
-                proxy_ip=""
-            fi
-            if [ -n "$internet_ip_v6" ] && [ "$proxy_ip" = "$internet_ip_v6" ]; then
-                proxy_ip=""
-            fi
-        fi
         if [ -z "$proxy_ip" ]; then
             proxy_ip="-"
         fi
@@ -1106,7 +1154,7 @@ PY
             fi
         fi
         if [ -z "$internet_ms" ] && command -v curl >/dev/null 2>&1; then
-            internet_ms="$(curl -s -o /dev/null -w '%{time_connect}' --max-time 2 https://1.1.1.1 2>/dev/null | awk '{if ($1>0) printf "%.0f", $1*1000}')"
+            internet_ms="$("${curl_env[@]}" curl "${direct_curl_args[@]}" -s -o /dev/null -w '%{time_connect}' --max-time 2 --noproxy '*' https://1.1.1.1 2>/dev/null | awk '{if ($1>0) printf "%.0f", $1*1000}')"
         fi
 
         router_ms=""
@@ -1145,10 +1193,10 @@ PY
         } > "$cache_file" 2>/dev/null || true
         fi
 
-        if [ -n "$internet_ip_v4" ]; then
+        if [ -n "$internet_ip_direct" ]; then
+            internet_ip="$internet_ip_direct"
+        elif [ -n "$internet_ip_v4" ]; then
             internet_ip="$internet_ip_v4"
-        elif [ -n "$internet_ip_v6" ]; then
-            internet_ip="$internet_ip_v6"
         else
             internet_ip="-"
         fi

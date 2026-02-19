@@ -1895,7 +1895,7 @@ function updateOverviewUI(data) {
     overviewProxyIp.textContent = maskIpAddress(data.proxyIp) || '-';
   }
   if (overviewInternetIp) {
-    const ipValue = data.internetIp4 || data.internetIp || data.internetIp6 || '-';
+    const ipValue = data.internetIp4 || data.internetIp || '-';
     overviewInternetIp.textContent = maskIpAddress(ipValue) || '-';
   }
   updateSystemTraffic(data.rxBytes, data.txBytes);
