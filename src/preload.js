@@ -47,4 +47,12 @@ contextBridge.exposeInMainWorld('clashfox', {
     ipcRenderer.on('clashfox:mainCoreAction', listener);
     return () => ipcRenderer.removeListener('clashfox:mainCoreAction', listener);
   },
+  onMainNavigate: (handler) => {
+    if (typeof handler !== 'function') {
+      return () => {};
+    }
+    const listener = (_event, payload) => handler(payload);
+    ipcRenderer.on('clashfox:mainNavigate', listener);
+    return () => ipcRenderer.removeListener('clashfox:mainNavigate', listener);
+  },
 });

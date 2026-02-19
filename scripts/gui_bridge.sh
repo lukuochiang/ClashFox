@@ -53,6 +53,7 @@ json_escape() {
 MIHOMO_CONTROLLER=""
 MIHOMO_SECRET=""
 MIHOMO_PROXY_PORT=""
+SYSTEM_PROXY_STATE_FILE="$CLASHFOX_PID_DIR/system_proxy_state.env"
 
 resolve_controller_from_config() {
     local config_path="$1"
@@ -98,6 +99,209 @@ resolve_proxy_port_from_config() {
     if [ -n "$port" ] && echo "$port" | grep -qE '^[0-9]+$'; then
         MIHOMO_PROXY_PORT="$port"
     fi
+}
+
+is_yes_value() {
+    local value
+    value="$(echo "${1:-}" | tr '[:upper:]' '[:lower:]')"
+    [ "$value" = "yes" ] || [ "$value" = "on" ] || [ "$value" = "1" ] || [ "$value" = "true" ]
+}
+
+is_loopback_host() {
+    local host
+    host="$(echo "${1:-}" | tr '[:upper:]' '[:lower:]')"
+    [ "$host" = "127.0.0.1" ] || [ "$host" = "localhost" ] || [ "$host" = "::1" ]
+}
+
+to_json_bool() {
+    if [ "$1" = true ]; then
+        printf 'true'
+    else
+        printf 'false'
+    fi
+}
+
+read_network_proxy_triplet() {
+    local service="$1"
+    local getter="$2"
+    local output enabled server port
+    output="$(networksetup "$getter" "$service" 2>/dev/null)"
+    enabled="$(printf '%s\n' "$output" | awk -F': ' '/^[[:space:]]*Enabled:/{print $2; exit}')"
+    server="$(printf '%s\n' "$output" | awk -F': ' '/^[[:space:]]*Server:/{print $2; exit}')"
+    port="$(printf '%s\n' "$output" | awk -F': ' '/^[[:space:]]*Port:/{print $2; exit}')"
+    enabled="$(echo "$enabled" | tr -d '\r')"
+    server="$(echo "$server" | tr -d '\r')"
+    port="$(echo "$port" | tr -d '\r')"
+    printf '%s|%s|%s\n' "$enabled" "$server" "$port"
+}
+
+resolve_active_network_interface() {
+    local iface default_route primary_iface
+    default_route="$(route get default 2>/dev/null)"
+    iface="$(echo "$default_route" | awk '/interface:/{print $2; exit}')"
+    primary_iface="$(scutil --nwi 2>/dev/null | awk -F': ' '/Primary interface:/{print $2; exit}')"
+    if [ -n "$primary_iface" ]; then
+        iface="$primary_iface"
+    fi
+    if [[ "$iface" == utun* ]] || [ -z "$iface" ]; then
+        iface="$(scutil --nwi 2>/dev/null | awk '/Network interfaces:/{print $3; exit}')"
+    fi
+    if [[ "$iface" == utun* ]] || [ -z "$iface" ]; then
+        for cand in $(ifconfig -l); do
+            case "$cand" in
+                en*|bridge*|pdp_ip*)
+                    if ipconfig getifaddr "$cand" >/dev/null 2>&1; then
+                        iface="$cand"
+                        break
+                    fi
+                    ;;
+            esac
+        done
+    fi
+    if [[ "$iface" == utun* ]]; then
+        iface=""
+    fi
+    echo "$iface"
+}
+
+resolve_network_service_for_interface() {
+    local iface="$1"
+    local service
+    if [ -z "$iface" ] || ! command -v networksetup >/dev/null 2>&1; then
+        echo ""
+        return
+    fi
+    service="$(networksetup -listnetworkserviceorder 2>/dev/null | awk -v iface="$iface" '
+        $0 ~ "\\(" iface "\\)" {print prev; exit}
+        {prev=$0}
+    ' | sed -E 's/^\([0-9]+\) //')"
+    if [ -n "$service" ] && [[ "$service" != *"denotes"* ]]; then
+        echo "$service"
+        return
+    fi
+    service="$(networksetup -listallhardwareports 2>/dev/null | awk -v iface="$iface" '
+        $1=="Hardware" && $2=="Port:" {port=$0; sub("Hardware Port: ","",port)}
+        $1=="Device:" && $2==iface {print port; exit}
+    ')"
+    echo "$service"
+}
+
+resolve_active_network_service() {
+    local iface service
+    iface="$(resolve_active_network_interface)"
+    service="$(resolve_network_service_for_interface "$iface")"
+    if [ -z "$service" ] && command -v networksetup >/dev/null 2>&1; then
+        service="$(networksetup -listallnetworkservices 2>/dev/null | sed '1d' | sed '/^\*/d' | awk 'NF{print; exit}')"
+    fi
+    echo "$service"
+}
+
+save_system_proxy_snapshot() {
+    local service="$1"
+    local web_enabled="$2"
+    local web_server="$3"
+    local web_port="$4"
+    local secure_enabled="$5"
+    local secure_server="$6"
+    local secure_port="$7"
+    local socks_enabled="$8"
+    local socks_server="$9"
+    local socks_port="${10}"
+    {
+        printf 'service=%q\n' "$service"
+        printf 'web_enabled=%q\n' "$web_enabled"
+        printf 'web_server=%q\n' "$web_server"
+        printf 'web_port=%q\n' "$web_port"
+        printf 'secure_enabled=%q\n' "$secure_enabled"
+        printf 'secure_server=%q\n' "$secure_server"
+        printf 'secure_port=%q\n' "$secure_port"
+        printf 'socks_enabled=%q\n' "$socks_enabled"
+        printf 'socks_server=%q\n' "$socks_server"
+        printf 'socks_port=%q\n' "$socks_port"
+    } > "$SYSTEM_PROXY_STATE_FILE"
+}
+
+build_system_proxy_status_json() {
+    local service="$1"
+    local target_port="$2"
+    local web_enabled="$3"
+    local web_server="$4"
+    local web_port="$5"
+    local secure_enabled="$6"
+    local secure_server="$7"
+    local secure_port="$8"
+    local socks_enabled="$9"
+    local socks_server="${10}"
+    local socks_port="${11}"
+
+    local web_match=false secure_match=false socks_match=false enabled=false
+    local effective_host="" effective_port=""
+
+    if is_yes_value "$web_enabled" && is_loopback_host "$web_server" && [ "$web_port" = "$target_port" ]; then
+        web_match=true
+        enabled=true
+        effective_host="$web_server"
+        effective_port="$web_port"
+    fi
+    if is_yes_value "$secure_enabled" && is_loopback_host "$secure_server" && [ "$secure_port" = "$target_port" ]; then
+        secure_match=true
+        enabled=true
+        if [ -z "$effective_host" ]; then
+            effective_host="$secure_server"
+            effective_port="$secure_port"
+        fi
+    fi
+    if is_yes_value "$socks_enabled" && is_loopback_host "$socks_server" && [ "$socks_port" = "$target_port" ]; then
+        socks_match=true
+        enabled=true
+        if [ -z "$effective_host" ]; then
+            effective_host="$socks_server"
+            effective_port="$socks_port"
+        fi
+    fi
+    if [ -z "$effective_host" ]; then
+        effective_host="127.0.0.1"
+    fi
+    if [ -z "$effective_port" ]; then
+        effective_port="$target_port"
+    fi
+
+    cat <<JSON
+{"enabled":$(to_json_bool "$enabled"),"service":"$(json_escape "$service")","host":"$(json_escape "$effective_host")","port":"$(json_escape "$effective_port")","webMatch":$(to_json_bool "$web_match"),"secureMatch":$(to_json_bool "$secure_match"),"socksMatch":$(to_json_bool "$socks_match")}
+JSON
+}
+
+set_system_proxy_on() {
+    local service="$1"
+    local host="$2"
+    local port="$3"
+    networksetup -setwebproxy "$service" "$host" "$port" off >/dev/null 2>&1 || return 1
+    networksetup -setsecurewebproxy "$service" "$host" "$port" off >/dev/null 2>&1 || return 1
+    networksetup -setsocksfirewallproxy "$service" "$host" "$port" >/dev/null 2>&1 || return 1
+    networksetup -setwebproxystate "$service" on >/dev/null 2>&1 || return 1
+    networksetup -setsecurewebproxystate "$service" on >/dev/null 2>&1 || return 1
+    networksetup -setsocksfirewallproxystate "$service" on >/dev/null 2>&1 || return 1
+    return 0
+}
+
+restore_system_proxy_triplet() {
+    local service="$1"
+    local setter="$2"
+    local state_setter="$3"
+    local enabled="$4"
+    local server="$5"
+    local port="$6"
+    if is_yes_value "$enabled" && [ -n "$server" ] && [ -n "$port" ]; then
+        if [ "$setter" = "-setsocksfirewallproxy" ]; then
+            networksetup "$setter" "$service" "$server" "$port" >/dev/null 2>&1 || return 1
+        else
+            networksetup "$setter" "$service" "$server" "$port" off >/dev/null 2>&1 || return 1
+        fi
+        networksetup "$state_setter" "$service" on >/dev/null 2>&1 || return 1
+    else
+        networksetup "$state_setter" "$service" off >/dev/null 2>&1 || return 1
+    fi
+    return 0
 }
 
 resolve_kernel_version_from_pid() {
@@ -1380,6 +1584,151 @@ JSON
         fi
 
         print_ok "{\"configured\":true,\"path\":\"$(json_escape "$panel_dir")\"}"
+        ;;
+    system-proxy-status)
+        config_path=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --config|--config-path)
+                    shift || true
+                    config_path="${1:-}"
+                    ;;
+            esac
+            shift || true
+        done
+        if [ -z "$config_path" ]; then
+            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+        fi
+        resolve_proxy_port_from_config "$config_path"
+        if [ -z "$MIHOMO_PROXY_PORT" ]; then
+            MIHOMO_PROXY_PORT="7890"
+        fi
+        service="$(resolve_active_network_service)"
+        if [ -z "$service" ]; then
+            print_err "network_service_not_found"
+            exit 1
+        fi
+
+        IFS='|' read -r web_enabled web_server web_port <<< "$(read_network_proxy_triplet "$service" "-getwebproxy")"
+        IFS='|' read -r secure_enabled secure_server secure_port <<< "$(read_network_proxy_triplet "$service" "-getsecurewebproxy")"
+        IFS='|' read -r socks_enabled socks_server socks_port <<< "$(read_network_proxy_triplet "$service" "-getsocksfirewallproxy")"
+
+        data="$(build_system_proxy_status_json "$service" "$MIHOMO_PROXY_PORT" "$web_enabled" "$web_server" "$web_port" "$secure_enabled" "$secure_server" "$secure_port" "$socks_enabled" "$socks_server" "$socks_port")"
+        print_ok "$data"
+        ;;
+    system-proxy-enable)
+        config_path=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --config|--config-path)
+                    shift || true
+                    config_path="${1:-}"
+                    ;;
+            esac
+            shift || true
+        done
+
+        if ! ensure_sudo ""; then
+            exit 1
+        fi
+        if [ -z "$config_path" ]; then
+            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+        fi
+        resolve_proxy_port_from_config "$config_path"
+        if [ -z "$MIHOMO_PROXY_PORT" ]; then
+            MIHOMO_PROXY_PORT="7890"
+        fi
+        service="$(resolve_active_network_service)"
+        if [ -z "$service" ]; then
+            print_err "network_service_not_found"
+            exit 1
+        fi
+
+        IFS='|' read -r web_enabled web_server web_port <<< "$(read_network_proxy_triplet "$service" "-getwebproxy")"
+        IFS='|' read -r secure_enabled secure_server secure_port <<< "$(read_network_proxy_triplet "$service" "-getsecurewebproxy")"
+        IFS='|' read -r socks_enabled socks_server socks_port <<< "$(read_network_proxy_triplet "$service" "-getsocksfirewallproxy")"
+
+        takeover_active=false
+        if is_yes_value "$web_enabled" && is_loopback_host "$web_server" && [ "$web_port" = "$MIHOMO_PROXY_PORT" ]; then
+            takeover_active=true
+        fi
+        if is_yes_value "$secure_enabled" && is_loopback_host "$secure_server" && [ "$secure_port" = "$MIHOMO_PROXY_PORT" ]; then
+            takeover_active=true
+        fi
+        if is_yes_value "$socks_enabled" && is_loopback_host "$socks_server" && [ "$socks_port" = "$MIHOMO_PROXY_PORT" ]; then
+            takeover_active=true
+        fi
+
+        if [ "$takeover_active" = false ]; then
+            save_system_proxy_snapshot "$service" "$web_enabled" "$web_server" "$web_port" "$secure_enabled" "$secure_server" "$secure_port" "$socks_enabled" "$socks_server" "$socks_port"
+        fi
+
+        if ! set_system_proxy_on "$service" "127.0.0.1" "$MIHOMO_PROXY_PORT"; then
+            print_err "set_system_proxy_failed"
+            exit 1
+        fi
+
+        data="$(build_system_proxy_status_json "$service" "$MIHOMO_PROXY_PORT" "Yes" "127.0.0.1" "$MIHOMO_PROXY_PORT" "Yes" "127.0.0.1" "$MIHOMO_PROXY_PORT" "Yes" "127.0.0.1" "$MIHOMO_PROXY_PORT")"
+        print_ok "$data"
+        ;;
+    system-proxy-disable)
+        if ! ensure_sudo ""; then
+            exit 1
+        fi
+
+        active_service="$(resolve_active_network_service)"
+        if [ -z "$active_service" ]; then
+            print_err "network_service_not_found"
+            exit 1
+        fi
+
+        restore_service="$active_service"
+        web_enabled=""
+        web_server=""
+        web_port=""
+        secure_enabled=""
+        secure_server=""
+        secure_port=""
+        socks_enabled=""
+        socks_server=""
+        socks_port=""
+
+        if [ -f "$SYSTEM_PROXY_STATE_FILE" ]; then
+            # shellcheck disable=SC1090
+            . "$SYSTEM_PROXY_STATE_FILE"
+            if [ -n "${service:-}" ]; then
+                restore_service="$service"
+            fi
+            web_enabled="${web_enabled:-}"
+            web_server="${web_server:-}"
+            web_port="${web_port:-}"
+            secure_enabled="${secure_enabled:-}"
+            secure_server="${secure_server:-}"
+            secure_port="${secure_port:-}"
+            socks_enabled="${socks_enabled:-}"
+            socks_server="${socks_server:-}"
+            socks_port="${socks_port:-}"
+        fi
+
+        if ! restore_system_proxy_triplet "$restore_service" "-setwebproxy" "-setwebproxystate" "$web_enabled" "$web_server" "$web_port"; then
+            print_err "restore_system_proxy_failed"
+            exit 1
+        fi
+        if ! restore_system_proxy_triplet "$restore_service" "-setsecurewebproxy" "-setsecurewebproxystate" "$secure_enabled" "$secure_server" "$secure_port"; then
+            print_err "restore_system_proxy_failed"
+            exit 1
+        fi
+        if ! restore_system_proxy_triplet "$restore_service" "-setsocksfirewallproxy" "-setsocksfirewallproxystate" "$socks_enabled" "$socks_server" "$socks_port"; then
+            print_err "restore_system_proxy_failed"
+            exit 1
+        fi
+
+        rm -f "$SYSTEM_PROXY_STATE_FILE"
+        data=$(cat <<JSON
+{"enabled":false,"service":"$(json_escape "$restore_service")"}
+JSON
+)
+        print_ok "$data"
         ;;
     mode)
         mode=""

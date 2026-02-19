@@ -1006,6 +1006,16 @@ if (window.clashfox && typeof window.clashfox.onMainCoreAction === 'function') {
   });
 }
 
+if (window.clashfox && typeof window.clashfox.onMainNavigate === 'function') {
+  window.clashfox.onMainNavigate((payload) => {
+    const page = payload && typeof payload.page === 'string' ? payload.page.trim() : '';
+    if (!page) {
+      return;
+    }
+    navigatePage(page);
+  });
+}
+
 function promptSudoPassword() {
   sudoPassword.value = '';
   sudoModal.classList.add('show');

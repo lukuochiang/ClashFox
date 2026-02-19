@@ -56,7 +56,7 @@ const RESTART_TRANSITION_MIN_MS = 450;
 const RESTART_TRANSITION_MAX_MS = 4000;
 const RESTART_TRANSITION_RATIO = 0.5;
 let trayCoreStartupEstimateMs = 1500;
-const PRIVILEGED_COMMANDS = new Set(['install', 'start', 'stop', 'restart', 'delete-backups']);
+const PRIVILEGED_COMMANDS = new Set(['install', 'start', 'stop', 'restart', 'delete-backups', 'system-proxy-enable', 'system-proxy-disable']);
 const OUTBOUND_MODE_BADGE = {
   rule: 'R',
   global: 'G',
@@ -67,6 +67,16 @@ const OUTBOUND_MODE_BADGE_STYLE = {
   global: { bg: '#ffffff', fg: '#0b1118' },
   direct: { bg: '#ffffff', fg: '#0b1118' },
 };
+const TRAY_MENU_ICON_SVGS = {
+  showMain: "<svg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'><rect x='3' y='3' width='6' height='6' rx='1.3' fill='#000'/><rect x='11' y='3' width='6' height='4' rx='1.3' fill='#000'/><rect x='11' y='9' width='6' height='8' rx='1.3' fill='#000'/><rect x='3' y='11' width='6' height='6' rx='1.3' fill='#000'/></svg>",
+  networkTakeover: "<svg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M10 15.75a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5Zm-3.2-3.2a.75.75 0 0 1 1.06 0 3.5 3.5 0 0 1 4.9 0 .75.75 0 1 1 1.06 1.06 5 5 0 0 0-7.02 0 .75.75 0 0 1-1.06-1.06Zm-2.3-2.3a.75.75 0 0 1 1.06 0 7 7 0 0 1 9.88 0 .75.75 0 1 1 1.06-1.06 8.5 8.5 0 0 0-12 0 .75.75 0 0 1-1.06 0A.75.75 0 0 1 4.5 10.25Zm-2.34-3.3a.75.75 0 0 1 1.06 0 11 11 0 0 1 15.56 0 .75.75 0 1 1 1.06-1.06 12.5 12.5 0 0 0-17.68 0 .75.75 0 0 1-1.06 0A.75.75 0 0 1 2.16 6.94Z' fill='#000'/></svg>",
+  outboundMode: "<svg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M4 7h8V4l6 5-6 5v-3H4V7Zm16 10H12v3l-6-5 6-5v3h8v4Z' fill='#000'/></svg>",
+  dashboard: "<svg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M3.5 4A1.5 1.5 0 0 1 5 2.5h10A1.5 1.5 0 0 1 16.5 4v4A1.5 1.5 0 0 1 15 9.5H5A1.5 1.5 0 0 1 3.5 8V4Zm0 8A1.5 1.5 0 0 1 5 10.5h4A1.5 1.5 0 0 1 10.5 12v4A1.5 1.5 0 0 1 9 17.5H5A1.5 1.5 0 0 1 3.5 16v-4Zm7.5-1.5H15a1.5 1.5 0 0 1 1.5 1.5v4A1.5 1.5 0 0 1 15 17.5h-4A1.5 1.5 0 0 1 9.5 16v-4A1.5 1.5 0 0 1 11 10.5Z' fill='#000'/></svg>",
+  kernelManager: "<svg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M4.28 4.22a.75.75 0 0 1 0 1.06l-.97.97.47.47a.75.75 0 1 1-1.06 1.06l-1-1a.75.75 0 0 1 0-1.06l1.5-1.5a.75.75 0 0 1 1.06 0Z' fill='#000'/><path d='M4.28 10.22a.75.75 0 0 1 0 1.06l-.97.97.47.47a.75.75 0 1 1-1.06 1.06l-1-1a.75.75 0 0 1 0-1.06l1.5-1.5a.75.75 0 0 1 1.06 0Z' fill='#000'/><path d='M4.28 16.22a.75.75 0 0 1 0 1.06l-.97.97.47.47a.75.75 0 1 1-1.06 1.06l-1-1a.75.75 0 0 1 0-1.06l1.5-1.5a.75.75 0 0 1 1.06 0Z' fill='#000'/><path d='M7.5 5.25a.75.75 0 0 1 .75-.75h8a.75.75 0 0 1 0 1.5h-8a.75.75 0 0 1-.75-.75Zm0 6a.75.75 0 0 1 .75-.75h8a.75.75 0 1 1 0 1.5h-8a.75.75 0 0 1-.75-.75Zm0 6a.75.75 0 0 1 .75-.75h8a.75.75 0 1 1 0 1.5h-8a.75.75 0 0 1-.75-.75Z' fill='#000'/></svg>",
+  settings: "<svg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M11.7 2.2 12 4a6.5 6.5 0 0 1 1.4.8l1.7-.7a1 1 0 0 1 1.3.5l.7 1.5a1 1 0 0 1-.4 1.3l-1.5.9a6.4 6.4 0 0 1 0 1.6l1.5.9a1 1 0 0 1 .4 1.3l-.7 1.5a1 1 0 0 1-1.3.5l-1.7-.7a6.5 6.5 0 0 1-1.4.8L11.7 18a1 1 0 0 1-1 .8h-1.4a1 1 0 0 1-1-.8l-.3-1.8a6.5 6.5 0 0 1-1.4-.8l-1.7.7a1 1 0 0 1-1.3-.5l-.7-1.5a1 1 0 0 1 .4-1.3l1.5-.9a6.4 6.4 0 0 1 0-1.6l-1.5-.9a1 1 0 0 1-.4-1.3l.7-1.5a1 1 0 0 1 1.3-.5l1.7.7a6.5 6.5 0 0 1 1.4-.8L8.3 2.2a1 1 0 0 1 1-.8h1.4a1 1 0 0 1 1 .8ZM10 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z' fill='#000'/></svg>",
+  quit: "<svg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M10 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm0 3a1.05 1.05 0 1 1 0 2.1A1.05 1.05 0 0 1 10 5Zm0 3.5c.41 0 .75.34.75.75v4.5a.75.75 0 1 1-1.5 0V9.25c0-.41.34-.75.75-.75Z' fill='#000'/></svg>",
+};
+const trayMenuItemIconCache = new Map();
 
 const I18N = require(path.join(APP_PATH, 'static', 'locales', 'i18n.js'));
 ;
@@ -106,6 +116,45 @@ function getUiLabels() {
   return (I18N[lang] && I18N[lang].labels) || (I18N.en && I18N.en.labels) || {};
 }
 
+function getConfigPathFromSettings() {
+  const settings = readAppSettings();
+  const configPath = settings && typeof settings.configFile === 'string' ? settings.configFile.trim() : '';
+  if (configPath) {
+    return configPath;
+  }
+  return path.join(APP_DATA_DIR, 'config', 'default.yaml');
+}
+
+function getNavLabels() {
+  const lang = resolveTrayLang();
+  return (I18N[lang] && I18N[lang].nav) || (I18N.en && I18N.en.nav) || {};
+}
+
+function getTrayMenuItemIcon(key) {
+  if (process.platform !== 'darwin') {
+    return undefined;
+  }
+  const svg = TRAY_MENU_ICON_SVGS[key];
+  if (!svg) {
+    return undefined;
+  }
+  if (trayMenuItemIconCache.has(key)) {
+    return trayMenuItemIconCache.get(key);
+  }
+  const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  let icon = nativeImage.createFromDataURL(dataUrl);
+  if (icon.isEmpty()) {
+    trayMenuItemIconCache.set(key, undefined);
+    return undefined;
+  }
+  icon = icon.resize({ width: 16, height: 16 });
+  if (typeof icon.setTemplateImage === 'function') {
+    icon.setTemplateImage(true);
+  }
+  trayMenuItemIconCache.set(key, icon);
+  return icon;
+}
+
 function readAppSettings() {
   try {
     const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
@@ -138,6 +187,19 @@ function persistOutboundModeToSettings(mode) {
     const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
     const parsed = readAppSettings();
     parsed.proxyMode = mode;
+    fs.writeFileSync(settingsPath, `${JSON.stringify(parsed, null, 2)}\n`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function persistTunEnabledToSettings(enabled) {
+  try {
+    ensureAppDirs();
+    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
+    const parsed = readAppSettings();
+    parsed.tunEnabled = Boolean(enabled);
     fs.writeFileSync(settingsPath, `${JSON.stringify(parsed, null, 2)}\n`);
     return true;
   } catch {
@@ -490,6 +552,24 @@ function showMainWindow() {
   createWindow();
 }
 
+function openMainPage(page) {
+  showMainWindow();
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+  const sendNavigate = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return;
+    }
+    mainWindow.webContents.send('clashfox:mainNavigate', { page });
+  };
+  if (mainWindow.webContents.isLoadingMainFrame()) {
+    mainWindow.webContents.once('did-finish-load', sendNavigate);
+    return;
+  }
+  sendNavigate();
+}
+
 function openDashboardPanel() {
   try {
     const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
@@ -616,19 +696,92 @@ async function createTrayMenu() {
   }
   const labels = getTrayLabels();
   const uiLabels = getUiLabels();
+  const navLabels = getNavLabels();
   const currentOutboundMode = resolveOutboundModeFromSettings();
   const currentOutboundBadge = OUTBOUND_MODE_BADGE[currentOutboundMode] || OUTBOUND_MODE_BADGE.rule;
+  const configPath = getConfigPathFromSettings();
   let dashboardEnabled = false;
+  let networkTakeoverEnabled = false;
+  let networkTakeoverService = '';
+  let tunEnabled = Boolean(readAppSettings().tunEnabled);
+  let tunAvailable = true;
   try {
     const status = await runBridge(['status']);
     dashboardEnabled = Boolean(status && status.ok && status.data && status.data.running);
   } catch {
     dashboardEnabled = false;
   }
+  try {
+    const takeover = await runBridge(['system-proxy-status', '--config', configPath]);
+    networkTakeoverEnabled = Boolean(takeover && takeover.ok && takeover.data && takeover.data.enabled);
+    networkTakeoverService = (takeover && takeover.ok && takeover.data && takeover.data.service)
+      ? String(takeover.data.service)
+      : '';
+  } catch {
+    networkTakeoverEnabled = false;
+    networkTakeoverService = '';
+  }
+  try {
+    const tunStatus = await runBridge(['tun-status', '--config', configPath, ...getControllerArgsFromSettings()]);
+    if (tunStatus && tunStatus.ok && tunStatus.data) {
+      const tunEnabledRaw = Object.prototype.hasOwnProperty.call(tunStatus.data, 'enabled')
+        ? tunStatus.data.enabled
+        : tunStatus.data.enable;
+      tunEnabled = tunEnabledRaw === true || tunEnabledRaw === 'true' || tunEnabledRaw === 1;
+      tunAvailable = true;
+    }
+  } catch {
+    // Keep fallback from local settings when controller is unavailable.
+  }
   const trayMenu = Menu.buildFromTemplate([
-    { label: labels.showMain, click: () => showMainWindow() },
+    { label: labels.showMain, icon: getTrayMenuItemIcon('showMain'), click: () => showMainWindow() },
     { type: 'separator' },
     {
+      icon: getTrayMenuItemIcon('networkTakeover'),
+      label: labels.networkTakeover || 'Network Takeover',
+      submenu: [
+        {
+          type: 'checkbox',
+          label: labels.systemProxy || 'System Proxy',
+          checked: networkTakeoverEnabled,
+          click: async (menuItem) => {
+            const command = menuItem && menuItem.checked ? 'system-proxy-enable' : 'system-proxy-disable';
+            const response = await runTrayCommand(command, ['--config', configPath], labels);
+            if (response.ok) {
+              await createTrayMenu();
+              emitTrayRefresh();
+              return;
+            }
+            await createTrayMenu();
+          },
+        },
+        {
+          type: 'checkbox',
+          label: labels.tun || 'TUN',
+          enabled: tunAvailable,
+          checked: tunEnabled,
+          click: async (menuItem) => {
+            const target = menuItem && menuItem.checked ? 'true' : 'false';
+            const response = await runTrayCommand('tun', ['--enable', target, ...getControllerArgsFromSettings()], labels);
+            if (response.ok) {
+              persistTunEnabledToSettings(target === 'true');
+              await createTrayMenu();
+              emitTrayRefresh();
+              return;
+            }
+            await createTrayMenu();
+          },
+        },
+        { type: 'separator' },
+        {
+          label: `${labels.currentService || 'Current Service'}: ${networkTakeoverService || '-'}`,
+          enabled: false,
+        },
+      ],
+    },
+    { type: 'separator' },
+    {
+      icon: getTrayMenuItemIcon('outboundMode'),
       label: `${labels.outboundMode || 'Outbound Mode'}\t[${currentOutboundBadge}]`,
       submenu: [
         {
@@ -676,11 +829,12 @@ async function createTrayMenu() {
       ],
     },
     { type: 'separator' },
-    { label: labels.dashboard, enabled: dashboardEnabled, click: () => openDashboardPanel() },
+    { label: labels.dashboard, icon: getTrayMenuItemIcon('dashboard'), enabled: dashboardEnabled, click: () => openDashboardPanel() },
     { type: 'separator' },
     // { label: 'About', click: () => createAboutWindow() },
     // { type: 'separator' },
     {
+      icon: getTrayMenuItemIcon('kernelManager'),
       label: labels.kernelManager,
       submenu: [
         {
@@ -776,7 +930,9 @@ async function createTrayMenu() {
       ],
     },
     { type: 'separator' },
-    { label: labels.quit, click: () => app.quit() },
+    { label: navLabels.settings || 'Settings', icon: getTrayMenuItemIcon('settings'), click: () => openMainPage('settings') },
+    { type: 'separator' },
+    { label: labels.quit, icon: getTrayMenuItemIcon('quit'), click: () => app.quit() },
   ]);
   tray.setContextMenu(trayMenu);
 }

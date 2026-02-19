@@ -1,7 +1,7 @@
 {
   "name": "ClashFox",
   "version": "0.3.8",
-  "buildNumber": 3,
+  "buildNumber": 4,
   "description": "ClashFox GUI for Mihomo",
   "author": "Kuochiang Lu <lukuochiang@gmail.com> (https://github.com/lukuochiang/ClashFox)",
   "main": "src/main.js",
@@ -9,13 +9,13 @@
   "scripts": {
     "start": "electron .",
     "dev": "node scripts/bump-version.js && CLASHFOX_DEV=1 electron .",
-    "build:mac": "node scripts/clean-dist-mac.js --pre; CLASHFOX_BUILD_NUMBER=$(node -p \"require('./package.json').buildNumber\") PYTHON=${PYTHON:-python3} sh -c 'electron-builder --mac dmg zip --x64 && electron-builder --mac dmg zip --arm64 && electron-builder --mac dmg zip --universal'; code=$?; node scripts/clean-dist-mac.js; exit $code",
+    "build:mac": "node scripts/clean-dist-mac.js --pre; CLASHFOX_BUILD_NUMBER=$(node -p \"require('./package.json').buildNumber\") CSC_IDENTITY_AUTO_DISCOVERY=false PYTHON=${PYTHON:-python3} sh -c 'electron-builder --mac zip --x64 && electron-builder --mac zip --arm64 && electron-builder --mac zip --universal'; code=$?; node scripts/clean-dist-mac.js; exit $code",
     "clean:mac": "node scripts/clean-dist-mac.js"
   },
   "devDependencies": {
     "electron": "^28.2.0",
-    "electron-reload": "^1.5.0",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^26.8.1",
+    "electron-reload": "^1.5.0"
   },
   "build": {
     "appId": "com.clashfox.gui",
@@ -36,16 +36,9 @@
     "mac": {
       "category": "public.app-category.utilities",
       "icon": "src/ui/assets/icns/logo.icns",
+      "identity": null,
       "artifactName": "${productName}-${version}(${env.CLASHFOX_BUILD_NUMBER})-mac-${arch}.${ext}",
       "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "x64",
-            "arm64",
-            "universal"
-          ]
-        },
         {
           "target": "zip",
           "arch": [

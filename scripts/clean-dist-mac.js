@@ -28,7 +28,7 @@ if (isPreclean) {
   process.exit(0);
 }
 
-const keepExts = new Set(['.dmg', '.zip', '.yml']);
+const keepExts = new Set(['.zip', '.yml']);
 const keepNames = new Set([
   'latest-mac.yml',
   'latest.yml',
