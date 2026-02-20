@@ -817,7 +817,7 @@ function ensureTrayMenuWindow() {
     webPreferences: {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
-      devTools: isDev,
+      devTools: false,
     },
   });
   trayMenuWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
@@ -1095,6 +1095,12 @@ async function handleTrayMenuAction(action, payload = {}) {
 
 function applyDevToolsState() {
   BrowserWindow.getAllWindows().forEach((win) => {
+    if (trayMenuWindow && win.id === trayMenuWindow.id) {
+      if (win.webContents.isDevToolsOpened()) {
+        win.webContents.closeDevTools();
+      }
+      return;
+    }
     if (globalSettings.debugMode) {
       if (!win.webContents.isDevToolsOpened()) {
         win.webContents.openDevTools({ mode: 'detach' });
