@@ -32,14 +32,13 @@ body {
 
 .tray-stage {
   position: relative;
-  width: 520px;
+  width: 100%;
   min-height: 200px;
   padding: 0;
 }
 
 .menu-root,
 .submenu-root {
-  width: 260px;
   border-radius: 12px;
   background: linear-gradient(150deg, var(--panel), var(--panel-soft));
   border: 1px solid var(--border);
@@ -49,12 +48,16 @@ body {
 }
 
 .menu-root {
+  width: 260px;
   position: absolute;
   left: 0;
   top: 0;
 }
 
 .submenu-root {
+  width: max-content;
+  min-width: 220px;
+  max-width: 340px;
   position: absolute;
   left: 260px;
   top: 56px;

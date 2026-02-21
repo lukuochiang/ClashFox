@@ -1982,6 +1982,7 @@ async function loadOverview(showToastOnSuccess = false) {
   state.overviewLoading = true;
   const configPath = getCurrentConfigPath();
   const args = configPath ? ['--config', configPath] : [];
+  args.unshift('--no-cache');
   args.push(...getControllerArgs());
   const response = await runCommand('overview', args);
   if (!response.ok) {
@@ -3854,7 +3855,7 @@ function startOverviewTimer() {
     if (currentPage === 'overview') {
       loadOverview();
     }
-  }, 5000);
+  }, 2000);
 
   if (state.trafficTimer) {
     clearInterval(state.trafficTimer);

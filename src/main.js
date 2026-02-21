@@ -40,7 +40,10 @@ let tray = null;
 let trayMenuWindow = null;
 let trayMenuVisible = false;
 let trayMenuData = null;
+let trayMenuBuildInProgress = false;
+let trayMenuBuildPending = false;
 let trayMenuContentHeight = 420;
+let trayMenuRefreshTimer = null;
 let dashboardWindow = null;
 let currentInstallProcess = null; // 仅用于跟踪安装进程，支持取消功能
 let globalSettings = {
@@ -60,6 +63,14 @@ const OUTBOUND_MODE_BADGE = {
   global: 'G',
   direct: 'D',
 };
+const CONNECTIVITY_REFRESH_MS = 1500;
+const trayIconCache = new Map();
+let connectivityQualityCache = {
+  text: '-',
+  tone: 'neutral',
+  updatedAt: 0,
+};
+let connectivityQualityFetchPromise = null;
 
 const I18N = require(path.join(APP_PATH, 'static', 'locales', 'i18n.js'));
 ;
@@ -189,6 +200,58 @@ function buildShellExportCommand(portValue) {
   return `export http_proxy="http://127.0.0.1:${safePort}" https_proxy="http://127.0.0.1:${safePort}" all_proxy="socks5://127.0.0.1:${safePort}" no_proxy="localhost,127.0.0.1,::1"`;
 }
 
+function resolveConnectivityToneByLatency(rawLatency) {
+  const latency = Number.parseFloat(String(rawLatency || '').trim());
+  if (!Number.isFinite(latency)) {
+    return 'neutral';
+  }
+  if (latency <= 50) {
+    return 'good';
+  }
+  if (latency <= 120) {
+    return 'warn';
+  }
+  return 'bad';
+}
+
+async function getConnectivityQualitySnapshot(configPath) {
+  const now = Date.now();
+  if ((now - connectivityQualityCache.updatedAt) <= CONNECTIVITY_REFRESH_MS) {
+    return connectivityQualityCache;
+  }
+  if (connectivityQualityFetchPromise) {
+    return connectivityQualityFetchPromise;
+  }
+
+  connectivityQualityFetchPromise = (async () => {
+    try {
+      const overview = await runBridge(['overview', '--no-cache', '--config', configPath, ...getControllerArgsFromSettings()]);
+      const internetMs = overview && overview.ok && overview.data ? String(overview.data.internetMs || '').trim() : '';
+      if (internetMs && internetMs !== '-') {
+        connectivityQualityCache = {
+          text: `${internetMs} ms`,
+          tone: resolveConnectivityToneByLatency(internetMs),
+          updatedAt: Date.now(),
+        };
+        return connectivityQualityCache;
+      }
+      connectivityQualityCache = {
+        text: '-',
+        tone: 'neutral',
+        updatedAt: Date.now(),
+      };
+      return connectivityQualityCache;
+    } catch {
+      // Keep old snapshot and allow immediate retry on next refresh cycle.
+      return connectivityQualityCache;
+    } finally {
+      connectivityQualityFetchPromise = null;
+    }
+  })();
+
+  return connectivityQualityFetchPromise;
+}
+
 function getControllerArgsFromSettings() {
   const settings = readAppSettings();
   const args = [];
@@ -209,6 +272,10 @@ function getControllerArgsFromSettings() {
 
 function buildTrayIconWithMode(mode) {
   const safeMode = OUTBOUND_MODE_BADGE[mode] ? mode : 'rule';
+  const cached = trayIconCache.get(safeMode);
+  if (cached && !cached.isEmpty()) {
+    return cached;
+  }
   const modeIconMap = {
     rule: 'menu_r.png',
     global: 'menu_g.png',
@@ -226,8 +293,22 @@ function buildTrayIconWithMode(mode) {
     if (process.platform === 'darwin' && typeof icon.setTemplateImage === 'function') {
       icon.setTemplateImage(false);
     }
+    trayIconCache.set(safeMode, icon);
   }
   return icon;
+}
+
+function applyTrayIconForMode(mode) {
+  if (!tray) {
+    return;
+  }
+  const trayIcon = buildTrayIconWithMode(mode);
+  if (!trayIcon.isEmpty()) {
+    if (process.platform === 'darwin' && typeof trayIcon.setTemplateImage === 'function') {
+      trayIcon.setTemplateImage(false);
+    }
+    tray.setImage(trayIcon);
+  }
 }
 
 function runBridgeWithSystemAuth(bridgeArgs = []) {
@@ -483,7 +564,7 @@ function showMainWindow() {
     mainWindow.focus();
     return;
   }
-  createWindow();
+  createWindow(true);
 }
 
 function openMainPage(page) {
@@ -607,7 +688,43 @@ function applyAppMenu() {
   Menu.setApplicationMenu(menu);
 }
 
-async function createTrayMenu() {
+function patchTrayMenuOutboundMode(nextMode) {
+  if (!trayMenuData || !OUTBOUND_MODE_BADGE[nextMode]) {
+    return;
+  }
+  const badge = OUTBOUND_MODE_BADGE[nextMode];
+  trayMenuData.meta = {
+    ...(trayMenuData.meta || {}),
+    currentOutboundMode: nextMode,
+  };
+  if (Array.isArray(trayMenuData.items)) {
+    trayMenuData.items = trayMenuData.items.map((item) => {
+      if (item && item.submenu === 'outbound') {
+        return {
+          ...item,
+          rightText: `[${badge}]`,
+        };
+      }
+      return item;
+    });
+  }
+  if (trayMenuData.submenus && Array.isArray(trayMenuData.submenus.outbound)) {
+    trayMenuData.submenus.outbound = trayMenuData.submenus.outbound.map((item) => {
+      if (!item || item.type === 'separator' || item.action !== 'mode-change') {
+        return item;
+      }
+      return {
+        ...item,
+        checked: String(item.value || '') === nextMode,
+      };
+    });
+  }
+  if (trayMenuWindow && !trayMenuWindow.isDestroyed()) {
+    trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
+  }
+}
+
+async function buildTrayMenuOnce() {
   if (process.platform !== 'darwin') {
     return;
   }
@@ -636,18 +753,10 @@ async function createTrayMenu() {
       }
     });
   } else {
-    const trayIcon = buildTrayIconWithMode(resolveOutboundModeFromSettings());
-    if (!trayIcon.isEmpty()) {
-      if (process.platform === 'darwin' && typeof trayIcon.setTemplateImage === 'function') {
-        trayIcon.setTemplateImage(false);
-      }
-      tray.setImage(trayIcon);
-    }
+    applyTrayIconForMode(resolveOutboundModeFromSettings());
   }
   const labels = getTrayLabels();
   const uiLabels = getUiLabels();
-  const currentOutboundMode = resolveOutboundModeFromSettings();
-  const currentOutboundBadge = OUTBOUND_MODE_BADGE[currentOutboundMode] || OUTBOUND_MODE_BADGE.rule;
   const configPath = getConfigPathFromSettings();
   let dashboardEnabled = false;
   let networkTakeoverEnabled = false;
@@ -677,28 +786,13 @@ async function createTrayMenu() {
     networkTakeoverService = '';
     networkTakeoverPort = '7890';
   }
-  try {
-    const overview = await runBridge(['overview', '--config', configPath, ...getControllerArgsFromSettings()]);
-    const internetMs = overview && overview.ok && overview.data ? String(overview.data.internetMs || '').trim() : '';
-    if (internetMs && internetMs !== '-') {
-      connectivityQuality = `${internetMs} ms`;
-      const latency = Number.parseFloat(internetMs);
-      if (Number.isFinite(latency)) {
-        if (latency <= 50) {
-          connectivityTone = 'good';
-        } else if (latency <= 120) {
-          connectivityTone = 'warn';
-        } else {
-          connectivityTone = 'bad';
-        }
-      } else {
-        connectivityTone = 'neutral';
-      }
-    }
-  } catch {
-    connectivityQuality = '-';
-    connectivityTone = 'neutral';
-  }
+  const connectivitySnapshot = await getConnectivityQualitySnapshot(configPath);
+  connectivityQuality = connectivitySnapshot && connectivitySnapshot.text
+    ? String(connectivitySnapshot.text)
+    : '-';
+  connectivityTone = connectivitySnapshot && connectivitySnapshot.tone
+    ? String(connectivitySnapshot.tone)
+    : 'neutral';
   try {
     const tunStatus = await runBridge(['tun-status', '--config', configPath, ...getControllerArgsFromSettings()]);
     if (tunStatus && tunStatus.ok && tunStatus.data) {
@@ -711,11 +805,14 @@ async function createTrayMenu() {
   } catch {
     // Keep fallback from local settings when controller is unavailable.
   }
+  // Re-read mode at commit time to avoid stale snapshot overwriting a newer switch.
+  const currentOutboundMode = resolveOutboundModeFromSettings();
+  const currentOutboundBadge = OUTBOUND_MODE_BADGE[currentOutboundMode] || OUTBOUND_MODE_BADGE.rule;
   const runningLabel = uiLabels.running || labels.on || 'Running';
   const stoppedLabel = uiLabels.stopped || labels.off || 'Stopped';
   const trayStatusLabel = dashboardEnabled ? `🟢 ${runningLabel}` : `⚪ ${stoppedLabel}`;
 
-  trayMenuData = {
+  const nextMenuData = {
     header: {
       title: app.getName(),
       status: trayStatusLabel,
@@ -790,10 +887,28 @@ async function createTrayMenu() {
       ],
     },
   };
+  trayMenuData = nextMenuData;
   if (trayMenuWindow && !trayMenuWindow.isDestroyed()) {
     trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
   }
   return trayMenuData;
+}
+
+async function createTrayMenu() {
+  if (trayMenuBuildInProgress) {
+    trayMenuBuildPending = true;
+    return trayMenuData;
+  }
+  trayMenuBuildInProgress = true;
+  try {
+    do {
+      trayMenuBuildPending = false;
+      await buildTrayMenuOnce();
+    } while (trayMenuBuildPending);
+    return trayMenuData;
+  } finally {
+    trayMenuBuildInProgress = false;
+  }
 }
 
 function ensureTrayMenuWindow() {
@@ -829,6 +944,10 @@ function ensureTrayMenuWindow() {
   trayMenuWindow.on('closed', () => {
     trayMenuWindow = null;
     trayMenuVisible = false;
+    if (trayMenuRefreshTimer) {
+      clearInterval(trayMenuRefreshTimer);
+      trayMenuRefreshTimer = null;
+    }
   });
   return trayMenuWindow;
 }
@@ -836,9 +955,17 @@ function ensureTrayMenuWindow() {
 function hideTrayMenuWindow() {
   if (!trayMenuWindow || trayMenuWindow.isDestroyed()) {
     trayMenuVisible = false;
+    if (trayMenuRefreshTimer) {
+      clearInterval(trayMenuRefreshTimer);
+      trayMenuRefreshTimer = null;
+    }
     return;
   }
   trayMenuVisible = false;
+  if (trayMenuRefreshTimer) {
+    clearInterval(trayMenuRefreshTimer);
+    trayMenuRefreshTimer = null;
+  }
   trayMenuWindow.hide();
 }
 
@@ -851,8 +978,10 @@ function computeTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, expl
   const area = display.workArea;
   const mainMenuWidth = 260;
   const submenuGap = 0;
-  const submenuWidth = 260;
-  const popupWidth = Number.isFinite(explicitWidth) ? Math.max(mainMenuWidth, Math.round(explicitWidth)) : (mainMenuWidth + submenuGap + submenuWidth);
+  const popupWidth = Number.isFinite(explicitWidth)
+    ? Math.max(mainMenuWidth, Math.round(explicitWidth))
+    : (mainMenuWidth + submenuGap + 260);
+  const submenuWidth = Math.max(0, popupWidth - mainMenuWidth - submenuGap);
   const hasSubmenuPane = popupWidth > mainMenuWidth;
   const popupHeight = Math.max(200, Math.min(Number(contentHeight) || 420, 620));
   const anchorX = trayBounds.x + Math.round(trayBounds.width / 2);
@@ -944,6 +1073,14 @@ async function showTrayMenuWindow() {
   popup.show();
   popup.focus();
   trayMenuVisible = true;
+  if (!trayMenuRefreshTimer) {
+    trayMenuRefreshTimer = setInterval(() => {
+      if (!trayMenuVisible) {
+        return;
+      }
+      createTrayMenu().catch(() => {});
+    }, CONNECTIVITY_REFRESH_MS);
+  }
 }
 
 function toggleTrayMenuWindow() {
@@ -980,7 +1117,7 @@ async function handleTrayMenuAction(action, payload = {}) {
       const command = payload && payload.checked ? 'system-proxy-enable' : 'system-proxy-disable';
       await runTrayCommand(command, ['--config', configPath], labels);
       emitTrayRefresh();
-      return { ok: true, submenu: 'network', data: trayMenuData };
+      return { ok: true, submenu: 'network' };
     }
     case 'toggle-tun': {
       const target = payload && payload.checked ? 'true' : 'false';
@@ -989,14 +1126,14 @@ async function handleTrayMenuAction(action, payload = {}) {
         persistTunEnabledToSettings(target === 'true');
       }
       emitTrayRefresh();
-      return { ok: true, submenu: 'network', data: trayMenuData };
+      return { ok: true, submenu: 'network' };
     }
     case 'copy-shell-export': {
       const shellExportCommand = buildShellExportCommand((trayMenuData && trayMenuData.meta && trayMenuData.meta.networkTakeoverPort) || '7890');
       clipboard.writeText(shellExportCommand);
       emitMainToast(labels.shellExportCopied || 'Shell export command copied.', 'info');
-      await createTrayMenu();
-      return { ok: true, submenu: 'network', data: trayMenuData };
+      createTrayMenu().catch(() => {});
+      return { ok: true, submenu: 'network' };
     }
     case 'mode-change': {
       const nextMode = payload && payload.value ? String(payload.value) : '';
@@ -1006,19 +1143,21 @@ async function handleTrayMenuAction(action, payload = {}) {
       const response = await runTrayCommand('mode', ['--mode', nextMode, ...getControllerArgsFromSettings()], labels);
       if (response.ok) {
         persistOutboundModeToSettings(nextMode);
+        patchTrayMenuOutboundMode(nextMode);
+        applyTrayIconForMode(nextMode);
         emitTrayRefresh();
       }
-      return { ok: true, submenu: 'outbound', data: trayMenuData };
+      return { ok: true, submenu: 'outbound' };
     }
     case 'kernel-start': {
       try {
         const status = await getKernelRunning(labels);
         if (!status) {
-          return { ok: false, submenu: 'kernel', data: trayMenuData };
+          return { ok: false, submenu: 'kernel' };
         }
         if (status.running) {
           emitMainToast(uiLabels.alreadyRunning || 'Kernel is already running.', 'info');
-          return { ok: true, submenu: 'kernel', data: trayMenuData };
+          return { ok: true, submenu: 'kernel' };
         }
         emitMainCoreAction({ action: 'start', phase: 'start' });
         const commandStartedAt = Date.now();
@@ -1033,17 +1172,17 @@ async function handleTrayMenuAction(action, payload = {}) {
       } finally {
         emitTrayRefresh();
       }
-      return { ok: true, submenu: 'kernel', data: trayMenuData };
+      return { ok: true, submenu: 'kernel' };
     }
     case 'kernel-stop': {
       try {
         const status = await getKernelRunning(labels);
         if (!status) {
-          return { ok: false, submenu: 'kernel', data: trayMenuData };
+          return { ok: false, submenu: 'kernel' };
         }
         if (!status.running) {
           emitMainToast(uiLabels.alreadyStopped || 'Kernel is already stopped.', 'info');
-          return { ok: true, submenu: 'kernel', data: trayMenuData };
+          return { ok: true, submenu: 'kernel' };
         }
         const stopped = await runTrayCommand('stop', [], labels, status.sudoPass);
         if (stopped.ok) {
@@ -1052,13 +1191,13 @@ async function handleTrayMenuAction(action, payload = {}) {
       } finally {
         emitTrayRefresh();
       }
-      return { ok: true, submenu: 'kernel', data: trayMenuData };
+      return { ok: true, submenu: 'kernel' };
     }
     case 'kernel-restart': {
       try {
         const status = await getKernelRunning(labels);
         if (!status) {
-          return { ok: false, submenu: 'kernel', data: trayMenuData };
+          return { ok: false, submenu: 'kernel' };
         }
         if (!status.running) {
           emitMainToast(uiLabels.restartStarts || 'Kernel is stopped, starting now.', 'info');
@@ -1072,7 +1211,7 @@ async function handleTrayMenuAction(action, payload = {}) {
             }
             emitMainToast(uiLabels.startSuccess || 'Kernel started.', 'info');
           }
-          return { ok: true, submenu: 'kernel', data: trayMenuData };
+          return { ok: true, submenu: 'kernel' };
         }
         const transitionDelayMs = getTrayRestartTransitionDelayMs();
         emitMainCoreAction({ action: 'restart', phase: 'transition', delayMs: transitionDelayMs });
@@ -1089,7 +1228,7 @@ async function handleTrayMenuAction(action, payload = {}) {
       } finally {
         emitTrayRefresh();
       }
-      return { ok: true, submenu: 'kernel', data: trayMenuData };
+      return { ok: true, submenu: 'kernel' };
     }
     default:
       return { ok: false, error: 'unknown_action' };
@@ -1320,9 +1459,10 @@ function parseBridgeOutput(output) {
   throw new Error('parse_failed');
 }
 
-function createWindow() {
+function createWindow(showOnCreate = false) {
   nativeTheme.themeSource = 'system';
   const win = new BrowserWindow({
+    show: Boolean(showOnCreate),
     width: 1180,
     height: 760,
     minWidth: 980,
@@ -1530,7 +1670,7 @@ app.whenReady().then(() => {
   ensureAppDirs();
   setDockIcon();
   createTrayMenu();
-  createWindow();
+  createWindow(false);
   ensureTrayMenuWindow();
   setTimeout(setDockIcon, 500);
   setTimeout(setDockIcon, 1500);
@@ -1553,11 +1693,8 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:trayMenu:action', async (_event, action, payload = {}) => {
     const result = await handleTrayMenuAction(action, payload);
-    await createTrayMenu();
-    return {
-      ...(result || { ok: false }),
-      data: trayMenuData || null,
-    };
+    createTrayMenu().catch(() => {});
+    return result || { ok: false };
   });
 
   ipcMain.on('clashfox:trayMenu:hide', () => {
@@ -1755,7 +1892,7 @@ app.whenReady().then(() => {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      createWindow(false);
     }
   });
 });

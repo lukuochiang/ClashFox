@@ -795,6 +795,8 @@ JSON
         config_path=""
         controller_override=""
         secret_override=""
+        cache_ttl=2
+        disable_cache=false
         while [ $# -gt 0 ]; do
             case "$1" in
                 --config|--config-path)
@@ -808,6 +810,15 @@ JSON
                 --secret)
                     shift || true
                     secret_override="${1:-}"
+                    ;;
+                --cache-ttl)
+                    shift || true
+                    if echo "${1:-}" | grep -qE '^[0-9]+$'; then
+                        cache_ttl="$1"
+                    fi
+                    ;;
+                --no-cache)
+                    disable_cache=true
                     ;;
             esac
             shift || true
@@ -996,10 +1007,9 @@ EOF
         router_ms=""
 
         cache_file="$CLASHFOX_PID_DIR/overview_cache"
-        cache_ttl=15
         cache_valid=false
         now_ts="$(date +%s)"
-        if [ -f "$cache_file" ]; then
+        if [ "$disable_cache" = false ] && [ -f "$cache_file" ]; then
             # shellcheck disable=SC1090
             . "$cache_file"
             if [ -n "${ts:-}" ] && [ $((now_ts - ts)) -lt "$cache_ttl" ]; then
@@ -1182,15 +1192,17 @@ PY
             fi
         fi
 
-        {
-            printf 'ts=%s\n' "$now_ts"
-            printf 'internet_ip_v4=%q\n' "$internet_ip_v4"
-            printf 'internet_ip_v6=%q\n' "$internet_ip_v6"
-            printf 'internet_ms=%q\n' "$internet_ms"
-            printf 'proxy_ip=%q\n' "$proxy_ip"
-            printf 'dns_ms=%q\n' "$dns_ms"
-            printf 'router_ms=%q\n' "$router_ms"
-        } > "$cache_file" 2>/dev/null || true
+        if [ "$disable_cache" = false ]; then
+            {
+                printf 'ts=%s\n' "$now_ts"
+                printf 'internet_ip_v4=%q\n' "$internet_ip_v4"
+                printf 'internet_ip_v6=%q\n' "$internet_ip_v6"
+                printf 'internet_ms=%q\n' "$internet_ms"
+                printf 'proxy_ip=%q\n' "$proxy_ip"
+                printf 'dns_ms=%q\n' "$dns_ms"
+                printf 'router_ms=%q\n' "$router_ms"
+            } > "$cache_file" 2>/dev/null || true
+        fi
         fi
 
         if [ -n "$internet_ip_direct" ]; then

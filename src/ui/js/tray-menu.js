@@ -11,7 +11,11 @@ let activeSubmenuAnchor = null;
 let submenuHideTimer = null;
 let lastExpandedSent = null;
 let lastHeightSent = 0;
+let lastWidthSent = 0;
 let blockClickUntil = 0;
+let menuVersion = 0;
+const SUBMENU_MIN_WIDTH = 170;
+const SUBMENU_MAX_WIDTH = 340;
 
 const ICON_SVGS = {
   showMain: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 9h16"/></svg>',
@@ -43,21 +47,23 @@ function clearHideTimer() {
 
 function syncWindowGeometry(expanded) {
   const rootRect = menuRootEl.getBoundingClientRect();
+  const rootWidth = Math.ceil(rootRect.width) || 260;
+  const submenuWidth = !submenuRootEl.classList.contains('hidden')
+    ? Math.ceil(submenuRootEl.offsetWidth || 0)
+    : 0;
   const height = Math.ceil(rootRect.height) + 2;
-  const width = expanded ? 520 : 260;
-  if (lastExpandedSent === Boolean(expanded) && Math.abs(height - lastHeightSent) <= 2) {
+  const width = expanded ? (rootWidth + submenuWidth) : rootWidth;
+  if (
+    lastExpandedSent === Boolean(expanded)
+    && Math.abs(height - lastHeightSent) <= 2
+    && Math.abs(width - lastWidthSent) <= 2
+  ) {
     return;
   }
   lastExpandedSent = Boolean(expanded);
   lastHeightSent = height;
+  lastWidthSent = width;
   window.clashfox.trayMenuSetExpanded(Boolean(expanded), { height, width });
-}
-
-function scheduleHideSubmenu() {
-  clearHideTimer();
-  submenuHideTimer = setTimeout(() => {
-    hideSubmenu();
-  }, 260);
 }
 
 function hideSubmenu() {
@@ -132,6 +138,7 @@ function makeRow(item, options = {}) {
   }
 
   if (!isSubmenu && item.submenu) {
+    row.dataset.submenuKey = String(item.submenu);
     const arrow = document.createElement('div');
     arrow.className = 'menu-arrow';
     arrow.textContent = '›';
@@ -192,21 +199,24 @@ async function invokeAction(item) {
 }
 
 async function runActionForItem(item, submenuKey = '') {
+  const actionStartVersion = menuVersion;
   const result = await invokeAction(item);
   if (result && result.hide) {
     window.clashfox.trayMenuHide();
     return;
   }
-  if (result && result.data) {
+  if (result && result.data && menuVersion === actionStartVersion) {
     menuData = result.data;
-  } else {
+  } else if (menuVersion === actionStartVersion) {
     const latest = await window.clashfox.trayMenuGetData();
-    menuData = latest || menuData;
+    if (menuVersion === actionStartVersion) {
+      menuData = latest || menuData;
+    }
   }
   renderHeader();
   renderMainList();
   if (submenuKey) {
-    openSubmenu(submenuKey, activeSubmenuAnchor, true);
+    hideSubmenu();
   } else {
     hideSubmenu();
   }
@@ -292,37 +302,68 @@ function renderSubmenuList(submenuKey) {
   }
 }
 
+function applySubmenuWidthByContent() {
+  if (!submenuRootEl) {
+    return;
+  }
+  submenuRootEl.style.width = 'fit-content';
+  const measured = Math.ceil(submenuRootEl.getBoundingClientRect().width || 0);
+  const width = Math.max(SUBMENU_MIN_WIDTH, Math.min(measured, SUBMENU_MAX_WIDTH));
+  submenuRootEl.style.width = `${width}px`;
+}
+
+function findMainAnchorBySubmenuKey(submenuKey) {
+  const rows = listEl.querySelectorAll('.menu-row[data-submenu-key]');
+  for (const row of rows) {
+    if (row && row.dataset && row.dataset.submenuKey === submenuKey) {
+      return row;
+    }
+  }
+  return null;
+}
+
+function resolveSubmenuAnchor(submenuKey, anchorRow) {
+  if (anchorRow && anchorRow.isConnected && listEl.contains(anchorRow)) {
+    return anchorRow;
+  }
+  return findMainAnchorBySubmenuKey(submenuKey);
+}
+
 function openSubmenu(submenuKey, anchorRow, keepAnchor = false) {
   if (!submenuKey || !menuData || !menuData.submenus || !Array.isArray(menuData.submenus[submenuKey])) {
     hideSubmenu();
     return;
   }
+  const resolvedAnchor = resolveSubmenuAnchor(
+    submenuKey,
+    keepAnchor ? activeSubmenuAnchor : anchorRow,
+  );
   if (
     activeSubmenuKey === submenuKey
     && !submenuRootEl.classList.contains('hidden')
-    && activeSubmenuAnchor === (keepAnchor ? activeSubmenuAnchor : anchorRow)
+    && activeSubmenuAnchor === resolvedAnchor
   ) {
     clearHideTimer();
     return;
   }
   clearHideTimer();
   activeSubmenuKey = submenuKey;
-  activeSubmenuAnchor = keepAnchor ? activeSubmenuAnchor : anchorRow;
+  activeSubmenuAnchor = resolvedAnchor;
   listEl.querySelectorAll('.menu-row.expanded').forEach((node) => node.classList.remove('expanded'));
-  if (anchorRow) {
-    anchorRow.classList.add('expanded');
+  if (resolvedAnchor) {
+    resolvedAnchor.classList.add('expanded');
   }
 
   renderSubmenuList(submenuKey);
   submenuRootEl.classList.remove('hidden');
+  applySubmenuWidthByContent();
   const rootRect = menuRootEl.getBoundingClientRect();
-  const anchor = anchorRow || activeSubmenuAnchor;
+  const anchor = resolveSubmenuAnchor(submenuKey, activeSubmenuAnchor);
   let top = 56;
   if (anchor) {
     const anchorRect = anchor.getBoundingClientRect();
-    const rawTop = anchorRect.top - rootRect.top - 6;
-    const maxTop = Math.max(8, rootRect.height - submenuRootEl.offsetHeight - 8);
-    top = Math.max(8, Math.min(rawTop, maxTop));
+    const rawTop = anchorRect.top - rootRect.top;
+    top = Math.max(8, rawTop);
   }
   submenuRootEl.style.top = `${top}px`;
   syncWindowGeometry(true);
@@ -347,15 +388,32 @@ async function init() {
     if (!payload) {
       return;
     }
+    menuVersion += 1;
+    const keepSubmenuKey = activeSubmenuKey;
+    const keepSubmenuAnchorKey = activeSubmenuAnchor
+      && activeSubmenuAnchor.dataset
+      && activeSubmenuAnchor.dataset.submenuKey
+      ? activeSubmenuAnchor.dataset.submenuKey
+      : keepSubmenuKey;
     menuData = payload;
     applySubmenuSide();
     renderHeader();
     renderMainList();
+    if (keepSubmenuKey && keepSubmenuAnchorKey) {
+      const nextAnchor = findMainAnchorBySubmenuKey(keepSubmenuAnchorKey);
+      if (nextAnchor) {
+        // Force refresh submenu content with latest payload to avoid stale rows.
+        activeSubmenuKey = null;
+        activeSubmenuAnchor = null;
+        openSubmenu(keepSubmenuKey, nextAnchor);
+        return;
+      }
+    }
     hideSubmenu();
   });
 
   stageEl.addEventListener('mouseenter', clearHideTimer);
-  stageEl.addEventListener('mouseleave', scheduleHideSubmenu);
+  headerEl.addEventListener('mouseenter', hideSubmenu);
 }
 
 window.addEventListener('keydown', (event) => {
