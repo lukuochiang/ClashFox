@@ -729,19 +729,19 @@ async function createTrayMenu() {
       submenuSide: 'right',
     },
     items: [
-      { type: 'action', label: labels.showMain, action: 'show-main', iconKey: 'showMain' },
+      { type: 'action', label: labels.showMain, action: 'show-main', rightText: '⌘ 1', shortcut: 'Cmd+1', iconKey: 'showMain' },
       { type: 'separator' },
       { type: 'action', label: labels.networkTakeover || 'Network Takeover', submenu: 'network', iconKey: 'networkTakeover' },
       { type: 'separator' },
       { type: 'action', label: labels.outboundMode || 'Outbound Mode', rightText: `[${currentOutboundBadge}]`, submenu: 'outbound', iconKey: 'outboundMode' },
       { type: 'separator' },
-      { type: 'action', label: labels.dashboard, action: 'open-dashboard', enabled: dashboardEnabled, iconKey: 'dashboard' },
+      { type: 'action', label: labels.dashboard, action: 'open-dashboard', enabled: dashboardEnabled, rightText: '⌘ 2', shortcut: 'Cmd+2', iconKey: 'dashboard' },
       { type: 'separator' },
       { type: 'action', label: labels.kernelManager, submenu: 'kernel', iconKey: 'kernelManager' },
       { type: 'separator' },
-      { type: 'action', label: getNavLabels().settings || 'Settings', action: 'open-settings', iconKey: 'settings' },
+      { type: 'action', label: getNavLabels().settings || 'Settings', action: 'open-settings', rightText: '⌘ ,', shortcut: 'Cmd+,', iconKey: 'settings' },
       { type: 'separator' },
-      { type: 'action', label: labels.quit, action: 'quit', iconKey: 'quit' },
+      { type: 'action', label: labels.quit, action: 'quit', rightText: '⌘ Q', shortcut: 'Cmd+Q', iconKey: 'quit' },
     ],
     submenus: {
       network: [
@@ -853,22 +853,25 @@ function computeTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, expl
   const submenuGap = 0;
   const submenuWidth = 320;
   const popupWidth = Number.isFinite(explicitWidth) ? Math.max(mainMenuWidth, Math.round(explicitWidth)) : (mainMenuWidth + submenuGap + submenuWidth);
+  const hasSubmenuPane = popupWidth > mainMenuWidth;
   const popupHeight = Math.max(200, Math.min(Number(contentHeight) || 420, 620));
   const anchorX = trayBounds.x + Math.round(trayBounds.width / 2);
   let submenuSide = 'right';
-  const rightNeed = anchorX + Math.round(mainMenuWidth / 2) + submenuGap + submenuWidth;
-  const leftNeed = anchorX - Math.round(mainMenuWidth / 2) - submenuGap - submenuWidth;
-  const canUseRightSubmenu = rightNeed <= (area.x + area.width - 8);
-  const canUseLeftSubmenu = leftNeed >= (area.x + 8);
-  if (!canUseRightSubmenu && canUseLeftSubmenu) {
-    submenuSide = 'left';
-  } else if (!canUseRightSubmenu && !canUseLeftSubmenu) {
-    const rightOverflow = rightNeed - (area.x + area.width - 8);
-    const leftOverflow = (area.x + 8) - leftNeed;
-    submenuSide = rightOverflow <= leftOverflow ? 'right' : 'left';
+  if (hasSubmenuPane) {
+    const rightNeed = anchorX + Math.round(mainMenuWidth / 2) + submenuGap + submenuWidth;
+    const leftNeed = anchorX - Math.round(mainMenuWidth / 2) - submenuGap - submenuWidth;
+    const canUseRightSubmenu = rightNeed <= (area.x + area.width - 8);
+    const canUseLeftSubmenu = leftNeed >= (area.x + 8);
+    if (!canUseRightSubmenu && canUseLeftSubmenu) {
+      submenuSide = 'left';
+    } else if (!canUseRightSubmenu && !canUseLeftSubmenu) {
+      const rightOverflow = rightNeed - (area.x + area.width - 8);
+      const leftOverflow = (area.x + 8) - leftNeed;
+      submenuSide = rightOverflow <= leftOverflow ? 'right' : 'left';
+    }
   }
 
-  const mainOffset = submenuSide === 'left' ? (submenuWidth + submenuGap) : 0;
+  const mainOffset = hasSubmenuPane && submenuSide === 'left' ? (submenuWidth + submenuGap) : 0;
   const desiredX = anchorX - Math.round(mainMenuWidth / 2) - mainOffset;
   const x = Math.max(area.x + 8, Math.min(desiredX, area.x + area.width - popupWidth - 8));
   const y = Math.max(area.y + 8, Math.min(trayBounds.y + trayBounds.height + 6, area.y + area.height - popupHeight - 8));
@@ -878,7 +881,7 @@ function computeTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, expl
   };
 }
 
-function applyTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, preservePosition = false, explicitWidth = 640) {
+function applyTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, preservePosition = false, explicitWidth = 640, syncMenuData = true) {
   if (!trayMenuWindow || trayMenuWindow.isDestroyed()) {
     return;
   }
@@ -903,7 +906,7 @@ function applyTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, preser
   }
   trayMenuContentHeight = Math.max(200, Math.min(Number(contentHeight) || trayMenuContentHeight || 420, 620));
   trayMenuWindow.setBounds(computed.bounds);
-  if (trayMenuData) {
+  if (syncMenuData && trayMenuData) {
     trayMenuData.meta = {
       ...(trayMenuData.meta || {}),
       submenuSide: computed.submenuSide,
@@ -937,7 +940,7 @@ async function showTrayMenuWindow() {
     // Show cached menu immediately, then refresh in background for responsiveness.
     createTrayMenu().catch(() => {});
   }
-  applyTrayMenuWindowBounds(trayMenuContentHeight, false, 640);
+  applyTrayMenuWindowBounds(trayMenuContentHeight, false, 320);
   popup.show();
   popup.focus();
   trayMenuVisible = true;
@@ -1562,10 +1565,14 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('clashfox:trayMenu:setExpanded', (_event, expanded, payload = {}) => {
-    // Keep geometry stable while hovering submenu to avoid flicker.
-    // The renderer still reports state for future tuning.
+    const requestedWidth = payload && Number.isFinite(payload.width)
+      ? Number(payload.width)
+      : (expanded ? 640 : 320);
     const requestedHeight = payload && Number.isFinite(payload.height) ? Number(payload.height) : trayMenuContentHeight;
     trayMenuContentHeight = Math.max(200, Math.min(requestedHeight || trayMenuContentHeight || 420, 620));
+    if (trayMenuWindow && !trayMenuWindow.isDestroyed() && trayMenuVisible) {
+      applyTrayMenuWindowBounds(trayMenuContentHeight, true, requestedWidth, false);
+    }
   });
   
   // 处理取消命令，只取消安装进程

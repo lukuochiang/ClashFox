@@ -160,24 +160,7 @@ function makeRow(item, options = {}) {
     if (Date.now() < blockClickUntil) {
       return;
     }
-    const result = await invokeAction(item);
-    if (result && result.hide) {
-      window.clashfox.trayMenuHide();
-      return;
-    }
-    if (result && result.data) {
-      menuData = result.data;
-    } else {
-      const latest = await window.clashfox.trayMenuGetData();
-      menuData = latest || menuData;
-    }
-    renderHeader();
-    renderMainList();
-    if (submenuKey) {
-      openSubmenu(submenuKey, activeSubmenuAnchor, true);
-    } else {
-      hideSubmenu();
-    }
+    await runActionForItem(item, submenuKey);
   });
 
   return row;
@@ -199,6 +182,63 @@ async function invokeAction(item) {
   } catch {
     return { ok: false };
   }
+}
+
+async function runActionForItem(item, submenuKey = '') {
+  const result = await invokeAction(item);
+  if (result && result.hide) {
+    window.clashfox.trayMenuHide();
+    return;
+  }
+  if (result && result.data) {
+    menuData = result.data;
+  } else {
+    const latest = await window.clashfox.trayMenuGetData();
+    menuData = latest || menuData;
+  }
+  renderHeader();
+  renderMainList();
+  if (submenuKey) {
+    openSubmenu(submenuKey, activeSubmenuAnchor, true);
+  } else {
+    hideSubmenu();
+  }
+}
+
+function normalizeShortcut(text = '') {
+  return String(text).trim().toLowerCase().replace(/\s+/g, '');
+}
+
+function eventToShortcut(event) {
+  const mods = [];
+  if (event.metaKey) {
+    mods.push('cmd');
+  }
+  if (event.ctrlKey) {
+    mods.push('ctrl');
+  }
+  if (event.altKey) {
+    mods.push('alt');
+  }
+  if (event.shiftKey) {
+    mods.push('shift');
+  }
+  const key = String(event.key || '').toLowerCase();
+  if (!key) {
+    return '';
+  }
+  return `${mods.join('+')}${mods.length ? '+' : ''}${key}`;
+}
+
+function findShortcutItem(shortcut) {
+  const items = Array.isArray(menuData && menuData.items) ? menuData.items : [];
+  return items.find((item) => (
+    item
+    && item.type !== 'separator'
+    && item.enabled !== false
+    && item.action
+    && normalizeShortcut(item.shortcut) === shortcut
+  ));
 }
 
 function renderHeader() {
@@ -314,7 +354,18 @@ async function init() {
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     window.clashfox.trayMenuHide();
+    return;
   }
+  const shortcut = eventToShortcut(event);
+  if (!shortcut) {
+    return;
+  }
+  const item = findShortcutItem(shortcut);
+  if (!item) {
+    return;
+  }
+  event.preventDefault();
+  runActionForItem(item).catch(() => {});
 });
 
 document.addEventListener('visibilitychange', () => {
