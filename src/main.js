@@ -801,7 +801,7 @@ function ensureTrayMenuWindow() {
     return trayMenuWindow;
   }
   trayMenuWindow = new BrowserWindow({
-    width: 640,
+    width: 520,
     height: 420,
     show: false,
     frame: false,
@@ -842,16 +842,16 @@ function hideTrayMenuWindow() {
   trayMenuWindow.hide();
 }
 
-function computeTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, explicitWidth = 640) {
+function computeTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, explicitWidth = 520) {
   if (!tray) {
     return null;
   }
   const trayBounds = tray.getBounds();
   const display = screen.getDisplayNearestPoint({ x: trayBounds.x, y: trayBounds.y });
   const area = display.workArea;
-  const mainMenuWidth = 320;
+  const mainMenuWidth = 260;
   const submenuGap = 0;
-  const submenuWidth = 320;
+  const submenuWidth = 260;
   const popupWidth = Number.isFinite(explicitWidth) ? Math.max(mainMenuWidth, Math.round(explicitWidth)) : (mainMenuWidth + submenuGap + submenuWidth);
   const hasSubmenuPane = popupWidth > mainMenuWidth;
   const popupHeight = Math.max(200, Math.min(Number(contentHeight) || 420, 620));
@@ -881,7 +881,7 @@ function computeTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, expl
   };
 }
 
-function applyTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, preservePosition = false, explicitWidth = 640, syncMenuData = true) {
+function applyTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, preservePosition = false, explicitWidth = 520, syncMenuData = true) {
   if (!trayMenuWindow || trayMenuWindow.isDestroyed()) {
     return;
   }
@@ -940,7 +940,7 @@ async function showTrayMenuWindow() {
     // Show cached menu immediately, then refresh in background for responsiveness.
     createTrayMenu().catch(() => {});
   }
-  applyTrayMenuWindowBounds(trayMenuContentHeight, false, 320);
+  applyTrayMenuWindowBounds(trayMenuContentHeight, false, 260);
   popup.show();
   popup.focus();
   trayMenuVisible = true;
@@ -1567,7 +1567,7 @@ app.whenReady().then(() => {
   ipcMain.on('clashfox:trayMenu:setExpanded', (_event, expanded, payload = {}) => {
     const requestedWidth = payload && Number.isFinite(payload.width)
       ? Number(payload.width)
-      : (expanded ? 640 : 320);
+      : (expanded ? 520 : 260);
     const requestedHeight = payload && Number.isFinite(payload.height) ? Number(payload.height) : trayMenuContentHeight;
     trayMenuContentHeight = Math.max(200, Math.min(requestedHeight || trayMenuContentHeight || 420, 620));
     if (trayMenuWindow && !trayMenuWindow.isDestroyed() && trayMenuVisible) {

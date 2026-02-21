@@ -44,7 +44,7 @@ function clearHideTimer() {
 function syncWindowGeometry(expanded) {
   const rootRect = menuRootEl.getBoundingClientRect();
   const height = Math.ceil(rootRect.height) + 2;
-  const width = expanded ? 640 : 320;
+  const width = expanded ? 520 : 260;
   if (lastExpandedSent === Boolean(expanded) && Math.abs(height - lastHeightSent) <= 2) {
     return;
   }
