@@ -113,7 +113,14 @@ function makeRow(item, options = {}) {
   if (item.rightText) {
     const right = document.createElement('div');
     right.className = 'menu-right';
-    right.textContent = item.rightText;
+    const rightText = String(item.rightText || '').trim();
+    const badgeMatch = rightText.match(/^[\[\【]\s*([A-Za-z0-9]{1,6})\s*[\]\】]$/);
+    if (badgeMatch) {
+      right.classList.add('tag');
+      right.textContent = badgeMatch[1];
+    } else {
+      right.textContent = rightText;
+    }
     row.appendChild(right);
   }
   if (item.rightBadge && item.rightBadge.text) {
