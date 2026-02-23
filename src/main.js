@@ -520,7 +520,6 @@ async function runTrayCommand(command, args = [], labels = TRAY_I18N.en, sudoPas
     });
     return { ok: false };
   }
-  createTrayMenu();
   return { ok: true, sudoPass: effectiveSudoPass };
 }
 
@@ -724,6 +723,27 @@ function patchTrayMenuOutboundMode(nextMode) {
   }
 }
 
+function patchTrayMenuNetworkState({ systemProxyEnabled, tunEnabled } = {}) {
+  if (!trayMenuData || !trayMenuData.submenus || !Array.isArray(trayMenuData.submenus.network)) {
+    return;
+  }
+  trayMenuData.submenus.network = trayMenuData.submenus.network.map((item) => {
+    if (!item || item.type === 'separator') {
+      return item;
+    }
+    if (item.action === 'toggle-system-proxy' && typeof systemProxyEnabled === 'boolean') {
+      return { ...item, checked: systemProxyEnabled };
+    }
+    if (item.action === 'toggle-tun' && typeof tunEnabled === 'boolean') {
+      return { ...item, checked: tunEnabled };
+    }
+    return item;
+  });
+  if (trayMenuWindow && !trayMenuWindow.isDestroyed()) {
+    trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
+  }
+}
+
 async function buildTrayMenuOnce() {
   if (process.platform !== 'darwin') {
     return;
@@ -810,12 +830,14 @@ async function buildTrayMenuOnce() {
   const currentOutboundBadge = OUTBOUND_MODE_BADGE[currentOutboundMode] || OUTBOUND_MODE_BADGE.rule;
   const runningLabel = uiLabels.running || labels.on || 'Running';
   const stoppedLabel = uiLabels.stopped || labels.off || 'Stopped';
-  const trayStatusLabel = dashboardEnabled ? `🟢 ${runningLabel}` : `⚪ ${stoppedLabel}`;
+  const trayStatusState = dashboardEnabled ? 'running' : 'stopped';
+  const trayStatusLabel = dashboardEnabled ? runningLabel : stoppedLabel;
 
   const nextMenuData = {
     header: {
       title: app.getName(),
       status: trayStatusLabel,
+      statusState: trayStatusState,
     },
     backLabel: '‹ Back',
     meta: {
@@ -1114,16 +1136,24 @@ async function handleTrayMenuAction(action, payload = {}) {
       app.quit();
       return { ok: true, hide: true };
     case 'toggle-system-proxy': {
+      const targetEnabled = Boolean(payload && payload.checked);
+      patchTrayMenuNetworkState({ systemProxyEnabled: targetEnabled });
       const command = payload && payload.checked ? 'system-proxy-enable' : 'system-proxy-disable';
-      await runTrayCommand(command, ['--config', configPath], labels);
+      const response = await runTrayCommand(command, ['--config', configPath], labels);
+      if (!response.ok) {
+        createTrayMenu().catch(() => {});
+      }
       emitTrayRefresh();
       return { ok: true, submenu: 'network' };
     }
     case 'toggle-tun': {
       const target = payload && payload.checked ? 'true' : 'false';
+      patchTrayMenuNetworkState({ tunEnabled: target === 'true' });
       const response = await runTrayCommand('tun', ['--enable', target, ...getControllerArgsFromSettings()], labels);
       if (response.ok) {
         persistTunEnabledToSettings(target === 'true');
+      } else {
+        createTrayMenu().catch(() => {});
       }
       emitTrayRefresh();
       return { ok: true, submenu: 'network' };

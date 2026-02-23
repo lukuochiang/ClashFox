@@ -264,7 +264,18 @@ function renderHeader() {
     return;
   }
   const title = menuData.header.title || 'ClashFox';
-  const status = menuData.header.status || '';
+  const rawStatus = String(menuData.header.status || '');
+  let statusState = String(menuData.header.statusState || '').trim().toLowerCase();
+  if (!statusState) {
+    if (/running/i.test(rawStatus) || rawStatus.includes('🟢')) {
+      statusState = 'running';
+    } else if (/stopp?ed/i.test(rawStatus) || rawStatus.includes('⚪') || rawStatus.includes('🔴')) {
+      statusState = 'stopped';
+    } else {
+      statusState = 'neutral';
+    }
+  }
+  const status = rawStatus.replace(/^[🟢⚪🔴]\s*/u, '');
   headerEl.innerHTML = `
     <div class="menu-header-left">
       <div class="menu-header-logo">
@@ -273,7 +284,10 @@ function renderHeader() {
       </div>
       <div class="menu-header-title">${title}</div>
     </div>
-    <div class="menu-header-status">${status}</div>
+    <div class="menu-header-status ${statusState}">
+      <span class="status-dot"></span>
+      <span class="status-text">${status}</span>
+    </div>
   `;
 }
 

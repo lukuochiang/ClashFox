@@ -5,6 +5,7 @@
   --panel: #151c24;
   --panel-soft: #1c2530;
   --accent: #f4b34a;
+  --accent-strong: #ff7a4a;
   --mint: #8ce0c6;
   --ink: #e9eef3;
   --muted: #93a4b7;
@@ -127,11 +128,43 @@ body {
 }
 
 .menu-header-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--header-status);
   white-space: nowrap;
   flex: 0 0 auto;
+}
+
+.menu-header-status .status-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #96a8bb;
+  box-shadow: 0 0 0 4px rgba(148, 171, 197, 0.16);
+}
+
+.menu-header-status.running {
+  color: var(--mint);
+}
+
+.menu-header-status.running .status-dot {
+  background: var(--mint);
+  box-shadow: 0 0 0 4px rgba(140, 224, 198, 0.18);
+}
+
+.menu-header-status.stopped {
+  color: var(--accent-strong);
+}
+
+.menu-header-status.stopped .status-dot {
+  background: var(--accent-strong);
+  box-shadow: 0 0 0 4px rgba(255, 122, 74, 0.18);
+}
+
+.menu-header-status.neutral {
+  color: var(--muted);
 }
 
 .menu-list {
@@ -290,6 +323,7 @@ body {
     --panel: #ffffff;
     --panel-soft: #f5f7fb;
     --accent: #f2a13b;
+    --accent-strong: #e56b3b;
     --mint: #2f8f78;
     --ink: #1f2a36;
     --muted: #3a4b5c;
