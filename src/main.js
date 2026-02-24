@@ -300,31 +300,87 @@ function getControllerArgsFromSettings() {
   return args;
 }
 
+function trimTransparentPadding(image, alphaThreshold = 8) {
+  if (!image || image.isEmpty()) {
+    return image;
+  }
+  try {
+    const { width, height } = image.getSize();
+    if (!width || !height) {
+      return image;
+    }
+    const bitmap = image.toBitmap();
+    if (!bitmap || !bitmap.length) {
+      return image;
+    }
+    let minX = width;
+    let minY = height;
+    let maxX = -1;
+    let maxY = -1;
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const alpha = bitmap[(y * width + x) * 4 + 3];
+        if (alpha > alphaThreshold) {
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX < minX || maxY < minY) {
+      return image;
+    }
+    const cropRect = {
+      x: minX,
+      y: minY,
+      width: (maxX - minX) + 1,
+      height: (maxY - minY) + 1,
+    };
+    return image.crop(cropRect);
+  } catch {
+    return image;
+  }
+}
+
 function buildTrayIconWithMode(mode) {
-  const cacheKey = 'default';
+  const cacheKey = process.platform === 'darwin' ? 'mac-template-v3' : 'default';
   const cached = trayIconCache.get(cacheKey);
   if (cached && !cached.isEmpty()) {
     return cached;
   }
-  const trayGlyphSvg = [
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">',
-    '<path fill="#ffffff" d="M32 9l8 7 9 2-2 11 5 8-8 5-4 11-8 2-8-2-4-11-8-5 5-8-2-11 9-2 8-7z"/>',
-    '<path fill="#000000" d="M22 24l6 7-8 4zm20 0l2 11-8-4z"/>',
-    '<path fill="#000000" d="M24 41c2-2 4-3 8-3s6 1 8 3l-8 6z"/>',
-    '</svg>',
-  ].join('');
-  const trayGlyphDataUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(trayGlyphSvg)}`;
-  let icon = nativeImage.createFromDataURL(trayGlyphDataUrl);
-  if (icon.isEmpty()) {
+  let icon = nativeImage.createEmpty();
+
+  if (process.platform === 'darwin') {
+    // Pixel-tuned menubar glyph with maximal visual occupancy.
+    const trayTemplateSvg = [
+      '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">',
+      '<path fill="#000" d="M9 0.2 12 2.7l3.8.8-.9 3 .9 2.3-2.7 1.7-1.2 3.4L9 15.2l-2.9-1.3-1.2-3.4-2.7-1.7.9-2.3-.9-3 3.8-.8L9 .2z"/>',
+      '</svg>',
+    ].join('');
+    const dataUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(trayTemplateSvg)}`;
+    icon = nativeImage.createFromDataURL(dataUrl);
+    if (icon.isEmpty()) {
+      const fallbackIconPath = path.join(APP_PATH, 'src', 'ui', 'assets', 'menu.png');
+      icon = nativeImage.createFromPath(fallbackIconPath);
+      icon = trimTransparentPadding(icon);
+    }
+    if (!icon.isEmpty()) {
+      icon = icon.resize({ width: 16, height: 16, quality: 'best' });
+      if (typeof icon.setTemplateImage === 'function') {
+        icon.setTemplateImage(true);
+      }
+    }
+  } else {
     const iconPath = path.join(APP_PATH, 'src', 'ui', 'assets', 'menu.png');
     icon = nativeImage.createFromPath(iconPath);
+    icon = trimTransparentPadding(icon);
+    if (!icon.isEmpty()) {
+      icon = icon.resize({ width: 16, height: 16, quality: 'best' });
+    }
   }
 
   if (!icon.isEmpty()) {
-    icon = icon.resize({ width: 24, height: 24 });
-    if (process.platform === 'darwin' && typeof icon.setTemplateImage === 'function') {
-      icon.setTemplateImage(true);
-    }
     trayIconCache.set(cacheKey, icon);
   }
   return icon;
