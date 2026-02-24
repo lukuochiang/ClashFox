@@ -305,6 +305,11 @@ const state = {
   connSamples: [],
   connPeak: 0,
   connLast: null,
+  overviewLatencySnapshot: {
+    internet: '',
+    dns: '',
+    router: '',
+  },
   hasKernel: false,
   configDefault: '',
   settings: { ...DEFAULT_SETTINGS },
@@ -419,7 +424,11 @@ function applyI18n() {
     const tip = t(key) || '';
     el.dataset.tip = tip;
     el.setAttribute('data-tooltip', tip);
-    el.setAttribute('title', tip);
+    if (el.dataset.nativeTitle === 'false') {
+      el.removeAttribute('title');
+    } else {
+      el.setAttribute('title', tip);
+    }
     el.setAttribute('aria-label', tip);
   });
   document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
@@ -1502,7 +1511,11 @@ function syncRunningIndicators(running, { allowTransitionOverride = false } = {}
     statusPill.dataset.i18nTip = statusPill.dataset.i18nTipKey;
     statusPill.dataset.tip = label;
     statusPill.setAttribute('aria-label', label);
-    statusPill.setAttribute('title', label);
+    if (statusPill.dataset.nativeTitle === 'false') {
+      statusPill.removeAttribute('title');
+    } else {
+      statusPill.setAttribute('title', label);
+    }
   }
 }
 
@@ -1934,14 +1947,34 @@ function updateOverviewUI(data) {
       ? '-'
       : data.memory;
   }
+  const internetLatency = formatLatency(data.internetMs ?? data.internet ?? data.internetLatency);
+  const dnsLatency = formatLatency(data.dnsMs ?? data.dns ?? data.dnsLatency);
+  const routerLatency = formatLatency(data.routerMs ?? data.router ?? data.gatewayMs ?? data.routerLatency);
+
+  if (internetLatency !== '-') {
+    state.overviewLatencySnapshot.internet = internetLatency;
+  }
+  if (dnsLatency !== '-') {
+    state.overviewLatencySnapshot.dns = dnsLatency;
+  }
+  if (routerLatency !== '-') {
+    state.overviewLatencySnapshot.router = routerLatency;
+  }
+
   if (overviewInternet) {
-    overviewInternet.textContent = formatLatency(data.internetMs);
+    overviewInternet.textContent = internetLatency !== '-'
+      ? internetLatency
+      : (state.overviewLatencySnapshot.internet || '-');
   }
   if (overviewDns) {
-    overviewDns.textContent = formatLatency(data.dnsMs);
+    overviewDns.textContent = dnsLatency !== '-'
+      ? dnsLatency
+      : (state.overviewLatencySnapshot.dns || '-');
   }
   if (overviewRouter) {
-    overviewRouter.textContent = formatLatency(data.routerMs);
+    overviewRouter.textContent = routerLatency !== '-'
+      ? routerLatency
+      : (state.overviewLatencySnapshot.router || '-');
   }
   if (overviewNetwork) {
     overviewNetwork.textContent = data.networkName || '-';

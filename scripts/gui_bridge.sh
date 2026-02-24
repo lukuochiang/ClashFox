@@ -1243,6 +1243,27 @@ PY
         fi
         fi
 
+        # Normalize latency fields and keep router latency populated when probe fails.
+        router_ms="$(printf '%s' "$router_ms" | tr -d '[:space:]')"
+        dns_ms="$(printf '%s' "$dns_ms" | tr -d '[:space:]')"
+        internet_ms="$(printf '%s' "$internet_ms" | tr -d '[:space:]')"
+        if [ -n "$router_ms" ] && ! echo "$router_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
+            router_ms=""
+        fi
+        if [ -n "$dns_ms" ] && ! echo "$dns_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
+            dns_ms=""
+        fi
+        if [ -n "$internet_ms" ] && ! echo "$internet_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
+            internet_ms=""
+        fi
+        if [ -z "$router_ms" ]; then
+            if [ -n "$dns_ms" ]; then
+                router_ms="$dns_ms"
+            elif [ -n "$internet_ms" ]; then
+                router_ms="$internet_ms"
+            fi
+        fi
+
         if [ -n "$internet_ip_direct" ]; then
             internet_ip="$internet_ip_direct"
         elif [ -n "$internet_ip_v4" ]; then

@@ -301,29 +301,31 @@ function getControllerArgsFromSettings() {
 }
 
 function buildTrayIconWithMode(mode) {
-  const safeMode = OUTBOUND_MODE_BADGE[mode] ? mode : 'rule';
-  const cached = trayIconCache.get(safeMode);
+  const cacheKey = 'default';
+  const cached = trayIconCache.get(cacheKey);
   if (cached && !cached.isEmpty()) {
     return cached;
   }
-  const modeIconMap = {
-    rule: 'menu_r.png',
-    global: 'menu_g.png',
-    direct: 'menu_d.png',
-  };
-  const modeIconPath = path.join(APP_PATH, 'src', 'ui', 'assets', modeIconMap[safeMode] || 'menu_r.png');
-  let icon = nativeImage.createFromPath(modeIconPath);
+  const trayGlyphSvg = [
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">',
+    '<path fill="#ffffff" d="M32 9l8 7 9 2-2 11 5 8-8 5-4 11-8 2-8-2-4-11-8-5 5-8-2-11 9-2 8-7z"/>',
+    '<path fill="#000000" d="M22 24l6 7-8 4zm20 0l2 11-8-4z"/>',
+    '<path fill="#000000" d="M24 41c2-2 4-3 8-3s6 1 8 3l-8 6z"/>',
+    '</svg>',
+  ].join('');
+  const trayGlyphDataUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(trayGlyphSvg)}`;
+  let icon = nativeImage.createFromDataURL(trayGlyphDataUrl);
   if (icon.isEmpty()) {
-    const fallback = path.join(APP_PATH, 'src', 'ui', 'assets', 'menu.png');
-    icon = nativeImage.createFromPath(fallback);
+    const iconPath = path.join(APP_PATH, 'src', 'ui', 'assets', 'menu.png');
+    icon = nativeImage.createFromPath(iconPath);
   }
 
   if (!icon.isEmpty()) {
-    icon = icon.resize({ width: 21, height: 21 });
+    icon = icon.resize({ width: 24, height: 24 });
     if (process.platform === 'darwin' && typeof icon.setTemplateImage === 'function') {
-      icon.setTemplateImage(false);
+      icon.setTemplateImage(true);
     }
-    trayIconCache.set(safeMode, icon);
+    trayIconCache.set(cacheKey, icon);
   }
   return icon;
 }
@@ -335,7 +337,7 @@ function applyTrayIconForMode(mode) {
   const trayIcon = buildTrayIconWithMode(mode);
   if (!trayIcon.isEmpty()) {
     if (process.platform === 'darwin' && typeof trayIcon.setTemplateImage === 'function') {
-      trayIcon.setTemplateImage(false);
+      trayIcon.setTemplateImage(true);
     }
     tray.setImage(trayIcon);
   }
@@ -782,7 +784,7 @@ async function buildTrayMenuOnce() {
     const trayIcon = buildTrayIconWithMode(resolveOutboundModeFromSettings());
     tray = new Tray(trayIcon);
     if (process.platform === 'darwin' && trayIcon && typeof trayIcon.setTemplateImage === 'function') {
-      trayIcon.setTemplateImage(false);
+      trayIcon.setTemplateImage(true);
     }
     tray.setToolTip('ClashFox');
     if (typeof tray.setIgnoreDoubleClickEvents === 'function') {

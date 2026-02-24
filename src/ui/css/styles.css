@@ -659,6 +659,12 @@ h1 {
   border: 1px solid rgba(148, 171, 197, 0.35);
   display: grid;
   place-items: center;
+  cursor: pointer;
+  overflow: visible;
+}
+
+.status-light * {
+  cursor: pointer;
 }
 
 .status-light .status-dot {
@@ -678,6 +684,47 @@ h1 {
 .status-light[data-state="stopped"] .status-dot {
   background: var(--accent-strong);
   box-shadow: 0 0 0 6px rgba(255, 122, 74, 0.18);
+}
+
+.status-light[data-i18n-tip][data-position="left"]::after {
+  --status-tip-gap: 6px;
+  --status-tip-arrow-width: 10px;
+  left: auto;
+  right: calc(100% + var(--status-tip-gap));
+  bottom: auto;
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 136px;
+  text-align: center;
+  border-radius: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+  z-index: 1001;
+  pointer-events: none;
+}
+
+.status-light[data-i18n-tip][data-position="left"]::before {
+  content: "";
+  left: auto;
+  right: calc(100% - 1px);
+  bottom: auto;
+  top: 50%;
+  transform: translateY(-50%);
+  width: var(--status-tip-arrow-width);
+  height: 14px;
+  border: 0;
+  background: var(--tooltip-bg);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+  margin: 0;
+  z-index: 1002;
+  pointer-events: none;
+}
+
+.status-light[data-i18n-tip][data-position="left"]::after,
+.status-light[data-i18n-tip][data-position="left"]::before {
+  margin-right: 0;
 }
 
 .panel {
@@ -813,6 +860,7 @@ h1 {
   padding: 0;
   border-radius: 8px;
   cursor: grab;
+  overflow: visible;
 }
 
 .overview-drag-handle:active {
@@ -1169,6 +1217,7 @@ body[data-page="settings"] .settings-top-column-right .form-row:first-child {
   justify-content: space-between;
   gap: 12px;
   /*margin-bottom: 12px;*/
+  overflow: visible;
 }
 
 .outbound-icon {
@@ -1385,8 +1434,8 @@ body[data-theme="day"] .paths-input::placeholder {
 
 .quick-actions-card {
   display: grid;
-  gap: 8px;
-  padding: 10px;
+  gap: 10px;
+  padding: 12px;
 }
 
 .quick-actions-card h3 {
@@ -1395,17 +1444,17 @@ body[data-theme="day"] .paths-input::placeholder {
 
 .quick-group {
   position: relative;
-  border: 1px solid rgba(148, 171, 197, 0.24);
+  border: 1px solid rgba(148, 171, 197, 0.2);
   border-radius: 12px;
-  padding: 20px 8px 0px;
+  padding: 18px 10px 10px;
   background: rgba(148, 171, 197, 0.04);
-  border-bottom: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .quick-group-label {
   position: absolute;
   top: -7px;
-  left: 10px;
+  left: 12px;
   padding: 0 6px;
   font-size: 10px;
   font-weight: 700;
@@ -1413,11 +1462,13 @@ body[data-theme="day"] .paths-input::placeholder {
   text-transform: uppercase;
   letter-spacing: 0.14em;
   background: var(--panel);
+  z-index: 2;
 }
 
 body[data-theme="day"] .quick-group {
-  background: rgba(255, 255, 255, 0.7);
-  border-color: rgba(96, 113, 133, 0.28);
+  background: rgba(255, 255, 255, 0.78);
+  border-color: rgba(96, 113, 133, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
 .quick-actions-buttons {
@@ -1428,10 +1479,10 @@ body[data-theme="day"] .quick-group {
 
 .quick-actions-buttons .btn {
   width: 100%;
-  min-height: 36px;
+  min-height: 40px;
   padding-top: 8px;
   padding-bottom: 8px;
-  border-radius: 10px;
+  border-radius: 14px;
   font-size: 14px;
   display: flex;
   align-items: center;
@@ -1450,8 +1501,8 @@ body[data-theme="day"] .quick-group {
   flex-wrap: nowrap;
   align-items: center;
   margin-top: 0;
-  min-height: 44px;
-  padding: 0 10px;
+  min-height: 46px;
+  padding: 0 12px;
 }
 
 .quick-tun-row {
@@ -1499,18 +1550,20 @@ body[data-theme="day"] .quick-group {
 
 .quick-stack-row select {
   flex: 0 0 auto;
-  width: 90px;
-  min-width: 90px;
+  width: 102px;
+  min-width: 102px;
   margin-left: auto;
-  padding: 6px 10px;
-  border-radius: 10px;
-  /*border-color: rgba(133, 190, 255, 0.82);*/
-  box-shadow: inset 0 0 0 1px rgba(133, 190, 255, 0.2);
+  padding: 7px 12px;
+  border-radius: 12px;
+  border: none;
+  box-shadow: none;
+  background: transparent;
 }
 
 body[data-theme="day"] .quick-stack-row select {
-  /*border-color: rgba(52, 124, 212, 0.68);*/
-  box-shadow: inset 0 0 0 1px rgba(52, 124, 212, 0.15);
+  border: none;
+  box-shadow: none;
+  background: transparent;
 }
 
 .mode-row {
@@ -1519,12 +1572,54 @@ body[data-theme="day"] .quick-stack-row select {
   /*margin-top: 15px;*/
   /*padding: 10px 12px;*/
   border-radius: 12px;
-  border: 1px solid rgba(148, 171, 197, 0.18);
-  background: rgba(148, 171, 197, 0.06);
+  border: none;
+  background: transparent;
 }
 
 body[data-theme="day"] .mode-row {
-  background: rgba(255, 255, 255, 0.75);
+  background: transparent;
+  border-color: transparent;
+}
+
+.overview-drag-handle[data-i18n-tip]::after {
+  --overview-drag-tip-gap: 8px;
+  --overview-drag-tip-arrow-width: 10px;
+  left: auto;
+  right: calc(100% + var(--overview-drag-tip-gap));
+  bottom: auto;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 170px;
+  box-sizing: border-box;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+  z-index: 1001;
+  pointer-events: none;
+}
+
+.overview-drag-handle[data-i18n-tip]::before {
+  content: "";
+  left: auto;
+  right: 100%;
+  bottom: auto;
+  top: 50%;
+  transform: translateY(-50%);
+  width: var(--overview-drag-tip-arrow-width);
+  height: 14px;
+  border: 0;
+  background: var(--tooltip-bg);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+  margin: 0;
+  z-index: 1002;
+  pointer-events: none;
+}
+
+.overview-drag-handle[data-i18n-tip][data-position="left"]::after,
+.overview-drag-handle[data-i18n-tip][data-position="left"]::before {
+  margin-right: 0;
 }
 
 .mode-label {
@@ -1633,11 +1728,9 @@ body[data-theme="day"] .conn-live-chart {
 .outbound-options {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 0;
-  border-radius: 14px;
-  border: 1px solid rgba(126, 156, 190, 0.24);
-  background: linear-gradient(180deg, rgba(16, 24, 34, 0.94), rgba(12, 18, 27, 0.92));
-  overflow: hidden;
+  gap: 8px;
+  border: none;
+  background: transparent;
 }
 
 .radio-pill {
@@ -1645,16 +1738,15 @@ body[data-theme="day"] .conn-live-chart {
   align-items: flex-start;
   gap: 10px;
   padding: 10px 14px 10px 28px;
-  border-top: 1px solid rgba(126, 156, 190, 0.2);
-  background: rgba(22, 32, 46, 0.68);
+  border: 1px solid rgba(126, 156, 190, 0.24);
+  border-radius: 12px;
+  background: rgba(22, 32, 46, 0.58);
   color: rgba(233, 238, 243, 0.86);
   cursor: pointer;
   user-select: none;
   position: relative;
-}
-
-.radio-pill:first-child {
-  border-top: none;
+  overflow: hidden;
+  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .radio-pill input[type="radio"] {
@@ -1664,7 +1756,9 @@ body[data-theme="day"] .conn-live-chart {
 }
 
 .radio-pill:has(input[type="radio"]:checked) {
-  background: linear-gradient(90deg, rgba(92, 140, 205, 0.2), rgba(92, 140, 205, 0.1));
+  background: linear-gradient(90deg, rgba(92, 140, 205, 0.18), rgba(92, 140, 205, 0.06));
+  border-color: rgba(118, 153, 196, 0.46);
+  box-shadow: 0 6px 16px rgba(32, 51, 79, 0.16);
 }
 
 body[data-theme="night"] .radio-pill:not(:has(input[type="radio"]:checked)):hover {
@@ -1715,21 +1809,18 @@ body[data-theme="night"] .radio-pill:not(:has(input[type="radio"]:checked)):hove
 
 body[data-theme="day"] .radio-pill {
   color: #1f2a36;
-  background: rgba(248, 252, 255, 0.98);
+  background: rgba(248, 252, 255, 0.95);
+  border-color: rgba(96, 113, 133, 0.22);
 }
 
 body[data-theme="day"] .radio-pill:has(input[type="radio"]:checked) {
-  background: rgba(236, 240, 246, 0.9);
-  box-shadow: inset 0 0 0 1px rgba(72, 106, 146, 0.28);
+  background: linear-gradient(90deg, rgba(227, 236, 247, 0.98), rgba(236, 241, 247, 0.98));
+  border-color: rgba(88, 117, 149, 0.36);
+  box-shadow: 0 4px 14px rgba(88, 117, 149, 0.12);
 }
 
 body[data-theme="day"] .radio-pill:not(:has(input[type="radio"]:checked)):hover {
   background: rgba(228, 234, 242, 0.96);
-}
-
-body[data-theme="day"] .outbound-options {
-  background: rgba(255, 255, 255, 0.66);
-  border-color: rgba(96, 113, 133, 0.2);
 }
 
 body[data-theme="day"] .radio-title {
@@ -1740,16 +1831,27 @@ body[data-theme="day"] .radio-hint {
   color: rgba(75, 93, 114, 0.8);
 }
 
-body[data-theme="day"] .radio-pill {
-  border-top-color: rgba(96, 113, 133, 0.18);
-}
-
 body[data-theme="day"] .radio-pill::before {
   background: rgba(96, 113, 133, 0.35);
 }
 
 body[data-theme="day"] .radio-pill:has(input[type="radio"]:checked)::before {
   color: #1f2a36;
+}
+
+.radio-pill:has(input[type="radio"]:checked)::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: rgba(144, 182, 229, 0.85);
+  pointer-events: none;
+}
+
+body[data-theme="day"] .radio-pill:has(input[type="radio"]:checked)::after {
+  background: rgba(88, 117, 149, 0.64);
 }
 
 @media (max-width: 720px) {
