@@ -9,6 +9,7 @@ let menuData = null;
 let activeSubmenuKey = null;
 let activeSubmenuAnchor = null;
 let submenuHideTimer = null;
+let connectivityRefreshTimer = null;
 let lastExpandedSent = null;
 let lastHeightSent = 0;
 let lastWidthSent = 0;
@@ -16,6 +17,7 @@ let blockClickUntil = 0;
 let menuVersion = 0;
 const SUBMENU_MIN_WIDTH = 170;
 const SUBMENU_MAX_WIDTH = 340;
+const CONNECTIVITY_REFRESH_MS = 1000;
 
 const ICON_SVGS = {
   showMain: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 9h16"/></svg>',
@@ -45,6 +47,77 @@ function clearHideTimer() {
   }
 }
 
+function stopConnectivityRefresh() {
+  if (connectivityRefreshTimer) {
+    clearInterval(connectivityRefreshTimer);
+    connectivityRefreshTimer = null;
+  }
+}
+
+function applyConnectivitySnapshot(snapshot) {
+  if (!snapshot || !menuData || !menuData.submenus || !Array.isArray(menuData.submenus.network)) {
+    return;
+  }
+  const text = snapshot.text ? String(snapshot.text) : '-';
+  const tone = snapshot.tone ? String(snapshot.tone) : 'neutral';
+  menuData.submenus.network = menuData.submenus.network.map((item) => {
+    if (!item || item.type === 'separator') {
+      return item;
+    }
+    if (item.iconKey === 'connectivityQuality') {
+      return {
+        ...item,
+        rightBadge: {
+          text,
+          tone,
+        },
+      };
+    }
+    return item;
+  });
+  if (activeSubmenuKey !== 'network') {
+    return;
+  }
+  const row = submenuListEl.querySelector('.menu-row[data-icon-key="connectivityQuality"]');
+  if (!row) {
+    return;
+  }
+  let badge = row.querySelector('.menu-badge');
+  if (!badge) {
+    badge = document.createElement('div');
+    badge.className = 'menu-badge';
+    row.appendChild(badge);
+  }
+  badge.className = `menu-badge tone-${tone}`;
+  badge.textContent = text;
+}
+
+async function refreshConnectivityBadge() {
+  if (activeSubmenuKey !== 'network' || !window.clashfox || typeof window.clashfox.trayMenuGetConnectivity !== 'function') {
+    return;
+  }
+  try {
+    const snapshot = await window.clashfox.trayMenuGetConnectivity();
+    applyConnectivitySnapshot(snapshot);
+  } catch {
+    // ignore transient refresh errors
+  }
+}
+
+function ensureConnectivityRefresh() {
+  if (activeSubmenuKey !== 'network') {
+    stopConnectivityRefresh();
+    return;
+  }
+  refreshConnectivityBadge();
+  if (connectivityRefreshTimer) {
+    return;
+  }
+  connectivityRefreshTimer = setInterval(() => {
+    refreshConnectivityBadge();
+  }, CONNECTIVITY_REFRESH_MS);
+}
+
 function syncWindowGeometry(expanded) {
   const rootRect = menuRootEl.getBoundingClientRect();
   const rootWidth = Math.ceil(rootRect.width) || 260;
@@ -67,6 +140,7 @@ function syncWindowGeometry(expanded) {
 }
 
 function hideSubmenu() {
+  stopConnectivityRefresh();
   activeSubmenuKey = null;
   activeSubmenuAnchor = null;
   submenuRootEl.classList.add('hidden');
@@ -98,6 +172,12 @@ function makeRow(item, options = {}) {
   const { isSubmenu = false, submenuKey = '', withCheckColumn = false } = options;
   const row = document.createElement('div');
   row.className = 'menu-row';
+  if (item.action) {
+    row.dataset.action = String(item.action);
+  }
+  if (item.iconKey) {
+    row.dataset.iconKey = String(item.iconKey);
+  }
   const clickable = item.enabled !== false;
   if (clickable) {
     row.classList.add('clickable');
@@ -381,6 +461,7 @@ function openSubmenu(submenuKey, anchorRow, keepAnchor = false) {
   }
   submenuRootEl.style.top = `${top}px`;
   syncWindowGeometry(true);
+  ensureConnectivityRefresh();
 }
 
 function renderAll() {

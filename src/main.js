@@ -259,6 +259,29 @@ async function getConnectivityQualitySnapshot(configPath) {
   return connectivityQualityFetchPromise;
 }
 
+function patchTrayMenuConnectivityBadge(snapshot) {
+  if (!trayMenuData || !trayMenuData.submenus || !Array.isArray(trayMenuData.submenus.network)) {
+    return;
+  }
+  const text = snapshot && snapshot.text ? String(snapshot.text) : '-';
+  const tone = snapshot && snapshot.tone ? String(snapshot.tone) : 'neutral';
+  trayMenuData.submenus.network = trayMenuData.submenus.network.map((item) => {
+    if (!item || item.type === 'separator') {
+      return item;
+    }
+    if (item.iconKey === 'connectivityQuality') {
+      return {
+        ...item,
+        rightBadge: {
+          text,
+          tone,
+        },
+      };
+    }
+    return item;
+  });
+}
+
 function getControllerArgsFromSettings() {
   const settings = readAppSettings();
   const args = [];
@@ -1732,6 +1755,13 @@ app.whenReady().then(() => {
   ipcMain.handle('clashfox:trayMenu:getData', async () => {
     const data = await createTrayMenu();
     return data || trayMenuData || {};
+  });
+
+  ipcMain.handle('clashfox:trayMenu:connectivity', async () => {
+    const configPath = getConfigPathFromSettings();
+    const snapshot = await getConnectivityQualitySnapshot(configPath);
+    patchTrayMenuConnectivityBadge(snapshot);
+    return snapshot || { text: '-', tone: 'neutral' };
   });
 
   ipcMain.handle('clashfox:trayMenu:action', async (_event, action, payload = {}) => {
