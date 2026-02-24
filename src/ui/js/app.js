@@ -2411,7 +2411,8 @@ function renderKernelTable() {
     if (isBackup) {
       tags.push(`<span class="tag backup">${t('labels.backup')}</span>`);
     }
-    html += '<div class="table-row kernel">';
+    // add selectable class for hover styling
+    html += '<div class="table-row kernel selectable">';
     html += `<div class="index-cell">${pageOffset + idx + 1}</div>`;
     html += `<div class="version-cell"><span class="kernel-name">${displayName || '-'}</span>${tags.length ? ` <span class="tag-group">${tags.join('')}</span>` : ''}</div>`;
     html += `<div class="time-cell">${timestamp}</div></div>`;

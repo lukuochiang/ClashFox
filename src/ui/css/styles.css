@@ -2383,9 +2383,10 @@ body[data-theme="day"] .toggle-pill::after {
 }
 
 .kernel-current-card {
-  border: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   border-radius: 14px;
-  background: linear-gradient(180deg, rgba(144, 170, 198, 0.08), rgba(144, 170, 198, 0.03));
+  /* background: linear-gradient(180deg, rgba(144, 170, 198, 0.08), rgba(144, 170, 198, 0.03)); */
+  background: rgba(244, 179, 74, 0.12);
   margin-bottom: 12px;
   overflow: hidden;
 }
@@ -2412,6 +2413,7 @@ body[data-theme="day"] .toggle-pill::after {
   gap: 10px;
   align-items: center;
   padding: 12px 14px;
+  background-color: white;
 }
 
 .kernel-backups-title {
@@ -2537,6 +2539,9 @@ body[data-theme="day"] .toggle-pill::after {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--muted);
+  border-top: 1px solid var(--border);
+  border-top-right-radius: 14px;
+  border-top-left-radius: 14px;
 }
 
 .table-row:last-child {
