@@ -4,6 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ClashFox</title>
+    <script>
+      (function(){
+        try {
+          var t = localStorage.getItem('lastTheme');
+          if (t) {
+            document.documentElement.setAttribute('data-theme', t);
+            if (document.body) document.body.dataset.theme = t;
+            else document.addEventListener('DOMContentLoaded', () => {
+              document.body.dataset.theme = t;
+            });
+          }
+        } catch (e) {}
+      })();
+    </script>
     <link rel="stylesheet" href="../css/styles.css" />
   </head>
   <body data-page="overview">

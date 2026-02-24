@@ -44,11 +44,11 @@
   --icon-connections: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='7' cy='12' r='3' fill='%23000'/%3E%3Ccircle cx='17' cy='7' r='3' fill='%23000'/%3E%3Ccircle cx='17' cy='17' r='3' fill='%23000'/%3E%3Cpath d='M9.8 10.8l4.4-2.6M9.8 13.2l4.4 2.6' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 
-body[data-theme="night"] {
+body[data-theme="night"], html[data-theme="night"] body {
   color-scheme: dark;
 }
 
-body[data-theme="day"] {
+body[data-theme="day"], html[data-theme="day"] body {
   color-scheme: light;
   --bg-1: #f6f1e8;
   --bg-2: #f1f5fb;
@@ -63,6 +63,12 @@ body[data-theme="day"] {
   --muted: #3a4b5c;
   --border: rgba(96, 113, 133, 0.25);
   --shadow: rgba(31, 46, 60, 0.12);
+}
+
+/* suppress transitions while theme is being applied (e.g. on reload) */
+body.no-theme-transition,
+body.no-theme-transition * {
+  transition: none !important;
 }
 
 * {
@@ -100,7 +106,7 @@ body.layout-ready .app {
   min-height: 60px;
 }
 
-body[data-theme="day"] {
+body[data-theme="day"], html[data-theme="day"] body {
   background: radial-gradient(circle at top left, #f8e7c6, transparent 60%),
     radial-gradient(circle at 30% 70%, #d9f2e9, transparent 55%),
     linear-gradient(145deg, var(--bg-1), var(--bg-2));
@@ -128,11 +134,13 @@ body::after {
   background: radial-gradient(circle, rgba(140, 224, 198, 0.2), transparent 70%);
 }
 
-body[data-theme="day"]::before {
+body[data-theme="day"]::before,
+html[data-theme="day"] body::before {
   background: radial-gradient(circle, rgba(244, 179, 74, 0.25), transparent 70%);
 }
 
-body[data-theme="day"]::after {
+body[data-theme="day"]::after,
+html[data-theme="day"] body::after {
   background: radial-gradient(circle, rgba(140, 224, 198, 0.28), transparent 70%);
 }
 
@@ -645,6 +653,7 @@ h1 {
 .status-light {
   width: 36px;
   height: 36px;
+  flex: 0 0 36px;
   border-radius: 12px;
   background: rgba(148, 171, 197, 0.12);
   border: 1px solid rgba(148, 171, 197, 0.35);
@@ -1054,7 +1063,7 @@ h1 {
 
 .card {
   background: var(--panel);
-  border: 1px solid var(--border);
+  /* border: 1px solid var(--border); */
   padding: 12px;
   border-radius: 18px;
   box-shadow: none;
@@ -2395,6 +2404,8 @@ tr.selectable.selected {
 .table-row.header.kernel {
   /* first column for sequence numbers */
   grid-template-columns: 40px 1fr 160px;
+  border-top: 1px solid var(--border);
+  border-bottom-style: none;
 }
 
 .kernel-current-card {
@@ -2428,7 +2439,7 @@ tr.selectable.selected {
   gap: 10px;
   align-items: center;
   padding: 12px 14px;
-  background-color: white;
+  background-color: var(--panel-soft);
 }
 
 .kernel-backups-title {
@@ -2554,7 +2565,6 @@ tr.selectable.selected {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--muted);
-  border-top: 1px solid var(--border);
   border-top-right-radius: 14px;
   border-top-left-radius: 14px;
 }

@@ -1,3 +1,27 @@
+// apply last-used theme immediately to avoid flicker on reload
+// this will be overwritten later when settings are applied
+try {
+  const last = localStorage.getItem('lastTheme');
+  if (last) {
+    document.documentElement.setAttribute('data-theme', last);
+  }
+  if (last && document.body) {
+    document.body.dataset.theme = last;
+  }
+} catch {};
+
+// disable theme-related transitions until initial load completes
+if (document.body) {
+  document.body.classList.add('no-theme-transition');
+} else {
+  document.addEventListener('DOMContentLoaded', () => document.body.classList.add('no-theme-transition'));
+}
+
+// remove the helper class once everything is loaded
+window.addEventListener('load', () => {
+  document.body.classList.remove('no-theme-transition');
+});
+
 let navButtons = Array.from(document.querySelectorAll('.nav-btn'));
 let panels = Array.from(document.querySelectorAll('.panel'));
 let toast = document.getElementById('toast');
@@ -405,7 +429,7 @@ function applyI18n() {
 
   applyCardIcons();
 
-  if (statusPill) {
+  if (statusPill && !statusPill.dataset.state) {
     statusPill.dataset.state = 'unknown';
   }
   updateThemeToggle();
@@ -805,7 +829,11 @@ function updateTipPosition(el) {
 
 function applyTheme(theme) {
   state.theme = theme;
+  document.documentElement.setAttribute('data-theme', theme);
   document.body.dataset.theme = theme;
+  try {
+    localStorage.setItem('lastTheme', theme);
+  } catch {}
 }
 
 function syncDebugMode(enabled) {
@@ -853,7 +881,10 @@ function applySettings(settings) {
   const externalUi = state.settings.dataDir
     ? `${String(state.settings.dataDir).replace(/\/+$/, '')}/ui`
     : '';
+  // temporarily suppress transitions while applying initial theme
+  document.body.classList.add('no-theme-transition');
   applyThemePreference(state.settings.themePreference, false);
+  document.body.classList.remove('no-theme-transition');
   setLanguage(state.settings.lang, false, false);
   syncDebugMode(state.settings.debugMode);
   if (settingsConfigDir) {
@@ -2882,6 +2913,8 @@ async function navigatePage(targetPage, pushState = true) {
 }
 
 function setLayoutReady() {
+  // Compute scrollbar compensation before first paint to avoid topbar jitter.
+  updateScrollbarWidthVar();
   if (document.body && !document.body.classList.contains('layout-ready')) {
     document.body.classList.add('layout-ready');
   }
