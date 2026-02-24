@@ -261,11 +261,13 @@ const state = {
   overviewMemoryTimer: null,
   overviewMemoryLoading: false,
   trafficTimer: null,
+  trafficLoading: false,
   trafficRxBytes: null,
   trafficTxBytes: null,
   trafficAt: 0,
   trafficHistoryRx: [],
   trafficHistoryTx: [],
+  lastProxyTrafficAt: 0,
   proxyRxBytes: null,
   proxyTxBytes: null,
   proxyAt: 0,
@@ -1663,7 +1665,12 @@ function updateSystemTraffic(rxBytes, txBytes) {
   const rx = Number.parseFloat(rxBytes);
   const tx = Number.parseFloat(txBytes);
   const now = Date.now();
+  const hasSnapshot = state.trafficRxBytes !== null && state.trafficTxBytes !== null && Boolean(state.trafficAt);
   if (!Number.isFinite(rx) || !Number.isFinite(tx)) {
+    // Overview/traffic may occasionally return empty counters; don't wipe a valid chart snapshot.
+    if (hasSnapshot) {
+      return;
+    }
     if (trafficSystemDownloadRate) {
       trafficSystemDownloadRate.textContent = '-';
     }
@@ -1735,7 +1742,19 @@ function updateSystemTraffic(rxBytes, txBytes) {
 }
 
 function updateProxyTraffic(rxBytes, txBytes) {
-  return;
+  const downRate = Number.parseFloat(rxBytes);
+  const upRate = Number.parseFloat(txBytes);
+  if (!Number.isFinite(downRate) || !Number.isFinite(upRate) || downRate < 0 || upRate < 0) {
+    return;
+  }
+  if (trafficSystemDownloadRate) {
+    trafficSystemDownloadRate.textContent = formatBitrate(downRate);
+  }
+  if (trafficSystemUploadRate) {
+    trafficSystemUploadRate.textContent = formatBitrate(upRate);
+  }
+  state.lastProxyTrafficAt = Date.now();
+  updateTrafficHistory(downRate, upRate);
 }
 
 function formatKernelDisplay(value) {
@@ -1906,7 +1925,10 @@ function updateOverviewUI(data) {
     const ipValue = data.internetIp4 || data.internetIp || '-';
     overviewInternetIp.textContent = maskIpAddress(ipValue) || '-';
   }
-  updateSystemTraffic(data.rxBytes, data.txBytes);
+  // Prefer /traffic realtime stream. If it stalls, fallback to /overview byte counters.
+  if (!state.lastProxyTrafficAt || (Date.now() - state.lastProxyTrafficAt) > 1500) {
+    updateSystemTraffic(data.rxBytes, data.txBytes);
+  }
 }
 
 function updateOverviewRuntimeUI(data) {
@@ -1989,25 +2011,34 @@ async function loadOverview(showToastOnSuccess = false) {
     return false;
   }
   state.overviewLoading = true;
-  const configPath = getCurrentConfigPath();
-  const args = configPath ? ['--config', configPath] : [];
-  args.unshift('--no-cache');
-  args.push(...getControllerArgs());
-  const response = await runCommand('overview', args);
-  if (!response.ok) {
-    state.overviewLoading = false;
+  try {
+    const configPath = getCurrentConfigPath();
+    const args = ['--cache-ttl', '1'];
+    if (configPath) {
+      args.push('--config', configPath);
+    }
+    args.push(...getControllerArgs());
+    const response = await runCommand('overview', args);
+    if (!response.ok) {
+      if (showToastOnSuccess) {
+        showToast(response.error || ti('labels.overviewError', 'Overview error'), 'error');
+      }
+      return false;
+    }
+    updateOverviewUI(response.data);
     if (showToastOnSuccess) {
-      showToast(response.error || ti('labels.overviewError', 'Overview error'), 'error');
+      showToast(t('labels.statusRefreshed'));
+    }
+    loadTunStatus(false);
+    return true;
+  } catch {
+    if (showToastOnSuccess) {
+      showToast(ti('labels.overviewError', 'Overview error'), 'error');
     }
     return false;
+  } finally {
+    state.overviewLoading = false;
   }
-  updateOverviewUI(response.data);
-  state.overviewLoading = false;
-  if (showToastOnSuccess) {
-    showToast(t('labels.statusRefreshed'));
-  }
-  loadTunStatus(false);
-  return true;
 }
 
 async function loadTunStatus(showToastOnSuccess = false) {
@@ -2066,29 +2097,48 @@ async function loadOverviewLite() {
     return false;
   }
   state.overviewLiteLoading = true;
-  const configPath = getCurrentConfigPath();
-  const args = configPath ? ['--config', configPath] : [];
-  args.push(...getControllerArgs());
-  const response = await runCommand('overview-lite', args);
-  if (!response.ok) {
-    state.overviewLiteLoading = false;
+  try {
+    const configPath = getCurrentConfigPath();
+    const args = configPath ? ['--config', configPath] : [];
+    args.push(...getControllerArgs());
+    const response = await runCommand('overview-lite', args);
+    if (!response.ok) {
+      return false;
+    }
+    updateOverviewRuntimeUI(response.data);
+    return true;
+  } catch {
     return false;
+  } finally {
+    state.overviewLiteLoading = false;
   }
-  updateOverviewRuntimeUI(response.data);
-  state.overviewLiteLoading = false;
-  return true;
 }
 
 async function loadTraffic() {
+  if (state.trafficLoading) {
+    return;
+  }
+  state.trafficLoading = true;
   const configPath = getCurrentConfigPath();
   const args = configPath ? ['--config', configPath] : [];
   args.push(...getControllerArgs());
-  const response = await runCommand('traffic', args);
-  if (!response.ok || !response.data) {
-    updateProxyTraffic(null, null);
-    return;
+  try {
+    const response = await runCommand('traffic', args);
+    if (!response.ok || !response.data) {
+      // Keep last successful values to avoid flicker when endpoint is temporarily unavailable.
+      return;
+    }
+    const downRaw = response.data.down ?? response.data.download ?? response.data.rx ?? '';
+    const upRaw = response.data.up ?? response.data.upload ?? response.data.tx ?? '';
+    const down = Number.parseFloat(downRaw);
+    const up = Number.parseFloat(upRaw);
+    if (!Number.isFinite(down) || !Number.isFinite(up)) {
+      return;
+    }
+    updateProxyTraffic(down, up);
+  } finally {
+    state.trafficLoading = false;
   }
-  updateProxyTraffic(response.data.down, response.data.up);
 }
 
 async function loadOverviewMemory() {
@@ -2096,16 +2146,20 @@ async function loadOverviewMemory() {
     return false;
   }
   state.overviewMemoryLoading = true;
-  const response = await runCommand('overview-memory');
-  if (!response.ok) {
-    state.overviewMemoryLoading = false;
+  try {
+    const response = await runCommand('overview-memory');
+    if (!response.ok) {
+      return false;
+    }
+    if (response.data && overviewMemory) {
+      overviewMemory.textContent = response.data.memory || '-';
+    }
+    return true;
+  } catch {
     return false;
+  } finally {
+    state.overviewMemoryLoading = false;
   }
-  if (response.data && overviewMemory) {
-    overviewMemory.textContent = response.data.memory || '-';
-  }
-  state.overviewMemoryLoading = false;
-  return true;
 }
 
 function paginate(items, page, pageSize) {
@@ -3864,14 +3918,15 @@ function startOverviewTimer() {
     if (currentPage === 'overview') {
       loadOverview();
     }
-  }, 2000);
+  }, 1000);
 
   if (state.trafficTimer) {
     clearInterval(state.trafficTimer);
   }
+  loadTraffic();
   state.trafficTimer = setInterval(() => {
     loadTraffic();
-  }, 1000);
+  }, 500);
 
   if (state.overviewLiteTimer) {
     clearInterval(state.overviewLiteTimer);

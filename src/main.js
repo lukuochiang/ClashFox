@@ -225,12 +225,19 @@ async function getConnectivityQualitySnapshot(configPath) {
 
   connectivityQualityFetchPromise = (async () => {
     try {
-      const overview = await runBridge(['overview', '--no-cache', '--config', configPath, ...getControllerArgsFromSettings()]);
+      const overview = await runBridge(['overview', '--cache-ttl', '2', '--config', configPath, ...getControllerArgsFromSettings()]);
       const internetMs = overview && overview.ok && overview.data ? String(overview.data.internetMs || '').trim() : '';
       if (internetMs && internetMs !== '-') {
         connectivityQualityCache = {
           text: `${internetMs} ms`,
           tone: resolveConnectivityToneByLatency(internetMs),
+          updatedAt: Date.now(),
+        };
+        return connectivityQualityCache;
+      }
+      if (connectivityQualityCache.text && connectivityQualityCache.text !== '-') {
+        connectivityQualityCache = {
+          ...connectivityQualityCache,
           updatedAt: Date.now(),
         };
         return connectivityQualityCache;

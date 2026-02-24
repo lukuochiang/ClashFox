@@ -1122,13 +1122,6 @@ EOF
         else
             internet_ip="-"
         fi
-        if [ -z "$internet_ms" ] && [ -n "$internet_ip" ] && [ "$internet_ip" != "-" ]; then
-            internet_ms="$(ping -c 1 -W 1000 "$internet_ip" 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
-            if [ -z "$internet_ms" ]; then
-                internet_ms="$(ping -c 1 -t 1 "$internet_ip" 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
-            fi
-        fi
-
         proxy_ip=""
         if [ -n "$MIHOMO_PROXY_PORT" ]; then
             proxy_ip="$("${curl_env[@]}" curl --proxy "http://127.0.0.1:$MIHOMO_PROXY_PORT" --noproxy '' -s --max-time 3 https://api.ipify.org 2>/dev/null)"
@@ -1157,14 +1150,30 @@ except Exception:
 PY
 )"
         fi
+        # Keep Internet latency refresh in the same cycle as DNS/Router and avoid
+        # coupling to public-IP probe success.
+        internet_ms=""
+        if command -v python3 >/dev/null 2>&1; then
+            internet_ms="$(python3 - <<'PY'
+import socket, time
+start = time.time()
+try:
+    sock = socket.create_connection(("1.1.1.1", 443), timeout=1.5)
+    sock.close()
+    print(int((time.time() - start) * 1000))
+except Exception:
+    print("")
+PY
+)"
+        fi
+        if [ -z "$internet_ms" ] && command -v curl >/dev/null 2>&1; then
+            internet_ms="$("${curl_env[@]}" curl "${direct_curl_args[@]}" -s -o /dev/null -w '%{time_connect}' --max-time 2 --noproxy '*' https://1.1.1.1 2>/dev/null | awk '{if ($1>0) printf "%.0f", $1*1000}')"
+        fi
         if [ -z "$internet_ms" ]; then
             internet_ms="$(ping -c 1 -W 1000 1.1.1.1 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
             if [ -z "$internet_ms" ]; then
                 internet_ms="$(ping -c 1 -t 1 1.1.1.1 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
             fi
-        fi
-        if [ -z "$internet_ms" ] && command -v curl >/dev/null 2>&1; then
-            internet_ms="$("${curl_env[@]}" curl "${direct_curl_args[@]}" -s -o /dev/null -w '%{time_connect}' --max-time 2 --noproxy '*' https://1.1.1.1 2>/dev/null | awk '{if ($1>0) printf "%.0f", $1*1000}')"
         fi
 
         router_ms=""
@@ -1346,8 +1355,39 @@ JSON
             traffic_resp="$(curl -s --max-time 1 "$controller/traffic" 2>/dev/null)"
         fi
 
-        up_val="$(printf '%s' "$traffic_resp" | sed -n 's/.*"up"[[:space:]]*:[[:space:]]*\\([0-9]\\+\\).*/\\1/p')"
-        down_val="$(printf '%s' "$traffic_resp" | sed -n 's/.*"down"[[:space:]]*:[[:space:]]*\\([0-9]\\+\\).*/\\1/p')"
+        up_val=""
+        down_val=""
+        if [ -n "$traffic_resp" ] && command -v python3 >/dev/null 2>&1; then
+            parsed_traffic="$(CLASHFOX_TRAFFIC_RESP="$traffic_resp" python3 - <<'PY'
+import json, os
+raw = os.environ.get("CLASHFOX_TRAFFIC_RESP", "")
+if not raw:
+    print("|")
+    raise SystemExit
+try:
+    data = json.loads(raw)
+except Exception:
+    print("|")
+    raise SystemExit
+def as_num(v):
+    try:
+        return float(v)
+    except Exception:
+        return None
+up = as_num(data.get("up"))
+down = as_num(data.get("down"))
+up_s = str(int(up)) if up is not None and up >= 0 else ""
+down_s = str(int(down)) if down is not None and down >= 0 else ""
+print(f"{up_s}|{down_s}")
+PY
+)"
+            up_val="${parsed_traffic%%|*}"
+            down_val="${parsed_traffic#*|}"
+        fi
+        if [ -z "$up_val" ] || [ -z "$down_val" ]; then
+            up_val="$(printf '%s' "$traffic_resp" | sed -n 's/.*"up"[[:space:]]*:[[:space:]]*\\([0-9]\\+\\).*/\\1/p')"
+            down_val="$(printf '%s' "$traffic_resp" | sed -n 's/.*"down"[[:space:]]*:[[:space:]]*\\([0-9]\\+\\).*/\\1/p')"
+        fi
         if [ -z "$up_val" ]; then
             up_val=""
         fi
