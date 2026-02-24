@@ -3035,23 +3035,18 @@ start_mihomo_kernel() {
 
     log_success "$(tr_msg MSG_CONFIG_WILL_USE "$CONFIG_PATH")"
 
-    # 启动内核
+    # 启动内核（GUI 无 TTY 场景下避免使用 nohup，防止 "can't detach from console"）
     log_fmt "${BLUE}$(tr_msg MSG_START_PROCESS)"
-    sudo nohup ./"$ACTIVE_CORE" -f "$CONFIG_PATH" -d "$CLASHFOX_DATA_DIR" >> "$CLASHFOX_LOG_DIR/clashfox.log" 2>&1 &
-    log_success "$(tr_msg MSG_START_COMMAND "nohup ./$ACTIVE_CORE -f $CONFIG_PATH -d "$CLASHFOX_DATA_DIR" >> $CLASHFOX_LOG_DIR/clashfox.log 2>&1 &")"
-    PID=$!
+    sudo sh -c "exec ./\"$ACTIVE_CORE\" -f \"$CONFIG_PATH\" -d \"$CLASHFOX_DATA_DIR\" >> \"$CLASHFOX_LOG_DIR/clashfox.log\" 2>&1 < /dev/null" &
+    log_success "$(tr_msg MSG_START_COMMAND "./$ACTIVE_CORE -f $CONFIG_PATH -d $CLASHFOX_DATA_DIR >> $CLASHFOX_LOG_DIR/clashfox.log 2>&1 < /dev/null")"
 
-    sleep 5
+    # 等待内核拉起后再解析真实 PID（避免记录到短生命周期的 sudo 进程）
+    sleep 3
+    PID="$(find_mihomo_pid)"
 
-    # 将PID写入文件
-    echo $PID > "$CLASHFOX_PID_DIR/clashfox.pid"
-    log_success "$(tr_msg MSG_PID_WRITTEN "$CLASHFOX_PID_DIR/clashfox.pid")"
-
-    # 等待内核启动
-    sleep 2
-
-    # 检查内核是否启动成功
-    if ps -p $PID > /dev/null 2>&1; then
+    if [ -n "$PID" ]; then
+        echo "$PID" > "$CLASHFOX_PID_DIR/clashfox.pid"
+        log_success "$(tr_msg MSG_PID_WRITTEN "$CLASHFOX_PID_DIR/clashfox.pid")"
         log_success "$(tr_msg MSG_KERNEL_STARTED)"
         log_success "$(tr_msg MSG_PROCESS_ID "$PID")"
     else

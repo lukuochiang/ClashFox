@@ -113,7 +113,7 @@ function getUiLabels() {
 function getConfigPathFromSettings() {
   const settings = readAppSettings();
   const configPath = settings && typeof settings.configFile === 'string' ? settings.configFile.trim() : '';
-  if (configPath) {
+  if (configPath && fs.existsSync(configPath)) {
     return configPath;
   }
   return path.join(APP_DATA_DIR, 'config', 'default.yaml');
@@ -901,9 +901,9 @@ async function buildTrayMenuOnce() {
         { type: 'action', label: labels.modeDirectTitle || 'Direct Outbound', action: 'mode-change', value: 'direct', checked: currentOutboundMode === 'direct', iconKey: 'modeDirect' },
       ],
       kernel: [
-        { type: 'action', label: labels.startKernel, action: 'kernel-start', iconKey: 'kernelStart' },
+        { type: 'action', label: labels.startKernel, action: 'kernel-start', enabled: !dashboardEnabled, iconKey: 'kernelStart' },
         { type: 'separator' },
-        { type: 'action', label: labels.stopKernel, action: 'kernel-stop', iconKey: 'kernelStop' },
+        { type: 'action', label: labels.stopKernel, action: 'kernel-stop', enabled: dashboardEnabled, iconKey: 'kernelStop' },
         { type: 'separator' },
         { type: 'action', label: labels.restartKernel, action: 'kernel-restart', enabled: dashboardEnabled, iconKey: 'kernelRestart' },
       ],
@@ -1191,13 +1191,15 @@ async function handleTrayMenuAction(action, payload = {}) {
         }
         emitMainCoreAction({ action: 'start', phase: 'start' });
         const commandStartedAt = Date.now();
-        const started = await runTrayCommand('start', [], labels, status.sudoPass);
+        const started = await runTrayCommand('start', ['--config', configPath], labels, status.sudoPass);
         if (started.ok) {
           const running = await waitForKernelRunningFromTray(started.sudoPass || status.sudoPass || '');
           if (running) {
             updateTrayCoreStartupEstimate(Date.now() - commandStartedAt);
+            emitMainToast(uiLabels.startSuccess || 'Kernel started.', 'info');
+          } else {
+            emitMainToast(uiLabels.startFailed || 'Start failed.', 'error');
           }
-          emitMainToast(uiLabels.startSuccess || 'Kernel started.', 'info');
         }
       } finally {
         emitTrayRefresh();
@@ -1233,13 +1235,15 @@ async function handleTrayMenuAction(action, payload = {}) {
           emitMainToast(uiLabels.restartStarts || 'Kernel is stopped, starting now.', 'info');
           emitMainCoreAction({ action: 'start', phase: 'start' });
           const commandStartedAt = Date.now();
-          const started = await runTrayCommand('start', [], labels, status.sudoPass);
+          const started = await runTrayCommand('start', ['--config', configPath], labels, status.sudoPass);
           if (started.ok) {
             const running = await waitForKernelRunningFromTray(started.sudoPass || status.sudoPass || '');
             if (running) {
               updateTrayCoreStartupEstimate(Date.now() - commandStartedAt);
+              emitMainToast(uiLabels.startSuccess || 'Kernel started.', 'info');
+            } else {
+              emitMainToast(uiLabels.startFailed || 'Start failed.', 'error');
             }
-            emitMainToast(uiLabels.startSuccess || 'Kernel started.', 'info');
           }
           return { ok: true, submenu: 'kernel' };
         }
@@ -1247,13 +1251,15 @@ async function handleTrayMenuAction(action, payload = {}) {
         emitMainCoreAction({ action: 'restart', phase: 'transition', delayMs: transitionDelayMs });
         await sleep(transitionDelayMs);
         const commandStartedAt = Date.now();
-        const restarted = await runTrayCommand('restart', [], labels, status.sudoPass);
+        const restarted = await runTrayCommand('restart', ['--config', configPath], labels, status.sudoPass);
         if (restarted.ok) {
           const running = await waitForKernelRunningFromTray(restarted.sudoPass || status.sudoPass || '');
           if (running) {
             updateTrayCoreStartupEstimate(Date.now() - commandStartedAt);
+            emitMainToast(uiLabels.restartSuccess || 'Kernel restarted.', 'info');
+          } else {
+            emitMainToast(uiLabels.startFailed || 'Start failed.', 'error');
           }
-          emitMainToast(uiLabels.restartSuccess || 'Kernel restarted.', 'info');
         }
       } finally {
         emitTrayRefresh();

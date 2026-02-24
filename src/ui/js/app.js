@@ -279,6 +279,7 @@ const state = {
   connSamples: [],
   connPeak: 0,
   connLast: null,
+  hasKernel: false,
   configDefault: '',
   settings: { ...DEFAULT_SETTINGS },
 };
@@ -1367,6 +1368,7 @@ function updateStatusUI(data) {
   state.configDefault = data.configDefault || '';
   const configValue = getCurrentConfigPath() || data.configDefault || '-';
   const hasKernel = Boolean(data.kernelExists);
+  state.hasKernel = hasKernel;
   if (statusRunning) {
     statusRunning.textContent = running ? t('labels.running') : t('labels.stopped');
   }
@@ -1376,15 +1378,7 @@ function updateStatusUI(data) {
   if (statusVersion) {
     statusVersion.textContent = data.version || t('labels.notInstalled');
   }
-  if (startBtn) {
-    startBtn.disabled = !hasKernel || state.coreActionInFlight;
-  }
-  if (stopBtn) {
-    stopBtn.disabled = !hasKernel || state.coreActionInFlight;
-  }
-  if (restartBtn) {
-    restartBtn.disabled = !hasKernel || !running || state.coreActionInFlight;
-  }
+  syncCoreActionButtons();
   if (quickHintNodes.length) {
   // quick hint removed
   }
@@ -1430,15 +1424,28 @@ function updateStatusUI(data) {
   renderConfigTable();
 }
 
+function syncCoreActionButtons() {
+  const hasKernel = Boolean(state.hasKernel);
+  const running = Boolean(state.coreRunning || state.overviewRunning);
+  const inFlight = Boolean(state.coreActionInFlight);
+  if (startBtn) {
+    startBtn.disabled = !hasKernel || inFlight || running;
+  }
+  if (stopBtn) {
+    stopBtn.disabled = !hasKernel || inFlight || !running;
+  }
+  if (restartBtn) {
+    restartBtn.disabled = !hasKernel || inFlight || !running;
+  }
+}
+
 function setStatusInterim(running) {
   syncRunningIndicators(running, { allowTransitionOverride: true });
 }
 
 function setCoreActionState(inFlight) {
   state.coreActionInFlight = inFlight;
-  startBtn.disabled = inFlight;
-  stopBtn.disabled = inFlight;
-  restartBtn.disabled = inFlight || !state.coreRunning;
+  syncCoreActionButtons();
 }
 
 function syncRunningIndicators(running, { allowTransitionOverride = false } = {}) {
@@ -1839,6 +1846,7 @@ function updateOverviewUI(data) {
     return;
   }
   state.overviewRunning = Boolean(data.running);
+  syncCoreActionButtons();
   
   // 检查元素是否存在再设置textContent
   if (overviewStatus) {
@@ -1906,6 +1914,7 @@ function updateOverviewRuntimeUI(data) {
     return;
   }
   state.overviewRunning = Boolean(data.running);
+  syncCoreActionButtons();
   // 运行状态统一由 updateStatusUI / setStatusInterim 管理，避免并发刷新不同步
   if (state.overviewRunning) {
     const parsedUptime = Number.parseInt(data.uptimeSec, 10);

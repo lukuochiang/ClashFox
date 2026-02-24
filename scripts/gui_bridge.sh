@@ -1191,6 +1191,35 @@ PY
                 router_ms="$(ping -c 1 -t 1 "$gateway" 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
             fi
         fi
+        if [ -z "$router_ms" ] && [ -n "$gateway" ] && command -v python3 >/dev/null 2>&1; then
+            router_ms="$(CLASHFOX_GATEWAY="$gateway" python3 - <<'PY'
+import os, socket, time
+gw = os.environ.get("CLASHFOX_GATEWAY", "")
+if not gw:
+    print("")
+    raise SystemExit
+for port in (443, 80, 22, 53):
+    start = time.time()
+    try:
+        sock = socket.create_connection((gw, port), timeout=1.2)
+        sock.close()
+        print(int((time.time() - start) * 1000))
+        raise SystemExit
+    except Exception:
+        pass
+print("")
+PY
+)"
+        fi
+        if [ -z "$router_ms" ] && [ -n "$local_ip" ] && echo "$local_ip" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+            guessed_gateway="$(echo "$local_ip" | awk -F'.' '{print $1"."$2"."$3".1"}')"
+            if [ -n "$guessed_gateway" ]; then
+                router_ms="$(ping -c 1 -W 1000 "$guessed_gateway" 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
+                if [ -z "$router_ms" ]; then
+                    router_ms="$(ping -c 1 -t 1 "$guessed_gateway" 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
+                fi
+            fi
+        fi
 
         if [ "$disable_cache" = false ]; then
             {
@@ -2146,6 +2175,15 @@ JSON
         if [ -z "$config_path" ]; then
             config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
         fi
+        if [ ! -f "$config_path" ]; then
+            fallback_config="$CLASHFOX_CONFIG_DIR/default.yaml"
+            if [ -f "$fallback_config" ]; then
+                config_path="$fallback_config"
+            else
+                print_err "config_not_found"
+                exit 1
+            fi
+        fi
         export CLASHFOX_CONFIG_PATH="$config_path"
         if ! ensure_sudo "$sudo_pass"; then
             exit 1
@@ -2197,9 +2235,14 @@ JSON
         fi
         ;;
     restart)
+        config_path=""
         sudo_pass="${CLASHFOX_SUDO_PASS:-}"
         while [ $# -gt 0 ]; do
             case "$1" in
+                --config)
+                    shift
+                    config_path="$1"
+                    ;;
                 --sudo-pass)
                     shift
                     sudo_pass="$1"
@@ -2207,6 +2250,19 @@ JSON
             esac
             shift || true
         done
+        if [ -z "$config_path" ]; then
+            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+        fi
+        if [ ! -f "$config_path" ]; then
+            fallback_config="$CLASHFOX_CONFIG_DIR/default.yaml"
+            if [ -f "$fallback_config" ]; then
+                config_path="$fallback_config"
+            else
+                print_err "config_not_found"
+                exit 1
+            fi
+        fi
+        export CLASHFOX_CONFIG_PATH="$config_path"
         if ! ensure_sudo "$sudo_pass"; then
             exit 1
         fi
