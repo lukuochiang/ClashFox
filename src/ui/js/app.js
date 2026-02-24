@@ -2191,7 +2191,8 @@ function renderBackups(targetEl, withRadio, pageInfo, pageSize, multiSelect) {
 
     pageData.items.forEach((item) => {
       const checked = state.selectedBackupPaths.has(item.path) ? 'checked' : '';
-      const selectedClass = checked ? 'selected' : '';
+      // always mark backup rows selectable so hover effect applies
+      const selectedClass = checked ? 'selected selectable' : 'selectable';
       html += `<tr class="${selectedClass}" data-path="${item.path}">`;
       html += `<td class="check-col"><input type="checkbox" data-path="${item.path}" ${checked} /></td>`;
       html += `<td class="version-col">${item.version || item.name}</td>`;
@@ -2508,7 +2509,7 @@ function renderRecommendTable() {
   let html = '';
   pageData.items.forEach((item, index) => {
     const githubLabel = (item.github || '').replace(/^https?:\/\//, '');
-    html += '<tr>';
+    html += '<tr class="selectable">';
     html += `<td class="index-col">${startIndex + index + 1}</td>`;
     html += `<td class="name-col">${item.name || '-'}</td>`;
     html += '<td class="github-col">';

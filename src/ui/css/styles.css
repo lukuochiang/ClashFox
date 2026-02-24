@@ -2372,6 +2372,21 @@ body[data-theme="day"] .toggle-pill::after {
   color: var(--muted);
 }
 
+/* table row hover styles for <tr> elements */
+tr.selectable {
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+tr.selectable:hover {
+  background: rgba(244, 179, 74, 0.08);
+}
+
+tr.selectable.selected {
+  background: rgba(244, 179, 74, 0.16);
+  border-color: rgba(244, 179, 74, 0.4);
+}
+
 .table-row.backup {
   grid-template-columns: 24px 1fr 160px;
 }
