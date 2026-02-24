@@ -2185,7 +2185,6 @@ function renderBackups(targetEl, withRadio, pageInfo, pageSize, multiSelect) {
     let html = '<table class="backup-table" aria-label="Backups">';
     html += '<thead><tr>';
     html += `<th class="check-col"><input type="checkbox" id="backupsHeaderSelect" ${checkedAttr} /></th>`;
-    html += `<th class="index-col">${t('table.index')}</th>`;
     html += `<th class="version-col">${t('table.version')}</th>`;
     html += `<th class="time-col">${t('table.time')}</th>`;
     html += '</tr></thead><tbody>';
@@ -2195,7 +2194,6 @@ function renderBackups(targetEl, withRadio, pageInfo, pageSize, multiSelect) {
       const selectedClass = checked ? 'selected' : '';
       html += `<tr class="${selectedClass}" data-path="${item.path}">`;
       html += `<td class="check-col"><input type="checkbox" data-path="${item.path}" ${checked} /></td>`;
-      html += `<td class="index-col">${item.index}</td>`;
       html += `<td class="version-col">${item.version || item.name}</td>`;
       const displayTime = formatBackupTimestamp(item.timestamp, item.timestamp || '-');
       html += `<td class="time-col">${displayTime}</td>`;
@@ -2203,7 +2201,7 @@ function renderBackups(targetEl, withRadio, pageInfo, pageSize, multiSelect) {
     });
 
     if (items.length === 0) {
-      html += `<tr><td class="empty-cell" colspan="4">${t('labels.noBackups')}</td></tr>`;
+      html += `<tr><td class="empty-cell" colspan="3">${t('labels.noBackups')}</td></tr>`;
     }
     html += '</tbody></table>';
     targetEl.innerHTML = html;
@@ -2313,17 +2311,19 @@ function renderConfigTable() {
   }
   const items = state.configs;
   const currentPath = getCurrentConfigPath();
-  let html = '<table class="backup-table" aria-label="Configs">';
+  let html = '<table class="backup-table config-table" aria-label="Configs">';
   html += '<thead><tr>';
+  html += '<th class="check-col"></th>';
   html += `<th class="name-col">${t('table.name')}</th>`;
   // html += `<th class="path-col">${t('table.path')}</th>`;
   html += `<th class="modified-col">${t('table.modified')}</th>`;
   // html += `<th class="current-col">${t('table.current')}</th>`;
   html += '</tr></thead><tbody>';
-  items.forEach((item, index) => {
+  items.forEach((item) => {
     const isCurrent = currentPath && item.path === currentPath;
     const rowClass = isCurrent ? 'selectable selected' : 'selectable';
     html += `<tr class="${rowClass}" data-path="${item.path || ''}">`;
+    html += `<td class="check-col"><input type="radio" name="configCurrent" data-path="${item.path || ''}" ${isCurrent ? 'checked' : ''} /></td>`;
     html += `<td class="name-col">${item.name || '-'} ${isCurrent ? `<span class="tag current">${t('labels.current')}</span>` : ''}</td>`;
     // html += `<td class="path-col">${item.path || '-'}</td>`;
     html += `<td class="modified-col">${item.modified || '-'}</td>`;
@@ -2331,7 +2331,7 @@ function renderConfigTable() {
     html += '</tr>';
   });
   if (items.length === 0) {
-    html += `<tr><td class="empty-cell" colspan="4">${t('labels.configsEmpty')}</td></tr>`;
+    html += `<tr><td class="empty-cell" colspan="3">${t('labels.configsEmpty')}</td></tr>`;
   }
   html += '</tbody></table>';
   configTable.innerHTML = html;
@@ -2393,10 +2393,13 @@ function renderKernelTable() {
 
   html += `<div class="kernel-backups-title">${t('nav.backups')}</div>`;
   html += '<div class="table-row header kernel">';
+  // show index column for backups
+  html += `<div class="index-head">${t('table.index')}</div>`;
   html += `<div class="version-head">${t('table.version')}</div>`;
   html += `<div class="time-head">${t('table.time')}</div></div>`;
 
-  pageData.items.forEach((item) => {
+  const pageOffset = ((pageData.page || 1) - 1) * size;
+  pageData.items.forEach((item, idx) => {
     const name = item && item.name ? item.name : '-';
     const backupMatch = backupRe.exec(name);
     const isBackup = Boolean(backupMatch);
@@ -2409,6 +2412,7 @@ function renderKernelTable() {
       tags.push(`<span class="tag backup">${t('labels.backup')}</span>`);
     }
     html += '<div class="table-row kernel">';
+    html += `<div class="index-cell">${pageOffset + idx + 1}</div>`;
     html += `<div class="version-cell"><span class="kernel-name">${displayName || '-'}</span>${tags.length ? ` <span class="tag-group">${tags.join('')}</span>` : ''}</div>`;
     html += `<div class="time-cell">${timestamp}</div></div>`;
   });
