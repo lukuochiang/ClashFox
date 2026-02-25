@@ -1329,7 +1329,7 @@ body[data-theme="day"] .history-chart {
 .history-line {
   fill: none;
   stroke: #9d4bff;
-  stroke-width: 2.5;
+  stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -1756,9 +1756,10 @@ body[data-theme="day"] .conn-live-chart {
 }
 
 .radio-pill:has(input[type="radio"]:checked) {
-  background: linear-gradient(90deg, rgba(92, 140, 205, 0.18), rgba(92, 140, 205, 0.06));
-  border-color: rgba(118, 153, 196, 0.46);
-  box-shadow: 0 6px 16px rgba(32, 51, 79, 0.16);
+  background: linear-gradient(135deg, rgba(244, 179, 74, 0.5), rgba(255, 122, 74, 0.48));
+  border-color: rgba(244, 179, 74, 0.4);
+  box-shadow: 0 6px 14px rgba(96, 58, 24, 0.12);
+  color: #2a1a0f;
 }
 
 body[data-theme="night"] .radio-pill:not(:has(input[type="radio"]:checked)):hover {
@@ -1782,7 +1783,7 @@ body[data-theme="night"] .radio-pill:not(:has(input[type="radio"]:checked)):hove
   height: auto;
   border-radius: 0;
   background: transparent;
-  color: #ffffff;
+  color: #2a1a0f;
   font-size: 14px;
   font-weight: 700;
   line-height: 1;
@@ -1814,9 +1815,10 @@ body[data-theme="day"] .radio-pill {
 }
 
 body[data-theme="day"] .radio-pill:has(input[type="radio"]:checked) {
-  background: linear-gradient(90deg, rgba(227, 236, 247, 0.98), rgba(236, 241, 247, 0.98));
-  border-color: rgba(88, 117, 149, 0.36);
-  box-shadow: 0 4px 14px rgba(88, 117, 149, 0.12);
+  background: linear-gradient(135deg, rgba(244, 179, 74, 0.46), rgba(255, 122, 74, 0.42));
+  border-color: rgba(244, 179, 74, 0.38);
+  box-shadow: 0 4px 12px rgba(131, 83, 35, 0.12);
+  color: #2a1a0f;
 }
 
 body[data-theme="day"] .radio-pill:not(:has(input[type="radio"]:checked)):hover {
@@ -1846,12 +1848,20 @@ body[data-theme="day"] .radio-pill:has(input[type="radio"]:checked)::before {
   top: 0;
   bottom: 0;
   width: 3px;
-  background: rgba(144, 182, 229, 0.85);
+  background: rgba(226, 133, 60, 0.65);
   pointer-events: none;
 }
 
 body[data-theme="day"] .radio-pill:has(input[type="radio"]:checked)::after {
-  background: rgba(88, 117, 149, 0.64);
+  background: rgba(226, 133, 60, 0.62);
+}
+
+.radio-pill:has(input[type="radio"]:checked) .radio-title {
+  color: #2a1a0f;
+}
+
+.radio-pill:has(input[type="radio"]:checked) .radio-hint {
+  color: rgba(58, 38, 20, 0.7);
 }
 
 @media (max-width: 720px) {

@@ -44,6 +44,8 @@ let trayMenuBuildInProgress = false;
 let trayMenuBuildPending = false;
 let trayMenuContentHeight = 420;
 let trayMenuRefreshTimer = null;
+let trayMenuRendererReady = false;
+let trayMenuLastBuiltAt = 0;
 let dashboardWindow = null;
 let currentInstallProcess = null; // 仅用于跟踪安装进程，支持取消功能
 let globalSettings = {
@@ -214,6 +216,34 @@ function resolveConnectivityToneByLatency(rawLatency) {
   return 'bad';
 }
 
+function pickOverviewInternetLatencyValue(data = {}) {
+  if (!data || typeof data !== 'object') {
+    return '';
+  }
+  const candidates = [
+    data.internetMs,
+    data.internet,
+    data.internetLatency,
+    data.dnsMs,
+    data.dns,
+    data.dnsLatency,
+    data.routerMs,
+    data.router,
+    data.gatewayMs,
+    data.routerLatency,
+  ];
+  for (const value of candidates) {
+    if (value === null || value === undefined || value === '') {
+      continue;
+    }
+    const num = Number.parseFloat(String(value).trim());
+    if (Number.isFinite(num)) {
+      return String(num);
+    }
+  }
+  return '';
+}
+
 async function getConnectivityQualitySnapshot(configPath) {
   const now = Date.now();
   if ((now - connectivityQualityCache.updatedAt) <= CONNECTIVITY_REFRESH_MS) {
@@ -226,7 +256,9 @@ async function getConnectivityQualitySnapshot(configPath) {
   connectivityQualityFetchPromise = (async () => {
     try {
       const overview = await runBridge(['overview', '--cache-ttl', '2', '--config', configPath, ...getControllerArgsFromSettings()]);
-      const internetMs = overview && overview.ok && overview.data ? String(overview.data.internetMs || '').trim() : '';
+      const internetMs = overview && overview.ok && overview.data
+        ? pickOverviewInternetLatencyValue(overview.data)
+        : '';
       if (internetMs && internetMs !== '-') {
         connectivityQualityCache = {
           text: `${internetMs} ms`,
@@ -998,6 +1030,7 @@ async function buildTrayMenuOnce() {
     },
   };
   trayMenuData = nextMenuData;
+  trayMenuLastBuiltAt = Date.now();
   if (trayMenuWindow && !trayMenuWindow.isDestroyed()) {
     trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
   }
@@ -1047,6 +1080,7 @@ function ensureTrayMenuWindow() {
   });
   trayMenuWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   trayMenuWindow.setAlwaysOnTop(true, 'pop-up-menu');
+  trayMenuRendererReady = false;
   trayMenuWindow.loadFile(path.join(__dirname, 'ui', 'html', 'tray-menu.html'));
   trayMenuWindow.on('blur', () => {
     hideTrayMenuWindow();
@@ -1054,6 +1088,7 @@ function ensureTrayMenuWindow() {
   trayMenuWindow.on('closed', () => {
     trayMenuWindow = null;
     trayMenuVisible = false;
+    trayMenuRendererReady = false;
     if (trayMenuRefreshTimer) {
       clearInterval(trayMenuRefreshTimer);
       trayMenuRefreshTimer = null;
@@ -1174,10 +1209,22 @@ async function showTrayMenuWindow() {
     trayMenuContentHeight = currentBounds.height;
   }
   if (!trayMenuData) {
+    await createTrayMenu().catch(() => {});
+  } else if ((Date.now() - trayMenuLastBuiltAt) > 1000) {
+    // Refresh stale cache in background only when needed.
     createTrayMenu().catch(() => {});
   } else {
-    // Show cached menu immediately, then refresh in background for responsiveness.
-    createTrayMenu().catch(() => {});
+    const connectivityItem = trayMenuData
+      && trayMenuData.submenus
+      && Array.isArray(trayMenuData.submenus.network)
+      ? trayMenuData.submenus.network.find((item) => item && item.iconKey === 'connectivityQuality')
+      : null;
+    const connectivityText = connectivityItem && connectivityItem.rightBadge
+      ? String(connectivityItem.rightBadge.text || '').trim()
+      : '';
+    if (!connectivityText || connectivityText === '-') {
+      createTrayMenu().catch(() => {});
+    }
   }
   applyTrayMenuWindowBounds(trayMenuContentHeight, false, 260);
   popup.show();
@@ -1794,7 +1841,7 @@ app.whenReady().then(() => {
   ensureAppDirs();
   setDockIcon();
   createTrayMenu();
-  createWindow(false);
+  createWindow(true);
   ensureTrayMenuWindow();
   setTimeout(setDockIcon, 500);
   setTimeout(setDockIcon, 1500);
@@ -1830,6 +1877,13 @@ app.whenReady().then(() => {
 
   ipcMain.on('clashfox:trayMenu:hide', () => {
     hideTrayMenuWindow();
+  });
+
+  ipcMain.on('clashfox:trayMenu:rendererReady', () => {
+    trayMenuRendererReady = true;
+    if (trayMenuWindow && !trayMenuWindow.isDestroyed() && trayMenuData) {
+      trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
+    }
   });
 
   ipcMain.on('clashfox:trayMenu:setExpanded', (_event, expanded, payload = {}) => {
@@ -2023,7 +2077,7 @@ app.whenReady().then(() => {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow(false);
+      createWindow(true);
     }
   });
 });

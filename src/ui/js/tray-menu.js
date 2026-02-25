@@ -472,13 +472,6 @@ function renderAll() {
 }
 
 async function init() {
-  try {
-    menuData = await window.clashfox.trayMenuGetData();
-    renderAll();
-  } catch {
-    // ignore
-  }
-
   window.clashfox.onTrayMenuUpdate((payload) => {
     if (!payload) {
       return;
@@ -506,6 +499,21 @@ async function init() {
     }
     hideSubmenu();
   });
+
+  if (window.clashfox && typeof window.clashfox.trayMenuRendererReady === 'function') {
+    window.clashfox.trayMenuRendererReady();
+  }
+
+  try {
+    const initial = await window.clashfox.trayMenuGetData();
+    // Avoid overriding newer pushed payloads that arrived first.
+    if (menuVersion === 0) {
+      menuData = initial;
+      renderAll();
+    }
+  } catch {
+    // ignore
+  }
 
   stageEl.addEventListener('mouseenter', clearHideTimer);
   headerEl.addEventListener('mouseenter', hideSubmenu);

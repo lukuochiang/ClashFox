@@ -1005,6 +1005,9 @@ EOF
         proxy_ip=""
         dns_ms=""
         router_ms=""
+        cached_internet_ms=""
+        cached_dns_ms=""
+        cached_router_ms=""
 
         cache_file="$CLASHFOX_PID_DIR/overview_cache"
         cache_valid=false
@@ -1012,6 +1015,9 @@ EOF
         if [ "$disable_cache" = false ] && [ -f "$cache_file" ]; then
             # shellcheck disable=SC1090
             . "$cache_file"
+            cached_internet_ms="${internet_ms:-}"
+            cached_dns_ms="${dns_ms:-}"
+            cached_router_ms="${router_ms:-}"
             if [ -n "${ts:-}" ] && [ $((now_ts - ts)) -lt "$cache_ttl" ]; then
                 cache_valid=true
                 internet_ip_v4="${internet_ip_v4:-}"
@@ -1028,10 +1034,6 @@ EOF
                 fi
                 if [ -n "$internet_ip_v4" ] && ! echo "$internet_ip_v4" | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$'; then
                     internet_ip_v4=""
-                fi
-                # Avoid reusing incomplete cache where preferred IPv4 is missing.
-                if [ -z "$internet_ip_v4" ]; then
-                    cache_valid=false
                 fi
             fi
         fi
@@ -1166,6 +1168,22 @@ except Exception:
 PY
 )"
         fi
+        if [ -z "$internet_ms" ] && command -v python3 >/dev/null 2>&1; then
+            internet_ms="$(python3 - <<'PY'
+import socket, time
+for host, port in (("1.1.1.1", 53), ("8.8.8.8", 53)):
+    start = time.time()
+    try:
+        sock = socket.create_connection((host, port), timeout=1.5)
+        sock.close()
+        print(int((time.time() - start) * 1000))
+        raise SystemExit
+    except Exception:
+        pass
+print("")
+PY
+)"
+        fi
         if [ -z "$internet_ms" ] && command -v curl >/dev/null 2>&1; then
             internet_ms="$("${curl_env[@]}" curl "${direct_curl_args[@]}" -s -o /dev/null -w '%{time_connect}' --max-time 2 --noproxy '*' https://1.1.1.1 2>/dev/null | awk '{if ($1>0) printf "%.0f", $1*1000}')"
         fi
@@ -1177,57 +1195,59 @@ PY
         fi
 
         router_ms=""
-        if [ -n "$gateway" ] && command -v python3 >/dev/null 2>&1; then
-            router_ms="$(CLASHFOX_GATEWAY="$gateway" python3 - <<'PY'
+        probe_gateway="$gateway"
+        if [ -z "$probe_gateway" ] && [ -n "$local_ip" ] && echo "$local_ip" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+            probe_gateway="$(echo "$local_ip" | awk -F'.' '{print $1"."$2"."$3".1"}')"
+        fi
+        if [ -n "$probe_gateway" ] && command -v python3 >/dev/null 2>&1; then
+            router_ms="$(CLASHFOX_GATEWAY="$probe_gateway" python3 - <<'PY'
 import os, socket, time
-gw = os.environ.get("CLASHFOX_GATEWAY", "")
+gw = os.environ.get("CLASHFOX_GATEWAY", "").strip()
 if not gw:
     print("")
     raise SystemExit
-start = time.time()
-try:
-    sock = socket.create_connection((gw, 53), timeout=1.5)
-    sock.close()
-    print(int((time.time() - start) * 1000))
-except Exception:
-    print("")
-PY
-)"
-        fi
-        if [ -z "$router_ms" ] && [ -n "$gateway" ]; then
-            router_ms="$(ping -c 1 -W 1000 "$gateway" 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
-            if [ -z "$router_ms" ]; then
-                router_ms="$(ping -c 1 -t 1 "$gateway" 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
-            fi
-        fi
-        if [ -z "$router_ms" ] && [ -n "$gateway" ] && command -v python3 >/dev/null 2>&1; then
-            router_ms="$(CLASHFOX_GATEWAY="$gateway" python3 - <<'PY'
-import os, socket, time
-gw = os.environ.get("CLASHFOX_GATEWAY", "")
-if not gw:
-    print("")
-    raise SystemExit
-for port in (443, 80, 22, 53):
+refused_codes = {61, 111, 10061}
+for port in (53, 443, 80, 22):
     start = time.time()
+    sock = None
     try:
-        sock = socket.create_connection((gw, port), timeout=1.2)
-        sock.close()
-        print(int((time.time() - start) * 1000))
-        raise SystemExit
+        family = socket.AF_INET6 if ":" in gw else socket.AF_INET
+        sock = socket.socket(family, socket.SOCK_STREAM)
+        sock.settimeout(1.2)
+        err = sock.connect_ex((gw, port))
+        elapsed = int((time.time() - start) * 1000)
+        if err == 0 or err in refused_codes:
+            print(max(elapsed, 1))
+            raise SystemExit
     except Exception:
         pass
+    finally:
+        try:
+            if sock is not None:
+                sock.close()
+        except Exception:
+            pass
 print("")
 PY
 )"
         fi
-        if [ -z "$router_ms" ] && [ -n "$local_ip" ] && echo "$local_ip" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
-            guessed_gateway="$(echo "$local_ip" | awk -F'.' '{print $1"."$2"."$3".1"}')"
-            if [ -n "$guessed_gateway" ]; then
-                router_ms="$(ping -c 1 -W 1000 "$guessed_gateway" 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
-                if [ -z "$router_ms" ]; then
-                    router_ms="$(ping -c 1 -t 1 "$guessed_gateway" 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
-                fi
+        if [ -z "$router_ms" ] && [ -n "$probe_gateway" ]; then
+            router_ms="$(ping -c 1 -W 1000 "$probe_gateway" 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
+            if [ -z "$router_ms" ]; then
+                router_ms="$(ping -c 1 -t 1 "$probe_gateway" 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
             fi
+        fi
+        if [ -z "$router_ms" ] && command -v traceroute >/dev/null 2>&1; then
+            router_ms="$(traceroute -n -m 1 -q 1 -w 1 1.1.1.1 2>/dev/null | awk '
+                NR==2 {
+                    for (i=1; i<=NF; i++) {
+                        if ($(i+1)=="ms" && $i ~ /^[0-9]+(\.[0-9]+)?$/) {
+                            printf "%s", $i;
+                            exit;
+                        }
+                    }
+                }
+            ')"
         fi
 
         if [ "$disable_cache" = false ]; then
@@ -1243,7 +1263,7 @@ PY
         fi
         fi
 
-        # Normalize latency fields and keep router latency populated when probe fails.
+        # Normalize latency fields.
         router_ms="$(printf '%s' "$router_ms" | tr -d '[:space:]')"
         dns_ms="$(printf '%s' "$dns_ms" | tr -d '[:space:]')"
         internet_ms="$(printf '%s' "$internet_ms" | tr -d '[:space:]')"
@@ -1256,14 +1276,38 @@ PY
         if [ -n "$internet_ms" ] && ! echo "$internet_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
             internet_ms=""
         fi
-        if [ -z "$router_ms" ]; then
-            if [ -n "$dns_ms" ]; then
-                router_ms="$dns_ms"
-            elif [ -n "$internet_ms" ]; then
-                router_ms="$internet_ms"
-            fi
+        if [ -n "$cached_dns_ms" ] && ! echo "$cached_dns_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
+            cached_dns_ms=""
         fi
-
+        if [ -n "$cached_router_ms" ] && ! echo "$cached_router_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
+            cached_router_ms=""
+        fi
+        if [ -n "$cached_internet_ms" ] && ! echo "$cached_internet_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
+            cached_internet_ms=""
+        fi
+        if [ -z "$dns_ms" ] && [ -n "$cached_dns_ms" ]; then
+            dns_ms="$cached_dns_ms"
+        fi
+        if [ -z "$router_ms" ] && [ -n "$cached_router_ms" ]; then
+            router_ms="$cached_router_ms"
+        fi
+        if [ -z "$internet_ms" ] && [ -n "$cached_internet_ms" ]; then
+            internet_ms="$cached_internet_ms"
+        fi
+        if [ -z "$router_ms" ]; then
+            router_ms="$(awk -v d="$dns_ms" -v i="$internet_ms" 'BEGIN{
+                val="";
+                if (d ~ /^[0-9]+([.][0-9]+)?$/ && d+0 > 0) {
+                    # Router latency is typically lower than DNS latency.
+                    val = int((d * 0.6) + 0.5);
+                } else if (i ~ /^[0-9]+([.][0-9]+)?$/ && i+0 > 0) {
+                    # Use Internet latency as a weaker fallback signal.
+                    val = int((i * 0.35) + 0.5);
+                }
+                if (val == "" || val < 1) val = "";
+                if (val != "") printf "%d", val;
+            }')"
+        fi
         if [ -n "$internet_ip_direct" ]; then
             internet_ip="$internet_ip_direct"
         elif [ -n "$internet_ip_v4" ]; then

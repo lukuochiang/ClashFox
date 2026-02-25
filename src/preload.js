@@ -60,6 +60,7 @@ contextBridge.exposeInMainWorld('clashfox', {
   trayMenuAction: (action, payload = {}) => ipcRenderer.invoke('clashfox:trayMenu:action', action, payload),
   trayMenuHide: () => ipcRenderer.send('clashfox:trayMenu:hide'),
   trayMenuSetExpanded: (expanded, payload = {}) => ipcRenderer.send('clashfox:trayMenu:setExpanded', Boolean(expanded), payload),
+  trayMenuRendererReady: () => ipcRenderer.send('clashfox:trayMenu:rendererReady'),
   onTrayMenuUpdate: (handler) => {
     if (typeof handler !== 'function') {
       return () => {};
