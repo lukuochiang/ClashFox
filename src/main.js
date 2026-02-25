@@ -1808,7 +1808,7 @@ function computeTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, expl
   const logoCenterX = 36;
   const desiredX = anchorX - logoCenterX;
   const x = Math.max(area.x + 8, Math.min(desiredX, area.x + area.width - popupWidth - 8));
-  const y = Math.max(area.y + 8, Math.min(trayBounds.y + trayBounds.height, area.y + area.height - popupHeight - 8));
+  const y = Math.max(area.y, Math.min(trayBounds.y + trayBounds.height, area.y + area.height - popupHeight - 8));
   return {
     bounds: { x, y, width: popupWidth, height: popupHeight },
   };

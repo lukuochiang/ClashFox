@@ -105,7 +105,11 @@ async function runActionForItem(item) {
   if (window.clashfox && typeof window.clashfox.traySubmenuHover === 'function') {
     window.clashfox.traySubmenuHover(true);
   }
-  const response = await window.clashfox.trayMenuAction(item.action, item);
+  const payload = { ...item };
+  if (typeof item.checked === 'boolean') {
+    payload.checked = !item.checked;
+  }
+  const response = await window.clashfox.trayMenuAction(item.action, payload);
   if (response && response.hide) {
     window.clashfox.trayMenuHide();
     window.clashfox.traySubmenuHide();
