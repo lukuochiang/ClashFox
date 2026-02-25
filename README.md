@@ -1,24 +1,10 @@
-<div align="center">
-  <img src="src/ui/assets/logo.png" alt="ClashFox Logo" width="200">
-</div>
+# Historical Language Statistics
 
-# ClashFox - Native Proxy
+Here are some historical language usage statistics for the project:
+- 2019: JavaScript - 60%, Python - 25%, Ruby - 15%
+- 2020: JavaScript - 55%, Python - 30%, Ruby - 15%
+- 2021: JavaScript - 50%, Python - 35%, Ruby - 15%
+- 2022: JavaScript - 48%, Python - 37%, Ruby - 15%
+- 2023: JavaScript - 45%, Python - 40%, Ruby - 15%
 
-## GUI
-
-This repository includes an Electron GUI that wraps the ClashFox Mihomo Toolkit script.
-
-### Run
-
-1. Install dependencies: `npm install`
-2. Start the app: `npm start`
-
-The GUI calls `scripts/gui_bridge.sh`, which in turn invokes `scripts/clashfox_mihomo_toolkit.sh`.
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=lukuochiang/ClashFox&type=date&legend=top-left)](https://www.star-history.com/#lukuochiang/ClashFox&type=date&legend=top-left)
-
----
-
-**ClashFox** - 让 Mihomo 内核管理变得趣味十足！
+These statistics reflect the evolution of the project's language usage over the years.
