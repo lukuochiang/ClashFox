@@ -151,6 +151,7 @@ let backupsRefresh = document.getElementById('backupsRefresh');
 let switchBtn = document.getElementById('switchBtn');
 let backupTable = document.getElementById('backupTable');
 let backupTableFull = document.getElementById('backupTableFull');
+let kernelCurrentTable = document.getElementById('kernelCurrentTable');
 let configsRefresh = document.getElementById('configsRefresh');
 let configTable = document.getElementById('configTable');
 let kernelTable = document.getElementById('kernelTable');
@@ -162,6 +163,7 @@ let kernelPageSize = document.getElementById('kernelPageSize');
 let switchPrev = document.getElementById('switchPrev');
 let switchNext = document.getElementById('switchNext');
 let switchPageInfo = document.getElementById('switchPageInfo');
+let switchPageSize = document.getElementById('switchPageSize');
 let backupsPrev = document.getElementById('backupsPrev');
 let backupsNext = document.getElementById('backupsNext');
 let backupsPageInfo = document.getElementById('backupsPageInfo');
@@ -948,6 +950,9 @@ function applySettings(settings) {
   state.generalPageSizeLocal = state.settings.backupsPageSize || '10';
   if (kernelPageSize) {
     kernelPageSize.value = state.kernelPageSizeLocal;
+  }
+  if (switchPageSize) {
+    switchPageSize.value = state.kernelPageSizeLocal;
   }
   if (backupsPageSize) {
     backupsPageSize.value = state.kernelPageSizeLocal;
@@ -2406,6 +2411,11 @@ function renderKernelTable() {
   if (!kernelTable || !kernelPageSize || !kernelPageInfo || !kernelPrev || !kernelNext) {
     return;
   }
+  const currentKernelHeading = kernelCurrentTable?.closest('.card')?.querySelector('h3');
+  if (currentKernelHeading) {
+    currentKernelHeading.classList.add('iconized', 'current-kernel-icon');
+    currentKernelHeading.style.setProperty('--card-icon-mask', 'var(--icon-current)');
+  }
   const items = state.kernels || [];
   const backupItems = [];
   let currentItem = null;
@@ -2445,19 +2455,21 @@ function renderKernelTable() {
     }
   }
   const currentTimestamp = currentItem && currentItem.modified ? currentItem.modified : '-';
-  let html = '<div class="kernel-current-card">';
-  html += '<div class="kernel-current-meta">';
-  html += `<div class="kernel-current-title">${t('labels.current')} ${t('status.kernel')}</div>`;
-  html += `<div class="kernel-current-time-label">${ti('table.installTime', t('table.time'))}</div>`;
-  html += '</div>';
-  html += '<div class="kernel-current-main">';
-  html += `<div class="version-cell"><span class="kernel-name">${currentDisplayName}</span> <span class="tag-group"><span class="tag current">${t('labels.current')}</span></span></div>`;
-  html += `<div class="time-cell">${currentTimestamp}</div>`;
-  html += '</div>';
-  html += '</div>';
+  if (kernelCurrentTable) {
+    let currentHtml = '<div class="kernel-current-card">';
+    currentHtml += '<div class="kernel-current-meta">';
+    currentHtml += `<div class="kernel-current-title">${t('labels.current')} ${t('status.kernel')}</div>`;
+    currentHtml += `<div class="kernel-current-time-label">${ti('table.installTime', t('table.time'))}</div>`;
+    currentHtml += '</div>';
+    currentHtml += '<div class="kernel-current-main">';
+    currentHtml += `<div class="version-cell"><span class="kernel-name">${currentDisplayName}</span> <span class="tag-group"><span class="tag current">${t('labels.current')}</span></span></div>`;
+    currentHtml += `<div class="time-cell">${currentTimestamp}</div>`;
+    currentHtml += '</div>';
+    currentHtml += '</div>';
+    kernelCurrentTable.innerHTML = currentHtml;
+  }
 
-  html += `<div class="kernel-backups-title">${t('nav.backups')}</div>`;
-  html += '<div class="table-row header kernel">';
+  let html = '<div class="table-row header kernel">';
   // show index column for backups
   html += `<div class="index-head">${t('table.index')}</div>`;
   html += `<div class="version-head">${t('table.version')}</div>`;
@@ -2534,10 +2546,15 @@ async function loadBackups(showToastOnSuccess = false) {
 }
 
 function renderSwitchTable() {
-  if (!backupTable || !kernelPageSize || !switchPageInfo || !switchPrev || !switchNext) {
+  if (!backupTable || !switchPageInfo || !switchPrev || !switchNext) {
     return;
   }
-  const size = Number.parseInt(state.kernelPageSizeLocal || kernelPageSize.value || '10', 10) || 10;
+  const pageSizeRaw = state.kernelPageSizeLocal
+    || (switchPageSize && switchPageSize.value)
+    || (kernelPageSize && kernelPageSize.value)
+    || state.settings.kernelPageSize
+    || '10';
+  const size = Number.parseInt(pageSizeRaw, 10) || 10;
   const pageData = renderBackups(backupTable, true, state.switchPage, size, false);
   state.switchPage = pageData.page;
   switchPageInfo.textContent = `${pageData.page} / ${pageData.totalPages} · ${state.lastBackups.length}`;
@@ -2748,6 +2765,7 @@ function refreshPageRefs() {
   switchBtn = document.getElementById('switchBtn');
   backupTable = document.getElementById('backupTable');
   backupTableFull = document.getElementById('backupTableFull');
+  kernelCurrentTable = document.getElementById('kernelCurrentTable');
   configsRefresh = document.getElementById('configsRefresh');
   configTable = document.getElementById('configTable');
   kernelTable = document.getElementById('kernelTable');
@@ -2759,6 +2777,7 @@ function refreshPageRefs() {
   switchPrev = document.getElementById('switchPrev');
   switchNext = document.getElementById('switchNext');
   switchPageInfo = document.getElementById('switchPageInfo');
+  switchPageSize = document.getElementById('switchPageSize');
   backupsPrev = document.getElementById('backupsPrev');
   backupsNext = document.getElementById('backupsNext');
   backupsPageInfo = document.getElementById('backupsPageInfo');
@@ -2874,10 +2893,10 @@ function refreshPageView() {
     loadLogs();
   }
   loadStatus();
-  if (currentPage === 'install') {
+  if (currentPage === 'install' || currentPage === 'kernel') {
     loadKernels();
   }
-  if (currentPage === 'switch') {
+  if (currentPage === 'switch' || currentPage === 'backups' || currentPage === 'kernel') {
     loadBackups();
   }
   if (currentPage === 'overview') {
@@ -2892,6 +2911,7 @@ function refreshPageView() {
 function normalizePageName(page) {
   if (page === 'status') return 'overview';
   if (page === 'control') return 'config';
+  if (page === 'install' || page === 'switch' || page === 'backups') return 'kernel';
   return page;
 }
 
@@ -3354,10 +3374,30 @@ if (kernelNext) {
 }
 if (kernelPageSize) {
   kernelPageSize.addEventListener('change', () => {
+    if (switchPageSize) {
+      switchPageSize.value = kernelPageSize.value;
+    }
     if (backupsPageSize) {
       backupsPageSize.value = kernelPageSize.value;
     }
     state.kernelPageSizeLocal = kernelPageSize.value;
+    state.kernelsPage = 1;
+    state.switchPage = 1;
+    state.backupsPage = 1;
+    renderKernelTable();
+    renderSwitchTable();
+    renderBackupsTable();
+  });
+}
+if (switchPageSize) {
+  switchPageSize.addEventListener('change', () => {
+    if (kernelPageSize) {
+      kernelPageSize.value = switchPageSize.value;
+    }
+    if (backupsPageSize) {
+      backupsPageSize.value = switchPageSize.value;
+    }
+    state.kernelPageSizeLocal = switchPageSize.value;
     state.kernelsPage = 1;
     state.switchPage = 1;
     state.backupsPage = 1;
@@ -3796,6 +3836,9 @@ if (settingsKernelPageSize) {
     if (kernelPageSize) {
       kernelPageSize.value = settingsKernelPageSize.value;
     }
+    if (switchPageSize) {
+      switchPageSize.value = settingsKernelPageSize.value;
+    }
     if (backupsPageSize) {
       backupsPageSize.value = settingsKernelPageSize.value;
     }
@@ -3837,6 +3880,9 @@ if (backupsPageSize) {
   backupsPageSize.addEventListener('change', () => {
     if (kernelPageSize) {
       kernelPageSize.value = backupsPageSize.value;
+    }
+    if (switchPageSize) {
+      switchPageSize.value = backupsPageSize.value;
     }
     state.kernelPageSizeLocal = backupsPageSize.value;
     state.kernelsPage = 1;
@@ -4228,6 +4274,10 @@ function initDashboardFrame() {
 
 async function initApp() {
   await loadLayoutParts();
+  const targetPage = getPageFromLocation();
+  if (targetPage && targetPage !== currentPage) {
+    await navigatePage(targetPage, false);
+  }
   await loadStaticConfigs();
   await syncSettingsFromFile();
   applySettings(readSettings());

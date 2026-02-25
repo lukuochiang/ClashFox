@@ -7,6 +7,11 @@
   --panel-soft: #1c2530;
   --accent: #f4b34a;
   --accent-strong: #ff7a4a;
+  --active-soft-bg: rgba(244, 179, 74, 0.12);
+  --active-soft-border: rgba(244, 179, 74, 0.4);
+  --active-strong-bg: linear-gradient(135deg, rgba(244, 179, 74, 0.56), rgba(255, 122, 74, 0.52));
+  --active-strong-border: rgba(244, 179, 74, 0.58);
+  --active-strong-ink: #2a180c;
   --mint: #8ce0c6;
   --ink: #e9eef3;
   --muted: #93a4b7;
@@ -20,6 +25,7 @@
   --icon-overview: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3' y='3' width='6' height='6' rx='1.3' fill='%23000'/%3E%3Crect x='11' y='3' width='6' height='4' rx='1.3' fill='%23000'/%3E%3Crect x='11' y='9' width='6' height='8' rx='1.3' fill='%23000'/%3E%3Crect x='3' y='11' width='6' height='6' rx='1.3' fill='%23000'/%3E%3C/svg%3E");
   --icon-download: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 3.5v9.2l2.8-2.8a1 1 0 0 1 1.4 1.4l-4.6 4.6a1 1 0 0 1-1.4 0L3.6 11.3a1 1 0 1 1 1.4-1.4L7.8 12.8V3.5a1 1 0 1 1 2 0Z' fill='%23000'/%3E%3Cpath d='M4 16.5h12a1 1 0 1 1 0 2H4a1 1 0 1 1 0-2Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-switch: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5.2 5.5H16l-2.1-2.1a1 1 0 1 1 1.4-1.4l3.9 3.9a1 1 0 0 1 0 1.4l-3.9 3.9a1 1 0 1 1-1.4-1.4L16 7.5H5.2a1 1 0 0 1 0-2Z' fill='%23000'/%3E%3Cpath d='M14.8 14.5H4l2.1 2.1a1 1 0 0 1-1.4 1.4l-3.9-3.9a1 1 0 0 1 0-1.4l3.9-3.9a1 1 0 0 1 1.4 1.4L4 12.5h10.8a1 1 0 0 1 0 2Z' fill='%23000'/%3E%3C/svg%3E");
+  --icon-kernel: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='5' y='5' width='10' height='10' rx='2' stroke='%23000' stroke-width='1.5'/%3E%3Crect x='8' y='8' width='4' height='4' rx='1' fill='%23000'/%3E%3Cpath d='M3 7h2M3 10h2M3 13h2M15 7h2M15 10h2M15 13h2M7 3v2M10 3v2M13 3v2M7 15v2M10 15v2M13 15v2' stroke='%23000' stroke-width='1.3' stroke-linecap='round'/%3E%3C/svg%3E");
   --icon-gear: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11.7 2.2 12 4a6.5 6.5 0 0 1 1.4.8l1.7-.7a1 1 0 0 1 1.3.5l.7 1.5a1 1 0 0 1-.4 1.3l-1.5.9a6.4 6.4 0 0 1 0 1.6l1.5.9a1 1 0 0 1 .4 1.3l-.7 1.5a1 1 0 0 1-1.3.5l-1.7-.7a6.5 6.5 0 0 1-1.4.8L11.7 18a1 1 0 0 1-1 .8h-1.4a1 1 0 0 1-1-.8l-.3-1.8a6.5 6.5 0 0 1-1.4-.8l-1.7.7a1 1 0 0 1-1.3-.5l-.7-1.5a1 1 0 0 1 .4-1.3l1.5-.9a6.4 6.4 0 0 1 0-1.6l-1.5-.9a1 1 0 0 1-.4-1.3l.7-1.5a1 1 0 0 1 1.3-.5l1.7.7a6.5 6.5 0 0 1 1.4-.8L8.3 2.2a1 1 0 0 1 1-.8h1.4a1 1 0 0 1 1 .8ZM10 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-backup: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M6.5 4.5a4.5 4.5 0 0 1 8.75 1h.75A3.5 3.5 0 0 1 19.5 9c0 1.9-1.6 3.5-3.5 3.5H6a3.5 3.5 0 1 1 .5-6.97Z' fill='%23000' opacity='0.9'/%3E%3Cpath d='M10 9.2v4.6l1.5-1.5a1 1 0 1 1 1.4 1.4l-3.3 3.3a1 1 0 0 1-1.4 0l-3.3-3.3a1 1 0 1 1 1.4-1.4L9 13.8V9.2a1 1 0 1 1 2 0Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-doc: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11.2 2.2 15.8 6.8c.3.3.4.6.4 1v8.5a1.5 1.5 0 0 1-1.5 1.5h-9a1.5 1.5 0 0 1-1.5-1.5v-14A1.5 1.5 0 0 1 5.2 1h5c.4 0 .7.1 1 .4ZM11 3.9V6a1 1 0 0 0 1 1h2.1L11 3.9ZM6 9.5a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H7a1 1 0 0 1-1-1Zm0 3a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H7a1 1 0 0 1-1-1Z' fill='%23000'/%3E%3C/svg%3E");
@@ -38,6 +44,7 @@
   --icon-folders: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3.75 4a1.75 1.75 0 0 0-1.74 1.94l.6 7A1.75 1.75 0 0 0 4.35 14.5h11.3a1.75 1.75 0 0 0 1.74-1.56l.6-7A1.75 1.75 0 0 0 16.25 4h-5.5a.75.75 0 0 1-.53-.22l-1.5-1.5A.75.75 0 0 0 8.19 2h-4.4Zm12.64 2.5-7.39 2.4a.75.75 0 0 1-.48 0L3.13 6.5l.17 2 4.9 1.6c.4.12.83.12 1.23 0l4.9-1.6.16-2Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-slider-h: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 5a1 1 0 0 1 1-1h10a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1Zm2.5 10a1 1 0 0 1 1-1h5a1 1 0 1 1 0 2h-5a1 1 0 0 1-1-1Zm-2-4a1 1 0 0 1 1-1h9a1 1 0 1 1 0 2h-9a1 1 0 0 1-1-1Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-palette: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 2a7.5 7.5 0 0 0-7.5 7.5c0 3.4 2.5 5.82 4.74 7.26 1.42.91 3.26-.27 2.95-1.9l-.11-.61a1.25 1.25 0 0 1 1.23-1.48h1.69c1.95 0 3-1.67 3-3.5C16 5.36 13.33 2 10 2Zm-3 7.5a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Zm2-3.5a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Zm3.75 0a1.25 1.25 0 1 1 2.5 0 1.25 1.25 0 0 1-2.5 0Zm-1 3.5a1.25 1.25 0 1 1 2.5 0 1.25 1.25 0 0 1-2.5 0Z' fill='%23000'/%3E%3C/svg%3E");
+  --icon-current: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='10' cy='10' r='7' stroke='%23000' stroke-width='1.6'/%3E%3Cpath d='M6.9 10.3 8.9 12.2 13.2 7.9' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --icon-defaults: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 2a1 1 0 0 1 .96.72l.7 2.44 2.5-.2a1 1 0 0 1 .87 1.6l-1.6 2.02 1.6 2.02a1 1 0 0 1-.87 1.6l-2.5-.2-.7 2.44a1 1 0 0 1-1.92 0l-.7-2.44-2.5.2a1 1 0 0 1-.87-1.6l1.6-2.02-1.6-2.02a1 1 0 0 1 .87-1.6l2.5.2.7-2.44A1 1 0 0 1 10 2Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-config: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3' y='2.5' width='14' height='15' rx='2' stroke='%23000' stroke-width='1.5' fill='none'/%3E%3Cpath d='M6 6.5h4' stroke='%23000' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M6 9.5h3' stroke='%23000' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M6 12.5h5' stroke='%23000' stroke-width='1.5' stroke-linecap='round'/%3E%3Crect x='11.5' y='6' width='5' height='6.5' rx='0.8' stroke='%23000' stroke-width='1.2' fill='none'/%3E%3Cpath d='M13 7.5h2.5' stroke='%23000' stroke-width='1.1' stroke-linecap='round'/%3E%3Cpath d='M13 9h1.6' stroke='%23000' stroke-width='1.1' stroke-linecap='round'/%3E%3Cpath d='M13 10.5h2' stroke='%23000' stroke-width='1.1' stroke-linecap='round'/%3E%3C/svg%3E");
   --icon-outbound: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 7h8V4l6 5-6 5v-3H4V7Zm16 10H12v3l-6-5 6-5v3h8v4Z' fill='%23000'/%3E%3C/svg%3E");
@@ -56,6 +63,11 @@ body[data-theme="day"], html[data-theme="day"] body {
   --panel-soft: rgba(255, 255, 255, 0.7);
   --accent: #f2a13b;
   --accent-strong: #e56b3b;
+  --active-soft-bg: rgba(244, 179, 74, 0.12);
+  --active-soft-border: rgba(229, 107, 59, 0.38);
+  --active-strong-bg: linear-gradient(135deg, rgba(242, 161, 59, 0.5), rgba(229, 107, 59, 0.46));
+  --active-strong-border: rgba(229, 107, 59, 0.46);
+  --active-strong-ink: #2b1a0f;
   --mint: #2f8f78;
   --ink: #1f2a36;
   /*--muted: #5b6e83;*/
@@ -98,7 +110,6 @@ body.layout-ready .app {
 
 #menuContainer {
   display: flex;
-  flex-direction: column;
   min-height: 100%;
 }
 
@@ -502,6 +513,7 @@ body[data-theme="day"] .brand-mark .logo-night {
 }
 
 .nav-btn[data-page="overview"]::before { mask-image: var(--icon-overview); }
+.nav-btn[data-page="kernel"]::before { mask-image: var(--icon-kernel); }
 .nav-btn[data-page="install"]::before { mask-image: var(--icon-download); }
 .nav-btn[data-page="switch"]::before { mask-image: var(--icon-switch); }
 .nav-btn[data-page="config"]::before { mask-image: var(--icon-config); }
@@ -512,8 +524,8 @@ body[data-theme="day"] .brand-mark .logo-night {
 
 .nav-btn.active,
 .nav-btn:hover {
-  background: rgba(244, 179, 74, 0.12);
-  border-color: rgba(244, 179, 74, 0.4);
+  background: var(--active-soft-bg);
+  border-color: var(--active-soft-border);
   color: var(--ink);
 }
 
@@ -1228,6 +1240,14 @@ body[data-page="settings"] .settings-top-column-right .form-row:first-child {
   --card-icon-mask: var(--icon-sliders);
 }
 
+.current-kernel-icon {
+  --card-icon-mask: var(--icon-current);
+}
+
+body[data-page="kernel"] h3.current-kernel-icon {
+  --card-icon-mask: var(--icon-current) !important;
+}
+
 .conn-live-icon {
   --card-icon-mask: var(--icon-connections);
 }
@@ -1930,6 +1950,35 @@ body[data-theme="day"] .radio-pill:has(input[type="radio"]:checked)::after {
   margin-bottom: 10px;
 }
 
+/* Kernel page: tighten vertical rhythm between stacked cards */
+body[data-page="kernel"] #kernel.panel {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+body[data-page="kernel"] #kernel.panel .card {
+  margin: 0;
+  padding: 10px 12px;
+}
+
+body[data-page="kernel"] #kernel.panel .install-card {
+  margin-bottom: 0;
+  gap: 12px;
+}
+
+body[data-page="kernel"] #kernel.panel .card > h3 {
+  margin: 0 0 10px;
+}
+
+body[data-page="kernel"] #kernel.panel .table {
+  margin-top: 10px;
+}
+
+body[data-page="kernel"] #kernel.panel .pagination {
+  margin-top: 8px;
+}
+
 .install-header {
   display: flex;
   align-items: flex-start;
@@ -2087,9 +2136,11 @@ body[data-theme="day"] [data-tooltip]:hover::after {
 }
 
 .btn.primary {
-  background: linear-gradient(135deg, rgba(244, 179, 74, 0.7), rgba(255, 122, 74, 0.7));
-  color: #1a0f07;
+  background: var(--active-strong-bg);
+  border-color: var(--active-strong-border);
+  color: var(--active-strong-ink);
   font-weight: 600;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 .btn.ghost {
@@ -2294,7 +2345,7 @@ body[data-theme="day"] .toggle-pill::after {
   margin-top: 14px;
   border-radius: 14px;
   overflow: hidden;
-  border: 1px solid var(--border);
+  /*border: 1px solid var(--border);*/
 }
 
 .backup-table {
@@ -2516,12 +2567,12 @@ tr.selectable.selected {
 .table-row.header.kernel {
   /* first column for sequence numbers */
   grid-template-columns: 40px 1fr 160px;
-  border-top: 1px solid var(--border);
-  border-bottom-style: none;
+  /*border-top: 1px solid var(--border);*/
+  /*border-bottom-style: none;*/
 }
 
 .kernel-current-card {
-  border-bottom: 1px solid var(--border);
+  /*border-bottom: 1px solid var(--border);*/
   border-radius: 14px;
   /* background: linear-gradient(180deg, rgba(144, 170, 198, 0.08), rgba(144, 170, 198, 0.03)); */
   background: rgba(244, 179, 74, 0.12);
@@ -3058,15 +3109,41 @@ body[data-theme="day"] .modal {
     grid-template-columns: 1fr;
   }
 
-  .sidebar {
+  #menuContainer {
     flex-direction: row;
-    flex-wrap: wrap;
+    min-height: 0;
+  }
+
+  .sidebar {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
     align-items: center;
+    gap: 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
   }
 
   .nav {
+    display: flex;
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+
+  .nav-bottom {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+
+  .sidebar .nav-btn {
+    white-space: nowrap;
+    flex: 0 0 auto;
   }
 }
 

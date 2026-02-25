@@ -2,6 +2,7 @@ const I18N = {
   "en": {
     "nav": {
       "status": "Overview",
+      "kernel": "Kernel",
       "install": "Install / Update",
       "config": "Config",
       "switch": "Switch Kernel",
@@ -319,6 +320,7 @@ const I18N = {
   "zh": {
     "nav": {
       "status": "概览",
+      "kernel": "内核",
       "install": "安装 / 更新",
       "config": "配置",
       "switch": "切换内核",
@@ -636,6 +638,7 @@ const I18N = {
   "ja": {
     "nav": {
       "status": "概要",
+      "kernel": "カーネル",
       "install": "インストール / 更新",
       "config": "設定",
       "switch": "カーネル切替",
@@ -947,6 +950,7 @@ const I18N = {
   "ko": {
     "nav": {
       "status": "개요",
+      "kernel": "커널",
       "install": "설치 / 업데이트",
       "config": "설정",
       "switch": "커널 전환",
@@ -1258,6 +1262,7 @@ const I18N = {
   "fr": {
     "nav": {
       "status": "Apercu",
+      "kernel": "Noyau",
       "install": "Installer / Mettre à jour",
       "config": "Configuration",
       "switch": "Changer le noyau",
@@ -1569,6 +1574,7 @@ const I18N = {
   "de": {
     "nav": {
       "status": "Übersicht",
+      "kernel": "Kernel",
       "install": "Installieren / Aktualisieren",
       "config": "Konfiguration",
       "switch": "Kernel wechseln",
@@ -1880,6 +1886,7 @@ const I18N = {
   "ru": {
     "nav": {
       "status": "Обзор",
+      "kernel": "Ядро",
       "install": "Установка / Обновление",
       "config": "Конфигурация",
       "switch": "Смена ядра",
