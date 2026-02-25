@@ -277,6 +277,7 @@ const state = {
   autoPanelInstalled: false,
   panelInstallRequested: false,
   coreVersionRaw: '',
+  coreStatusTimer: null,
   overviewTimer: null,
   overviewTickTimer: null,
   overviewLoading: false,
@@ -297,8 +298,11 @@ const state = {
   proxyAt: 0,
   coreActionInFlight: false,
   coreStartupEstimateMs: 1500,
-  coreStatusTransitionUntil: 0,
-  coreStatusTransitionTimer: null,
+  coreRunning: false,
+  coreRunningFalseStreak: 0,
+  coreRunningGuardUntil: 0,
+  coreRunningUpdatedAt: 0,
+  overviewRunningUpdatedAt: 0,
   overviewRunning: false,
   overviewUptimeBaseSec: 0,
   overviewUptimeAt: 0,
@@ -317,9 +321,6 @@ const state = {
 
 const CORE_STARTUP_ESTIMATE_MIN_MS = 900;
 const CORE_STARTUP_ESTIMATE_MAX_MS = 10000;
-const RESTART_TRANSITION_MIN_MS = 450;
-const RESTART_TRANSITION_MAX_MS = 4000;
-const RESTART_TRANSITION_RATIO = 0.5;
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -327,43 +328,6 @@ function clamp(value, min, max) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function getRestartTransitionDelayMs() {
-  const estimate = Number.isFinite(state.coreStartupEstimateMs) ? state.coreStartupEstimateMs : 1500;
-  return clamp(
-    Math.round(estimate * RESTART_TRANSITION_RATIO),
-    RESTART_TRANSITION_MIN_MS,
-    RESTART_TRANSITION_MAX_MS,
-  );
-}
-
-function beginStatusTransition(running, durationMs = 0) {
-  const ms = Math.max(0, Number.parseInt(durationMs, 10) || 0);
-  if (state.coreStatusTransitionTimer) {
-    clearTimeout(state.coreStatusTransitionTimer);
-    state.coreStatusTransitionTimer = null;
-  }
-  state.coreStatusTransitionUntil = Date.now() + ms;
-  if (statusPill) {
-    statusPill.dataset.state = 'transition';
-  }
-  syncRunningIndicators(running, { allowTransitionOverride: true });
-  if (ms <= 0) {
-    state.coreStatusTransitionUntil = 0;
-    if (statusPill) {
-      statusPill.dataset.state = state.coreRunning ? 'running' : 'stopped';
-    }
-    return;
-  }
-  state.coreStatusTransitionTimer = setTimeout(async () => {
-    state.coreStatusTransitionUntil = 0;
-    state.coreStatusTransitionTimer = null;
-    if (statusPill && statusPill.dataset.state === 'transition') {
-      statusPill.dataset.state = state.coreRunning ? 'running' : 'stopped';
-    }
-    await loadStatusSilently();
-  }, ms);
 }
 
 function updateCoreStartupEstimate(measuredMs) {
@@ -1039,13 +1003,8 @@ if (window.clashfox && typeof window.clashfox.onMainCoreAction === 'function') {
     if (!payload || !payload.action) {
       return;
     }
-    if (payload.action === 'restart' && payload.phase === 'transition') {
-      beginStatusTransition(false, payload.delayMs || getRestartTransitionDelayMs());
-      return;
-    }
-    if (payload.action === 'start' && payload.phase === 'start') {
-      setStatusInterim(true);
-    }
+    // Always sync from real kernel state; avoid synthetic transition states.
+    loadStatusSilently();
   });
 }
 
@@ -1260,8 +1219,13 @@ function isTunConflictError(message) {
 }
 
 function formatCoreActionError(action, response) {
-  const fallback = response?.error || response?.details || response?.message
-    || `${action.charAt(0).toUpperCase() + action.slice(1)} failed`;
+  const genericErrors = new Set(['start_failed', 'restart_failed', 'stop_failed']);
+  const errorCode = response?.error || '';
+  const details = response?.details || response?.message || '';
+  const fallback = (details && genericErrors.has(errorCode))
+    ? details
+    : (response?.error || response?.details || response?.message
+      || `${action.charAt(0).toUpperCase() + action.slice(1)} failed`);
   const combined = [response?.error, response?.details, response?.message]
     .filter(Boolean)
     .join(' | ');
@@ -1405,7 +1369,7 @@ async function loadAppInfo() {
 
 function updateStatusUI(data) {
   const running = data.running;
-  state.coreRunning = running;
+  applyKernelRunningState(running, 'status');
   state.coreVersionRaw = data.version || '';
   state.configDefault = data.configDefault || '';
   const configValue = getCurrentConfigPath() || data.configDefault || '-';
@@ -1420,7 +1384,7 @@ function updateStatusUI(data) {
   if (statusVersion) {
     statusVersion.textContent = data.version || t('labels.notInstalled');
   }
-  syncCoreActionButtons();
+  syncQuickActionButtons();
   if (quickHintNodes.length) {
   // quick hint removed
   }
@@ -1462,39 +1426,61 @@ function updateStatusUI(data) {
     // ensure value reflects current panel
     updateExternalUiUrlField();
   }
-  syncRunningIndicators(running, { allowTransitionOverride: false });
+  syncRunningIndicators(state.coreRunning);
   renderConfigTable();
 }
 
-function syncCoreActionButtons() {
-  const hasKernel = Boolean(state.hasKernel);
-  const running = Boolean(state.coreRunning || state.overviewRunning);
-  const inFlight = Boolean(state.coreActionInFlight);
+function syncQuickActionButtons() {
   if (startBtn) {
-    startBtn.disabled = !hasKernel || inFlight || running;
+    startBtn.disabled = false;
   }
   if (stopBtn) {
-    stopBtn.disabled = !hasKernel || inFlight || !running;
+    stopBtn.disabled = false;
   }
   if (restartBtn) {
-    restartBtn.disabled = !hasKernel || inFlight || !running;
+    restartBtn.disabled = false;
   }
-}
-
-function setStatusInterim(running) {
-  syncRunningIndicators(running, { allowTransitionOverride: true });
 }
 
 function setCoreActionState(inFlight) {
   state.coreActionInFlight = inFlight;
-  syncCoreActionButtons();
+  syncQuickActionButtons();
 }
 
-function syncRunningIndicators(running, { allowTransitionOverride = false } = {}) {
-  const inTransition = Date.now() < (state.coreStatusTransitionUntil || 0);
-  if (inTransition && !allowTransitionOverride) {
+function setQuickActionRunningState(running) {
+  const next = Boolean(running);
+  state.coreRunning = next;
+  state.coreRunningUpdatedAt = Date.now();
+  state.coreRunningFalseStreak = 0;
+  syncRunningIndicators(next);
+  syncQuickActionButtons();
+}
+
+function applyKernelRunningState(running, source = 'status') {
+  const next = Boolean(running);
+  const now = Date.now();
+  if (next) {
+    state.coreRunning = true;
+    state.coreRunningFalseStreak = 0;
+    state.coreRunningUpdatedAt = now;
+    syncRunningIndicators(true);
+    syncQuickActionButtons();
     return;
   }
+  if (source === 'status' && state.coreRunning && now < state.coreRunningGuardUntil) {
+    state.coreRunningFalseStreak += 1;
+    if (state.coreRunningFalseStreak < 3) {
+      return;
+    }
+  }
+  state.coreRunning = false;
+  state.coreRunningFalseStreak = 0;
+  state.coreRunningUpdatedAt = now;
+  syncRunningIndicators(false);
+  syncQuickActionButtons();
+}
+
+function syncRunningIndicators(running) {
   const label = running ? t('labels.running') : t('labels.stopped');
   if (statusRunning) {
     statusRunning.textContent = label;
@@ -1503,9 +1489,7 @@ function syncRunningIndicators(running, { allowTransitionOverride = false } = {}
     overviewStatus.textContent = label;
   }
   if (statusPill) {
-    if (statusPill.dataset.state === 'transition' && !allowTransitionOverride) {
-      return;
-    }
+    // Always reflect the latest real status instead of keeping a stale transition state.
     statusPill.dataset.state = running ? 'running' : 'stopped';
     statusPill.dataset.i18nTipKey = running ? 'labels.running' : 'labels.stopped';
     statusPill.dataset.i18nTip = statusPill.dataset.i18nTipKey;
@@ -1909,13 +1893,8 @@ function updateOverviewUI(data) {
     return;
   }
   state.overviewRunning = Boolean(data.running);
-  syncCoreActionButtons();
-  
-  // 检查元素是否存在再设置textContent
-  if (overviewStatus) {
-    overviewStatus.textContent = state.overviewRunning ? t('labels.running') : t('labels.stopped');
-  }
-  syncRunningIndicators(state.overviewRunning, { allowTransitionOverride: false });
+  state.overviewRunningUpdatedAt = Date.now();
+  // Keep overview runtime data independent; running indicator is driven by status probe.
   if (overviewKernel) {
     overviewKernel.textContent = formatKernelDisplay(data.kernelVersion);
   }
@@ -2000,8 +1979,8 @@ function updateOverviewRuntimeUI(data) {
     return;
   }
   state.overviewRunning = Boolean(data.running);
-  syncCoreActionButtons();
-  // 运行状态统一由 updateStatusUI / setStatusInterim 管理，避免并发刷新不同步
+  state.overviewRunningUpdatedAt = Date.now();
+  // 运行状态统一由 updateStatusUI 管理，避免并发刷新不同步
   if (state.overviewRunning) {
     const parsedUptime = Number.parseInt(data.uptimeSec, 10);
     if (Number.isFinite(parsedUptime)) {
@@ -2036,15 +2015,38 @@ function updateOverviewRuntimeUI(data) {
 }
 
 async function loadStatusSilently() {
-  const configPath = getCurrentConfigPath();
-  const args = configPath ? ['--config', configPath] : [];
-  const response = await runCommand('status', args);
+  // Do not bind status detection to selected config file validity.
+  // Status should reflect actual kernel process state.
+  const response = await runCommand('status');
   if (!response.ok) {
+    const fallbackOk = await probeKernelRunningFromOverviewLite();
+    if (fallbackOk) {
+      return {
+        ok: true,
+        data: { running: state.coreRunning },
+        fallback: 'overview-lite',
+      };
+    }
     return response;
   }
   updateStatusUI(response.data);
   loadTunStatus(false);
   return response;
+}
+
+async function probeKernelRunningFromOverviewLite() {
+  const configPath = getCurrentConfigPath();
+  const args = configPath ? ['--config', configPath] : [];
+  args.push(...getControllerArgs());
+  const response = await runCommand('overview-lite', args);
+  if (!response.ok || !response.data || typeof response.data.running !== 'boolean') {
+    return false;
+  }
+  const running = Boolean(response.data.running);
+  state.overviewRunning = running;
+  state.overviewRunningUpdatedAt = Date.now();
+  applyKernelRunningState(running, 'overview-lite');
+  return true;
 }
 
 async function loadStatus() {
@@ -2055,19 +2057,17 @@ async function loadStatus() {
   }
 }
 
-async function waitForCoreRunning(timeoutMs = 12000, intervalMs = 350) {
+async function waitForKernelState(expectedRunning, timeoutMs = 12000, intervalMs = 350) {
+  const expected = Boolean(expectedRunning);
   const deadline = Date.now() + timeoutMs;
   while (Date.now() <= deadline) {
-    const response = await loadStatusSilently();
-    if (!response.ok) {
-      return false;
-    }
-    if (state.coreRunning) {
+    await loadStatusSilently();
+    if (Boolean(state.coreRunning) === expected) {
       return true;
     }
     await sleep(intervalMs);
   }
-  return false;
+  return Boolean(state.coreRunning) === expected;
 }
 
 async function loadOverview(showToastOnSuccess = false) {
@@ -2114,7 +2114,7 @@ async function loadTunStatus(showToastOnSuccess = false) {
   args.push(...getControllerArgs());
   const response = await runCommand('tun-status', args);
   if (!response.ok || !response.data) {
-    const statusResp = await runCommand('status', args);
+    const statusResp = await runCommand('status');
     const running = statusResp && statusResp.ok && statusResp.data && statusResp.data.running;
     if (!running) {
       if (tunToggle) tunToggle.checked = false;
@@ -3476,21 +3476,20 @@ if (settingsBrowseConfig) {
 
 // 统一的核心操作处理函数
 async function handleCoreAction(action, button) {
-  // 检查是否有操作正在进行
-  if (state.coreActionInFlight) {
-    return;
-  }
-  
-  // 设置操作中状态
-  setCoreActionState(true);
+  // Keep quick actions always responsive.
+  setCoreActionState(false);
   
   try {
+    // Always refresh status before making action decisions to avoid stale state.
+    const statusResp = await loadStatusSilently();
+    if (!statusResp.ok && !state.coreRunning) {
+      showToast(statusResp.error || ti('labels.statusError', 'Status error'), 'error');
+      return;
+    }
+
     // 检查当前运行状态
     if (action === 'start' && state.coreRunning) {
       showToast(t('labels.alreadyRunning'));
-      setStatusInterim(true);
-      loadStatus();
-      setTimeout(() => loadStatus(), 1200);
       return;
     }
     
@@ -3501,69 +3500,86 @@ async function handleCoreAction(action, button) {
     
     let command = action;
     if (action === 'restart' && !state.coreRunning) {
-      showToast(t('labels.restartStarts'));
-      command = 'start';
-    }
-
-    if (action === 'restart' && state.coreRunning) {
-      // Make restart transition visible to user instead of appearing always-running.
-      setStatusInterim(false);
-      await sleep(getRestartTransitionDelayMs());
+      showToast(t('labels.alreadyStopped'));
+      return;
     }
 
     // 准备命令参数
     const args = [];
-    if (command === 'start') {
+    if (command === 'start' || command === 'restart') {
       const configPath = getCurrentConfigPath();
       if (configPath) {
         args.push('--config', configPath);
       }
-      setStatusInterim(true);
-    } else if (command === 'stop') {
-      setStatusInterim(false);
     }
     
     // 执行操作
     const commandStartedAt = Date.now();
     const response = await runCommandWithSudo(command, args);
     if (response.ok) {
-      if (action === 'start' || action === 'restart') {
-        const running = await waitForCoreRunning();
-        if (!running) {
-          await loadStatus();
-        } else {
+      if (action === 'start') {
+        const running = await waitForKernelState(true, 12000, 350);
+        if (running) {
+          state.coreRunningGuardUntil = Date.now() + 10000;
+          setQuickActionRunningState(true);
           const startupElapsedMs = Date.now() - commandStartedAt;
           updateCoreStartupEstimate(startupElapsedMs);
-        }
-        loadOverviewLite();
-      }
-      if (action === 'restart') {
-        showToast(t('labels.restartSuccess'));
-      } else if (action === 'start') {
-        if (state.coreRunning) {
           showToast(t('labels.startSuccess'));
         } else {
+          state.coreRunningGuardUntil = 0;
+          await loadStatusSilently();
+          syncQuickActionButtons();
           showToast(ti('labels.startFailed', 'Start failed'), 'error');
         }
+      } else if (action === 'restart') {
+        const running = await waitForKernelState(true, 15000, 400);
+        if (running) {
+          state.coreRunningGuardUntil = Date.now() + 10000;
+          setQuickActionRunningState(true);
+          const startupElapsedMs = Date.now() - commandStartedAt;
+          updateCoreStartupEstimate(startupElapsedMs);
+          showToast(t('labels.restartSuccess'));
+        } else {
+          state.coreRunningGuardUntil = 0;
+          await loadStatusSilently();
+          syncQuickActionButtons();
+          showToast(ti('labels.restartFailed', 'Restart failed'), 'error');
+        }
       } else {
-        showToast(t('labels.stopped'));
+        const stopped = await waitForKernelState(false, 10000, 300);
+        if (stopped) {
+          state.coreRunningGuardUntil = 0;
+          setQuickActionRunningState(false);
+          showToast(t('labels.stopped'));
+        } else {
+          state.coreRunningGuardUntil = 0;
+          await loadStatusSilently();
+          syncQuickActionButtons();
+          showToast(ti('labels.stopFailed', 'Stop failed'), 'error');
+        }
       }
+      loadOverviewLite();
     } else {
+      state.coreRunningGuardUntil = 0;
+      await loadStatusSilently();
+      syncQuickActionButtons();
       showToast(formatCoreActionError(action, response), 'error');
     }
     
   } catch (error) {
     showToast(error.message || ti('labels.unexpectedError', 'An unexpected error occurred'), 'error');
   } finally {
-    // 无论成功失败，都更新状态
-    await loadStatus();
-    const delay = action === 'restart'
-      ? clamp(Math.round(state.coreStartupEstimateMs * 0.8), 1200, 6000)
-      : 1200;
-    setTimeout(() => loadStatus(), delay);
-    
-    // 重置操作中状态
     setCoreActionState(false);
+    // refresh with restart-safe timing to avoid transient false-negative overriding buttons.
+    if (action === 'restart') {
+      const delay = clamp(Math.round(state.coreStartupEstimateMs * 0.8), 1200, 6000);
+      setTimeout(() => loadStatus(), 900);
+      setTimeout(() => loadStatus(), delay);
+      setTimeout(() => loadStatus(), Math.max(delay + 1200, 2600));
+    } else {
+      loadStatus();
+      setTimeout(() => loadStatus(), 1200);
+    }
   }
 }
 
@@ -3657,13 +3673,25 @@ if (tunStackSelect) {
 }
 
 if (configTable) {
-  configTable.addEventListener('click', (event) => {
+  configTable.addEventListener('click', async (event) => {
     const row = event.target.closest('tr[data-path]');
     if (!row) {
       return;
     }
     const path = row.getAttribute('data-path') || '';
     if (!path || path === getCurrentConfigPath()) {
+      return;
+    }
+    // Avoid radio input switching before user confirms.
+    event.preventDefault();
+    const confirmed = await promptConfirm({
+      title: t('confirm.title'),
+      body: t('confirm.body'),
+      confirmLabel: t('confirm.confirm'),
+      confirmTone: 'primary',
+    });
+    if (!confirmed) {
+      renderConfigTable();
       return;
     }
     saveSettings({ configPath: path });
@@ -3983,6 +4011,15 @@ if (overviewNetworkRefresh) {
 }
 
 function startOverviewTimer() {
+  if (state.coreStatusTimer) {
+    clearInterval(state.coreStatusTimer);
+  }
+  state.coreStatusTimer = setInterval(() => {
+    if (currentPage === 'overview') {
+      loadStatusSilently();
+    }
+  }, 1500);
+
   if (state.overviewTimer) {
     clearInterval(state.overviewTimer);
   }

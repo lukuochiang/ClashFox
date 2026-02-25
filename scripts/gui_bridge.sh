@@ -412,6 +412,43 @@ print_err() {
     printf '{"ok":false,"error":"%s"}\n' "$(json_escape "$msg")"
 }
 
+print_err_with_details() {
+    local msg="$1"
+    local details="$2"
+    printf '{"ok":false,"error":"%s","details":"%s"}\n' "$(json_escape "$msg")" "$(json_escape "$details")"
+}
+
+extract_recent_start_failure_detail() {
+    local log_path="$CLASHFOX_LOG_DIR/clashfox.log"
+    if [ ! -f "$log_path" ]; then
+        return
+    fi
+    local recent_line=""
+    recent_line="$(tail -n 240 "$log_path" 2>/dev/null | awk '/level=fatal msg=|level=error msg=/{line=$0} END{print line}')"
+    if [ -z "$recent_line" ]; then
+        return
+    fi
+    local parsed=""
+    parsed="$(printf '%s\n' "$recent_line" | sed -nE 's/.*msg="(.*)".*/\1/p')"
+    if [ -z "$parsed" ]; then
+        parsed="$recent_line"
+    fi
+    printf '%s' "$parsed"
+}
+
+wait_for_kernel_running() {
+    local timeout_sec="${1:-25}"
+    local elapsed=0
+    while [ "$elapsed" -lt "$timeout_sec" ]; do
+        if is_running; then
+            return 0
+        fi
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+    return 1
+}
+
 is_running() {
     local pid_file="$CLASHFOX_PID_DIR/clashfox.pid"
     local pid=""
@@ -2296,11 +2333,27 @@ JSON
         export CLASHFOX_SUDO_PASS="$sudo_pass"
 
         if start_mihomo_kernel; then
-            unset CLASHFOX_SUDO_PASS
-            print_ok "{}"
+            if wait_for_kernel_running 25; then
+                unset CLASHFOX_SUDO_PASS
+                print_ok "{}"
+            else
+                unset CLASHFOX_SUDO_PASS
+                fail_details="$(extract_recent_start_failure_detail)"
+                if [ -n "$fail_details" ]; then
+                    print_err_with_details "start_failed" "$fail_details"
+                else
+                    print_err "start_failed"
+                fi
+                exit 1
+            fi
         else
             unset CLASHFOX_SUDO_PASS
-            print_err "start_failed"
+            fail_details="$(extract_recent_start_failure_detail)"
+            if [ -n "$fail_details" ]; then
+                print_err_with_details "start_failed" "$fail_details"
+            else
+                print_err "start_failed"
+            fi
             exit 1
         fi
         ;;
@@ -2385,17 +2438,27 @@ JSON
         fi
 
         if start_mihomo_kernel; then
-            if is_running; then
+            if wait_for_kernel_running 25; then
                 unset CLASHFOX_SUDO_PASS
                 print_ok "{}"
             else
                 unset CLASHFOX_SUDO_PASS
-                print_err "start_failed"
+                fail_details="$(extract_recent_start_failure_detail)"
+                if [ -n "$fail_details" ]; then
+                    print_err_with_details "start_failed" "$fail_details"
+                else
+                    print_err "start_failed"
+                fi
                 exit 1
             fi
         else
             unset CLASHFOX_SUDO_PASS
-            print_err "restart_failed"
+            fail_details="$(extract_recent_start_failure_detail)"
+            if [ -n "$fail_details" ]; then
+                print_err_with_details "restart_failed" "$fail_details"
+            else
+                print_err "restart_failed"
+            fi
             exit 1
         fi
         ;;

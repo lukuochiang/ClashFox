@@ -1699,10 +1699,15 @@ function createWindow(showOnCreate = false) {
   });
 
   win.webContents.on('before-input-event', (event, input) => {
+    const key = (input.key || '').toLowerCase();
+    const isReloadCombo = (input.control || input.meta) && key === 'r';
+    if (isReloadCombo) {
+      event.preventDefault();
+      return;
+    }
     if (globalSettings.debugMode) {
       return;
     }
-    const key = (input.key || '').toLowerCase();
     const isDevToolsCombo =
       (input.control && input.shift && key === 'i') ||
       (input.meta && input.alt && key === 'i') ||
