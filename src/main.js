@@ -158,6 +158,24 @@ function readAppSettings() {
   }
 }
 
+function readMainWindowClosedFromSettings() {
+  const parsed = readAppSettings();
+  return Boolean(parsed && parsed.mainWindowClosed);
+}
+
+function persistMainWindowClosedToSettings(closed) {
+  try {
+    ensureAppDirs();
+    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
+    const parsed = readAppSettings();
+    parsed.mainWindowClosed = Boolean(closed);
+    fs.writeFileSync(settingsPath, `${JSON.stringify(parsed, null, 2)}\n`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function resolveOutboundModeFromSettings() {
   const parsed = readAppSettings();
   const mode = parsed && typeof parsed.proxyMode === 'string' ? parsed.proxyMode.trim().toLowerCase() : '';
@@ -672,6 +690,7 @@ async function getKernelRunning(labels) {
 }
 
 function showMainWindow() {
+  persistMainWindowClosedToSettings(false);
   if (mainWindow && !mainWindow.isDestroyed()) {
     if (app.dock && app.dock.isVisible && !app.dock.isVisible()) {
       app.dock.show();
@@ -1632,10 +1651,13 @@ function parseBridgeOutput(output) {
 
 function createWindow(showOnCreate = false) {
   nativeTheme.themeSource = 'system';
+  if (showOnCreate) {
+    persistMainWindowClosedToSettings(false);
+  }
   const win = new BrowserWindow({
     show: Boolean(showOnCreate),
-    width: 1180,
-    height: 760,
+    width: 997,
+    height: 655,
     minWidth: 980,
     minHeight: 640,
     backgroundColor: '#0f1216',
@@ -1692,6 +1714,7 @@ function createWindow(showOnCreate = false) {
       return;
     }
     event.preventDefault();
+    persistMainWindowClosedToSettings(true);
     win.hide();
     if (app.dock && app.dock.hide) {
       app.dock.hide();
@@ -1846,7 +1869,13 @@ app.whenReady().then(() => {
   ensureAppDirs();
   setDockIcon();
   createTrayMenu();
-  createWindow(true);
+  const shouldShowMainWindow = !readMainWindowClosedFromSettings();
+  createWindow(shouldShowMainWindow);
+  if (shouldShowMainWindow && app.dock && app.dock.show) {
+    app.dock.show();
+  } else if (!shouldShowMainWindow && app.dock && app.dock.hide) {
+    app.dock.hide();
+  }
   ensureTrayMenuWindow();
   setTimeout(setDockIcon, 500);
   setTimeout(setDockIcon, 1500);
