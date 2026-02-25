@@ -211,6 +211,15 @@ let settingsDataDir = document.getElementById('settingsDataDir');
 let settingsConfigDirReveal = document.getElementById('settingsConfigDirReveal');
 let settingsCoreDirReveal = document.getElementById('settingsCoreDirReveal');
 let settingsDataDirReveal = document.getElementById('settingsDataDirReveal');
+let helperInstallBtn = document.getElementById('helperInstallBtn');
+let helperInstallTerminalBtn = document.getElementById('helperInstallTerminalBtn');
+let helperInstallPathBtn = document.getElementById('helperInstallPathBtn');
+let helperInstallPath = document.getElementById('helperInstallPath');
+let helperStatusText = document.getElementById('helperStatusText');
+let helperStatusDot = document.querySelector('.helper-status-dot');
+let helperLogsOpenBtn = document.getElementById('helperLogsOpenBtn');
+let helperLogsRevealBtn = document.getElementById('helperLogsRevealBtn');
+let helperLogsPath = document.getElementById('helperLogsPath');
 let settingsLogLines = document.getElementById('settingsLogLines');
 let settingsLogAutoRefresh = document.getElementById('settingsLogAutoRefresh');
 let settingsLogIntervalPreset = document.getElementById('settingsLogIntervalPreset');
@@ -1908,7 +1917,7 @@ function updateOverviewUI(data) {
   }
   if (overviewVersion) {
     const systemParts = [data.systemVersion, data.systemBuild].filter(Boolean);
-    overviewVersion.textContent = systemParts.length ? systemParts.join(' ') : '-';
+    overviewVersion.textContent = systemParts.length ? systemParts.join('\u00A0') : '-';
   }
   
   const parsedUptime = Number.parseInt(data.uptimeSec, 10);
@@ -2906,6 +2915,11 @@ function refreshPageView() {
       loadOverviewMemory(),
     ]);
   }
+  if (currentPage === 'settings') {
+    refreshHelperStatus();
+    refreshHelperInstallPath();
+    refreshHelperLogPath();
+  }
 }
 
 function normalizePageName(page) {
@@ -3179,6 +3193,45 @@ const getRevealPath = (inputEl) => {
   return '';
 };
 
+async function refreshHelperInstallPath() {
+  if (!helperInstallPath || !window.clashfox || typeof window.clashfox.getHelperInstallPath !== 'function') {
+    return;
+  }
+  const response = await window.clashfox.getHelperInstallPath();
+  if (response && response.ok) {
+    helperInstallPath.textContent = response.path || '-';
+    helperInstallPath.dataset.exists = response.exists ? 'true' : 'false';
+  }
+}
+
+function refreshHelperLogPath() {
+  if (helperLogsPath) {
+    helperLogsPath.textContent = '/var/log/clashfox-helper.log';
+  }
+}
+
+function setHelperStatus(state, text) {
+  if (helperStatusText) {
+    helperStatusText.textContent = text || '-';
+  }
+  if (helperStatusDot) {
+    helperStatusDot.dataset.state = state || 'unknown';
+  }
+}
+
+async function refreshHelperStatus() {
+  if (!window.clashfox || typeof window.clashfox.pingHelper !== 'function') {
+    setHelperStatus('unknown', '-');
+    return;
+  }
+  const response = await window.clashfox.pingHelper();
+  if (response && response.ok) {
+    setHelperStatus('running', ti('settings.helperStatusRunning', 'Running'));
+  } else {
+    setHelperStatus('stopped', ti('settings.helperStatusStopped', 'Not running'));
+  }
+}
+
 if (settingsConfigDirReveal) {
   settingsConfigDirReveal.addEventListener('click', async () => {
     const target = getRevealPath(settingsConfigDir);
@@ -3202,6 +3255,89 @@ if (settingsDataDirReveal) {
     const target = getRevealPath(settingsDataDir);
     if (target && window.clashfox && typeof window.clashfox.revealInFinder === 'function') {
       await window.clashfox.revealInFinder(target);
+    }
+  });
+}
+
+if (helperInstallBtn) {
+  helperInstallBtn.addEventListener('click', async () => {
+    if (!window.clashfox || typeof window.clashfox.installHelper !== 'function') {
+      showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
+      return;
+    }
+    helperInstallBtn.disabled = true;
+    const response = await window.clashfox.installHelper();
+    helperInstallBtn.disabled = false;
+    if (response && response.ok) {
+      showToast(ti('settings.helperInstallSuccess', 'Helper installed'), 'info');
+      refreshHelperStatus();
+      refreshHelperInstallPath();
+      return;
+    }
+    if (response && response.path && helperInstallPath) {
+      helperInstallPath.textContent = response.path;
+    }
+    showToast(ti('settings.helperInstallFailed', 'Helper install failed'), 'error');
+  });
+}
+
+if (helperInstallTerminalBtn) {
+  helperInstallTerminalBtn.addEventListener('click', async () => {
+    if (!window.clashfox || typeof window.clashfox.runHelperInstallInTerminal !== 'function') {
+      showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
+      return;
+    }
+    helperInstallTerminalBtn.disabled = true;
+    const response = await window.clashfox.runHelperInstallInTerminal();
+    helperInstallTerminalBtn.disabled = false;
+    if (response && response.ok) {
+      showToast(ti('settings.helperInstallTerminalLaunched', 'Opened Terminal'), 'info');
+      refreshHelperInstallPath();
+      return;
+    }
+    if (response && response.path && helperInstallPath) {
+      helperInstallPath.textContent = response.path;
+    }
+    showToast(ti('settings.helperInstallFailed', 'Helper install failed'), 'error');
+  });
+}
+
+if (helperInstallPathBtn) {
+  helperInstallPathBtn.addEventListener('click', async () => {
+    await refreshHelperInstallPath();
+    const pathValue = helperInstallPath ? helperInstallPath.textContent.trim() : '';
+    if (!pathValue || pathValue === '-') {
+      return;
+    }
+    if (window.clashfox && typeof window.clashfox.revealInFinder === 'function') {
+      await window.clashfox.revealInFinder(pathValue);
+    }
+  });
+}
+
+if (helperLogsOpenBtn) {
+  helperLogsOpenBtn.addEventListener('click', async () => {
+    const logPath = helperLogsPath ? helperLogsPath.textContent.trim() : '';
+    if (!logPath || logPath === '-') {
+      return;
+    }
+    if (window.clashfox && typeof window.clashfox.openPath === 'function') {
+      const response = await window.clashfox.openPath(logPath);
+      if (!response || !response.ok) {
+        showToast(ti('settings.helperLogsOpenFailed', 'Unable to open helper logs'), 'error');
+      }
+    }
+  });
+}
+
+if (helperLogsRevealBtn) {
+  helperLogsRevealBtn.addEventListener('click', async () => {
+    const logPath = helperLogsPath ? helperLogsPath.textContent.trim() : '';
+    if (!logPath || logPath === '-') {
+      return;
+    }
+    if (window.clashfox && typeof window.clashfox.revealInFinder === 'function') {
+      await window.clashfox.revealInFinder(logPath);
     }
   });
 }

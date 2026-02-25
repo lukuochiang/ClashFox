@@ -178,7 +178,36 @@
               </div>
             </div>
 
-            <div class="card card-full">
+            <div class="card card-full helper-card">
+              <div class="helper-card-header">
+                <div class="helper-card-info">
+                  <h3 data-i18n="settings.helperTitle">Privileged Helper</h3>
+                  <p data-i18n="settings.helperDesc">Runs as a system service to enable privileged operations like TUN and system proxy.</p>
+                </div>
+              </div>
+              <div class="helper-card-actions">
+                <button class="btn primary" id="helperInstallBtn" data-i18n="settings.helperInstall">Install / Repair Helper</button>
+                <button class="btn ghost" id="helperInstallTerminalBtn" data-i18n="settings.helperInstallTerminal">Run In Terminal</button>
+                <button class="btn ghost" id="helperInstallPathBtn" data-i18n="settings.helperInstallPath">Show Install Script</button>
+              </div>
+              <div class="helper-card-path" id="helperInstallPath">-</div>
+            </div>
+
+            <div class="card card-full helper-card helper-logs-card">
+              <div class="helper-card-header">
+                <div class="helper-card-info">
+                  <h3 data-i18n="settings.helperLogsTitle">Helper Logs</h3>
+                  <p data-i18n="settings.helperLogsDesc">View the privileged helper service logs.</p>
+                </div>
+              </div>
+              <div class="helper-card-actions">
+                <button class="btn ghost" id="helperLogsOpenBtn" data-i18n="settings.helperLogsOpen">View Helper Logs</button>
+                <button class="btn ghost" id="helperLogsRevealBtn" data-i18n="settings.helperLogsReveal">Reveal in Finder</button>
+              </div>
+              <div class="helper-card-path" id="helperLogsPath">-</div>
+            </div>
+
+            <div class="card card-full user-paths-card">
               <h3 data-i18n="settings.paths">Paths</h3>
               <div class="paths-row paths-row-grid">
                 <div class="paths-item">

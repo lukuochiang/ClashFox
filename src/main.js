@@ -1,6 +1,8 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const net = require('net');
+const http = require('http');
 const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme, shell, Tray, session, clipboard, screen } = require('electron');
 const { spawn, execFileSync, execFile } = require('child_process');
 
@@ -46,6 +48,13 @@ let trayMenuContentHeight = 420;
 let trayMenuRefreshTimer = null;
 let trayMenuRendererReady = false;
 let trayMenuLastBuiltAt = 0;
+let traySubmenuWindow = null;
+let traySubmenuVisible = false;
+let traySubmenuReady = false;
+let traySubmenuHovering = false;
+let traySubmenuAnchor = { top: 0, height: 0, rootHeight: 0 };
+let traySubmenuLastSize = { width: 0, height: 0 };
+let traySubmenuPendingPayload = null;
 let dashboardWindow = null;
 let currentInstallProcess = null; // 仅用于跟踪安装进程，支持取消功能
 let globalSettings = {
@@ -59,6 +68,22 @@ const RESTART_TRANSITION_MAX_MS = 4000;
 const RESTART_TRANSITION_RATIO = 0.5;
 let trayCoreStartupEstimateMs = 1500;
 const PRIVILEGED_COMMANDS = new Set(['install', 'start', 'stop', 'restart', 'delete-backups', 'system-proxy-enable', 'system-proxy-disable']);
+const HELPER_COMMANDS = new Set([
+  'ping',
+  'status',
+  'start',
+  'stop',
+  'restart',
+  'install',
+  'delete-backups',
+  'system-proxy-status',
+  'system-proxy-enable',
+  'system-proxy-disable',
+  'tun-status',
+  'tun',
+]);
+const HELPER_SOCKET_PATH = '/var/run/clashfox-helper.sock';
+const DEFAULT_HELPER_HTTP_PORT = 19999;
 const SYSTEM_AUTH_ERROR_PREFIX = '__CLASHFOX_SYSTEM_AUTH_ERROR__';
 const OUTBOUND_MODE_BADGE = {
   rule: 'R',
@@ -126,6 +151,154 @@ function getNavLabels() {
   return (I18N[lang] && I18N[lang].nav) || (I18N.en && I18N.en.nav) || {};
 }
 
+function refreshTrayMenuLabelsOnly() {
+  if (!trayMenuData) {
+    return;
+  }
+  const labels = getTrayLabels();
+  const uiLabels = getUiLabels();
+  const navLabels = getNavLabels();
+  const runningLabel = uiLabels.running || labels.on || 'Running';
+  const stoppedLabel = uiLabels.stopped || labels.off || 'Stopped';
+
+  if (trayMenuData.header && trayMenuData.header.statusState) {
+    trayMenuData.header.status = trayMenuData.header.statusState === 'running'
+      ? runningLabel
+      : stoppedLabel;
+  }
+
+  trayMenuData.items = (trayMenuData.items || []).map((item) => {
+    if (!item || item.type === 'separator') {
+      return item;
+    }
+    if (item.action === 'show-main') {
+      return { ...item, label: labels.showMain };
+    }
+    if (item.submenu === 'network') {
+      return { ...item, label: labels.networkTakeover || 'Network Takeover' };
+    }
+    if (item.submenu === 'outbound') {
+      return { ...item, label: labels.outboundMode || 'Outbound Mode' };
+    }
+    if (item.action === 'open-dashboard') {
+      return { ...item, label: labels.dashboard };
+    }
+    if (item.submenu === 'kernel') {
+      return { ...item, label: labels.kernelManager };
+    }
+    if (item.submenu === 'directory') {
+      return { ...item, label: labels.directoryLocations || 'Directory Locations' };
+    }
+    if (item.action === 'open-settings') {
+      return { ...item, label: navLabels.settings || 'Settings' };
+    }
+    if (item.action === 'quit') {
+      return { ...item, label: labels.quit };
+    }
+    return item;
+  });
+
+  if (trayMenuData.submenus && Array.isArray(trayMenuData.submenus.network)) {
+    trayMenuData.submenus.network = trayMenuData.submenus.network.map((item) => {
+      if (!item || item.type === 'separator') {
+        return item;
+      }
+      if (item.action === 'toggle-system-proxy') {
+        return { ...item, label: labels.systemProxy || 'System Proxy' };
+      }
+      if (item.action === 'toggle-tun') {
+        return { ...item, label: labels.tun || 'TUN' };
+      }
+      if (item.iconKey === 'currentService') {
+        const prevLabel = String(item.label || '');
+        const parts = prevLabel.split(':');
+        const service = parts.length > 1 ? parts.slice(1).join(':').trim() : '-';
+        return { ...item, label: `${labels.currentService || 'Current Service'}: ${service || '-'}` };
+      }
+      if (item.iconKey === 'connectivityQuality') {
+        return { ...item, label: labels.connectivityQuality || 'Connectivity Quality' };
+      }
+      if (item.action === 'copy-shell-export') {
+        return { ...item, label: labels.copyShellExportCommand || 'Copy Shell Export Command' };
+      }
+      return item;
+    });
+  }
+
+  if (trayMenuData.submenus && Array.isArray(trayMenuData.submenus.outbound)) {
+    trayMenuData.submenus.outbound = trayMenuData.submenus.outbound.map((item) => {
+      if (!item || item.type === 'separator') {
+        return item;
+      }
+      if (item.value === 'global') {
+        return { ...item, label: labels.modeGlobalTitle || 'Global Proxy' };
+      }
+      if (item.value === 'rule') {
+        return { ...item, label: labels.modeRuleTitle || 'Rule-Based Proxy' };
+      }
+      if (item.value === 'direct') {
+        return { ...item, label: labels.modeDirectTitle || 'Direct Outbound' };
+      }
+      return item;
+    });
+  }
+
+  if (trayMenuData.submenus && Array.isArray(trayMenuData.submenus.kernel)) {
+    trayMenuData.submenus.kernel = trayMenuData.submenus.kernel.map((item) => {
+      if (!item || item.type === 'separator') {
+        return item;
+      }
+      if (item.action === 'kernel-start') {
+        return { ...item, label: labels.startKernel };
+      }
+      if (item.action === 'kernel-stop') {
+        return { ...item, label: labels.stopKernel };
+      }
+      if (item.action === 'kernel-restart') {
+        return { ...item, label: labels.restartKernel };
+      }
+      return item;
+    });
+  }
+
+  if (trayMenuData.submenus && Array.isArray(trayMenuData.submenus.directory)) {
+    trayMenuData.submenus.directory = trayMenuData.submenus.directory.map((item) => {
+      if (!item || item.type === 'separator') {
+        return item;
+      }
+      if (item.action === 'open-user-directory') {
+        return { ...item, label: labels.userDirectory || 'User Directory' };
+      }
+      if (item.action === 'open-config-directory') {
+        return { ...item, label: labels.userConfigDirectory || 'Config Directory' };
+      }
+      if (item.action === 'open-work-directory') {
+        return { ...item, label: labels.workDirectory || 'Work Directory' };
+      }
+      if (item.action === 'open-log-directory') {
+        return { ...item, label: labels.logDirectory || 'Log Directory' };
+      }
+      return item;
+    });
+  }
+
+  if (trayMenuWindow && !trayMenuWindow.isDestroyed()) {
+    trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
+  }
+}
+
+async function openDirectoryInFinder(targetPath) {
+  try {
+    if (!targetPath || typeof targetPath !== 'string') {
+      return false;
+    }
+    const result = await shell.openPath(targetPath);
+    return !result;
+  } catch {
+    return false;
+  }
+}
+
 function withMacTrayGlyph(key, label) {
   const text = String(label || '').trim();
   if (process.platform !== 'darwin' || !text) {
@@ -156,6 +329,114 @@ function readAppSettings() {
   } catch {
     return {};
   }
+}
+
+function readHelperConfigFromSettings() {
+  const settings = readAppSettings();
+  const helperHttpEnabled = settings && Object.prototype.hasOwnProperty.call(settings, 'helperHttpEnabled')
+    ? Boolean(settings.helperHttpEnabled)
+    : true;
+  const helperHttpPort = settings && Number.isFinite(Number(settings.helperHttpPort))
+    ? Number(settings.helperHttpPort)
+    : DEFAULT_HELPER_HTTP_PORT;
+  const helperHttpHost = settings && typeof settings.helperHttpHost === 'string'
+    ? settings.helperHttpHost
+    : '127.0.0.1';
+  return {
+    helperHttpEnabled,
+    helperHttpPort,
+    helperHttpHost,
+  };
+}
+
+function resolveHelperInstallScriptPath() {
+  const candidates = [
+    path.join(ROOT_DIR, 'helper', 'install.sh'),
+    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'helper', 'install.sh'),
+    path.join(process.resourcesPath || '', 'helper', 'install.sh'),
+  ];
+  for (const candidate of candidates) {
+    if (candidate && fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return path.join(ROOT_DIR, 'helper', 'install.sh');
+}
+
+function installHelperWithSystemAuth() {
+  return new Promise((resolve) => {
+    const scriptPath = resolveHelperInstallScriptPath();
+    if (!fs.existsSync(scriptPath)) {
+      resolve({ ok: false, error: 'install_script_missing', path: scriptPath });
+      return;
+    }
+    const quote = (value) => `'${String(value || '').replace(/'/g, `'\\''`)}'`;
+    const command = `/bin/bash ${quote(scriptPath)}`;
+    const script = [
+      'try',
+      `set out to do shell script ${JSON.stringify(command)} with administrator privileges`,
+      'return out',
+      'on error errMsg number errNum',
+      `return "${SYSTEM_AUTH_ERROR_PREFIX}:" & (errNum as text) & ":" & errMsg`,
+      'end try',
+    ].join('\n');
+    execFile('osascript', ['-e', script], { timeout: 180 * 1000 }, (error, stdout) => {
+      if (error) {
+        resolve({
+          ok: false,
+          error: 'system_auth_failed',
+          details: error.message || String(error),
+          path: scriptPath,
+        });
+        return;
+      }
+      const output = String(stdout || '').trim();
+      if (output.startsWith(`${SYSTEM_AUTH_ERROR_PREFIX}:`)) {
+        const payload = output.slice(SYSTEM_AUTH_ERROR_PREFIX.length + 1);
+        const firstColonIndex = payload.indexOf(':');
+        const errNumRaw = firstColonIndex >= 0 ? payload.slice(0, firstColonIndex) : payload;
+        const errMsg = firstColonIndex >= 0 ? payload.slice(firstColonIndex + 1).trim() : '';
+        const errNum = Number.parseInt(String(errNumRaw || '').trim(), 10);
+        if (errNum === -128) {
+          resolve({ ok: false, error: 'sudo_required', path: scriptPath });
+          return;
+        }
+        resolve({
+          ok: false,
+          error: 'system_auth_failed',
+          details: errMsg || 'system_authorization_failed',
+          path: scriptPath,
+        });
+        return;
+      }
+      resolve({ ok: true, output, path: scriptPath });
+    });
+  });
+}
+
+function runHelperInstallInTerminal() {
+  return new Promise((resolve) => {
+    const scriptPath = resolveHelperInstallScriptPath();
+    if (!fs.existsSync(scriptPath)) {
+      resolve({ ok: false, error: 'install_script_missing', path: scriptPath });
+      return;
+    }
+    const quote = (value) => `'${String(value || '').replace(/'/g, `'\\''`)}'`;
+    const command = `sudo /bin/bash ${quote(scriptPath)}`;
+    const script = [
+      'tell application "Terminal"',
+      'activate',
+      `do script ${JSON.stringify(command)}`,
+      'end tell',
+    ].join('\n');
+    execFile('osascript', ['-e', script], { timeout: 8000 }, (error) => {
+      if (error) {
+        resolve({ ok: false, error: 'terminal_launch_failed', details: error.message, path: scriptPath });
+        return;
+      }
+      resolve({ ok: true, path: scriptPath });
+    });
+  });
 }
 
 function readMainWindowClosedFromSettings() {
@@ -211,6 +492,32 @@ function persistTunEnabledToSettings(enabled) {
     return true;
   } catch {
     return false;
+  }
+}
+
+function persistSystemProxyEnabledToSettings(enabled) {
+  try {
+    ensureAppDirs();
+    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
+    const parsed = readAppSettings() || {};
+    parsed.systemProxyEnabled = Boolean(enabled);
+    fs.writeFileSync(settingsPath, `${JSON.stringify(parsed, null, 2)}\n`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function persistSystemProxyEnabledToAppSettings(enabled) {
+  try {
+    ensureAppDirs();
+    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
+    const parsed = readAppSettings() || {};
+    parsed.systemProxyEnabled = Boolean(enabled);
+    fs.writeFileSync(settingsPath, `${JSON.stringify(parsed, null, 2)}\n`);
+    return parsed;
+  } catch {
+    return null;
   }
 }
 
@@ -330,6 +637,25 @@ function patchTrayMenuConnectivityBadge(snapshot) {
     }
     return item;
   });
+}
+
+async function refreshNetworkSubmenuState() {
+  const configPath = getConfigPathFromSettings();
+  let systemProxyEnabled;
+  let tunEnabled;
+  try {
+    const takeover = await runBridge(['system-proxy-status', '--config', configPath]);
+    systemProxyEnabled = Boolean(takeover && takeover.ok && takeover.data && takeover.data.enabled);
+  } catch {
+    // ignore transient errors; keep last known value
+  }
+  try {
+    const tunStatus = await runBridge(['tun-status']);
+    tunEnabled = Boolean(tunStatus && tunStatus.ok && tunStatus.data && tunStatus.data.enabled);
+  } catch {
+    // ignore transient errors; keep last known value
+  }
+  patchTrayMenuNetworkState({ systemProxyEnabled, tunEnabled });
 }
 
 function getControllerArgsFromSettings() {
@@ -527,6 +853,170 @@ function normalizeBridgeArgs(args = [], options = {}) {
     args: normalized,
     sudoPass: optionSudoPass || extractedSudoPass,
   };
+}
+
+function buildHelperRequest(command, args = []) {
+  const requestId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return {
+    id: requestId,
+    cmd: command,
+    args,
+    bridgePath: getBridgePath(),
+    cwd: app.isPackaged ? APP_DATA_DIR : ROOT_DIR,
+  };
+}
+
+function sendHelperRequestViaSocket(payload, timeoutMs = 20000) {
+  return new Promise((resolve, reject) => {
+    if (!fs.existsSync(HELPER_SOCKET_PATH)) {
+      reject(new Error('socket_missing'));
+      return;
+    }
+    const client = net.createConnection({ path: HELPER_SOCKET_PATH });
+    let resolved = false;
+    let response = '';
+    const timer = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      client.destroy();
+      reject(new Error('timeout'));
+    }, timeoutMs);
+
+    const finish = (err) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timer);
+      if (err) {
+        reject(err);
+      } else {
+        resolve(response);
+      }
+    };
+
+    client.on('connect', () => {
+      try {
+        client.write(JSON.stringify(payload));
+        client.end();
+      } catch (err) {
+        finish(err);
+      }
+    });
+    client.on('data', (chunk) => {
+      response += chunk.toString();
+    });
+    client.on('end', () => finish());
+    client.on('error', (err) => finish(err));
+  });
+}
+
+function sendHelperRequestViaHttp(payload, timeoutMs = 20000) {
+  return new Promise((resolve, reject) => {
+    const { helperHttpEnabled, helperHttpHost, helperHttpPort } = readHelperConfigFromSettings();
+    if (!helperHttpEnabled) {
+      reject(new Error('http_disabled'));
+      return;
+    }
+    const body = JSON.stringify(payload);
+    const request = http.request({
+      host: helperHttpHost,
+      port: helperHttpPort,
+      method: 'POST',
+      path: '/command',
+      timeout: timeoutMs,
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => {
+        data += chunk.toString();
+      });
+      res.on('end', () => {
+        resolve(data);
+      });
+    });
+    request.on('error', (err) => reject(err));
+    request.on('timeout', () => {
+      request.destroy();
+      reject(new Error('timeout'));
+    });
+    request.write(body);
+    request.end();
+  });
+}
+
+async function runBridgeViaHelper(bridgeArgs = []) {
+  const commandType = bridgeArgs[0];
+  if (!commandType || !HELPER_COMMANDS.has(commandType) || process.platform !== 'darwin') {
+    return null;
+  }
+  const request = buildHelperRequest(commandType, bridgeArgs.slice(1));
+  let responseText = '';
+  try {
+    responseText = await sendHelperRequestViaSocket(request);
+  } catch {
+    responseText = '';
+  }
+  if (!responseText) {
+    try {
+      responseText = await sendHelperRequestViaHttp(request);
+    } catch {
+      responseText = '';
+    }
+  }
+  if (!responseText) {
+    return null;
+  }
+  try {
+    return parseBridgeOutput(responseText);
+  } catch (err) {
+    return {
+      ok: false,
+      error: 'parse_error',
+      details: String(responseText || '').trim(),
+    };
+  }
+}
+
+async function pingHelper() {
+  if (process.platform !== 'darwin') {
+    return { ok: false, error: 'unsupported_os' };
+  }
+  const request = buildHelperRequest('ping', []);
+  let responseText = '';
+  try {
+    responseText = await sendHelperRequestViaSocket(request, 6000);
+  } catch {
+    responseText = '';
+  }
+  if (!responseText) {
+    try {
+      responseText = await sendHelperRequestViaHttp(request, 6000);
+    } catch {
+      responseText = '';
+    }
+  }
+  if (!responseText) {
+    return { ok: false, error: 'helper_unreachable' };
+  }
+  try {
+    const parsed = parseBridgeOutput(responseText);
+    return parsed;
+  } catch {
+    return { ok: false, error: 'parse_error', details: responseText };
+  }
+}
+
+async function checkHelperOnStartup() {
+  const response = await pingHelper();
+  if (response && response.ok) {
+    return;
+  }
+  emitMainToast(
+    'Helper is not installed or not running. Please install/repair it in Settings.',
+    'warn',
+  );
 }
 
 async function runBridgeWithAutoAuth(command, args = [], options = {}) {
@@ -871,15 +1361,29 @@ function patchTrayMenuNetworkState({ systemProxyEnabled, tunEnabled } = {}) {
       return item;
     }
     if (item.action === 'toggle-system-proxy' && typeof systemProxyEnabled === 'boolean') {
-      return { ...item, checked: systemProxyEnabled };
+      return {
+        ...item,
+        checked: systemProxyEnabled,
+        rightText: systemProxyEnabled ? 'On' : 'Off',
+      };
     }
     if (item.action === 'toggle-tun' && typeof tunEnabled === 'boolean') {
-      return { ...item, checked: tunEnabled };
+      return {
+        ...item,
+        checked: tunEnabled,
+        rightText: tunEnabled ? 'On' : 'Off',
+      };
     }
     return item;
   });
   if (trayMenuWindow && !trayMenuWindow.isDestroyed()) {
     trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
+  }
+  if (traySubmenuWindow && traySubmenuVisible) {
+    sendTraySubmenuUpdate({
+      key: 'network',
+      items: trayMenuData.submenus.network,
+    });
   }
 }
 
@@ -940,10 +1444,12 @@ async function buildTrayMenuOnce() {
     networkTakeoverPort = (takeover && takeover.ok && takeover.data && takeover.data.port)
       ? String(takeover.data.port).trim()
       : '7890';
+    persistSystemProxyEnabledToSettings(networkTakeoverEnabled);
   } catch {
     networkTakeoverEnabled = false;
     networkTakeoverService = '';
     networkTakeoverPort = '7890';
+    // keep last persisted systemProxyEnabled on transient errors
   }
   const connectivitySnapshot = await getConnectivityQualitySnapshot(configPath);
   connectivityQuality = connectivitySnapshot && connectivitySnapshot.text
@@ -997,6 +1503,8 @@ async function buildTrayMenuOnce() {
       { type: 'separator' },
       { type: 'action', label: labels.kernelManager, submenu: 'kernel', iconKey: 'kernelManager' },
       { type: 'separator' },
+      { type: 'action', label: labels.directoryLocations || 'Directory Locations', submenu: 'directory', iconKey: 'directory' },
+      { type: 'separator' },
       { type: 'action', label: getNavLabels().settings || 'Settings', action: 'open-settings', rightText: '⌘ ,', shortcut: 'Cmd+,', iconKey: 'settings' },
       { type: 'separator' },
       { type: 'action', label: labels.quit, action: 'quit', rightText: '⌘ Q', shortcut: 'Cmd+Q', iconKey: 'quit' },
@@ -1008,6 +1516,7 @@ async function buildTrayMenuOnce() {
           label: labels.systemProxy || 'System Proxy',
           action: 'toggle-system-proxy',
           checked: networkTakeoverEnabled,
+          rightText: networkTakeoverEnabled ? 'On' : 'Off',
           iconKey: 'systemProxy',
         },
         {
@@ -1016,6 +1525,7 @@ async function buildTrayMenuOnce() {
           action: 'toggle-tun',
           checked: tunEnabled,
           enabled: tunAvailable,
+          rightText: tunEnabled ? 'On' : 'Off',
           iconKey: 'tun',
         },
         { type: 'separator' },
@@ -1038,6 +1548,15 @@ async function buildTrayMenuOnce() {
         { type: 'action', label: labels.modeGlobalTitle || 'Global Proxy', action: 'mode-change', value: 'global', checked: currentOutboundMode === 'global', iconKey: 'modeGlobal' },
         { type: 'action', label: labels.modeRuleTitle || 'Rule-Based Proxy', action: 'mode-change', value: 'rule', checked: currentOutboundMode === 'rule', iconKey: 'modeRule' },
         { type: 'action', label: labels.modeDirectTitle || 'Direct Outbound', action: 'mode-change', value: 'direct', checked: currentOutboundMode === 'direct', iconKey: 'modeDirect' },
+      ],
+      directory: [
+        { type: 'action', label: labels.userDirectory || 'User Directory', action: 'open-user-directory', iconKey: 'userDir' },
+        { type: 'separator' },
+        { type: 'action', label: labels.userConfigDirectory || 'Config Directory', action: 'open-config-directory', iconKey: 'configDir' },
+        { type: 'separator' },
+        { type: 'action', label: labels.workDirectory || 'Work Directory', action: 'open-work-directory', iconKey: 'workDir' },
+        { type: 'separator' },
+        { type: 'action', label: labels.logDirectory || 'Log Directory', action: 'open-log-directory', iconKey: 'logDir' },
       ],
       kernel: [
         { type: 'action', label: labels.startKernel, action: 'kernel-start', enabled: !dashboardEnabled, iconKey: 'kernelStart' },
@@ -1097,14 +1616,25 @@ function ensureTrayMenuWindow() {
       devTools: false,
     },
   });
+  if (trayMenuWindow.setSkipTaskbar) {
+    trayMenuWindow.setSkipTaskbar(true);
+  }
+  if (trayMenuWindow.setExcludedFromShownWindowsMenu) {
+    trayMenuWindow.setExcludedFromShownWindowsMenu(true);
+  }
   trayMenuWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   trayMenuWindow.setAlwaysOnTop(true, 'pop-up-menu');
   trayMenuRendererReady = false;
   trayMenuWindow.loadFile(path.join(__dirname, 'ui', 'html', 'tray-menu.html'));
   trayMenuWindow.on('blur', () => {
-    hideTrayMenuWindow();
+    setTimeout(() => {
+      if (!traySubmenuHovering) {
+        hideTrayMenuWindow();
+      }
+    }, 40);
   });
   trayMenuWindow.on('closed', () => {
+    hideTraySubmenuWindow();
     trayMenuWindow = null;
     trayMenuVisible = false;
     trayMenuRendererReady = false;
@@ -1116,16 +1646,73 @@ function ensureTrayMenuWindow() {
   return trayMenuWindow;
 }
 
+function hideTraySubmenuWindow() {
+  traySubmenuVisible = false;
+  traySubmenuHovering = false;
+  if (traySubmenuWindow && !traySubmenuWindow.isDestroyed()) {
+    traySubmenuWindow.hide();
+  }
+}
+
+function ensureTraySubmenuWindow() {
+  if (traySubmenuWindow && !traySubmenuWindow.isDestroyed()) {
+    return traySubmenuWindow;
+  }
+  traySubmenuWindow = new BrowserWindow({
+    width: 240,
+    height: 200,
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    hasShadow: true,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    focusable: false,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+      devTools: false,
+    },
+  });
+  if (traySubmenuWindow.setSkipTaskbar) {
+    traySubmenuWindow.setSkipTaskbar(true);
+  }
+  if (traySubmenuWindow.setExcludedFromShownWindowsMenu) {
+    traySubmenuWindow.setExcludedFromShownWindowsMenu(true);
+  }
+  traySubmenuWindow.setAlwaysOnTop(true, 'pop-up-menu');
+  traySubmenuWindow.loadFile(path.join(__dirname, 'ui', 'html', 'tray-submenu.html'));
+  traySubmenuWindow.on('closed', () => {
+    traySubmenuWindow = null;
+    traySubmenuVisible = false;
+    traySubmenuReady = false;
+    traySubmenuHovering = false;
+    traySubmenuPendingPayload = null;
+    traySubmenuLastSize = { width: 0, height: 0 };
+  });
+  return traySubmenuWindow;
+}
+
 function hideTrayMenuWindow() {
   if (!trayMenuWindow || trayMenuWindow.isDestroyed()) {
     trayMenuVisible = false;
+    hideTraySubmenuWindow();
+    traySubmenuPendingPayload = null;
     if (trayMenuRefreshTimer) {
       clearInterval(trayMenuRefreshTimer);
       trayMenuRefreshTimer = null;
     }
     return;
   }
+  hideTraySubmenuWindow();
   trayMenuVisible = false;
+  traySubmenuPendingPayload = null;
   if (trayMenuRefreshTimer) {
     clearInterval(trayMenuRefreshTimer);
     trayMenuRefreshTimer = null;
@@ -1133,7 +1720,78 @@ function hideTrayMenuWindow() {
   trayMenuWindow.hide();
 }
 
-function computeTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, explicitWidth = 520) {
+function sendTraySubmenuUpdate(payload) {
+  traySubmenuPendingPayload = payload || null;
+  if (!trayMenuVisible) {
+    hideTraySubmenuWindow();
+    return;
+  }
+  if (
+    traySubmenuWindow
+    && !traySubmenuWindow.isDestroyed()
+    && traySubmenuReady
+    && traySubmenuPendingPayload
+  ) {
+    traySubmenuWindow.webContents.send('clashfox:traySubmenu:update', traySubmenuPendingPayload);
+  }
+}
+
+function computeTraySubmenuBounds(width, height) {
+  if (!trayMenuWindow || trayMenuWindow.isDestroyed()) {
+    return null;
+  }
+  if (!trayMenuVisible) {
+    return null;
+  }
+  const mainBounds = trayMenuWindow.getBounds();
+  const display = screen.getDisplayNearestPoint({ x: mainBounds.x, y: mainBounds.y });
+  const area = display.workArea;
+  const gap = 0;
+  const targetWidth = Math.max(140, Math.round(width || 0));
+  const targetHeight = Math.max(60, Math.round(height || 0));
+  const maxTopWithinMain = Math.max(
+    8,
+    (traySubmenuAnchor.rootHeight || targetHeight) - targetHeight - 8,
+  );
+  const anchorTop = Math.min(Math.max(8, Math.round(traySubmenuAnchor.top || 0)), maxTopWithinMain);
+  const desiredY = mainBounds.y + anchorTop;
+  const y = Math.max(area.y + 4, Math.min(desiredY, area.y + area.height - targetHeight - 4));
+  let xRight = mainBounds.x + mainBounds.width + gap;
+  let xLeft = mainBounds.x - targetWidth - gap;
+  let side = 'right';
+  const canRight = (xRight + targetWidth) <= (area.x + area.width - 4);
+  const canLeft = xLeft >= (area.x + 4);
+  if (!canRight && canLeft) {
+    side = 'left';
+  } else if (!canRight && !canLeft) {
+    const rightOverflow = (xRight + targetWidth) - (area.x + area.width - 4);
+    const leftOverflow = (area.x + 4) - xLeft;
+    side = rightOverflow <= leftOverflow ? 'right' : 'left';
+  }
+  const x = side === 'right'
+    ? Math.min(Math.max(area.x + 4, xRight), area.x + area.width - targetWidth - 4)
+    : Math.max(area.x + 4, Math.min(xLeft, area.x + area.width - targetWidth - 4));
+  return { x, y, side };
+}
+
+function positionTraySubmenuWindow(width, height) {
+  if (!traySubmenuWindow || traySubmenuWindow.isDestroyed()) {
+    return;
+  }
+  const bounds = computeTraySubmenuBounds(width, height);
+  if (!bounds) {
+    return;
+  }
+  const nextBounds = {
+    x: Math.round(bounds.x),
+    y: Math.round(bounds.y),
+    width: Math.round(width),
+    height: Math.round(height),
+  };
+  traySubmenuWindow.setBounds(nextBounds);
+}
+
+function computeTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, explicitWidth = 260) {
   if (!tray) {
     return null;
   }
@@ -1141,40 +1799,22 @@ function computeTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, expl
   const display = screen.getDisplayNearestPoint({ x: trayBounds.x, y: trayBounds.y });
   const area = display.workArea;
   const mainMenuWidth = 260;
-  const submenuGap = 0;
   const popupWidth = Number.isFinite(explicitWidth)
     ? Math.max(mainMenuWidth, Math.round(explicitWidth))
-    : (mainMenuWidth + submenuGap + 260);
-  const submenuWidth = Math.max(0, popupWidth - mainMenuWidth - submenuGap);
-  const hasSubmenuPane = popupWidth > mainMenuWidth;
+    : mainMenuWidth;
   const popupHeight = Math.max(200, Math.min(Number(contentHeight) || 420, 620));
   const anchorX = trayBounds.x + Math.round(trayBounds.width / 2);
-  let submenuSide = 'right';
-  if (hasSubmenuPane) {
-    const rightNeed = anchorX + Math.round(mainMenuWidth / 2) + submenuGap + submenuWidth;
-    const leftNeed = anchorX - Math.round(mainMenuWidth / 2) - submenuGap - submenuWidth;
-    const canUseRightSubmenu = rightNeed <= (area.x + area.width - 8);
-    const canUseLeftSubmenu = leftNeed >= (area.x + 8);
-    if (!canUseRightSubmenu && canUseLeftSubmenu) {
-      submenuSide = 'left';
-    } else if (!canUseRightSubmenu && !canUseLeftSubmenu) {
-      const rightOverflow = rightNeed - (area.x + area.width - 8);
-      const leftOverflow = (area.x + 8) - leftNeed;
-      submenuSide = rightOverflow <= leftOverflow ? 'right' : 'left';
-    }
-  }
-
-  const mainOffset = hasSubmenuPane && submenuSide === 'left' ? (submenuWidth + submenuGap) : 0;
-  const desiredX = anchorX - Math.round(mainMenuWidth / 2) - mainOffset;
+  // Align tray icon center with the header logo center (padding-left 12px + logo radius 24px).
+  const logoCenterX = 36;
+  const desiredX = anchorX - logoCenterX;
   const x = Math.max(area.x + 8, Math.min(desiredX, area.x + area.width - popupWidth - 8));
-  const y = Math.max(area.y + 8, Math.min(trayBounds.y + trayBounds.height + 6, area.y + area.height - popupHeight - 8));
+  const y = Math.max(area.y + 8, Math.min(trayBounds.y + trayBounds.height, area.y + area.height - popupHeight - 8));
   return {
     bounds: { x, y, width: popupWidth, height: popupHeight },
-    submenuSide,
   };
 }
 
-function applyTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, preservePosition = false, explicitWidth = 520, syncMenuData = true) {
+function applyTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, preservePosition = false, explicitWidth = 260, syncMenuData = true) {
   if (!trayMenuWindow || trayMenuWindow.isDestroyed()) {
     return;
   }
@@ -1199,11 +1839,15 @@ function applyTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, preser
   }
   trayMenuContentHeight = Math.max(200, Math.min(Number(contentHeight) || trayMenuContentHeight || 420, 620));
   trayMenuWindow.setBounds(computed.bounds);
+  if (
+    traySubmenuVisible
+    && traySubmenuLastSize
+    && traySubmenuLastSize.width
+    && traySubmenuLastSize.height
+  ) {
+    positionTraySubmenuWindow(traySubmenuLastSize.width, traySubmenuLastSize.height);
+  }
   if (syncMenuData && trayMenuData) {
-    trayMenuData.meta = {
-      ...(trayMenuData.meta || {}),
-      submenuSide: computed.submenuSide,
-    };
     const sendUpdate = () => {
       if (!trayMenuWindow || trayMenuWindow.isDestroyed()) {
         return;
@@ -1222,6 +1866,7 @@ async function showTrayMenuWindow() {
   if (!tray) {
     return;
   }
+  hideTraySubmenuWindow();
   const popup = ensureTrayMenuWindow();
   const currentBounds = popup.getBounds();
   if (currentBounds && Number.isFinite(currentBounds.height) && currentBounds.height > 0) {
@@ -1294,7 +1939,10 @@ async function handleTrayMenuAction(action, payload = {}) {
       patchTrayMenuNetworkState({ systemProxyEnabled: targetEnabled });
       const command = payload && payload.checked ? 'system-proxy-enable' : 'system-proxy-disable';
       const response = await runTrayCommand(command, ['--config', configPath], labels);
-      if (!response.ok) {
+      if (response.ok) {
+        persistSystemProxyEnabledToSettings(targetEnabled);
+      } else {
+        persistSystemProxyEnabledToSettings(false);
         createTrayMenu().catch(() => {});
       }
       emitTrayRefresh();
@@ -1420,6 +2068,22 @@ async function handleTrayMenuAction(action, payload = {}) {
       }
       return { ok: true, submenu: 'kernel' };
     }
+    case 'open-user-directory': {
+      const opened = await openDirectoryInFinder(APP_DATA_DIR);
+      return { ok: opened, hide: false, submenu: 'directory' };
+    }
+    case 'open-config-directory': {
+      const opened = await openDirectoryInFinder(path.join(APP_DATA_DIR, 'config'));
+      return { ok: opened, hide: false, submenu: 'directory' };
+    }
+    case 'open-work-directory': {
+      const opened = await openDirectoryInFinder(WORK_DIR);
+      return { ok: opened, hide: false, submenu: 'directory' };
+    }
+    case 'open-log-directory': {
+      const opened = await openDirectoryInFinder(path.join(APP_DATA_DIR, 'logs'));
+      return { ok: opened, hide: false, submenu: 'directory' };
+    }
     default:
       return { ok: false, error: 'unknown_action' };
   }
@@ -1457,13 +2121,21 @@ if (process.env.CLASHFOX_DEV === '1') {
 
 function runBridge(args, options = {}) {
   return new Promise((resolve) => {
-    try {
-      const normalized = normalizeBridgeArgs(args, options);
-      const bridgeArgs = normalized.args;
-      const sudoPass = normalized.sudoPass;
-      // console.log('[runBridge] Running command:', args);
-      const commandType = bridgeArgs[0];
-      const startBridgeProcess = () => {
+    (async () => {
+      try {
+        const normalized = normalizeBridgeArgs(args, options);
+        const bridgeArgs = normalized.args;
+        const sudoPass = normalized.sudoPass;
+        // console.log('[runBridge] Running command:', args);
+        const commandType = bridgeArgs[0];
+
+        const helperResult = await runBridgeViaHelper(bridgeArgs);
+        if (helperResult) {
+          resolve(helperResult);
+          return;
+        }
+
+        const startBridgeProcess = () => {
 
       // 1. 如果是安装命令，终止当前正在运行的安装进程（如果有）
       const isInstallCommand = commandType === 'install' || commandType === 'panel-install';
@@ -1612,16 +2284,17 @@ function runBridge(args, options = {}) {
           details: err.message 
         });
       });
-      };
-      startBridgeProcess();
-    } catch (err) {
-      // console.error('Error in runBridge:', err);
-      resolve({ 
-        ok: false, 
-        error: 'unexpected_error', 
-        details: err.message 
-      });
-    }
+        };
+        startBridgeProcess();
+      } catch (err) {
+        // console.error('Error in runBridge:', err);
+        resolve({ 
+          ok: false, 
+          error: 'unexpected_error', 
+          details: err.message 
+        });
+      }
+    })();
   });
 }
 
@@ -1877,6 +2550,9 @@ app.whenReady().then(() => {
     app.dock.hide();
   }
   ensureTrayMenuWindow();
+  setTimeout(() => {
+    checkHelperOnStartup().catch(() => {});
+  }, 1200);
   setTimeout(setDockIcon, 500);
   setTimeout(setDockIcon, 1500);
   setTimeout(setDockIcon, 3000);
@@ -1923,12 +2599,90 @@ app.whenReady().then(() => {
   ipcMain.on('clashfox:trayMenu:setExpanded', (_event, expanded, payload = {}) => {
     const requestedWidth = payload && Number.isFinite(payload.width)
       ? Number(payload.width)
-      : (expanded ? 520 : 260);
+      : 260;
     const requestedHeight = payload && Number.isFinite(payload.height) ? Number(payload.height) : trayMenuContentHeight;
     trayMenuContentHeight = Math.max(200, Math.min(requestedHeight || trayMenuContentHeight || 420, 620));
     if (trayMenuWindow && !trayMenuWindow.isDestroyed() && trayMenuVisible) {
       applyTrayMenuWindowBounds(trayMenuContentHeight, true, requestedWidth, false);
     }
+  });
+  ipcMain.on('clashfox:trayMenu:openSubmenu', async (_event, payload = {}) => {
+    if (!trayMenuVisible) {
+      return;
+    }
+    const key = payload && payload.key ? String(payload.key) : '';
+    if (key === 'network') {
+      await createTrayMenu().catch(() => {});
+      // await refreshNetworkSubmenuState().catch(() => {});
+    }
+    const items = (trayMenuData
+      && trayMenuData.submenus
+      && Array.isArray(trayMenuData.submenus[key]))
+      ? trayMenuData.submenus[key]
+      : (Array.isArray(payload.items) ? payload.items : []);
+    const popup = ensureTraySubmenuWindow();
+    traySubmenuAnchor = {
+      top: Number(payload && payload.anchorTop) || 0,
+      height: Number(payload && payload.anchorHeight) || 0,
+      rootHeight: Number(payload && payload.rootHeight) || 0,
+    };
+    traySubmenuLastSize = { width: 0, height: 0 };
+    traySubmenuVisible = true;
+    sendTraySubmenuUpdate({
+      key,
+      items,
+    });
+    if (!popup.isVisible()) {
+      popup.show();
+    }
+  });
+
+  ipcMain.on('clashfox:trayMenu:closeSubmenu', () => {
+    hideTraySubmenuWindow();
+  });
+
+  ipcMain.on('clashfox:traySubmenu:resize', (_event, payload = {}) => {
+    if (!trayMenuVisible) {
+      hideTraySubmenuWindow();
+      return;
+    }
+    const width = Math.max(140, Math.round(Number(payload && payload.width) || 0));
+    const height = Math.max(60, Math.round(Number(payload && payload.height) || 0));
+    traySubmenuLastSize = { width, height };
+    positionTraySubmenuWindow(width, height);
+    const popup = ensureTraySubmenuWindow();
+    traySubmenuVisible = true;
+    if (!popup.isVisible()) {
+      popup.show();
+    }
+  });
+
+  ipcMain.on('clashfox:traySubmenu:hover', (_event, hovering) => {
+    traySubmenuHovering = Boolean(hovering);
+    if (!traySubmenuHovering && (!trayMenuWindow || trayMenuWindow.isDestroyed() || !trayMenuWindow.isFocused())) {
+      hideTrayMenuWindow();
+    }
+  });
+
+  ipcMain.on('clashfox:traySubmenu:ready', () => {
+    traySubmenuReady = true;
+    if (!trayMenuVisible) {
+      hideTraySubmenuWindow();
+      return;
+    }
+    if (traySubmenuPendingPayload) {
+      sendTraySubmenuUpdate(traySubmenuPendingPayload);
+    }
+    if (traySubmenuVisible && traySubmenuLastSize.width && traySubmenuLastSize.height) {
+      positionTraySubmenuWindow(traySubmenuLastSize.width, traySubmenuLastSize.height);
+      if (traySubmenuWindow && !traySubmenuWindow.isDestroyed()) {
+        traySubmenuWindow.show();
+      }
+    }
+  });
+
+  ipcMain.on('clashfox:traySubmenu:hide', () => {
+    hideTraySubmenuWindow();
   });
   
   // 处理取消命令，只取消安装进程
@@ -2000,7 +2754,20 @@ app.whenReady().then(() => {
       if (!targetPath || typeof targetPath !== 'string') {
         return { ok: false };
       }
-      shell.showItemInFolder(targetPath);
+      const resolved = path.resolve(String(targetPath));
+      let openTarget = resolved;
+      try {
+        const stat = fs.existsSync(resolved) ? fs.statSync(resolved) : null;
+        if (stat && stat.isFile()) {
+          openTarget = path.dirname(resolved);
+        }
+      } catch {
+        // ignore
+      }
+      const result = shell.openPath(openTarget);
+      if (result && typeof result.then === 'function') {
+        return result.then((err) => (err ? { ok: false, error: err } : { ok: true }));
+      }
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err.message };
@@ -2069,7 +2836,8 @@ app.whenReady().then(() => {
       }
       const json = JSON.stringify(payload, null, 2);
       fs.writeFileSync(settingsPath, `${json}\n`);
-      await createTrayMenu();
+      refreshTrayMenuLabelsOnly();
+      createTrayMenu().catch(() => {});
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err.message };
@@ -2107,6 +2875,41 @@ app.whenReady().then(() => {
         buildNumber: getBuildNumber(),
       },
     };
+  });
+
+  ipcMain.handle('clashfox:installHelper', async () => {
+    const result = await installHelperWithSystemAuth();
+    return result || { ok: false, error: 'install_failed' };
+  });
+
+  ipcMain.handle('clashfox:runHelperInstallInTerminal', async () => {
+    const result = await runHelperInstallInTerminal();
+    return result || { ok: false, error: 'terminal_launch_failed' };
+  });
+
+  ipcMain.handle('clashfox:getHelperInstallPath', () => {
+    const scriptPath = resolveHelperInstallScriptPath();
+    return { ok: true, path: scriptPath, exists: fs.existsSync(scriptPath) };
+  });
+
+  ipcMain.handle('clashfox:pingHelper', async () => {
+    const result = await pingHelper();
+    return result || { ok: false, error: 'helper_unreachable' };
+  });
+
+  ipcMain.handle('clashfox:openPath', async (_event, targetPath) => {
+    try {
+      if (!targetPath || typeof targetPath !== 'string') {
+        return { ok: false };
+      }
+      const result = await shell.openPath(targetPath);
+      if (result) {
+        return { ok: false, error: result };
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
   });
 
   app.on('activate', () => {

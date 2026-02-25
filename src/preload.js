@@ -6,6 +6,11 @@ contextBridge.exposeInMainWorld('clashfox', {
   selectConfig: () => ipcRenderer.invoke('clashfox:selectConfig'),
   selectDirectory: (title) => ipcRenderer.invoke('clashfox:selectDirectory', title),
   getAppInfo: () => ipcRenderer.invoke('clashfox:appInfo'),
+  installHelper: () => ipcRenderer.invoke('clashfox:installHelper'),
+  runHelperInstallInTerminal: () => ipcRenderer.invoke('clashfox:runHelperInstallInTerminal'),
+  getHelperInstallPath: () => ipcRenderer.invoke('clashfox:getHelperInstallPath'),
+  pingHelper: () => ipcRenderer.invoke('clashfox:pingHelper'),
+  openPath: (targetPath) => ipcRenderer.invoke('clashfox:openPath', targetPath),
   // openAbout: () => ipcRenderer.invoke('clashfox:openAbout'),
   openExternal: (url) => ipcRenderer.invoke('clashfox:openExternal', url),
   setDebugMode: (enabled) => ipcRenderer.invoke('clashfox:setDebugMode', Boolean(enabled)),
@@ -60,6 +65,8 @@ contextBridge.exposeInMainWorld('clashfox', {
   trayMenuAction: (action, payload = {}) => ipcRenderer.invoke('clashfox:trayMenu:action', action, payload),
   trayMenuHide: () => ipcRenderer.send('clashfox:trayMenu:hide'),
   trayMenuSetExpanded: (expanded, payload = {}) => ipcRenderer.send('clashfox:trayMenu:setExpanded', Boolean(expanded), payload),
+  trayMenuOpenSubmenu: (payload = {}) => ipcRenderer.send('clashfox:trayMenu:openSubmenu', payload),
+  trayMenuCloseSubmenu: () => ipcRenderer.send('clashfox:trayMenu:closeSubmenu'),
   trayMenuRendererReady: () => ipcRenderer.send('clashfox:trayMenu:rendererReady'),
   onTrayMenuUpdate: (handler) => {
     if (typeof handler !== 'function') {
@@ -68,5 +75,17 @@ contextBridge.exposeInMainWorld('clashfox', {
     const listener = (_event, payload) => handler(payload);
     ipcRenderer.on('clashfox:trayMenu:update', listener);
     return () => ipcRenderer.removeListener('clashfox:trayMenu:update', listener);
+  },
+  traySubmenuResize: (payload = {}) => ipcRenderer.send('clashfox:traySubmenu:resize', payload),
+  traySubmenuHover: (hovering) => ipcRenderer.send('clashfox:traySubmenu:hover', Boolean(hovering)),
+  traySubmenuReady: () => ipcRenderer.send('clashfox:traySubmenu:ready'),
+  traySubmenuHide: () => ipcRenderer.send('clashfox:traySubmenu:hide'),
+  onTraySubmenuUpdate: (handler) => {
+    if (typeof handler !== 'function') {
+      return () => {};
+    }
+    const listener = (_event, payload) => handler(payload);
+    ipcRenderer.on('clashfox:traySubmenu:update', listener);
+    return () => ipcRenderer.removeListener('clashfox:traySubmenu:update', listener);
   },
 });

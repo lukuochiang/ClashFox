@@ -2,22 +2,13 @@ const stageEl = document.getElementById('trayStage');
 const menuRootEl = document.getElementById('menuRoot');
 const headerEl = document.getElementById('menuHeader');
 const listEl = document.getElementById('menuList');
-const submenuRootEl = document.getElementById('submenuRoot');
-const submenuListEl = document.getElementById('submenuList');
-
 let menuData = null;
 let activeSubmenuKey = null;
 let activeSubmenuAnchor = null;
-let submenuHideTimer = null;
-let connectivityRefreshTimer = null;
-let lastExpandedSent = null;
 let lastHeightSent = 0;
 let lastWidthSent = 0;
 let blockClickUntil = 0;
 let menuVersion = 0;
-const SUBMENU_MIN_WIDTH = 170;
-const SUBMENU_MAX_WIDTH = 340;
-const CONNECTIVITY_REFRESH_MS = 1000;
 
 const ICON_SVGS = {
   showMain: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 9h16"/></svg>',
@@ -38,115 +29,37 @@ const ICON_SVGS = {
   kernelStart: '<svg viewBox="0 0 24 24"><path d="M8 6l10 6-10 6z"/></svg>',
   kernelStop: '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>',
   kernelRestart: '<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v6h-6"/></svg>',
+  directory: '<svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/><path d="M3 7V5a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v2"/></svg>',
+  folder: '<svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/><path d="M3 7V5a2 2 0 0 1 2-2h5l2 2h9"/></svg>',
+  userDir: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0v1H5z"/></svg>',
+  configDir: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5"/></svg>',
+  workDir: '<svg viewBox="0 0 24 24"><path d="M4 9h16v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9z"/><path d="M8 9V7a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M4 12h16"/></svg>',
+  logDir: '<svg viewBox="0 0 24 24"><path d="M6 4h9l3 3v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M9 11h6M9 15h6"/></svg>',
 };
 
-function clearHideTimer() {
-  if (submenuHideTimer) {
-    clearTimeout(submenuHideTimer);
-    submenuHideTimer = null;
-  }
-}
-
-function stopConnectivityRefresh() {
-  if (connectivityRefreshTimer) {
-    clearInterval(connectivityRefreshTimer);
-    connectivityRefreshTimer = null;
-  }
-}
-
-function applyConnectivitySnapshot(snapshot) {
-  if (!snapshot || !menuData || !menuData.submenus || !Array.isArray(menuData.submenus.network)) {
-    return;
-  }
-  const text = snapshot.text ? String(snapshot.text) : '-';
-  const tone = snapshot.tone ? String(snapshot.tone) : 'neutral';
-  menuData.submenus.network = menuData.submenus.network.map((item) => {
-    if (!item || item.type === 'separator') {
-      return item;
-    }
-    if (item.iconKey === 'connectivityQuality') {
-      return {
-        ...item,
-        rightBadge: {
-          text,
-          tone,
-        },
-      };
-    }
-    return item;
-  });
-  if (activeSubmenuKey !== 'network') {
-    return;
-  }
-  const row = submenuListEl.querySelector('.menu-row[data-icon-key="connectivityQuality"]');
-  if (!row) {
-    return;
-  }
-  let badge = row.querySelector('.menu-badge');
-  if (!badge) {
-    badge = document.createElement('div');
-    badge.className = 'menu-badge';
-    row.appendChild(badge);
-  }
-  badge.className = `menu-badge tone-${tone}`;
-  badge.textContent = text;
-}
-
-async function refreshConnectivityBadge() {
-  if (activeSubmenuKey !== 'network' || !window.clashfox || typeof window.clashfox.trayMenuGetConnectivity !== 'function') {
-    return;
-  }
-  try {
-    const snapshot = await window.clashfox.trayMenuGetConnectivity();
-    applyConnectivitySnapshot(snapshot);
-  } catch {
-    // ignore transient refresh errors
-  }
-}
-
-function ensureConnectivityRefresh() {
-  if (activeSubmenuKey !== 'network') {
-    stopConnectivityRefresh();
-    return;
-  }
-  refreshConnectivityBadge();
-  if (connectivityRefreshTimer) {
-    return;
-  }
-  connectivityRefreshTimer = setInterval(() => {
-    refreshConnectivityBadge();
-  }, CONNECTIVITY_REFRESH_MS);
-}
-
-function syncWindowGeometry(expanded) {
+function syncWindowGeometry() {
   const rootRect = menuRootEl.getBoundingClientRect();
   const rootWidth = Math.ceil(rootRect.width) || 260;
-  const submenuWidth = !submenuRootEl.classList.contains('hidden')
-    ? Math.ceil(submenuRootEl.offsetWidth || 0)
-    : 0;
   const height = Math.ceil(rootRect.height) + 2;
-  const width = expanded ? (rootWidth + submenuWidth) : rootWidth;
+  const width = rootWidth;
   if (
-    lastExpandedSent === Boolean(expanded)
-    && Math.abs(height - lastHeightSent) <= 2
+    Math.abs(height - lastHeightSent) <= 2
     && Math.abs(width - lastWidthSent) <= 2
   ) {
     return;
   }
-  lastExpandedSent = Boolean(expanded);
   lastHeightSent = height;
   lastWidthSent = width;
-  window.clashfox.trayMenuSetExpanded(Boolean(expanded), { height, width });
+  window.clashfox.trayMenuSetExpanded(false, { height, width });
 }
 
 function hideSubmenu() {
-  stopConnectivityRefresh();
   activeSubmenuKey = null;
   activeSubmenuAnchor = null;
-  submenuRootEl.classList.add('hidden');
-  submenuListEl.innerHTML = '';
   listEl.querySelectorAll('.menu-row.expanded').forEach((node) => node.classList.remove('expanded'));
-  syncWindowGeometry(false);
+  if (window.clashfox && typeof window.clashfox.trayMenuCloseSubmenu === 'function') {
+    window.clashfox.trayMenuCloseSubmenu();
+  }
 }
 
 function makeLeading(item) {
@@ -162,14 +75,13 @@ function makeLeading(item) {
   return { check, leading };
 }
 
-function makeRow(item, options = {}) {
+function makeRow(item) {
   if (item.type === 'separator') {
     const sep = document.createElement('div');
     sep.className = 'menu-row-sep';
     return sep;
   }
 
-  const { isSubmenu = false, submenuKey = '', withCheckColumn = false } = options;
   const row = document.createElement('div');
   row.className = 'menu-row';
   if (item.action) {
@@ -186,7 +98,7 @@ function makeRow(item, options = {}) {
   }
 
   const leadingParts = makeLeading(item);
-  if (withCheckColumn) {
+  if (typeof item.checked === 'boolean') {
     row.appendChild(leadingParts.check);
   }
   row.appendChild(leadingParts.leading);
@@ -217,7 +129,7 @@ function makeRow(item, options = {}) {
     row.appendChild(badge);
   }
 
-  if (!isSubmenu && item.submenu) {
+  if (item.submenu) {
     row.dataset.submenuKey = String(item.submenu);
     const arrow = document.createElement('div');
     arrow.className = 'menu-arrow';
@@ -229,7 +141,7 @@ function makeRow(item, options = {}) {
     return row;
   }
 
-  if (!isSubmenu && item.submenu) {
+  if (item.submenu) {
     row.addEventListener('mouseenter', () => {
       openSubmenu(item.submenu, row);
     });
@@ -244,17 +156,15 @@ function makeRow(item, options = {}) {
     return row;
   }
 
-  if (!isSubmenu && !item.submenu) {
-    row.addEventListener('mouseenter', () => {
-      hideSubmenu();
-    });
-  }
+  row.addEventListener('mouseenter', () => {
+    hideSubmenu();
+  });
 
   row.addEventListener('click', async () => {
     if (Date.now() < blockClickUntil) {
       return;
     }
-    await runActionForItem(item, submenuKey);
+    await runActionForItem(item);
   });
 
   return row;
@@ -283,6 +193,7 @@ async function runActionForItem(item, submenuKey = '') {
   const result = await invokeAction(item);
   if (result && result.hide) {
     window.clashfox.trayMenuHide();
+    hideSubmenu();
     return;
   }
   if (result && result.data && menuVersion === actionStartVersion) {
@@ -295,11 +206,8 @@ async function runActionForItem(item, submenuKey = '') {
   }
   renderHeader();
   renderMainList();
-  if (submenuKey) {
-    hideSubmenu();
-  } else {
-    hideSubmenu();
-  }
+  hideSubmenu();
+  syncWindowGeometry();
 }
 
 function normalizeShortcut(text = '') {
@@ -371,39 +279,12 @@ function renderHeader() {
   `;
 }
 
-function applySubmenuSide() {
-  const side = (menuData && menuData.meta && menuData.meta.submenuSide) === 'left' ? 'left' : 'right';
-  stageEl.classList.remove('side-left', 'side-right');
-  stageEl.classList.add(side === 'left' ? 'side-left' : 'side-right');
-}
-
 function renderMainList() {
   listEl.innerHTML = '';
   const items = Array.isArray(menuData && menuData.items) ? menuData.items : [];
   for (const item of items) {
-    listEl.appendChild(makeRow(item, { withCheckColumn: false }));
+    listEl.appendChild(makeRow(item));
   }
-}
-
-function renderSubmenuList(submenuKey) {
-  submenuListEl.innerHTML = '';
-  const items = (menuData && menuData.submenus && Array.isArray(menuData.submenus[submenuKey]))
-    ? menuData.submenus[submenuKey]
-    : [];
-  const withCheckColumn = items.some((item) => item && item.type !== 'separator' && typeof item.checked === 'boolean');
-  for (const item of items) {
-    submenuListEl.appendChild(makeRow(item, { isSubmenu: true, submenuKey, withCheckColumn }));
-  }
-}
-
-function applySubmenuWidthByContent() {
-  if (!submenuRootEl) {
-    return;
-  }
-  submenuRootEl.style.width = 'fit-content';
-  const measured = Math.ceil(submenuRootEl.getBoundingClientRect().width || 0);
-  const width = Math.max(SUBMENU_MIN_WIDTH, Math.min(measured, SUBMENU_MAX_WIDTH));
-  submenuRootEl.style.width = `${width}px`;
 }
 
 function findMainAnchorBySubmenuKey(submenuKey) {
@@ -432,15 +313,6 @@ function openSubmenu(submenuKey, anchorRow, keepAnchor = false) {
     submenuKey,
     keepAnchor ? activeSubmenuAnchor : anchorRow,
   );
-  if (
-    activeSubmenuKey === submenuKey
-    && !submenuRootEl.classList.contains('hidden')
-    && activeSubmenuAnchor === resolvedAnchor
-  ) {
-    clearHideTimer();
-    return;
-  }
-  clearHideTimer();
   activeSubmenuKey = submenuKey;
   activeSubmenuAnchor = resolvedAnchor;
   listEl.querySelectorAll('.menu-row.expanded').forEach((node) => node.classList.remove('expanded'));
@@ -448,57 +320,60 @@ function openSubmenu(submenuKey, anchorRow, keepAnchor = false) {
     resolvedAnchor.classList.add('expanded');
   }
 
-  renderSubmenuList(submenuKey);
-  submenuRootEl.classList.remove('hidden');
-  applySubmenuWidthByContent();
   const rootRect = menuRootEl.getBoundingClientRect();
-  const anchor = resolveSubmenuAnchor(submenuKey, activeSubmenuAnchor);
-  let top = 56;
-  if (anchor) {
-    const anchorRect = anchor.getBoundingClientRect();
-    const rawTop = anchorRect.top - rootRect.top;
-    top = Math.max(8, rawTop);
+  const anchorRect = resolvedAnchor ? resolvedAnchor.getBoundingClientRect() : null;
+  const anchorTop = anchorRect ? (anchorRect.top - rootRect.top) : 56;
+  const anchorHeight = anchorRect ? anchorRect.height : 32;
+  const payload = {
+    key: submenuKey,
+    items: (menuData && menuData.submenus && Array.isArray(menuData.submenus[submenuKey]))
+      ? menuData.submenus[submenuKey]
+      : [],
+    anchorTop: Math.max(0, Math.round(anchorTop)),
+    anchorHeight: Math.max(0, Math.round(anchorHeight)),
+    rootHeight: Math.max(0, Math.round(rootRect.height || 0)),
+  };
+  if (window.clashfox && typeof window.clashfox.trayMenuOpenSubmenu === 'function') {
+    window.clashfox.trayMenuOpenSubmenu(payload);
   }
-  submenuRootEl.style.top = `${top}px`;
-  syncWindowGeometry(true);
-  ensureConnectivityRefresh();
 }
 
 function renderAll() {
-  applySubmenuSide();
   renderHeader();
   renderMainList();
   hideSubmenu();
+  syncWindowGeometry();
 }
 
 async function init() {
-  window.clashfox.onTrayMenuUpdate((payload) => {
-    if (!payload) {
-      return;
-    }
-    menuVersion += 1;
-    const keepSubmenuKey = activeSubmenuKey;
-    const keepSubmenuAnchorKey = activeSubmenuAnchor
-      && activeSubmenuAnchor.dataset
-      && activeSubmenuAnchor.dataset.submenuKey
-      ? activeSubmenuAnchor.dataset.submenuKey
-      : keepSubmenuKey;
-    menuData = payload;
-    applySubmenuSide();
-    renderHeader();
-    renderMainList();
-    if (keepSubmenuKey && keepSubmenuAnchorKey) {
-      const nextAnchor = findMainAnchorBySubmenuKey(keepSubmenuAnchorKey);
-      if (nextAnchor) {
-        // Force refresh submenu content with latest payload to avoid stale rows.
-        activeSubmenuKey = null;
-        activeSubmenuAnchor = null;
-        openSubmenu(keepSubmenuKey, nextAnchor);
+  if (window.clashfox && typeof window.clashfox.onTrayMenuUpdate === 'function') {
+    window.clashfox.onTrayMenuUpdate((payload) => {
+      if (!payload) {
         return;
       }
-    }
-    hideSubmenu();
-  });
+      menuVersion += 1;
+      const keepSubmenuKey = activeSubmenuKey;
+      const keepSubmenuAnchorKey = activeSubmenuAnchor
+        && activeSubmenuAnchor.dataset
+        && activeSubmenuAnchor.dataset.submenuKey
+        ? activeSubmenuAnchor.dataset.submenuKey
+        : keepSubmenuKey;
+      menuData = payload;
+      renderHeader();
+      renderMainList();
+      if (keepSubmenuKey && keepSubmenuAnchorKey) {
+        const nextAnchor = findMainAnchorBySubmenuKey(keepSubmenuAnchorKey);
+        if (nextAnchor) {
+          activeSubmenuKey = null;
+          activeSubmenuAnchor = null;
+          openSubmenu(keepSubmenuKey, nextAnchor, true);
+          return;
+        }
+      }
+      hideSubmenu();
+      syncWindowGeometry();
+    });
+  }
 
   if (window.clashfox && typeof window.clashfox.trayMenuRendererReady === 'function') {
     window.clashfox.trayMenuRendererReady();
@@ -506,7 +381,6 @@ async function init() {
 
   try {
     const initial = await window.clashfox.trayMenuGetData();
-    // Avoid overriding newer pushed payloads that arrived first.
     if (menuVersion === 0) {
       menuData = initial;
       renderAll();
@@ -515,7 +389,6 @@ async function init() {
     // ignore
   }
 
-  stageEl.addEventListener('mouseenter', clearHideTimer);
   headerEl.addEventListener('mouseenter', hideSubmenu);
 }
 

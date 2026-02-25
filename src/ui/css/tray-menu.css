@@ -43,7 +43,7 @@ body {
   border-radius: 12px;
   background: linear-gradient(150deg, var(--panel), var(--panel-soft));
   border: 1px solid var(--border);
-  box-shadow: var(--shadow);
+  box-shadow: none;
   padding: 8px 0;
   overflow: hidden;
 }
@@ -63,6 +63,22 @@ body {
   left: 260px;
   top: 56px;
   z-index: 5;
+  padding-bottom: 10px;
+  box-shadow: var(--shadow);
+}
+
+.submenu-window .submenu-root {
+  position: relative;
+  left: 0;
+  top: 0;
+  width: max-content;
+  min-width: 200px;
+  max-width: 360px;
+  box-shadow: var(--shadow);
+}
+
+.tray-stage .menu-root {
+  box-shadow: none;
 }
 
 .tray-stage.side-left .menu-root {
@@ -169,6 +185,10 @@ body {
 
 .menu-list {
   padding: 4px;
+}
+
+.submenu-root .menu-list {
+  padding: 6px;
 }
 
 .menu-row {

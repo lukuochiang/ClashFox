@@ -224,6 +224,14 @@ resolve_active_network_service() {
     if [ -z "$service" ] && command -v networksetup >/dev/null 2>&1; then
         service="$(networksetup -listallnetworkservices 2>/dev/null | sed '1d' | sed '/^\*/d' | awk 'NF{print; exit}')"
     fi
+    # Fallback: prefer Wi-Fi if available but not already selected
+    if [ -z "$service" ] && command -v networksetup >/dev/null 2>&1; then
+        service="$(networksetup -listallnetworkservices 2>/dev/null | sed '1d' | sed 's/^\\*//' | awk '/[Ww][Ii]-?[Ff][Ii]/{print; exit}')"
+    fi
+    # Final fallback: take first even if disabled
+    if [ -z "$service" ] && command -v networksetup >/dev/null 2>&1; then
+        service="$(networksetup -listallnetworkservices 2>/dev/null | sed '1d' | sed 's/^\\*//' | awk 'NF{print; exit}')"
+    fi
     echo "$service"
 }
 
