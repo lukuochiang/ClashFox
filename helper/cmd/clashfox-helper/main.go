@@ -135,7 +135,6 @@ func findJSONPayload(raw string) (string, bool) {
 func defaultBridgePath() string {
 	candidates := []string{
 		"/Applications/ClashFox.app/Contents/Resources/scripts/gui_bridge.sh",
-		"/Applications/ClashFox.app/Contents/Resources/app.asar.unpacked/scripts/gui_bridge.sh",
 	}
 	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
@@ -174,7 +173,6 @@ func parseAllowedCommandList(raw []byte) ([]string, error) {
 func resolveAllowedCommandList() []string {
 	candidates := []string{
 		"/Applications/ClashFox.app/Contents/Resources/helper/allowed-commands.json",
-		"/Applications/ClashFox.app/Contents/Resources/app.asar.unpacked/helper/allowed-commands.json",
 	}
 	for _, p := range candidates {
 		data, err := os.ReadFile(p)

@@ -35,7 +35,6 @@ function getBridgePath() {
   const candidates = [
     path.join(ROOT_DIR, 'scripts', 'gui_bridge.sh'),
     path.join(process.resourcesPath || '', 'scripts', 'gui_bridge.sh'),
-    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'scripts', 'gui_bridge.sh'),
   ];
   for (const candidate of candidates) {
     if (candidate && fs.existsSync(candidate)) {
@@ -93,7 +92,6 @@ const DEFAULT_HELPER_COMMAND_LIST = [
 function loadHelperCommandList() {
   const candidates = [
     path.join(ROOT_DIR, 'helper', 'allowed-commands.json'),
-    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'helper', 'allowed-commands.json'),
     path.join(process.resourcesPath || '', 'helper', 'allowed-commands.json'),
   ];
   for (const filePath of candidates) {
@@ -401,8 +399,6 @@ function resolveHelperInstallScriptPath() {
   const baseDirs = [
     path.join(ROOT_DIR, 'helper'),
     path.join(ROOT_DIR, 'scripts'),
-    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'helper'),
-    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'scripts'),
     path.join(process.resourcesPath || '', 'helper'),
     path.join(process.resourcesPath || '', 'scripts'),
   ];
@@ -419,8 +415,6 @@ function resolveHelperUninstallScriptPath() {
   const baseDirs = [
     path.join(ROOT_DIR, 'helper'),
     path.join(ROOT_DIR, 'scripts'),
-    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'helper'),
-    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'scripts'),
     path.join(process.resourcesPath || '', 'helper'),
     path.join(process.resourcesPath || '', 'scripts'),
   ];
