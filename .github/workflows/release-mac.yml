@@ -1,10 +1,10 @@
-name: Build & Release (macOS) - beta/standard
+name: Build & Release macOS (standard + beta channels)
 
 on:
   push:
     tags:
-      - "v*.*.*"          # standard: v1.2.3
-      - "v*.*.*-beta*"    # beta:     v1.2.3-beta.1
+      - "v*.*.*"
+      - "v*.*.*-beta*"
   workflow_dispatch:
     inputs:
       channel:
@@ -12,18 +12,16 @@ on:
         required: true
         default: "beta"
         type: choice
-        options:
-          - beta
-          - standard
+        options: [beta, standard]
       tag:
-        description: "Tag to release (e.g. v1.2.3 or v1.2.3-beta.1). Leave empty to use current ref."
+        description: "Tag to build (e.g. v1.2.3 or v1.2.3-beta.1). Empty = current ref"
         required: false
 
 permissions:
   contents: write
 
 jobs:
-  build-mac:
+  build:
     runs-on: macos-14
 
     steps:
@@ -33,43 +31,48 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Determine tag name
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.tag }}" ]]; then
-            TAG="${{ inputs.tag }}"
+            INPUT_TAG="${{ inputs.tag }}"
           else
-            TAG="${GITHUB_REF_NAME}"
+            INPUT_TAG="${GITHUB_REF_NAME}"
           fi
 
-          # Determine channel
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             CHANNEL="${{ inputs.channel }}"
           else
-            if [[ "$TAG" == *"-beta"* ]]; then
+            if [[ "$INPUT_TAG" == *"-beta"* ]]; then
               CHANNEL="beta"
             else
               CHANNEL="standard"
             fi
           fi
 
-          # prerelease flag
+          # standard: 用真实 tag；beta: 统一发布到固定 tag=beta 的 Release
           if [[ "$CHANNEL" == "beta" ]]; then
+            RELEASE_TAG="beta"
             PRERELEASE="true"
-            TITLE_SUFFIX=" (Beta)"
+            UPDATE_CHANNEL="beta"
           else
+            RELEASE_TAG="$INPUT_TAG"
             PRERELEASE="false"
-            TITLE_SUFFIX=""
+            UPDATE_CHANNEL="latest"
           fi
 
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          # electron-builder 的 version 要跟 tag 对齐：去掉前缀 v
+          VERSION="${INPUT_TAG#v}"
+
+          echo "input_tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
           echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
-          echo "title_suffix=$TITLE_SUFFIX" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "update_channel=$UPDATE_CHANNEL" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout (tag)
+      - name: Checkout (source tag)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ steps.meta.outputs.tag }}
+          ref: ${{ steps.meta.outputs.input_tag }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -86,28 +89,92 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build (mac)
-        run: npm run build:mac
+      - name: Set package.json version = tag version (no git tag)
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm version "${{ steps.meta.outputs.version }}" --no-git-tag-version
 
-      - name: Prepare artifacts (optional rename with channel)
+      # beta：把 refs/tags/beta 强制移动到当前提交（用于“永远一个 beta 入口”）
+      - name: Move beta tag to this commit (beta only)
+        if: ${{ steps.meta.outputs.channel == 'beta' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA="$(git rev-parse HEAD)"
+
+          # 尝试更新 refs/tags/beta；不存在则创建
+          api="https://api.github.com/repos/${{ github.repository }}/git/refs/tags/beta"
+          payload_update="{\"sha\":\"$SHA\",\"force\":true}"
+          payload_create="{\"ref\":\"refs/tags/beta\",\"sha\":\"$SHA\"}"
+
+          code=$(curl -sS -o /tmp/resp.json -w "%{http_code}" \
+            -X PATCH -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "$api" -d "$payload_update" || true)
+
+          if [[ "$code" == "404" ]]; then
+            curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/git/refs" \
+              -d "$payload_create" >/dev/null
+          elif [[ "$code" != "200" ]]; then
+            cat /tmp/resp.json
+            echo "Failed to move beta tag (HTTP $code)"
+            exit 1
+          fi
+
+      - name: Build helper
+        run: npm run build:helper
+
+      - name: Pre-clean dist (same as your build:mac)
+        run: node scripts/clean-dist-mac.js --pre
+
+      # 关键：用 --publish never 构建，但仍产出 yml 元数据（前提是 package.json 里有 build.publish）
+      - name: Build mac zips (x64/arm64/universal) + update metadata
+        env:
+          CLASHFOX_BUILD_NUMBER: ${{ github.run_number }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          UPDATE_CHANNEL: ${{ steps.meta.outputs.update_channel }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # 让应用在运行时可读到通道（你主进程里按这个决定 autoUpdater.channel）
+          export UPDATE_CHANNEL
+
+          npx electron-builder --mac zip --x64 --publish never
+          npx electron-builder --mac zip --arm64 --publish never
+          npx electron-builder --mac zip --universal --publish never
+
+          node scripts/clean-dist-mac.js
+
+      - name: Show dist
+        run: |
+          ls -al dist || true
+          echo "---- yml files ----"
+          ls -al dist/*.yml 2>/dev/null || true
+
+      - name: Prepare artifacts (keep zips + yml)
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts
           shopt -s nullglob
-          for f in dist/*.zip; do
-            base="$(basename "$f")"
-            # 在文件名里加上 channel 前缀，便于 Release Assets 一眼区分
-            cp -v "$f" "artifacts/${{ steps.meta.outputs.channel }}-${base}"
-          done
-          ls -ալ artifacts || true
+          # zip 安装包
+          cp -v dist/*.zip artifacts/ || true
+          # 自动更新元数据：latest/beta 通道通常会生成类似 latest-mac.yml / beta-mac.yml / latest.yml / beta.yml
+          cp -v dist/*.yml artifacts/ || true
+          ls -al artifacts
 
-      - name: Create/Update GitHub Release & upload artifacts
-        uses: softprops/action-gh-release@v2
+      # 用 ncipollo/release-action：支持 allowUpdates + replacesArtifacts，真正做到“覆盖同一个 beta Release”
+      - name: Create/Update Release & upload (overwrite assets)
+        uses: ncipollo/release-action@v1
         with:
-          tag_name: ${{ steps.meta.outputs.tag }}
-          name: ${{ steps.meta.outputs.tag }}${{ steps.meta.outputs.title_suffix }}
+          tag: ${{ steps.meta.outputs.release_tag }}
+          name: ${{ steps.meta.outputs.release_tag }}
           prerelease: ${{ steps.meta.outputs.prerelease }}
-          generate_release_notes: true
-          files: |
-            artifacts/*.zip
+          allowUpdates: true
+          replacesArtifacts: true
+          artifacts: "artifacts/*"
+          generateReleaseNotes: true
