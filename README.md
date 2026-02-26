@@ -8,12 +8,11 @@
 
 This repository includes an Electron GUI that wraps the ClashFox Mihomo Toolkit Script.
 
-### Run
+### Requirements
 
-1. Install dependencies: `npm install`
-2. Start the app: `npm start`
-
-The GUI calls `scripts/gui_bridge.sh`, which in turn invokes `scripts/clashfox_mihomo_toolkit.sh`.
+- Node.js 20+
+- npm 10+
+- macOS (for full toolkit/helper capability)
 
 ## 致谢
 
