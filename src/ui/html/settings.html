@@ -55,8 +55,6 @@
                       <option value="ru">Русский</option>
                     </select>
                   </div>
-                </div>
-                <div class="settings-top-column settings-top-column-right">
                   <div class="form-row">
                     <label data-i18n="settings.github">GitHub Source</label>
                     <select id="settingsGithubUser">
@@ -73,6 +71,25 @@
                     </label>
                   </div>
                 </div>
+                <div class="settings-top-column settings-top-column-right">
+                  <div class="form-row">
+                    <label data-i18n="settings.windowWidth">Window Width</label>
+                    <input id="settingsWindowWidth" type="number" min="980" max="4096" step="1" />
+                  </div>
+                  <div class="form-row">
+                    <label data-i18n="settings.windowHeight">Window Height</label>
+                    <input id="settingsWindowHeight" type="number" min="640" max="2160" step="1" />
+                  </div>
+                  <div class="form-row">
+                    <label data-i18n="settings.backupsPageSize">General Page Size</label>
+                    <select id="settingsBackupsPageSize">
+                      <option value="5">5</option>
+                      <option value="10" selected>10</option>
+                      <option value="20">20</option>
+                      <option value="50">50</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 <!--              <div class="form-row">-->
 <!--                <label data-i18n="settings.configPath">Config Path</label>-->
@@ -83,23 +100,25 @@
 <!--              </div>-->
             </div>
 
-            <div class="card">
+            <div class="card card-full">
               <h3 data-i18n="settings.logs">Log Settings</h3>
-              <div class="form-row">
-                <label data-i18n="logs.lines">Lines</label>
-                <input id="settingsLogLines" type="number" min="10" max="2000" value="10" />
-              </div>
-              <div class="form-row">
-                <label data-i18n="logs.interval">Interval</label>
-                <select id="settingsLogIntervalPreset">
-                  <option value="1">1s</option>
-                  <option value="3" selected>3s</option>
-                  <option value="5">5s</option>
-                  <option value="10">10s</option>
-                  <option value="15">15s</option>
-                  <option value="30">30s</option>
-                  <option value="60">60s</option>
-                </select>
+              <div class="settings-log-inline">
+                <div class="field-inline">
+                  <label data-i18n="logs.lines">Lines</label>
+                  <input id="settingsLogLines" type="number" min="10" max="2000" value="10" />
+                </div>
+                <div class="field-inline">
+                  <label data-i18n="logs.interval">Interval</label>
+                  <select id="settingsLogIntervalPreset">
+                    <option value="1">1s</option>
+                    <option value="3" selected>3s</option>
+                    <option value="5">5s</option>
+                    <option value="10">10s</option>
+                    <option value="15">15s</option>
+                    <option value="30">30s</option>
+                    <option value="60">60s</option>
+                  </select>
+                </div>
               </div>
 <!--              <label class="toggle">-->
 <!--                <input id="settingsLogAutoRefresh" type="checkbox" />-->
@@ -108,26 +127,33 @@
 <!--              </label>-->
             </div>
 
-            <div class="card">
-              <h3 data-i18n="settings.pagination">Pagination</h3>
-              <div class="form-row">
-                <label data-i18n="settings.kernelPageSize">Kernel Page Size</label>
-                <select id="settingsKernelPageSize">
-                  <option value="5">5</option>
-                  <option value="10" selected>10</option>
-                  <option value="20">20</option>
-                  <option value="50">50</option>
-                </select>
+            <div class="card card-full helper-card">
+              <div class="helper-card-header">
+                <div class="helper-card-main">
+                  <h3 class="card-title helper-card-title">
+<!--                    <span class="card-icon helper-shield" aria-hidden="true"></span>-->
+                    <span data-i18n="settings.helperTitle">Privileged Helper</span>
+                  </h3>
+                </div>
+                <div class="helper-card-side">
+                  <span class="helper-install-status" id="helperStatusText">-</span>
+                  <button class="icon-btn ghost small helper-refresh-btn" id="helperRefreshBtn" type="button" aria-label="Refresh helper status">
+                    <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                      <path d="M17.64 6.36A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.76-4.24L14 10h6V4l-2.36 2.36Z"></path>
+                    </svg>
+                  </button>
+                </div>
               </div>
-              <div class="form-row">
-                <label data-i18n="settings.backupsPageSize">General Page Size</label>
-                <select id="settingsBackupsPageSize">
-                  <option value="5">5</option>
-                  <option value="10" selected>10</option>
-                  <option value="20">20</option>
-                  <option value="50">50</option>
-                </select>
+              <p class="helper-card-desc" data-i18n="settings.helperDesc">The privileged helper enables advanced features like Enhanced Mode (TUN). It runs as a system service and requires administrator privileges to install.</p>
+              <div class="helper-card-actions">
+                <button class="btn primary" id="helperInstallBtn" data-i18n="settings.helperInstall">Install</button>
+                <button class="btn ghost" id="helperLogsOpenBtn" data-i18n="settings.helperLogsOpen">View Helper Logs</button>
               </div>
+              <button class="is-hidden" id="helperInstallTerminalBtn" type="button"></button>
+              <button class="is-hidden" id="helperInstallPathBtn" type="button"></button>
+              <button class="is-hidden" id="helperLogsRevealBtn" type="button"></button>
+              <div class="helper-card-path is-hidden" id="helperInstallPath">-</div>
+              <div class="helper-card-path is-hidden" id="helperLogsPath">-</div>
             </div>
 
             <div class="card card-full">
@@ -171,40 +197,11 @@
                 <div class="paths-item">
                   <span class="paths-label" data-i18n="settings.authentication">Authentication</span>
                   <div class="input-group">
-<!--                    <textarea id="externalAuth" class="paths-input" rows="2" placeholder="-"></textarea>-->
+                    <!--                    <textarea id="externalAuth" class="paths-input" rows="2" placeholder="-"></textarea>-->
                     <input id="externalAuth" class="paths-input" type="text" placeholder="-" />
                   </div>
                 </div>
               </div>
-            </div>
-
-            <div class="card card-full helper-card">
-              <div class="helper-card-header">
-                <div class="helper-card-main">
-                  <h3 class="card-title helper-card-title">
-<!--                    <span class="card-icon helper-shield" aria-hidden="true"></span>-->
-                    <span data-i18n="settings.helperTitle">Privileged Helper</span>
-                  </h3>
-                </div>
-                <div class="helper-card-side">
-                  <span class="helper-install-status" id="helperStatusText">-</span>
-                  <button class="icon-btn ghost small helper-refresh-btn" id="helperRefreshBtn" type="button" aria-label="Refresh helper status">
-                    <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-                      <path d="M17.64 6.36A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.76-4.24L14 10h6V4l-2.36 2.36Z"></path>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              <p class="helper-card-desc" data-i18n="settings.helperDesc">The privileged helper enables advanced features like Enhanced Mode (TUN). It runs as a system service and requires administrator privileges to install.</p>
-              <div class="helper-card-actions">
-                <button class="btn primary" id="helperInstallBtn" data-i18n="settings.helperInstall">Install</button>
-                <button class="btn ghost" id="helperLogsOpenBtn" data-i18n="settings.helperLogsOpen">View Helper Logs</button>
-              </div>
-              <button class="is-hidden" id="helperInstallTerminalBtn" type="button"></button>
-              <button class="is-hidden" id="helperInstallPathBtn" type="button"></button>
-              <button class="is-hidden" id="helperLogsRevealBtn" type="button"></button>
-              <div class="helper-card-path is-hidden" id="helperInstallPath">-</div>
-              <div class="helper-card-path is-hidden" id="helperLogsPath">-</div>
             </div>
 
             <div class="card card-full user-paths-card">

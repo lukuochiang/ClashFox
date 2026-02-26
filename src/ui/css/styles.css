@@ -1201,6 +1201,33 @@ body[data-page="settings"] .settings-top-column-right .form-row:first-child {
   margin-top: 38px;
 }
 
+body[data-page="settings"] .settings-log-inline {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: nowrap;
+}
+
+body[data-page="settings"] .settings-log-inline .field-inline {
+  flex: 1 1 0;
+  min-width: 0;
+  gap: 10px;
+}
+
+body[data-page="settings"] .settings-log-inline .field-inline label {
+  min-width: 0;
+}
+
+body[data-page="settings"] #settingsLogLines {
+  flex: 0 0 96px;
+  min-width: 96px;
+}
+
+body[data-page="settings"] #settingsLogIntervalPreset {
+  flex: 0 0 110px;
+  min-width: 110px;
+}
+
 @media (max-width: 900px) {
   body[data-page="settings"] .panel-grid {
     grid-template-columns: 1fr;
@@ -1221,6 +1248,10 @@ body[data-page="settings"] .settings-top-column-right .form-row:first-child {
 
   body[data-page="settings"] .settings-top-column-right .form-row:first-child {
     margin-top: 0;
+  }
+
+  body[data-page="settings"] .settings-log-inline {
+    flex-wrap: wrap;
   }
 }
 
@@ -1270,6 +1301,37 @@ body[data-page="settings"] .settings-top-column-right .form-row:first-child {
   gap: 12px;
   /*margin-bottom: 12px;*/
   overflow: visible;
+}
+
+.kernel-list-header {
+  align-items: center;
+}
+
+.kernel-list-modes {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kernel-mode-btn {
+  border-radius: 10px;
+}
+
+.kernel-header-icon-btn {
+  width: 30px;
+  height: 30px;
+}
+
+.kernel-header-icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.kernel-mode-btn.is-active {
+  background: var(--active-strong-bg);
+  border-color: var(--active-strong-border);
+  color: var(--active-strong-ink);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 .outbound-icon {
@@ -1586,6 +1648,10 @@ body[data-theme="day"] .paths-input::placeholder {
   flex-wrap: wrap;
   gap: 10px;
   /*margin-top: 10px;*/
+}
+
+.action-spacer {
+  flex: 1 1 auto;
 }
 
 .quick-actions-card {
@@ -2702,9 +2768,32 @@ tr.selectable.selected {
 .table-row.kernel,
 .table-row.header.kernel {
   /* first column for sequence numbers */
-  grid-template-columns: 40px 1fr 160px;
+  grid-template-columns: 40px 1fr 160px 112px;
   /*border-top: 1px solid var(--border);*/
   /*border-bottom-style: none;*/
+}
+
+.table-row.kernel:not(.header):not(.empty) {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.table-row.kernel.empty {
+  grid-template-columns: 1fr;
+}
+
+.table-row.kernel .action-head,
+.table-row.kernel .action-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.row-action-btn {
+  /*min-width: 78px;*/
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.2;
 }
 
 .kernel-current-card {
@@ -2712,7 +2801,7 @@ tr.selectable.selected {
   border-radius: 14px;
   /* background: linear-gradient(180deg, rgba(144, 170, 198, 0.08), rgba(144, 170, 198, 0.03)); */
   background: rgba(244, 179, 74, 0.12);
-  margin-bottom: 12px;
+  /*margin-bottom: 12px;*/
   overflow: hidden;
 }
 
@@ -3031,6 +3120,10 @@ body[data-theme="day"] .log-view {
   flex-direction: column;
   gap: 10px;
   font-size: 14px;
+}
+
+body[data-page="logs"] .logs-clean-action {
+  justify-content: flex-end;
 }
 
 .help-list {

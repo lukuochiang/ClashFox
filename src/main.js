@@ -62,6 +62,7 @@ let traySubmenuAnchor = { top: 0, height: 0, rootHeight: 0 };
 let traySubmenuLastSize = { width: 0, height: 0 };
 let traySubmenuPendingPayload = null;
 let dashboardWindow = null;
+let mainWindowResizePersistTimer = null;
 let currentInstallProcess = null; // 仅用于跟踪安装进程，支持取消功能
 let globalSettings = {
   debugMode: true, // 是否启用调试模式
@@ -131,6 +132,12 @@ const OUTBOUND_MODE_BADGE = {
   direct: 'D',
 };
 const CONNECTIVITY_REFRESH_MS = 1500;
+const DEFAULT_MAIN_WINDOW_WIDTH = 997;
+const DEFAULT_MAIN_WINDOW_HEIGHT = 655;
+const MIN_MAIN_WINDOW_WIDTH = 980;
+const MIN_MAIN_WINDOW_HEIGHT = 640;
+const MAX_MAIN_WINDOW_WIDTH = 4096;
+const MAX_MAIN_WINDOW_HEIGHT = 2160;
 const trayIconCache = new Map();
 let connectivityQualityCache = {
   text: '-',
@@ -375,6 +382,31 @@ function writeAppSettings(settings = {}) {
   ensureAppDirs();
   const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
   fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
+}
+
+function sanitizeMainWindowDimension(value, fallback, min, max) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, parsed));
+}
+
+function resolveMainWindowSizeFromSettings() {
+  const settings = readAppSettings();
+  const width = sanitizeMainWindowDimension(
+    settings.windowWidth,
+    DEFAULT_MAIN_WINDOW_WIDTH,
+    MIN_MAIN_WINDOW_WIDTH,
+    MAX_MAIN_WINDOW_WIDTH,
+  );
+  const height = sanitizeMainWindowDimension(
+    settings.windowHeight,
+    DEFAULT_MAIN_WINDOW_HEIGHT,
+    MIN_MAIN_WINDOW_HEIGHT,
+    MAX_MAIN_WINDOW_HEIGHT,
+  );
+  return { width, height };
 }
 
 function readHelperConfigFromSettings() {
@@ -676,6 +708,35 @@ function persistMainWindowClosedToSettings(closed) {
     const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
     const parsed = readAppSettings();
     parsed.mainWindowClosed = Boolean(closed);
+    fs.writeFileSync(settingsPath, `${JSON.stringify(parsed, null, 2)}\n`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function persistMainWindowSizeToSettings(width, height) {
+  try {
+    ensureAppDirs();
+    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
+    const parsed = readAppSettings();
+    const nextWidth = sanitizeMainWindowDimension(
+      width,
+      DEFAULT_MAIN_WINDOW_WIDTH,
+      MIN_MAIN_WINDOW_WIDTH,
+      MAX_MAIN_WINDOW_WIDTH,
+    );
+    const nextHeight = sanitizeMainWindowDimension(
+      height,
+      DEFAULT_MAIN_WINDOW_HEIGHT,
+      MIN_MAIN_WINDOW_HEIGHT,
+      MAX_MAIN_WINDOW_HEIGHT,
+    );
+    if (parsed.windowWidth === nextWidth && parsed.windowHeight === nextHeight) {
+      return false;
+    }
+    parsed.windowWidth = nextWidth;
+    parsed.windowHeight = nextHeight;
     fs.writeFileSync(settingsPath, `${JSON.stringify(parsed, null, 2)}\n`);
     return true;
   } catch {
@@ -2615,12 +2676,13 @@ function createWindow(showOnCreate = false) {
   if (showOnCreate) {
     persistMainWindowClosedToSettings(false);
   }
+  const mainWindowSize = resolveMainWindowSizeFromSettings();
   const win = new BrowserWindow({
     show: Boolean(showOnCreate),
-    width: 997,
-    height: 655,
-    minWidth: 980,
-    minHeight: 640,
+    width: mainWindowSize.width,
+    height: mainWindowSize.height,
+    minWidth: MIN_MAIN_WINDOW_WIDTH,
+    minHeight: MIN_MAIN_WINDOW_HEIGHT,
     backgroundColor: '#0f1216',
     icon: path.join(APP_PATH, 'src', 'ui', 'assets', 'logo.png'),
     webPreferences: {
@@ -2679,6 +2741,32 @@ function createWindow(showOnCreate = false) {
     win.hide();
     if (app.dock && app.dock.hide) {
       app.dock.hide();
+    }
+  });
+
+  win.on('resize', () => {
+    if (!win || win.isDestroyed() || win.isMinimized() || win.isMaximized() || win.isFullScreen()) {
+      return;
+    }
+    if (mainWindowResizePersistTimer) {
+      clearTimeout(mainWindowResizePersistTimer);
+    }
+    mainWindowResizePersistTimer = setTimeout(() => {
+      if (!win || win.isDestroyed()) {
+        return;
+      }
+      const [width, height] = win.getSize();
+      persistMainWindowSizeToSettings(width, height);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('clashfox:mainWindowResize', { width, height });
+      }
+    }, 180);
+  });
+
+  win.on('closed', () => {
+    if (mainWindowResizePersistTimer) {
+      clearTimeout(mainWindowResizePersistTimer);
+      mainWindowResizePersistTimer = null;
     }
   });
 
@@ -3147,8 +3235,23 @@ app.whenReady().then(() => {
       if (Object.prototype.hasOwnProperty.call(merged, 'configPath')) {
         delete merged.configPath;
       }
+      merged.windowWidth = sanitizeMainWindowDimension(
+        merged.windowWidth,
+        DEFAULT_MAIN_WINDOW_WIDTH,
+        MIN_MAIN_WINDOW_WIDTH,
+        MAX_MAIN_WINDOW_WIDTH,
+      );
+      merged.windowHeight = sanitizeMainWindowDimension(
+        merged.windowHeight,
+        DEFAULT_MAIN_WINDOW_HEIGHT,
+        MIN_MAIN_WINDOW_HEIGHT,
+        MAX_MAIN_WINDOW_HEIGHT,
+      );
       const json = JSON.stringify(merged, null, 2);
       fs.writeFileSync(settingsPath, `${json}\n`);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.setSize(merged.windowWidth, merged.windowHeight);
+      }
       refreshTrayMenuLabelsOnly();
       createTrayMenu().catch(() => {});
       return { ok: true };

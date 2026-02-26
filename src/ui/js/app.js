@@ -156,6 +156,10 @@ let configsRefresh = document.getElementById('configsRefresh');
 let configTable = document.getElementById('configTable');
 let kernelTable = document.getElementById('kernelTable');
 let kernelRefresh = document.getElementById('kernelRefresh');
+let kernelModeSwitchBtn = document.getElementById('kernelModeSwitchBtn');
+let kernelModeManageBtn = document.getElementById('kernelModeManageBtn');
+let kernelSwitchSection = document.getElementById('kernelSwitchSection');
+let kernelManageSection = document.getElementById('kernelManageSection');
 let kernelPrev = document.getElementById('kernelPrev');
 let kernelNext = document.getElementById('kernelNext');
 let kernelPageInfo = document.getElementById('kernelPageInfo');
@@ -225,9 +229,10 @@ let helperPrimaryAction = 'install';
 let settingsLogLines = document.getElementById('settingsLogLines');
 let settingsLogAutoRefresh = document.getElementById('settingsLogAutoRefresh');
 let settingsLogIntervalPreset = document.getElementById('settingsLogIntervalPreset');
-let settingsKernelPageSize = document.getElementById('settingsKernelPageSize');
 let settingsBackupsPageSize = document.getElementById('settingsBackupsPageSize');
 let settingsDebugMode = document.getElementById('settingsDebugMode');
+let settingsWindowWidth = document.getElementById('settingsWindowWidth');
+let settingsWindowHeight = document.getElementById('settingsWindowHeight');
 
 let langButtons = Array.from(document.querySelectorAll('.lang-btn'));
 
@@ -235,6 +240,12 @@ const I18N = window.CLASHFOX_I18N || {};
 ;
 
 const SETTINGS_KEY = 'clashfox-settings';
+const MAIN_WINDOW_DEFAULT_WIDTH = 997;
+const MAIN_WINDOW_DEFAULT_HEIGHT = 655;
+const MAIN_WINDOW_MIN_WIDTH = 980;
+const MAIN_WINDOW_MIN_HEIGHT = 640;
+const MAIN_WINDOW_MAX_WIDTH = 4096;
+const MAIN_WINDOW_MAX_HEIGHT = 2160;
 const DEFAULT_SETTINGS = {
   lang: 'auto',
   themePreference: 'auto',
@@ -259,6 +270,8 @@ const DEFAULT_SETTINGS = {
   kernelPageSize: '10',
   backupsPageSize: '10',
   debugMode: false,
+  windowWidth: MAIN_WINDOW_DEFAULT_WIDTH,
+  windowHeight: MAIN_WINDOW_DEFAULT_HEIGHT,
   mihomoStatus: {
     running: false,
     source: 'init',
@@ -282,6 +295,7 @@ const state = {
   logIntervalMs: 3000,
   switchPage: 1,
   backupsPage: 1,
+  kernelListMode: 'switch',
   recommendPage: 1,
   kernelsPage: 1,
   kernelPageSizeLocal: null,
@@ -342,6 +356,14 @@ const CORE_STARTUP_ESTIMATE_MAX_MS = 10000;
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+function sanitizeWindowDimension(value, fallback, min, max) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return clamp(parsed, min, max);
 }
 
 function sleep(ms) {
@@ -513,6 +535,9 @@ function normalizeSettingsForUi(settings) {
   const normalized = { ...(settings || {}) };
   if (!normalized.configPath && typeof normalized.configFile === 'string') {
     normalized.configPath = normalized.configFile;
+  }
+  if ((!normalized.backupsPageSize || String(normalized.backupsPageSize).trim() === '') && normalized.kernelPageSize) {
+    normalized.backupsPageSize = normalized.kernelPageSize;
   }
   if (Object.prototype.hasOwnProperty.call(normalized, 'configFile')) {
     delete normalized.configFile;
@@ -862,6 +887,18 @@ function applyThemePreference(preference, persist = true) {
 
 function applySettings(settings) {
   state.settings = { ...DEFAULT_SETTINGS, ...settings };
+  state.settings.windowWidth = sanitizeWindowDimension(
+    state.settings.windowWidth,
+    MAIN_WINDOW_DEFAULT_WIDTH,
+    MAIN_WINDOW_MIN_WIDTH,
+    MAIN_WINDOW_MAX_WIDTH,
+  );
+  state.settings.windowHeight = sanitizeWindowDimension(
+    state.settings.windowHeight,
+    MAIN_WINDOW_DEFAULT_HEIGHT,
+    MAIN_WINDOW_MIN_HEIGHT,
+    MAIN_WINDOW_MAX_HEIGHT,
+  );
   if (!state.settings.panelChoice) {
     state.settings.panelChoice = 'zashboard';
     saveSettings({ panelChoice: 'zashboard' });
@@ -879,6 +916,12 @@ function applySettings(settings) {
   document.body.classList.remove('no-theme-transition');
   setLanguage(state.settings.lang, false, false);
   syncDebugMode(state.settings.debugMode);
+  if (settingsWindowWidth) {
+    settingsWindowWidth.value = state.settings.windowWidth;
+  }
+  if (settingsWindowHeight) {
+    settingsWindowHeight.value = state.settings.windowHeight;
+  }
   if (settingsConfigDir) {
     settingsConfigDir.value = state.settings.configDir;
   }
@@ -957,14 +1000,9 @@ function applySettings(settings) {
   }
   updateExternalUiUrlField();
   updateDashboardFrameSrc();
-  if (kernelPageSize) {
-    kernelPageSize.value = state.settings.kernelPageSize;
-  }
-  if (settingsKernelPageSize) {
-    settingsKernelPageSize.value = state.settings.kernelPageSize;
-  }
-  state.kernelPageSizeLocal = state.settings.kernelPageSize || '10';
-  state.generalPageSizeLocal = state.settings.backupsPageSize || '10';
+  const unifiedPageSize = state.settings.backupsPageSize || state.settings.kernelPageSize || '10';
+  state.kernelPageSizeLocal = unifiedPageSize;
+  state.generalPageSizeLocal = state.settings.backupsPageSize || unifiedPageSize;
   if (kernelPageSize) {
     kernelPageSize.value = state.kernelPageSizeLocal;
   }
@@ -1038,6 +1076,48 @@ if (window.clashfox && typeof window.clashfox.onMainNavigate === 'function') {
       return;
     }
     navigatePage(page);
+  });
+}
+
+if (window.clashfox && typeof window.clashfox.onMainWindowResize === 'function') {
+  window.clashfox.onMainWindowResize((payload) => {
+    if (!payload || typeof payload !== 'object') {
+      return;
+    }
+    const fallbackWidth = state.settings && Number.isFinite(Number(state.settings.windowWidth))
+      ? Number(state.settings.windowWidth)
+      : MAIN_WINDOW_DEFAULT_WIDTH;
+    const fallbackHeight = state.settings && Number.isFinite(Number(state.settings.windowHeight))
+      ? Number(state.settings.windowHeight)
+      : MAIN_WINDOW_DEFAULT_HEIGHT;
+    const nextWidth = sanitizeWindowDimension(
+      payload.width,
+      fallbackWidth,
+      MAIN_WINDOW_MIN_WIDTH,
+      MAIN_WINDOW_MAX_WIDTH,
+    );
+    const nextHeight = sanitizeWindowDimension(
+      payload.height,
+      fallbackHeight,
+      MAIN_WINDOW_MIN_HEIGHT,
+      MAIN_WINDOW_MAX_HEIGHT,
+    );
+
+    state.settings = { ...DEFAULT_SETTINGS, ...(state.settings || {}), windowWidth: nextWidth, windowHeight: nextHeight };
+    state.fileSettings = { ...(state.fileSettings || {}), windowWidth: nextWidth, windowHeight: nextHeight };
+
+    if (settingsWindowWidth) {
+      settingsWindowWidth.value = nextWidth;
+    }
+    if (settingsWindowHeight) {
+      settingsWindowHeight.value = nextHeight;
+    }
+
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
+    } catch {
+      // ignore storage write errors
+    }
   });
 }
 
@@ -2500,7 +2580,11 @@ function renderKernelTable() {
     }
   });
 
-  const pageSizeRaw = state.kernelPageSizeLocal || (kernelPageSize && kernelPageSize.value) || state.settings.kernelPageSize || '10';
+  const pageSizeRaw = state.kernelPageSizeLocal
+    || (kernelPageSize && kernelPageSize.value)
+    || state.settings.backupsPageSize
+    || state.settings.kernelPageSize
+    || '10';
   const size = Number.parseInt(pageSizeRaw, 10) || 10;
   const pageData = paginate(backupItems, state.kernelsPage, size);
   state.kernelsPage = pageData.page;
@@ -2535,7 +2619,8 @@ function renderKernelTable() {
   // show index column for backups
   html += `<div class="index-head">${t('table.index')}</div>`;
   html += `<div class="version-head">${t('table.version')}</div>`;
-  html += `<div class="time-head">${t('table.time')}</div></div>`;
+  html += `<div class="time-head">${t('table.time')}</div>`;
+  html += `<div class="action-head">${ti('table.action', 'Action')}</div></div>`;
 
   const pageOffset = ((pageData.page || 1) - 1) * size;
   pageData.items.forEach((item, idx) => {
@@ -2554,7 +2639,8 @@ function renderKernelTable() {
     html += '<div class="table-row kernel selectable">';
     html += `<div class="index-cell">${pageOffset + idx + 1}</div>`;
     html += `<div class="version-cell"><span class="kernel-name">${displayName || '-'}</span>${tags.length ? ` <span class="tag-group">${tags.join('')}</span>` : ''}</div>`;
-    html += `<div class="time-cell">${timestamp}</div></div>`;
+    html += `<div class="time-cell">${timestamp}</div>`;
+    html += `<div class="action-cell"><button class="btn ghost row-action-btn kernel-switch-action" data-switch-index="${pageOffset + idx + 1}">${ti('confirm.switchConfirm', 'Switch')}</button></div></div>`;
   });
 
   if (backupItems.length === 0) {
@@ -2562,6 +2648,32 @@ function renderKernelTable() {
   }
 
   kernelTable.innerHTML = html;
+}
+
+async function switchKernelByIndex(index) {
+  const safeIndex = Number.parseInt(String(index || ''), 10);
+  if (!Number.isFinite(safeIndex) || safeIndex <= 0) {
+    showToast(t('labels.selectBackup'), 'error');
+    return;
+  }
+  const confirmed = await promptConfirm({
+    title: t('confirm.switchTitle'),
+    body: t('confirm.switchBody'),
+    confirmLabel: t('confirm.switchConfirm'),
+    confirmTone: 'primary',
+  });
+  if (!confirmed) {
+    return;
+  }
+  const response = await runCommand('switch', ['--index', String(safeIndex)]);
+  if (response.ok) {
+    showToast(t('labels.switchNeedsRestart'));
+    loadStatus();
+    loadKernels();
+    loadBackups();
+  } else {
+    showToast(response.error || ti('labels.switchFailed', 'Switch failed'), 'error');
+  }
 }
 
 async function loadConfigs(showToastOnSuccess = false) {
@@ -2614,6 +2726,7 @@ function renderSwitchTable() {
   const pageSizeRaw = state.kernelPageSizeLocal
     || (switchPageSize && switchPageSize.value)
     || (kernelPageSize && kernelPageSize.value)
+    || state.settings.backupsPageSize
     || state.settings.kernelPageSize
     || '10';
   const size = Number.parseInt(pageSizeRaw, 10) || 10;
@@ -2628,7 +2741,11 @@ function renderBackupsTable() {
   if (!backupTableFull || !backupsPageInfo || !backupsPrev || !backupsNext) {
     return;
   }
-  const pageSizeRaw = state.kernelPageSizeLocal || (kernelPageSize && kernelPageSize.value) || state.settings.kernelPageSize || '10';
+  const pageSizeRaw = state.kernelPageSizeLocal
+    || (kernelPageSize && kernelPageSize.value)
+    || state.settings.backupsPageSize
+    || state.settings.kernelPageSize
+    || '10';
   const size = Number.parseInt(pageSizeRaw, 10) || 10;
   const pageData = renderBackups(backupTableFull, false, state.backupsPage, size, true);
   state.backupsPage = pageData.page;
@@ -2832,6 +2949,10 @@ function refreshPageRefs() {
   configTable = document.getElementById('configTable');
   kernelTable = document.getElementById('kernelTable');
   kernelRefresh = document.getElementById('kernelRefresh');
+  kernelModeSwitchBtn = document.getElementById('kernelModeSwitchBtn');
+  kernelModeManageBtn = document.getElementById('kernelModeManageBtn');
+  kernelSwitchSection = document.getElementById('kernelSwitchSection');
+  kernelManageSection = document.getElementById('kernelManageSection');
   kernelPrev = document.getElementById('kernelPrev');
   kernelNext = document.getElementById('kernelNext');
   kernelPageInfo = document.getElementById('kernelPageInfo');
@@ -2898,9 +3019,10 @@ function refreshPageRefs() {
   settingsLogLines = document.getElementById('settingsLogLines');
   settingsLogAutoRefresh = document.getElementById('settingsLogAutoRefresh');
   settingsLogIntervalPreset = document.getElementById('settingsLogIntervalPreset');
-  settingsKernelPageSize = document.getElementById('settingsKernelPageSize');
   settingsBackupsPageSize = document.getElementById('settingsBackupsPageSize');
   settingsDebugMode = document.getElementById('settingsDebugMode');
+  settingsWindowWidth = document.getElementById('settingsWindowWidth');
+  settingsWindowHeight = document.getElementById('settingsWindowHeight');
   langButtons = Array.from(document.querySelectorAll('.lang-btn'));
 }
 
@@ -2955,6 +3077,23 @@ function bindTopbarActions() {
   }
 }
 
+function setKernelListMode(mode) {
+  const nextMode = mode === 'manage' ? 'manage' : 'switch';
+  state.kernelListMode = nextMode;
+  if (kernelSwitchSection) {
+    kernelSwitchSection.classList.toggle('is-hidden', nextMode !== 'switch');
+  }
+  if (kernelManageSection) {
+    kernelManageSection.classList.toggle('is-hidden', nextMode !== 'manage');
+  }
+  if (kernelModeSwitchBtn) {
+    kernelModeSwitchBtn.classList.toggle('is-active', nextMode === 'switch');
+  }
+  if (kernelModeManageBtn) {
+    kernelModeManageBtn.classList.toggle('is-active', nextMode === 'manage');
+  }
+}
+
 function refreshPageView() {
   renderConfigTable();
   renderKernelTable();
@@ -2980,6 +3119,9 @@ function refreshPageView() {
   }
   if (currentPage === 'settings') {
     invokeHelperPanelRefresh();
+  }
+  if (currentPage === 'kernel') {
+    setKernelListMode(state.kernelListMode || 'switch');
   }
 }
 
@@ -3226,11 +3368,23 @@ document.querySelectorAll('[data-i18n-tip]').forEach((el) => {
   el.addEventListener('mouseenter', () => updateTipPosition(el));
   el.addEventListener('focus', () => updateTipPosition(el));
 });
-langButtons.forEach((btn) => {
-  btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
-});
+  langButtons.forEach((btn) => {
+    btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
+  });
 
-if (settingsLang) {
+  if (kernelModeSwitchBtn && kernelModeSwitchBtn.dataset.bound !== 'true') {
+    kernelModeSwitchBtn.dataset.bound = 'true';
+    kernelModeSwitchBtn.addEventListener('click', () => setKernelListMode('switch'));
+  }
+  if (kernelModeManageBtn && kernelModeManageBtn.dataset.bound !== 'true') {
+    kernelModeManageBtn.dataset.bound = 'true';
+    kernelModeManageBtn.addEventListener('click', () => setKernelListMode('manage'));
+  }
+  if (kernelSwitchSection || kernelManageSection) {
+    setKernelListMode(state.kernelListMode || 'switch');
+  }
+
+  if (settingsLang) {
   settingsLang.addEventListener('change', (event) => {
     setLanguage(event.target.value);
   });
@@ -3247,6 +3401,44 @@ if (settingsDebugMode) {
     const enabled = Boolean(event.target.checked);
     saveSettings({ debugMode: enabled });
     syncDebugMode(enabled);
+  });
+}
+
+if (settingsWindowWidth) {
+  settingsWindowWidth.addEventListener('change', (event) => {
+    const current = sanitizeWindowDimension(
+      state.settings.windowWidth,
+      MAIN_WINDOW_DEFAULT_WIDTH,
+      MAIN_WINDOW_MIN_WIDTH,
+      MAIN_WINDOW_MAX_WIDTH,
+    );
+    const next = sanitizeWindowDimension(
+      event.target.value,
+      current,
+      MAIN_WINDOW_MIN_WIDTH,
+      MAIN_WINDOW_MAX_WIDTH,
+    );
+    event.target.value = next;
+    saveSettings({ windowWidth: next });
+  });
+}
+
+if (settingsWindowHeight) {
+  settingsWindowHeight.addEventListener('change', (event) => {
+    const current = sanitizeWindowDimension(
+      state.settings.windowHeight,
+      MAIN_WINDOW_DEFAULT_HEIGHT,
+      MAIN_WINDOW_MIN_HEIGHT,
+      MAIN_WINDOW_MAX_HEIGHT,
+    );
+    const next = sanitizeWindowDimension(
+      event.target.value,
+      current,
+      MAIN_WINDOW_MIN_HEIGHT,
+      MAIN_WINDOW_MAX_HEIGHT,
+    );
+    event.target.value = next;
+    saveSettings({ windowHeight: next });
   });
 }
 
@@ -3540,18 +3732,14 @@ if (helperLogsOpenBtn) {
       if (window.clashfox && typeof window.clashfox.openHelperLogs === 'function') {
         const response = await window.clashfox.openHelperLogs();
         if (!response || !response.ok) {
-          showToast(ti('settings.helperLogsOpenFailed', 'Unable to open helper logs'), 'error');
-        } else {
-          showToast(ti('settings.helperLogsOpened', 'Helper logs opened'), 'info');
+          console.warn('[helper] open logs failed: openHelperLogs returned not ok');
         }
         return;
       }
       if (window.clashfox && typeof window.clashfox.openPath === 'function') {
         const response = await window.clashfox.openPath('/var/log/clashfox-helper.log');
         if (!response || !response.ok) {
-          showToast(ti('settings.helperLogsOpenFailed', 'Unable to open helper logs'), 'error');
-        } else {
-          showToast(ti('settings.helperLogsOpened', 'Helper logs opened'), 'info');
+          console.warn('[helper] open logs failed: openPath returned not ok');
         }
       }
     } catch (err) {
@@ -3560,14 +3748,12 @@ if (helperLogsOpenBtn) {
         try {
           const fallback = await window.clashfox.openPath('/var/log/clashfox-helper.log');
           if (fallback && fallback.ok) {
-            showToast(ti('settings.helperLogsOpened', 'Helper logs opened'), 'info');
             return;
           }
         } catch {
           // ignore
         }
       }
-      showToast(ti('settings.helperLogsOpenFailed', 'Unable to open helper logs'), 'error');
     }
     });
   }
@@ -3738,7 +3924,22 @@ if (overviewConfigReset) {
 
 if (kernelRefresh) {
   kernelRefresh.addEventListener('click', () => {
+    if (currentPage === 'kernel' && state.kernelListMode === 'manage') {
+      loadBackups(true);
+      return;
+    }
     loadKernels();
+  });
+}
+
+if (kernelTable) {
+  kernelTable.addEventListener('click', async (event) => {
+    const target = event.target.closest('.kernel-switch-action');
+    if (!target) {
+      return;
+    }
+    const index = target.dataset.switchIndex || '';
+    await switchKernelByIndex(index);
   });
 }
 
@@ -4224,31 +4425,24 @@ if (settingsLogIntervalPreset) {
   });
 }
 
-// 添加settings页面上Pagination的事件监听器
-if (settingsKernelPageSize) {
-  settingsKernelPageSize.addEventListener('change', () => {
+if (settingsBackupsPageSize) {
+  settingsBackupsPageSize.addEventListener('change', () => {
     if (kernelPageSize) {
-      kernelPageSize.value = settingsKernelPageSize.value;
+      kernelPageSize.value = settingsBackupsPageSize.value;
     }
     if (switchPageSize) {
-      switchPageSize.value = settingsKernelPageSize.value;
+      switchPageSize.value = settingsBackupsPageSize.value;
     }
     if (backupsPageSize) {
-      backupsPageSize.value = settingsKernelPageSize.value;
+      backupsPageSize.value = settingsBackupsPageSize.value;
     }
-    state.kernelPageSizeLocal = settingsKernelPageSize.value;
+    state.kernelPageSizeLocal = settingsBackupsPageSize.value;
     state.switchPage = 1;
     state.kernelsPage = 1;
     state.backupsPage = 1;
     renderKernelTable();
     renderSwitchTable();
     renderBackupsTable();
-    saveSettings({ kernelPageSize: settingsKernelPageSize.value });
-  });
-}
-
-if (settingsBackupsPageSize) {
-  settingsBackupsPageSize.addEventListener('change', () => {
     if (recommendPageSize) {
       recommendPageSize.value = settingsBackupsPageSize.value;
     }
@@ -4351,26 +4545,7 @@ if (backupsDelete) {
 if (switchBtn) {
   switchBtn.addEventListener('click', async () => {
     const index = getSelectedBackupIndex();
-    if (!index) {
-      showToast(t('labels.selectBackup'), 'error');
-      return;
-    }
-    const confirmed = await promptConfirm({
-      title: t('confirm.switchTitle'),
-      body: t('confirm.switchBody'),
-      confirmLabel: t('confirm.switchConfirm'),
-      confirmTone: 'primary',
-    });
-    if (!confirmed) {
-      return;
-    }
-    const response = await runCommand('switch', ['--index', String(index)]);
-    if (response.ok) {
-      showToast(t('labels.switchNeedsRestart'));
-      loadStatus();
-    } else {
-      showToast(response.error || ti('labels.switchFailed', 'Switch failed'), 'error');
-    }
+    await switchKernelByIndex(index);
   });
 }
 
@@ -4429,6 +4604,16 @@ if (logLines) {
 
 if (cleanBtn) {
   cleanBtn.addEventListener('click', async () => {
+    const confirmed = await promptConfirm({
+      title: ti('clean.confirmTitle', t('confirm.title')),
+      body: ti('clean.confirmBody', t('confirm.body')),
+      confirmLabel: ti('clean.confirmAction', ti('clean.action', 'Clean Logs')),
+      confirmTone: 'danger',
+    });
+    if (!confirmed) {
+      return;
+    }
+
     const selected = document.querySelector('input[name="cleanMode"]:checked');
     const mode = selected ? selected.value : 'all';
     const response = await runCommand('clean', ['--mode', mode]);

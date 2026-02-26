@@ -149,7 +149,8 @@ const I18N = {
       "recommendAuthor": "Creator",
       "recommendGithub": "GitHub URL",
       "recommendDir": "Directory",
-      "recommendRating": "Rating"
+      "recommendRating": "Rating",
+      "action": "Action"
     },
     "labels": {
       "running": "Running",
@@ -264,6 +265,8 @@ const I18N = {
       "backupsPageSize": "General Page Size",
       "debugMode": "Debug Mode",
       "debugModeLabel": "Enable Debug Mode",
+      "windowWidth": "Window Width",
+      "windowHeight": "Window Height",
       "helperTitle": "Privileged Helper",
       "helperDesc": "The privileged helper enables advanced features like Enhanced Mode (TUN). It runs as a system service and requires administrator privileges to install.",
       "helperInstall": "Install",
@@ -488,7 +491,8 @@ const I18N = {
       "recommendAuthor": "大佬",
       "recommendGithub": "GitHub地址",
       "recommendDir": "目录",
-      "recommendRating": "推荐指数"
+      "recommendRating": "推荐指数",
+      "action": "操作"
     },
     "labels": {
       "running": "运行中",
@@ -603,6 +607,8 @@ const I18N = {
       "backupsPageSize": "通用页大小",
       "debugMode": "调试模式",
       "debugModeLabel": "启用调试模式",
+      "windowWidth": "窗口宽度",
+      "windowHeight": "窗口高度",
       "helperTitle": "特权助手",
       "helperDesc": "特权助手可启用增强模式 (TUN) 等高级功能。它以系统服务方式运行，安装时需要管理员权限。",
       "helperInstall": "安装",
@@ -827,7 +833,8 @@ const I18N = {
       "recommendAuthor": "作者",
       "recommendGithub": "GitHub URL",
       "recommendDir": "ディレクトリ",
-      "recommendRating": "推薦指数"
+      "recommendRating": "推薦指数",
+      "action": "操作"
     },
     "labels": {
       "running": "稼働中",
@@ -942,6 +949,8 @@ const I18N = {
       "backupsPageSize": "共通ページサイズ",
       "debugMode": "デバッグモード",
       "debugModeLabel": "デバッグモードを有効にする",
+      "windowWidth": "ウィンドウ幅",
+      "windowHeight": "ウィンドウ高さ",
       "helperTitle": "Privileged Helper",
       "helperDesc": "The privileged helper enables advanced features like Enhanced Mode (TUN). It runs as a system service and requires administrator privileges to install.",
       "helperInstall": "Install",
@@ -1160,7 +1169,8 @@ const I18N = {
       "recommendAuthor": "작성자",
       "recommendGithub": "GitHub 주소",
       "recommendDir": "디렉터리",
-      "recommendRating": "추천 지수"
+      "recommendRating": "추천 지수",
+      "action": "작업"
     },
     "labels": {
       "running": "실행 중",
@@ -1275,6 +1285,8 @@ const I18N = {
       "backupsPageSize": "일반 페이지 크기",
       "debugMode": "디버그 모드",
       "debugModeLabel": "디버그 모드 활성화",
+      "windowWidth": "창 너비",
+      "windowHeight": "창 높이",
       "helperTitle": "Privileged Helper",
       "helperDesc": "The privileged helper enables advanced features like Enhanced Mode (TUN). It runs as a system service and requires administrator privileges to install.",
       "helperInstall": "Install",
@@ -1493,7 +1505,8 @@ const I18N = {
       "recommendAuthor": "Auteur",
       "recommendGithub": "URL GitHub",
       "recommendDir": "Répertoire",
-      "recommendRating": "Indice de recommandation"
+      "recommendRating": "Indice de recommandation",
+      "action": "Action"
     },
     "labels": {
       "running": "En marche",
@@ -1608,6 +1621,8 @@ const I18N = {
       "backupsPageSize": "Taille de page générale",
       "debugMode": "Mode débogage",
       "debugModeLabel": "Activer le mode débogage",
+      "windowWidth": "Largeur de fenêtre",
+      "windowHeight": "Hauteur de fenêtre",
       "helperTitle": "Privileged Helper",
       "helperDesc": "The privileged helper enables advanced features like Enhanced Mode (TUN). It runs as a system service and requires administrator privileges to install.",
       "helperInstall": "Install",
@@ -1826,7 +1841,8 @@ const I18N = {
       "recommendAuthor": "Autor",
       "recommendGithub": "GitHub-Adresse",
       "recommendDir": "Verzeichnis",
-      "recommendRating": "Empfehlung"
+      "recommendRating": "Empfehlung",
+      "action": "Aktion"
     },
     "labels": {
       "running": "Läuft",
@@ -1941,6 +1957,8 @@ const I18N = {
       "backupsPageSize": "Allgemeine Seitengröße",
       "debugMode": "Debug-Modus",
       "debugModeLabel": "Debug-Modus aktivieren",
+      "windowWidth": "Fensterbreite",
+      "windowHeight": "Fensterhöhe",
       "helperTitle": "Privileged Helper",
       "helperDesc": "The privileged helper enables advanced features like Enhanced Mode (TUN). It runs as a system service and requires administrator privileges to install.",
       "helperInstall": "Install",
@@ -2159,7 +2177,8 @@ const I18N = {
       "recommendAuthor": "Автор",
       "recommendGithub": "GitHub-адрес",
       "recommendDir": "Каталог",
-      "recommendRating": "Рейтинг"
+      "recommendRating": "Рейтинг",
+      "action": "Действие"
     },
     "labels": {
       "running": "Работает",
@@ -2274,6 +2293,8 @@ const I18N = {
       "backupsPageSize": "Общий размер страницы",
       "debugMode": "Режим отладки",
       "debugModeLabel": "Включить режим отладки",
+      "windowWidth": "Ширина окна",
+      "windowHeight": "Высота окна",
       "helperTitle": "Privileged Helper",
       "helperDesc": "The privileged helper enables advanced features like Enhanced Mode (TUN). It runs as a system service and requires administrator privileges to install.",
       "helperInstall": "Install",

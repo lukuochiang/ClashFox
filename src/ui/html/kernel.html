@@ -67,77 +67,65 @@
             </div>
 
             <div class="card">
-              <div class="card-header-row">
+              <div class="card-header-row kernel-list-header">
                 <h3 data-i18n="install.kernelsTitle">Kernel List</h3>
-              </div>
-              <div class="action-row">
-                <button class="btn" id="kernelRefresh" data-i18n="actions.refresh">Refresh</button>
-              </div>
-              <div class="table" id="kernelTable"></div>
-              <div class="pagination">
-                <div class="page-controls">
-                  <button class="btn ghost" id="kernelPrev">Prev</button>
-                  <div class="page-info" id="kernelPageInfo">1 / 1</div>
-                  <button class="btn ghost" id="kernelNext">Next</button>
-                </div>
-                <div class="page-size">
-                  <span data-i18n="pagination.size">Per page</span>
-                  <select id="kernelPageSize">
-                    <option value="5">5</option>
-                    <option value="10" selected>10</option>
-                    <option value="20">20</option>
-                    <option value="50">50</option>
-                  </select>
+                <div class="kernel-list-modes">
+                  <button class="icon-btn ghost small kernel-header-icon-btn kernel-refresh-btn" id="kernelRefresh" type="button" data-i18n-tip="actions.refresh" data-position="bottom" data-native-title="false" aria-label="Refresh">
+                    <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                      <path d="M17.64 6.36A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.76-4.24L14 10h6V4l-2.36 2.36Z"></path>
+                    </svg>
+                  </button>
+                  <button class="icon-btn ghost small kernel-header-icon-btn kernel-mode-btn is-active" id="kernelModeSwitchBtn" type="button" data-mode="switch" data-i18n-tip="confirm.switchConfirm" data-position="bottom" data-native-title="false" aria-label="Switch mode">
+                    <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                      <path d="M7 7h11l-2.6-2.6L17 3l5 5-5 5-1.6-1.4L18 9H7V7Zm10 10H6l2.6 2.6L7 21l-5-5 5-5 1.6 1.4L6 15h11v2Z"></path>
+                    </svg>
+                  </button>
+                  <button class="icon-btn ghost small kernel-header-icon-btn kernel-mode-btn" id="kernelModeManageBtn" type="button" data-mode="manage" data-i18n-tip="backups.title" data-position="bottom" data-native-title="false" aria-label="Manage backups">
+                    <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                      <path d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h16v2H4v-2Z"></path>
+                    </svg>
+                  </button>
                 </div>
               </div>
-            </div>
-
-            <div class="card">
-              <h3 data-i18n="switch.title">Switch Kernel</h3>
-              <div class="action-row">
-                <button class="btn" id="refreshBackups" data-i18n="actions.refresh">Refresh Backups</button>
-                <button class="btn primary" id="switchBtn" data-i18n="switch.action">Switch to Selected</button>
-              </div>
-              <div class="table" id="backupTable"></div>
-              <div class="pagination">
-                <div class="page-controls">
-                  <button class="btn ghost" id="switchPrev">Prev</button>
-                  <div class="page-info" id="switchPageInfo">1 / 1</div>
-                  <button class="btn ghost" id="switchNext">Next</button>
-                </div>
-                <div class="page-size">
-                  <span data-i18n="pagination.size">Per page</span>
-                  <select id="switchPageSize">
-                    <option value="5">5</option>
-                    <option value="10" selected>10</option>
-                    <option value="20">20</option>
-                    <option value="50">50</option>
-                  </select>
+              <div id="kernelSwitchSection">
+                <div class="table" id="kernelTable"></div>
+                <div class="pagination">
+                  <div class="page-controls">
+                    <button class="btn ghost" id="kernelPrev">Prev</button>
+                    <div class="page-info" id="kernelPageInfo">1 / 1</div>
+                    <button class="btn ghost" id="kernelNext">Next</button>
+                  </div>
+                  <div class="page-size">
+                    <span data-i18n="pagination.size">Per page</span>
+                    <select id="kernelPageSize">
+                      <option value="5">5</option>
+                      <option value="10" selected>10</option>
+                      <option value="20">20</option>
+                      <option value="50">50</option>
+                    </select>
+                  </div>
                 </div>
               </div>
-            </div>
-
-            <div class="card">
-              <h3 data-i18n="backups.title">Backup Inventory</h3>
-              <div class="action-row">
-                <button class="btn" id="backupsRefresh" data-i18n="actions.refresh">Refresh Backups</button>
-                <button class="btn danger" id="backupsDelete" data-i18n="backups.delete">Delete</button>
-              </div>
-              <div class="table" id="backupTableFull"></div>
-              <div class="pagination">
-                <div class="page-controls">
-                  <button class="btn ghost" id="backupsPrev">Prev</button>
-                  <div class="page-info" id="backupsPageInfo">1 / 1</div>
-                  <button class="btn ghost" id="backupsNext">Next</button>
+              <div id="kernelManageSection" class="is-hidden">
+                <div class="action-row">
+                  <button class="btn danger" id="backupsDelete" data-i18n="backups.delete">Delete</button>
                 </div>
-                <div class="page-size">
-                  <span data-i18n="pagination.size">Per page</span>
-                  <select id="backupsPageSize">
-                    <option value="5">5</option>
-                    <option value="10" selected>10</option>
-                    <option value="20">20</option>
-                    <option value="50">50</option>
-                  </select>
+                <div class="table" id="backupTableFull"></div>
+                <div class="pagination">
+                  <div class="page-controls">
+                    <button class="btn ghost" id="backupsPrev">Prev</button>
+                    <div class="page-info" id="backupsPageInfo">1 / 1</div>
+                    <button class="btn ghost" id="backupsNext">Next</button>
+                  </div>
+                  <div class="page-size">
+                    <span data-i18n="pagination.size">Per page</span>
+                    <select id="backupsPageSize">
+                      <option value="5">5</option>
+                      <option value="10" selected>10</option>
+                      <option value="20">20</option>
+                      <option value="50">50</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>

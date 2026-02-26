@@ -1,7 +1,7 @@
 {
   "name": "ClashFox",
   "version": "0.3.9",
-  "buildNumber": 5,
+  "buildNumber": 6,
   "description": "ClashFox GUI for Mihomo",
   "author": "Kuochiang Lu <lukuochiang@gmail.com> (https://github.com/lukuochiang/ClashFox)",
   "main": "src/main.js",
@@ -10,7 +10,8 @@
     "start": "electron .",
     "dev": "node scripts/bump-version.js && CLASHFOX_DEV=1 electron .",
     "build:helper": "bash helper/build-helper.sh && cp -f helper/.build/release/com.clashfox.helper helper/com.clashfox.helper && chmod +x helper/com.clashfox.helper && test -f helper/com.clashfox.helper && rm -rf helper/.build",
-    "build:mac": "npm run build:helper && node scripts/clean-dist-mac.js --pre; CLASHFOX_BUILD_NUMBER=$(node -p \"require('./package.json').buildNumber\") CSC_IDENTITY_AUTO_DISCOVERY=false PYTHON=${PYTHON:-python3} sh -c 'electron-builder --mac zip --x64 && electron-builder --mac zip --arm64 && electron-builder --mac zip --universal'; code=$?; node scripts/clean-dist-mac.js; exit $code",
+    "build:mac": "node scripts/build-mac.js",
+    "build:mac:helper": "node scripts/build-mac.js --with-helper",
     "clean:mac": "node scripts/clean-dist-mac.js"
   },
   "devDependencies": {
