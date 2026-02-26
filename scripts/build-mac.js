@@ -65,9 +65,9 @@ function buildMac() {
   };
   const commonArgs = ['--mac', 'zip'];
   const configArgs = withHelper ? [] : ['--config', tempConfigPath];
-  run('npx', ['electron-builder', ...commonArgs, '--x64', ...configArgs], { env });
-  run('npx', ['electron-builder', ...commonArgs, '--arm64', ...configArgs], { env });
-  run('npx', ['electron-builder', ...commonArgs, '--universal', ...configArgs], { env });
+  run('npx', ['electron-builder', ...commonArgs, '--x64', '--publish', 'never', ...configArgs], { env });
+  run('npx', ['electron-builder', ...commonArgs, '--arm64', '--publish', 'never', ...configArgs], { env });
+  run('npx', ['electron-builder', ...commonArgs, '--universal', '--publish', 'never', ...configArgs], { env });
 }
 
 run('node', ['scripts/clean-dist-mac.js', '--pre']);
