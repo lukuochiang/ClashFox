@@ -6,6 +6,7 @@ const ROOT = path.join(__dirname, '..');
 const pkg = require(path.join(ROOT, 'package.json'));
 const withHelper = process.argv.includes('--with-helper') || process.env.CLASHFOX_WITH_HELPER === '1';
 const tempConfigPath = path.join(ROOT, 'dist', 'electron-builder.no-helper.json');
+const helperBinaryPath = path.join(ROOT, 'helper', 'com.clashfox.helper');
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -73,7 +74,11 @@ function buildMac() {
 run('node', ['scripts/clean-dist-mac.js', '--pre']);
 
 if (withHelper) {
-  run('npm', ['run', 'build:helper']);
+  if (!fs.existsSync(helperBinaryPath)) {
+    console.error(`Helper binary not found: ${helperBinaryPath}`);
+    console.error('Please prepare helper/com.clashfox.helper before running with --with-helper.');
+    process.exit(1);
+  }
 }
 
 if (!withHelper) {

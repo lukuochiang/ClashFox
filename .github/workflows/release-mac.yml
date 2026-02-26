@@ -1,4 +1,4 @@
-name: Build & Release macOS (standard + beta channels)
+name: Build & Release macOS
 
 on:
   push:
@@ -30,21 +30,19 @@ jobs:
     runs-on: macos-14
 
     steps:
-      - name: Resolve tag & channel
+      - name: Resolve release metadata
         id: meta
         shell: bash
         run: |
           set -euo pipefail
 
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.tag }}" ]]; then
-            INPUT_TAG="${{ inputs.tag }}"
-          else
+          INPUT_TAG="${{ inputs.tag }}"
+          if [[ -z "$INPUT_TAG" ]]; then
             INPUT_TAG="${GITHUB_REF_NAME}"
           fi
 
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            CHANNEL="${{ inputs.channel }}"
-          else
+          CHANNEL="${{ inputs.channel }}"
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
             if [[ "$INPUT_TAG" == *"-beta"* ]]; then
               CHANNEL="beta"
             else
@@ -52,7 +50,6 @@ jobs:
             fi
           fi
 
-          # standard: 用真实 tag；beta: 统一发布到固定 tag=beta 的 Release
           if [[ "$CHANNEL" == "beta" ]]; then
             RELEASE_TAG="beta"
             PRERELEASE="true"
@@ -63,23 +60,21 @@ jobs:
             UPDATE_CHANNEL="latest"
           fi
 
-          # electron-builder 的 version 要跟 tag 对齐：去掉前缀 v
           VERSION="${INPUT_TAG#v}"
+
+          WITH_HELPER="false"
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.with_helper }}" == "true" ]]; then
             WITH_HELPER="true"
-          else
-            WITH_HELPER="false"
           fi
 
           echo "input_tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
           echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
           echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "update_channel=$UPDATE_CHANNEL" >> "$GITHUB_OUTPUT"
           echo "with_helper=$WITH_HELPER" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout (source tag)
+      - name: Checkout source
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -91,68 +86,14 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      - name: Setup Go
-        if: ${{ steps.meta.outputs.with_helper == 'true' }}
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.22.x"
-          cache: false
-
       - name: Install dependencies
         run: npm ci
 
-      - name: Set package.json version = tag version (no git tag)
+      - name: Set package version from tag
         shell: bash
-        run: |
-          set -euo pipefail
-          npm version "${{ steps.meta.outputs.version }}" --no-git-tag-version
+        run: npm version "${{ steps.meta.outputs.version }}" --no-git-tag-version
 
-      # beta：把 refs/tags/beta 强制移动到当前提交（用于“永远一个 beta 入口”）
-      - name: Move beta tag to this commit (beta only)
-        if: ${{ steps.meta.outputs.channel == 'beta' }}
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          SHA="$(git rev-parse HEAD)"
-
-          api_ref="https://api.github.com/repos/${{ github.repository }}/git/ref/tags/beta"
-          api_refs="https://api.github.com/repos/${{ github.repository }}/git/refs"
-          payload_create="{\"ref\":\"refs/tags/beta\",\"sha\":\"$SHA\"}"
-          payload_update="{\"sha\":\"$SHA\",\"force\":true}"
-
-          get_code=$(curl -sS -o /tmp/ref.json -w "%{http_code}" \
-            -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-            "$api_ref" || true)
-
-          if [[ "$get_code" == "404" ]]; then
-            create_code=$(curl -sS -o /tmp/resp.json -w "%{http_code}" \
-              -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-              "$api_refs" -d "$payload_create" || true)
-            if [[ "$create_code" != "201" ]]; then
-              cat /tmp/resp.json
-              echo "Failed to create beta tag (HTTP $create_code)"
-              exit 1
-            fi
-          elif [[ "$get_code" == "200" ]]; then
-            update_code=$(curl -sS -o /tmp/resp.json -w "%{http_code}" \
-              -X PATCH -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${{ github.repository }}/git/refs/tags/beta" \
-              -d "$payload_update" || true)
-            if [[ "$update_code" != "200" ]]; then
-              cat /tmp/resp.json
-              echo "Failed to move beta tag (HTTP $update_code)"
-              exit 1
-            fi
-          else
-            cat /tmp/ref.json
-            echo "Failed to query beta tag ref (HTTP $get_code)"
-            exit 1
-          fi
-
-      - name: Build mac zips + update metadata
+      - name: Build mac packages
         env:
           CLASHFOX_BUILD_NUMBER: ${{ github.run_number }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -160,8 +101,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          # 让应用在运行时可读到通道（你主进程里按这个决定 autoUpdater.channel）
           export UPDATE_CHANNEL
 
           if [[ "${{ steps.meta.outputs.with_helper }}" == "true" ]]; then
@@ -170,36 +109,22 @@ jobs:
             npm run build:mac
           fi
 
-      - name: Show dist
-        run: |
-          ls -al dist || true
-          echo "---- yml files ----"
-          ls -al dist/*.yml 2>/dev/null || true
-
-      - name: Prepare artifacts (keep zips + yml)
+      - name: Prepare artifacts
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          shopt -s nullglob
-          zip_files=(dist/*.zip dist/*/*.zip)
-          yml_files=(dist/*.yml dist/*/*.yml)
 
-          if (( ${#zip_files[@]} == 0 )); then
+          if ! find dist -type f -name "*.zip" | grep -q .; then
             echo "No zip artifacts found under dist/"
             exit 1
           fi
 
-          # zip 安装包
-          cp -v "${zip_files[@]}" artifacts/
-          # 自动更新元数据：latest/beta 通道通常会生成类似 latest-mac.yml / beta-mac.yml / latest.yml / beta.yml
-          if (( ${#yml_files[@]} > 0 )); then
-            cp -v "${yml_files[@]}" artifacts/
-          fi
+          find dist -type f -name "*.zip" -exec cp -v {} artifacts/ \;
+          find dist -type f -name "*.yml" -exec cp -v {} artifacts/ \;
           ls -al artifacts
 
-      # 用 ncipollo/release-action：支持 allowUpdates + replacesArtifacts，真正做到“覆盖同一个 beta Release”
-      - name: Create/Update Release & upload (overwrite assets)
+      - name: Create/Update release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ steps.meta.outputs.release_tag }}
