@@ -56,9 +56,10 @@ function cleanupNoHelperConfig() {
 }
 
 function buildMac() {
+  const buildNumberFromEnv = process.env.CLASHFOX_BUILD_NUMBER;
   const env = {
     ...process.env,
-    CLASHFOX_BUILD_NUMBER: String(pkg.buildNumber || ''),
+    CLASHFOX_BUILD_NUMBER: buildNumberFromEnv || String(pkg.buildNumber || ''),
     CSC_IDENTITY_AUTO_DISCOVERY: 'false',
     PYTHON: process.env.PYTHON || 'python3',
   };

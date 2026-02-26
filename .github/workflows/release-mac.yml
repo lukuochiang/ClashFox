@@ -110,6 +110,7 @@ jobs:
       # beta：把 refs/tags/beta 强制移动到当前提交（用于“永远一个 beta 入口”）
       - name: Move beta tag to this commit (beta only)
         if: ${{ steps.meta.outputs.channel == 'beta' }}
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -117,22 +118,37 @@ jobs:
           set -euo pipefail
           SHA="$(git rev-parse HEAD)"
 
-          # 尝试更新 refs/tags/beta；不存在则创建
-          api="https://api.github.com/repos/${{ github.repository }}/git/refs/tags/beta"
-          payload_update="{\"sha\":\"$SHA\",\"force\":true}"
+          api_ref="https://api.github.com/repos/${{ github.repository }}/git/ref/tags/beta"
+          api_refs="https://api.github.com/repos/${{ github.repository }}/git/refs"
           payload_create="{\"ref\":\"refs/tags/beta\",\"sha\":\"$SHA\"}"
+          payload_update="{\"sha\":\"$SHA\",\"force\":true}"
 
-          code=$(curl -sS -o /tmp/resp.json -w "%{http_code}" \
-            -X PATCH -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-            "$api" -d "$payload_update" || true)
+          get_code=$(curl -sS -o /tmp/ref.json -w "%{http_code}" \
+            -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "$api_ref" || true)
 
-          if [[ "$code" == "404" ]]; then
-            curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${{ github.repository }}/git/refs" \
-              -d "$payload_create" >/dev/null
-          elif [[ "$code" != "200" ]]; then
-            cat /tmp/resp.json
-            echo "Failed to move beta tag (HTTP $code)"
+          if [[ "$get_code" == "404" ]]; then
+            create_code=$(curl -sS -o /tmp/resp.json -w "%{http_code}" \
+              -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "$api_refs" -d "$payload_create" || true)
+            if [[ "$create_code" != "201" ]]; then
+              cat /tmp/resp.json
+              echo "Failed to create beta tag (HTTP $create_code)"
+              exit 1
+            fi
+          elif [[ "$get_code" == "200" ]]; then
+            update_code=$(curl -sS -o /tmp/resp.json -w "%{http_code}" \
+              -X PATCH -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/git/refs/tags/beta" \
+              -d "$payload_update" || true)
+            if [[ "$update_code" != "200" ]]; then
+              cat /tmp/resp.json
+              echo "Failed to move beta tag (HTTP $update_code)"
+              exit 1
+            fi
+          else
+            cat /tmp/ref.json
+            echo "Failed to query beta tag ref (HTTP $get_code)"
             exit 1
           fi
 
@@ -166,10 +182,20 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts
           shopt -s nullglob
+          zip_files=(dist/*.zip dist/*/*.zip)
+          yml_files=(dist/*.yml dist/*/*.yml)
+
+          if (( ${#zip_files[@]} == 0 )); then
+            echo "No zip artifacts found under dist/"
+            exit 1
+          fi
+
           # zip 安装包
-          cp -v dist/*.zip artifacts/ || true
+          cp -v "${zip_files[@]}" artifacts/
           # 自动更新元数据：latest/beta 通道通常会生成类似 latest-mac.yml / beta-mac.yml / latest.yml / beta.yml
-          cp -v dist/*.yml artifacts/ || true
+          if (( ${#yml_files[@]} > 0 )); then
+            cp -v "${yml_files[@]}" artifacts/
+          fi
           ls -al artifacts
 
       # 用 ncipollo/release-action：支持 allowUpdates + replacesArtifacts，真正做到“覆盖同一个 beta Release”
