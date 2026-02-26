@@ -2918,12 +2918,11 @@ app.whenReady().then(() => {
   ensureAppDirs();
   setDockIcon();
   createTrayMenu();
-  const shouldShowMainWindow = !readMainWindowClosedFromSettings();
+  // Always show main window on app launch; close-to-tray only applies to current runtime.
+  const shouldShowMainWindow = true;
   createWindow(shouldShowMainWindow);
-  if (shouldShowMainWindow && app.dock && app.dock.show) {
+  if (app.dock && app.dock.show) {
     app.dock.show();
-  } else if (!shouldShowMainWindow && app.dock && app.dock.hide) {
-    app.dock.hide();
   }
   ensureTrayMenuWindow();
   setTimeout(() => {
