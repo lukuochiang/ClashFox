@@ -50,17 +50,17 @@ jobs:
             fi
           fi
 
+          RELEASE_TAG="$INPUT_TAG"
           if [[ "$CHANNEL" == "beta" ]]; then
-            RELEASE_TAG="beta"
             PRERELEASE="true"
             UPDATE_CHANNEL="beta"
           else
-            RELEASE_TAG="$INPUT_TAG"
             PRERELEASE="false"
             UPDATE_CHANNEL="latest"
           fi
 
           VERSION="${INPUT_TAG#v}"
+          RELEASE_NAME="ClashFox ${VERSION}"
 
           WITH_HELPER="false"
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.with_helper }}" == "true" ]]; then
@@ -69,6 +69,7 @@ jobs:
 
           echo "input_tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
           echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
           echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "update_channel=$UPDATE_CHANNEL" >> "$GITHUB_OUTPUT"
@@ -128,7 +129,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ steps.meta.outputs.release_tag }}
-          name: ${{ steps.meta.outputs.release_tag }}
+          name: ${{ steps.meta.outputs.release_name }}
           prerelease: ${{ steps.meta.outputs.prerelease }}
           allowUpdates: true
           replacesArtifacts: true
