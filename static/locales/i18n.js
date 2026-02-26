@@ -340,6 +340,7 @@ const I18N = {
       "sudoMessage": "Enter your macOS password to continue.",
       "sudoPlaceholder": "••••••••",
       "sudoInvalid": "Password incorrect.",
+      "checkUpdate": "Check for Updates",
       "quit": "Quit"
     }
   },
@@ -684,6 +685,7 @@ const I18N = {
       "sudoMessage": "请输入 macOS 密码以继续。",
       "sudoPlaceholder": "••••••••",
       "sudoInvalid": "密码不正确。",
+      "checkUpdate": "检查更新",
       "quit": "退出"
     }
   },
@@ -1022,6 +1024,7 @@ const I18N = {
       "sudoMessage": "続行するには macOS パスワードを入力してください。",
       "sudoPlaceholder": "••••••••",
       "sudoInvalid": "パスワードが正しくありません。",
+      "checkUpdate": "アップデートを確認",
       "quit": "終了"
     }
   },
@@ -1360,6 +1363,7 @@ const I18N = {
       "sudoMessage": "계속하려면 macOS 비밀번호를 입력하세요.",
       "sudoPlaceholder": "••••••••",
       "sudoInvalid": "비밀번호가 올바르지 않습니다.",
+      "checkUpdate": "업데이트 확인",
       "quit": "종료"
     }
   },
@@ -1698,6 +1702,7 @@ const I18N = {
       "sudoMessage": "Saisissez votre mot de passe macOS pour continuer.",
       "sudoPlaceholder": "••••••••",
       "sudoInvalid": "Mot de passe incorrect.",
+      "checkUpdate": "Vérifier les mises à jour",
       "quit": "Quitter"
     }
   },
@@ -2036,6 +2041,7 @@ const I18N = {
       "sudoMessage": "Geben Sie Ihr macOS-Passwort ein, um fortzufahren.",
       "sudoPlaceholder": "••••••••",
       "sudoInvalid": "Passwort falsch.",
+      "checkUpdate": "Nach Updates suchen",
       "quit": "Beenden"
     }
   },
@@ -2374,6 +2380,7 @@ const I18N = {
       "sudoMessage": "Введите пароль macOS для продолжения.",
       "sudoPlaceholder": "••••••••",
       "sudoInvalid": "Пароль неверный.",
+      "checkUpdate": "Проверить обновления",
       "quit": "Выход"
     }
   }

@@ -132,6 +132,8 @@ const OUTBOUND_MODE_BADGE = {
   direct: 'D',
 };
 const CONNECTIVITY_REFRESH_MS = 1500;
+const CHECK_UPDATE_STABLE_URL = 'https://github.com/lukuochiang/ClashFox/releases/latest';
+const CHECK_UPDATE_BETA_URL = 'https://github.com/lukuochiang/ClashFox/releases';
 const DEFAULT_MAIN_WINDOW_WIDTH = 997;
 const DEFAULT_MAIN_WINDOW_HEIGHT = 655;
 const MIN_MAIN_WINDOW_WIDTH = 980;
@@ -238,6 +240,9 @@ function refreshTrayMenuLabelsOnly() {
     }
     if (item.action === 'open-settings') {
       return { ...item, label: navLabels.settings || 'Settings' };
+    }
+    if (item.action === 'check-update') {
+      return { ...item, label: labels.checkUpdate || 'Check for Updates' };
     }
     if (item.action === 'quit') {
       return { ...item, label: labels.quit };
@@ -358,6 +363,7 @@ function withMacTrayGlyph(key, label) {
     dashboard: 'Ⓓ',
     kernelManager: 'Ⓚ',
     settings: 'Ⓢ',
+    checkUpdate: 'Ⓤ',
     quit: 'Ⓠ',
   };
   const glyph = glyphs[key] || '';
@@ -376,6 +382,11 @@ function readAppSettings() {
   } catch {
     return {};
   }
+}
+
+function resolveCheckUpdateUrlFromSettings() {
+  const settings = readAppSettings();
+  return settings && settings.acceptBeta ? CHECK_UPDATE_BETA_URL : CHECK_UPDATE_STABLE_URL;
 }
 
 function writeAppSettings(settings = {}) {
@@ -1852,6 +1863,7 @@ async function buildTrayMenuOnce() {
       { type: 'separator' },
       { type: 'action', label: getNavLabels().settings || 'Settings', action: 'open-settings', rightText: '⌘ ,', shortcut: 'Cmd+,', iconKey: 'settings' },
       { type: 'separator' },
+      { type: 'action', label: labels.checkUpdate || 'Check for Updates', action: 'check-update', iconKey: 'checkUpdate' },
       { type: 'action', label: labels.quit, action: 'quit', rightText: '⌘ Q', shortcut: 'Cmd+Q', iconKey: 'quit' },
     ],
     submenus: {
@@ -2276,6 +2288,14 @@ async function handleTrayMenuAction(action, payload = {}) {
       hideTrayMenuWindow();
       openMainPage('settings');
       return { ok: true, hide: true };
+    case 'check-update':
+      hideTrayMenuWindow();
+      try {
+        await shell.openExternal(resolveCheckUpdateUrlFromSettings());
+        return { ok: true, hide: true };
+      } catch {
+        return { ok: false, hide: true };
+      }
     case 'quit':
       app.quit();
       return { ok: true, hide: true };

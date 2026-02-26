@@ -63,12 +63,13 @@
                     </select>
                   </div>
                   <div class="form-row">
-                    <label data-i18n="settings.debugMode">Debug Mode</label>
-                    <label class="toggle">
-                      <input id="settingsDebugMode" type="checkbox" />
-                      <span class="toggle-pill"></span>
-                      <span data-i18n="settings.debugModeLabel">Enable Debug Tools</span>
-                    </label>
+                    <label data-i18n="settings.backupsPageSize">General Page Size</label>
+                    <select id="settingsBackupsPageSize">
+                      <option value="5">5</option>
+                      <option value="10" selected>10</option>
+                      <option value="20">20</option>
+                      <option value="50">50</option>
+                    </select>
                   </div>
                 </div>
                 <div class="settings-top-column settings-top-column-right">
@@ -81,13 +82,20 @@
                     <input id="settingsWindowHeight" type="number" min="640" max="2160" step="1" />
                   </div>
                   <div class="form-row">
-                    <label data-i18n="settings.backupsPageSize">General Page Size</label>
-                    <select id="settingsBackupsPageSize">
-                      <option value="5">5</option>
-                      <option value="10" selected>10</option>
-                      <option value="20">20</option>
-                      <option value="50">50</option>
-                    </select>
+                    <label data-i18n="settings.debugMode">Debug Mode</label>
+                    <label class="toggle">
+                      <input id="settingsDebugMode" type="checkbox" />
+                      <span class="toggle-pill"></span>
+                      <span data-i18n="settings.debugModeLabel">Enable Debug Tools</span>
+                    </label>
+                  </div>
+                  <div class="form-row">
+                    <label>Beta</label>
+                    <label class="toggle">
+                      <input id="settingsAcceptBeta" type="checkbox" />
+                      <span class="toggle-pill"></span>
+                      <span>Accept Beta</span>
+                    </label>
                   </div>
                 </div>
               </div>
@@ -102,22 +110,26 @@
 
             <div class="card card-full">
               <h3 data-i18n="settings.logs">Log Settings</h3>
-              <div class="settings-log-inline">
-                <div class="field-inline">
-                  <label data-i18n="logs.lines">Lines</label>
-                  <input id="settingsLogLines" type="number" min="10" max="2000" value="10" />
+              <div class="settings-log-columns">
+                <div class="settings-log-column">
+                  <div class="form-row">
+                    <label data-i18n="logs.lines">Lines</label>
+                    <input id="settingsLogLines" type="number" min="10" max="2000" value="10" />
+                  </div>
                 </div>
-                <div class="field-inline">
-                  <label data-i18n="logs.interval">Interval</label>
-                  <select id="settingsLogIntervalPreset">
-                    <option value="1">1s</option>
-                    <option value="3" selected>3s</option>
-                    <option value="5">5s</option>
-                    <option value="10">10s</option>
-                    <option value="15">15s</option>
-                    <option value="30">30s</option>
-                    <option value="60">60s</option>
-                  </select>
+                <div class="settings-log-column settings-log-column-right">
+                  <div class="form-row">
+                    <label data-i18n="logs.interval">Interval</label>
+                    <select id="settingsLogIntervalPreset">
+                      <option value="1">1s</option>
+                      <option value="3" selected>3s</option>
+                      <option value="5">5s</option>
+                      <option value="10">10s</option>
+                      <option value="15">15s</option>
+                      <option value="30">30s</option>
+                      <option value="60">60s</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 <!--              <label class="toggle">-->

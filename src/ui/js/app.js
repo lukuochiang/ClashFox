@@ -233,6 +233,7 @@ let settingsBackupsPageSize = document.getElementById('settingsBackupsPageSize')
 let settingsDebugMode = document.getElementById('settingsDebugMode');
 let settingsWindowWidth = document.getElementById('settingsWindowWidth');
 let settingsWindowHeight = document.getElementById('settingsWindowHeight');
+let settingsAcceptBeta = document.getElementById('settingsAcceptBeta');
 
 let langButtons = Array.from(document.querySelectorAll('.lang-btn'));
 
@@ -269,6 +270,7 @@ const DEFAULT_SETTINGS = {
   logIntervalPreset: '3',
   kernelPageSize: '10',
   backupsPageSize: '10',
+  acceptBeta: false,
   debugMode: false,
   windowWidth: MAIN_WINDOW_DEFAULT_WIDTH,
   windowHeight: MAIN_WINDOW_DEFAULT_HEIGHT,
@@ -928,6 +930,9 @@ function applySettings(settings) {
   }
   if (settingsWindowHeight) {
     settingsWindowHeight.value = state.settings.windowHeight;
+  }
+  if (settingsAcceptBeta) {
+    settingsAcceptBeta.checked = Boolean(state.settings.acceptBeta);
   }
   if (settingsConfigDir) {
     settingsConfigDir.value = state.settings.configDir;
@@ -3030,6 +3035,7 @@ function refreshPageRefs() {
   settingsDebugMode = document.getElementById('settingsDebugMode');
   settingsWindowWidth = document.getElementById('settingsWindowWidth');
   settingsWindowHeight = document.getElementById('settingsWindowHeight');
+  settingsAcceptBeta = document.getElementById('settingsAcceptBeta');
   langButtons = Array.from(document.querySelectorAll('.lang-btn'));
 }
 
@@ -3453,6 +3459,13 @@ if (settingsWindowHeight) {
     );
     event.target.value = next;
     saveSettings({ windowHeight: next });
+  });
+}
+
+if (settingsAcceptBeta) {
+  settingsAcceptBeta.addEventListener('change', (event) => {
+    const enabled = Boolean(event.target.checked);
+    saveSettings({ acceptBeta: enabled });
   });
 }
 

@@ -1222,41 +1222,112 @@ body[data-page="settings"] .settings-top-column {
   min-width: 0;
 }
 
+body[data-page="settings"] .settings-top-column .form-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  margin-bottom: 14px;
+}
+
+body[data-page="settings"] .settings-top-column .form-row > label {
+  min-width: 0;
+}
+
+body[data-page="settings"] .settings-top-column .form-row > input,
+body[data-page="settings"] .settings-top-column .form-row > select,
+body[data-page="settings"] .settings-top-column .form-row > .toggle {
+  min-width: 0;
+}
+
+body[data-page="settings"] .settings-top-column .form-row > input,
+body[data-page="settings"] .settings-top-column .form-row > select,
+body[data-page="settings"] .settings-log-column .form-row > input,
+body[data-page="settings"] .settings-log-column .form-row > select {
+  height: 40px;
+  line-height: 20px;
+  padding-top: 0;
+  padding-bottom: 0;
+  text-align: left;
+}
+
 body[data-page="settings"] .settings-top-column-right {
-  border-left: 1px solid var(--border);
+  border-left: 0;
   padding-left: 20px;
   margin-left: -10px;
+  position: relative;
+}
+
+body[data-page="settings"] .settings-top-column-right::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 38px;
+  bottom: 0;
+  width: 1px;
+  background: var(--border);
 }
 
 body[data-page="settings"] .settings-top-column-right .form-row:first-child {
   margin-top: 38px;
 }
 
-body[data-page="settings"] .settings-log-inline {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: nowrap;
+body[data-page="settings"] .settings-log-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
 }
 
-body[data-page="settings"] .settings-log-inline .field-inline {
-  flex: 1 1 0;
+body[data-page="settings"] .settings-log-column {
   min-width: 0;
-  gap: 10px;
 }
 
-body[data-page="settings"] .settings-log-inline .field-inline label {
-  min-width: 0;
+body[data-page="settings"] .settings-log-column .form-row {
+  margin-bottom: 0;
+}
+
+body[data-page="settings"] .settings-log-column-right {
+  border-left: 1px solid var(--border);
+  padding-left: 20px;
+  margin-left: -10px;
 }
 
 body[data-page="settings"] #settingsLogLines {
-  flex: 0 0 96px;
-  min-width: 96px;
+  flex: 1 1 auto;
+  min-width: 150px;
 }
 
 body[data-page="settings"] #settingsLogIntervalPreset {
-  flex: 0 0 110px;
-  min-width: 110px;
+  flex: 1 1 auto;
+  min-width: 150px;
+}
+
+body[data-page="settings"] .settings-top-column .form-row .toggle {
+  margin-left: 0;
+  min-width: 0;
+  justify-content: flex-start;
+}
+
+body[data-page="settings"] select {
+  appearance: auto;
+  -webkit-appearance: menulist;
+  background-image: none;
+  text-align-last: auto;
+  text-indent: initial;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+body[data-page="settings"] select option {
+  background: #1f2937;
+  color: #e5ebf3;
+  text-align: left;
+}
+
+body[data-theme="day"][data-page="settings"] select option {
+  background: #ffffff;
+  color: #223043;
 }
 
 @media (max-width: 900px) {
@@ -1277,12 +1348,30 @@ body[data-page="settings"] #settingsLogIntervalPreset {
     padding-top: 12px;
   }
 
+  body[data-page="settings"] .settings-top-column-right::before {
+    display: none;
+  }
+
   body[data-page="settings"] .settings-top-column-right .form-row:first-child {
     margin-top: 0;
   }
 
-  body[data-page="settings"] .settings-log-inline {
-    flex-wrap: wrap;
+  body[data-page="settings"] .settings-top-column .form-row .toggle {
+    margin-left: 0;
+    min-width: 0;
+  }
+
+  body[data-page="settings"] .settings-log-columns {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  body[data-page="settings"] .settings-log-column-right {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding-left: 0;
+    margin-left: 0;
+    padding-top: 12px;
   }
 }
 
