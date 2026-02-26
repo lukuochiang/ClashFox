@@ -94,9 +94,22 @@ jobs:
         shell: bash
         run: npm version "${{ steps.meta.outputs.version }}" --no-git-tag-version
 
+      - name: Normalize artifact name (no buildNumber suffix)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs = require("fs");
+            const pkgPath = "package.json";
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+            pkg.build = pkg.build || {};
+            pkg.build.mac = pkg.build.mac || {};
+            pkg.build.mac.artifactName = "${productName}-${version}-mac-${arch}.${ext}";
+            fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+          '
+
       - name: Build mac packages
         env:
-          CLASHFOX_BUILD_NUMBER: ${{ github.run_number }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           UPDATE_CHANNEL: ${{ steps.meta.outputs.update_channel }}
         shell: bash
@@ -126,6 +139,7 @@ jobs:
             ! -name "builder-debug.yml" \
             ! -name "latest-mac.yml" \
             -exec cp -v {} artifacts/ \;
+
           ls -al artifacts
 
       - name: Create/Update release
