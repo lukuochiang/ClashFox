@@ -48,6 +48,8 @@
   --icon-current: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='10' cy='10' r='7' stroke='%23000' stroke-width='1.6'/%3E%3Cpath d='M6.9 10.3 8.9 12.2 13.2 7.9' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --icon-defaults: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 2a1 1 0 0 1 .96.72l.7 2.44 2.5-.2a1 1 0 0 1 .87 1.6l-1.6 2.02 1.6 2.02a1 1 0 0 1-.87 1.6l-2.5-.2-.7 2.44a1 1 0 0 1-1.92 0l-.7-2.44-2.5.2a1 1 0 0 1-.87-1.6l1.6-2.02-1.6-2.02a1 1 0 0 1 .87-1.6l2.5.2.7-2.44A1 1 0 0 1 10 2Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-config: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3' y='2.5' width='14' height='15' rx='2' stroke='%23000' stroke-width='1.5' fill='none'/%3E%3Cpath d='M6 6.5h4' stroke='%23000' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M6 9.5h3' stroke='%23000' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M6 12.5h5' stroke='%23000' stroke-width='1.5' stroke-linecap='round'/%3E%3Crect x='11.5' y='6' width='5' height='6.5' rx='0.8' stroke='%23000' stroke-width='1.2' fill='none'/%3E%3Cpath d='M13 7.5h2.5' stroke='%23000' stroke-width='1.1' stroke-linecap='round'/%3E%3Cpath d='M13 9h1.6' stroke='%23000' stroke-width='1.1' stroke-linecap='round'/%3E%3Cpath d='M13 10.5h2' stroke='%23000' stroke-width='1.1' stroke-linecap='round'/%3E%3C/svg%3E");
+  --icon-dashboard: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='12' cy='12' r='8.5' stroke='%23000' stroke-width='1.8'/%3E%3Cpath d='M8 14.5a4 4 0 0 1 8 0' stroke='%23000' stroke-width='1.8' stroke-linecap='round'/%3E%3Cpath d='M12 12l3-3' stroke='%23000' stroke-width='1.8' stroke-linecap='round'/%3E%3Ccircle cx='9' cy='10' r='1' fill='%23000'/%3E%3C/svg%3E");
+  --icon-external-link: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M14 5h5v5' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M10 14L19 5' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M19 13v5a1 1 0 0 1-1 1h-12a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
   --icon-outbound: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 7h8V4l6 5-6 5v-3H4V7Zm16 10H12v3l-6-5 6-5v3h8v4Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-connections: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='7' cy='12' r='3' fill='%23000'/%3E%3Ccircle cx='17' cy='7' r='3' fill='%23000'/%3E%3Ccircle cx='17' cy='17' r='3' fill='%23000'/%3E%3Cpath d='M9.8 10.8l4.4-2.6M9.8 13.2l4.4 2.6' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
 }
@@ -534,8 +536,23 @@ body[data-theme="day"] .brand-mark .logo-night {
 .nav-btn[data-page="config"]::before { mask-image: var(--icon-config); }
 .nav-btn[data-page="backups"]::before { mask-image: var(--icon-backup); }
 .nav-btn[data-page="logs"]::before { mask-image: var(--icon-doc); }
+.nav-btn[data-tray-action="open-dashboard"]::before { mask-image: var(--icon-dashboard); }
 .nav-btn[data-page="settings"]::before { mask-image: var(--icon-settings); }
 .nav-btn[data-page="help"]::before { mask-image: var(--icon-help); }
+
+.nav-btn[data-tray-action="open-dashboard"]::after {
+  content: '';
+  width: 13px;
+  height: 13px;
+  margin-left: auto;
+  opacity: 0.8;
+  background: currentColor;
+  mask-image: var(--icon-external-link);
+  mask-size: 13px 13px;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  flex: 0 0 13px;
+}
 
 .nav-btn.active,
 .nav-btn:hover {

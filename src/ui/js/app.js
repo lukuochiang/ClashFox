@@ -3049,6 +3049,13 @@ function bindNavButtons() {
         }
         return;
       }
+      const trayAction = btn.dataset.trayAction;
+      if (trayAction) {
+        if (window.clashfox && typeof window.clashfox.trayMenuAction === 'function') {
+          window.clashfox.trayMenuAction(trayAction).catch(() => {});
+        }
+        return;
+      }
       const targetPage = btn.dataset.page;
       if (targetPage) {
         navigatePage(targetPage);
