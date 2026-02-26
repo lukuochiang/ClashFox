@@ -16,6 +16,11 @@ on:
       tag:
         description: "Tag to build (e.g. v1.2.3 or v1.2.3-beta.1). Empty = current ref"
         required: false
+      with_helper:
+        description: "Build and package helper"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -60,6 +65,11 @@ jobs:
 
           # electron-builder 的 version 要跟 tag 对齐：去掉前缀 v
           VERSION="${INPUT_TAG#v}"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.with_helper }}" == "true" ]]; then
+            WITH_HELPER="true"
+          else
+            WITH_HELPER="false"
+          fi
 
           echo "input_tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
           echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
@@ -67,6 +77,7 @@ jobs:
           echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "update_channel=$UPDATE_CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "with_helper=$WITH_HELPER" >> "$GITHUB_OUTPUT"
 
       - name: Checkout (source tag)
         uses: actions/checkout@v4
@@ -81,10 +92,11 @@ jobs:
           cache: "npm"
 
       - name: Setup Go
+        if: ${{ steps.meta.outputs.with_helper == 'true' }}
         uses: actions/setup-go@v5
         with:
           go-version: "1.22.x"
-          cache: true
+          cache: false
 
       - name: Install dependencies
         run: npm ci
@@ -124,14 +136,7 @@ jobs:
             exit 1
           fi
 
-      - name: Build helper
-        run: npm run build:helper
-
-      - name: Pre-clean dist (same as your build:mac)
-        run: node scripts/clean-dist-mac.js --pre
-
-      # 关键：用 --publish never 构建，但仍产出 yml 元数据（前提是 package.json 里有 build.publish）
-      - name: Build mac zips (x64/arm64/universal) + update metadata
+      - name: Build mac zips + update metadata
         env:
           CLASHFOX_BUILD_NUMBER: ${{ github.run_number }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -143,11 +148,11 @@ jobs:
           # 让应用在运行时可读到通道（你主进程里按这个决定 autoUpdater.channel）
           export UPDATE_CHANNEL
 
-          npx electron-builder --mac zip --x64 --publish never
-          npx electron-builder --mac zip --arm64 --publish never
-          npx electron-builder --mac zip --universal --publish never
-
-          node scripts/clean-dist-mac.js
+          if [[ "${{ steps.meta.outputs.with_helper }}" == "true" ]]; then
+            npm run build:mac:helper
+          else
+            npm run build:mac
+          fi
 
       - name: Show dist
         run: |
