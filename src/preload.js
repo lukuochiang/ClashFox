@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('clashfox', {
   selectDirectory: (title) => ipcRenderer.invoke('clashfox:selectDirectory', title),
   getAppInfo: () => ipcRenderer.invoke('clashfox:appInfo'),
   installHelper: () => ipcRenderer.invoke('clashfox:installHelper'),
+  uninstallHelper: () => ipcRenderer.invoke('clashfox:uninstallHelper'),
   runHelperInstallInTerminal: () => ipcRenderer.invoke('clashfox:runHelperInstallInTerminal'),
   getHelperInstallPath: () => ipcRenderer.invoke('clashfox:getHelperInstallPath'),
   pingHelper: () => ipcRenderer.invoke('clashfox:pingHelper'),

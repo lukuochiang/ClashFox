@@ -221,6 +221,7 @@ let helperRefreshBtn = document.getElementById('helperRefreshBtn');
 let helperLogsOpenBtn = document.getElementById('helperLogsOpenBtn');
 let helperLogsRevealBtn = document.getElementById('helperLogsRevealBtn');
 let helperLogsPath = document.getElementById('helperLogsPath');
+let helperPrimaryAction = 'install';
 let settingsLogLines = document.getElementById('settingsLogLines');
 let settingsLogAutoRefresh = document.getElementById('settingsLogAutoRefresh');
 let settingsLogIntervalPreset = document.getElementById('settingsLogIntervalPreset');
@@ -258,6 +259,11 @@ const DEFAULT_SETTINGS = {
   kernelPageSize: '10',
   backupsPageSize: '10',
   debugMode: false,
+  mihomoStatus: {
+    running: false,
+    source: 'init',
+    updatedAt: '',
+  },
 };
 
 let PANEL_PRESETS = {};
@@ -974,6 +980,7 @@ function applySettings(settings) {
   if (settingsBackupsPageSize) {
     settingsBackupsPageSize.value = state.settings.backupsPageSize;
   }
+  applyPersistedMihomoStatus();
   renderRecommendTable();
 }
 
@@ -1447,14 +1454,16 @@ function updateStatusUI(data) {
 }
 
 function syncQuickActionButtons() {
+  const running = Boolean(state.coreRunning);
+  const inFlight = Boolean(state.coreActionInFlight);
   if (startBtn) {
-    startBtn.disabled = false;
+    startBtn.disabled = inFlight || running;
   }
   if (stopBtn) {
-    stopBtn.disabled = false;
+    stopBtn.disabled = inFlight || !running;
   }
   if (restartBtn) {
-    restartBtn.disabled = false;
+    restartBtn.disabled = inFlight || !running;
   }
 }
 
@@ -1468,8 +1477,48 @@ function setQuickActionRunningState(running) {
   state.coreRunning = next;
   state.coreRunningUpdatedAt = Date.now();
   state.coreRunningFalseStreak = 0;
+  cacheMihomoStatusForUi(next, 'quick-action');
   syncRunningIndicators(next);
   syncQuickActionButtons();
+}
+
+function getPersistedMihomoStatusSnapshot() {
+  const candidate = (state.settings && state.settings.mihomoStatus)
+    || (state.fileSettings && state.fileSettings.mihomoStatus)
+    || null;
+  if (!candidate || typeof candidate !== 'object' || typeof candidate.running !== 'boolean') {
+    return null;
+  }
+  return candidate;
+}
+
+function applyPersistedMihomoStatus() {
+  const snapshot = getPersistedMihomoStatusSnapshot();
+  if (!snapshot) {
+    return;
+  }
+  applyKernelRunningState(Boolean(snapshot.running), 'settings');
+}
+
+function cacheMihomoStatusForUi(running, source = 'status') {
+  const snapshot = {
+    running: Boolean(running),
+    source: String(source || 'status'),
+    updatedAt: new Date().toISOString(),
+  };
+  if (!state.settings) {
+    state.settings = { ...DEFAULT_SETTINGS };
+  }
+  if (!state.fileSettings) {
+    state.fileSettings = {};
+  }
+  state.settings.mihomoStatus = snapshot;
+  state.fileSettings.mihomoStatus = snapshot;
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
+  } catch {
+    // ignore
+  }
 }
 
 function applyKernelRunningState(running, source = 'status') {
@@ -1479,6 +1528,7 @@ function applyKernelRunningState(running, source = 'status') {
     state.coreRunning = true;
     state.coreRunningFalseStreak = 0;
     state.coreRunningUpdatedAt = now;
+    cacheMihomoStatusForUi(true, source);
     syncRunningIndicators(true);
     syncQuickActionButtons();
     return;
@@ -1492,6 +1542,7 @@ function applyKernelRunningState(running, source = 'status') {
   state.coreRunning = false;
   state.coreRunningFalseStreak = 0;
   state.coreRunningUpdatedAt = now;
+  cacheMihomoStatusForUi(false, source);
   syncRunningIndicators(false);
   syncQuickActionButtons();
 }
@@ -2834,6 +2885,16 @@ function refreshPageRefs() {
   settingsConfigDirReveal = document.getElementById('settingsConfigDirReveal');
   settingsCoreDirReveal = document.getElementById('settingsCoreDirReveal');
   settingsDataDirReveal = document.getElementById('settingsDataDirReveal');
+  helperInstallBtn = document.getElementById('helperInstallBtn');
+  helperInstallTerminalBtn = document.getElementById('helperInstallTerminalBtn');
+  helperInstallPathBtn = document.getElementById('helperInstallPathBtn');
+  helperInstallPath = document.getElementById('helperInstallPath');
+  helperStatusText = document.getElementById('helperStatusText');
+  helperStatusDot = document.querySelector('.helper-status-dot');
+  helperRefreshBtn = document.getElementById('helperRefreshBtn');
+  helperLogsOpenBtn = document.getElementById('helperLogsOpenBtn');
+  helperLogsRevealBtn = document.getElementById('helperLogsRevealBtn');
+  helperLogsPath = document.getElementById('helperLogsPath');
   settingsLogLines = document.getElementById('settingsLogLines');
   settingsLogAutoRefresh = document.getElementById('settingsLogAutoRefresh');
   settingsLogIntervalPreset = document.getElementById('settingsLogIntervalPreset');
@@ -2918,9 +2979,18 @@ function refreshPageView() {
     ]);
   }
   if (currentPage === 'settings') {
-    refreshHelperStatus();
-    refreshHelperInstallPath();
-    refreshHelperLogPath();
+    invokeHelperPanelRefresh();
+  }
+}
+
+async function invokeHelperPanelRefresh(force = false) {
+  try {
+    const fn = window.__refreshHelperPanel;
+    if (typeof fn === 'function') {
+      await fn(Boolean(force));
+    }
+  } catch (err) {
+    console.warn('[helper] invokeHelperPanelRefresh failed:', err);
   }
 }
 
@@ -3222,34 +3292,139 @@ function setHelperStatus(state, text) {
   }
 }
 
-async function refreshHelperStatus() {
-  if (window.clashfox && typeof window.clashfox.getHelperStatus === 'function') {
-    const response = await window.clashfox.getHelperStatus();
-    if (response && response.ok && response.data) {
-      const logPath = response.data.logPath || '/var/log/clashfox-helper.log';
-      if (helperLogsPath) {
-        helperLogsPath.textContent = logPath;
-      }
-      if (response.data.state === 'running') {
-        setHelperStatus('running', ti('settings.helperStatusRunning', 'Running'));
-      } else if (response.data.state === 'not_installed') {
-        setHelperStatus('stopped', ti('settings.helperStatusStopped', 'Not Installed'));
-      } else {
-        setHelperStatus('stopped', 'Stopped');
-      }
+function setHelperPrimaryAction(installed) {
+  helperPrimaryAction = installed ? 'uninstall' : 'install';
+  if (!helperInstallBtn) {
+    return;
+  }
+  if (installed) {
+    helperInstallBtn.textContent = ti('settings.helperUninstall', 'Uninstall');
+  } else {
+    helperInstallBtn.textContent = ti('settings.helperInstall', 'Install');
+  }
+}
+
+function getCachedHelperStatus() {
+  const candidate = (state.settings && state.settings.helperStatus)
+    || (state.fileSettings && state.fileSettings.helperStatus)
+    || null;
+  if (!candidate || typeof candidate !== 'object') {
+    return null;
+  }
+  return candidate;
+}
+
+async function hydrateHelperStatusFromFile() {
+  if (!window.clashfox || typeof window.clashfox.readSettings !== 'function') {
+    return;
+  }
+  try {
+    const response = await window.clashfox.readSettings();
+    if (!response || !response.ok || !response.data || typeof response.data !== 'object') {
+      return;
+    }
+    if (response.data.helperStatus && typeof response.data.helperStatus === 'object') {
+      if (!state.settings) state.settings = {};
+      if (!state.fileSettings) state.fileSettings = {};
+      state.settings.helperStatus = response.data.helperStatus;
+      state.fileSettings.helperStatus = response.data.helperStatus;
+      applyHelperStatusSnapshot(response.data.helperStatus);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function applyHelperStatusSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return;
+  }
+  setHelperPrimaryAction(Boolean(snapshot.installed));
+  const logPath = snapshot.logPath || '/var/log/clashfox-helper.log';
+  if (helperLogsPath) {
+    helperLogsPath.textContent = logPath;
+  }
+  if (snapshot.state === 'running') {
+    setHelperStatus('running', ti('settings.helperStatusRunning', 'Running'));
+  } else if (snapshot.state === 'not_installed') {
+    setHelperStatus('stopped', ti('settings.helperStatusStopped', 'Not Installed'));
+  } else if (snapshot.state === 'stopped') {
+    setHelperStatus('stopped', 'Stopped');
+  } else {
+    setHelperStatus('unknown', '-');
+  }
+}
+
+async function refreshHelperStatus(force = false) {
+  await hydrateHelperStatusFromFile();
+  const cached = getCachedHelperStatus();
+  if (cached) {
+    applyHelperStatusSnapshot(cached);
+    if (!force) {
       return;
     }
   }
-  if (!window.clashfox || typeof window.clashfox.pingHelper !== 'function') {
-    setHelperStatus('unknown', '-');
-    return;
+
+  try {
+    if (window.clashfox && typeof window.clashfox.getHelperStatus === 'function') {
+      const response = await window.clashfox.getHelperStatus();
+      if (response && response.ok && response.data) {
+        const snapshot = {
+          state: String(response.data.state || 'unknown'),
+          installed: Boolean(response.data.installed),
+          running: Boolean(response.data.running),
+          binaryExists: Boolean(response.data.binaryExists),
+          plistExists: Boolean(response.data.plistExists),
+          logPath: String(response.data.logPath || '/var/log/clashfox-helper.log'),
+          updatedAt: new Date().toISOString(),
+        };
+        if (state.settings) {
+          state.settings.helperStatus = snapshot;
+        }
+        if (state.fileSettings) {
+          state.fileSettings.helperStatus = snapshot;
+        }
+        applyHelperStatusSnapshot(snapshot);
+        return;
+      }
+    }
+  } catch (err) {
+    console.warn('[helper] getHelperStatus failed:', err);
   }
-  const response = await window.clashfox.pingHelper();
-  if (response && response.ok) {
-    setHelperStatus('running', ti('settings.helperStatusRunning', 'Running'));
-  } else {
-    setHelperStatus('stopped', ti('settings.helperStatusStopped', 'Not Installed'));
+}
+
+async function refreshHelperPanel(force = false) {
+  await hydrateHelperStatusFromFile();
+  await Promise.all([
+    refreshHelperStatus(force),
+    refreshHelperInstallPath(),
+    Promise.resolve(refreshHelperLogPath()),
+  ]);
+}
+window.__refreshHelperPanel = refreshHelperPanel;
+
+async function repairHelperAndRetryTun() {
+  const confirmed = await promptConfirm({
+    title: ti('settings.helperRepairTitle', 'Helper Unreachable'),
+    body: ti('settings.helperRepairBody', 'Privileged Helper is unreachable. Repair helper now and retry TUN?'),
+    confirmLabel: ti('settings.helperRepairConfirm', 'Repair and Retry'),
+    confirmTone: 'primary',
+  });
+  if (!confirmed) {
+    return false;
   }
+  if (!window.clashfox || typeof window.clashfox.installHelper !== 'function') {
+    showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
+    return false;
+  }
+  const response = await window.clashfox.installHelper();
+  if (!response || !response.ok) {
+    showToast(ti('settings.helperInstallFailed', 'Helper install failed'), 'error');
+    return false;
+  }
+  showToast(ti('settings.helperInstallSuccess', 'Helper installed'), 'info');
+  await invokeHelperPanelRefresh(true);
+  return true;
 }
 
 if (settingsConfigDirReveal) {
@@ -3280,25 +3455,39 @@ if (settingsDataDirReveal) {
 }
 
 if (helperInstallBtn) {
-  helperInstallBtn.addEventListener('click', async () => {
-    if (!window.clashfox || typeof window.clashfox.installHelper !== 'function') {
-      showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
-      return;
-    }
-    helperInstallBtn.disabled = true;
-    const response = await window.clashfox.installHelper();
-    helperInstallBtn.disabled = false;
-    if (response && response.ok) {
-      showToast(ti('settings.helperInstallSuccess', 'Helper installed'), 'info');
-      refreshHelperStatus();
-      refreshHelperInstallPath();
-      return;
-    }
-    if (response && response.path && helperInstallPath) {
-      helperInstallPath.textContent = response.path;
-    }
-    showToast(ti('settings.helperInstallFailed', 'Helper install failed'), 'error');
-  });
+  if (helperInstallBtn.dataset.bound !== 'true') {
+    helperInstallBtn.dataset.bound = 'true';
+    helperInstallBtn.addEventListener('click', async () => {
+      const isUninstall = helperPrimaryAction === 'uninstall';
+      const actionFn = isUninstall ? 'uninstallHelper' : 'installHelper';
+      if (!window.clashfox || typeof window.clashfox[actionFn] !== 'function') {
+        showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
+        return;
+      }
+      helperInstallBtn.disabled = true;
+      const response = await window.clashfox[actionFn]();
+      helperInstallBtn.disabled = false;
+      if (response && response.ok) {
+        showToast(
+          isUninstall
+            ? ti('settings.helperUninstallSuccess', 'Helper uninstalled')
+            : ti('settings.helperInstallSuccess', 'Helper installed'),
+          'info'
+        );
+        await refreshHelperPanel(true);
+        return;
+      }
+      if (response && response.path && helperInstallPath) {
+        helperInstallPath.textContent = response.path;
+      }
+      showToast(
+        isUninstall
+          ? ti('settings.helperUninstallFailed', 'Helper uninstall failed')
+          : ti('settings.helperInstallFailed', 'Helper install failed'),
+        'error'
+      );
+    });
+  }
 }
 
 if (helperInstallTerminalBtn) {
@@ -3338,36 +3527,56 @@ if (helperInstallPathBtn) {
 if (helperRefreshBtn) {
   helperRefreshBtn.addEventListener('click', async () => {
     helperRefreshBtn.disabled = true;
-    await Promise.all([
-      refreshHelperStatus(),
-      refreshHelperInstallPath(),
-      Promise.resolve(refreshHelperLogPath()),
-    ]);
+    await refreshHelperPanel(true);
     helperRefreshBtn.disabled = false;
   });
 }
 
 if (helperLogsOpenBtn) {
-  helperLogsOpenBtn.addEventListener('click', async () => {
-    if (window.clashfox && typeof window.clashfox.openHelperLogs === 'function') {
-      const response = await window.clashfox.openHelperLogs();
-      if (!response || !response.ok) {
-        showToast(ti('settings.helperLogsOpenFailed', 'Unable to open helper logs'), 'error');
+  if (helperLogsOpenBtn.dataset.bound !== 'true') {
+    helperLogsOpenBtn.dataset.bound = 'true';
+    helperLogsOpenBtn.addEventListener('click', async () => {
+    try {
+      if (window.clashfox && typeof window.clashfox.openHelperLogs === 'function') {
+        const response = await window.clashfox.openHelperLogs();
+        if (!response || !response.ok) {
+          showToast(ti('settings.helperLogsOpenFailed', 'Unable to open helper logs'), 'error');
+        } else {
+          showToast(ti('settings.helperLogsOpened', 'Helper logs opened'), 'info');
+        }
+        return;
       }
-      return;
-    }
-    const logPath = helperLogsPath ? helperLogsPath.textContent.trim() : '';
-    if (window.clashfox && typeof window.clashfox.openPath === 'function') {
-      const response = await window.clashfox.openPath(logPath);
-      if (!response || !response.ok) {
-        showToast(ti('settings.helperLogsOpenFailed', 'Unable to open helper logs'), 'error');
+      if (window.clashfox && typeof window.clashfox.openPath === 'function') {
+        const response = await window.clashfox.openPath('/var/log/clashfox-helper.log');
+        if (!response || !response.ok) {
+          showToast(ti('settings.helperLogsOpenFailed', 'Unable to open helper logs'), 'error');
+        } else {
+          showToast(ti('settings.helperLogsOpened', 'Helper logs opened'), 'info');
+        }
       }
+    } catch (err) {
+      console.warn('[helper] open logs failed:', err);
+      if (window.clashfox && typeof window.clashfox.openPath === 'function') {
+        try {
+          const fallback = await window.clashfox.openPath('/var/log/clashfox-helper.log');
+          if (fallback && fallback.ok) {
+            showToast(ti('settings.helperLogsOpened', 'Helper logs opened'), 'info');
+            return;
+          }
+        } catch {
+          // ignore
+        }
+      }
+      showToast(ti('settings.helperLogsOpenFailed', 'Unable to open helper logs'), 'error');
     }
-  });
+    });
+  }
 }
 
 if (helperLogsRevealBtn) {
-  helperLogsRevealBtn.addEventListener('click', async () => {
+  if (helperLogsRevealBtn.dataset.bound !== 'true') {
+    helperLogsRevealBtn.dataset.bound = 'true';
+    helperLogsRevealBtn.addEventListener('click', async () => {
     const logPath = helperLogsPath ? helperLogsPath.textContent.trim() : '';
     if (!logPath || logPath === '-') {
       return;
@@ -3375,7 +3584,8 @@ if (helperLogsRevealBtn) {
     if (window.clashfox && typeof window.clashfox.revealInFinder === 'function') {
       await window.clashfox.revealInFinder(logPath);
     }
-  });
+    });
+  }
 }
 
 if (installBtn) {
@@ -3836,7 +4046,13 @@ if (tunToggle) {
   tunToggle.addEventListener('change', async () => {
     const enabled = Boolean(tunToggle.checked);
     const previous = !enabled;
-    const response = await runCommand('tun', ['--enable', enabled ? 'true' : 'false', ...getControllerArgs()]);
+    let response = await runCommand('tun', ['--enable', enabled ? 'true' : 'false', ...getControllerArgs()]);
+    if (response && !response.ok && response.error === 'helper_unreachable') {
+      const repaired = await repairHelperAndRetryTun();
+      if (repaired) {
+        response = await runCommand('tun', ['--enable', enabled ? 'true' : 'false', ...getControllerArgs()]);
+      }
+    }
     // Always re-sync from kernel to avoid divergence
     const statusResponse = await loadTunStatus(false);
     const actual = tunToggle.checked;
@@ -3863,7 +4079,13 @@ if (tunStackSelect) {
     const previous = normalizeTunStack(state.settings && state.settings.tunStack);
     const value = normalizeTunStack(tunStackSelect.value);
     tunStackSelect.value = value;
-    const response = await runCommand('tun', ['--stack', value, ...getControllerArgs()]);
+    let response = await runCommand('tun', ['--stack', value, ...getControllerArgs()]);
+    if (response && !response.ok && response.error === 'helper_unreachable') {
+      const repaired = await repairHelperAndRetryTun();
+      if (repaired) {
+        response = await runCommand('tun', ['--stack', value, ...getControllerArgs()]);
+      }
+    }
     const statusResponse = await loadTunStatus(false);
     const actual = normalizeTunStack(tunStackSelect.value);
     const statusOk = statusResponse && statusResponse.ok && statusResponse.data;
@@ -4492,11 +4714,7 @@ async function initApp() {
   setTimeout(() => loadStatus(), 1200);
   setTimeout(() => loadStatus(), 4000);
   if (currentPage === 'settings') {
-    await Promise.all([
-      refreshHelperStatus(),
-      refreshHelperInstallPath(),
-      Promise.resolve(refreshHelperLogPath()),
-    ]);
+    await invokeHelperPanelRefresh();
   }
   if (currentPage === 'overview') {
     Promise.all([

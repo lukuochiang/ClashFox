@@ -123,6 +123,7 @@ function loadHelperCommandList() {
 }
 
 const HELPER_COMMANDS = new Set(loadHelperCommandList());
+const STRICT_HELPER_COMMANDS = new Set(['tun']);
 const HELPER_SOCKET_PATH = '/var/run/clashfox-helper.sock';
 const DEFAULT_HELPER_HTTP_PORT = 19999;
 const SYSTEM_AUTH_ERROR_PREFIX = '__CLASHFOX_SYSTEM_AUTH_ERROR__';
@@ -372,6 +373,12 @@ function readAppSettings() {
   }
 }
 
+function writeAppSettings(settings = {}) {
+  ensureAppDirs();
+  const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
+  fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
+}
+
 function readHelperConfigFromSettings() {
   const settings = readAppSettings();
   const helperHttpEnabled = settings && Object.prototype.hasOwnProperty.call(settings, 'helperHttpEnabled')
@@ -406,6 +413,24 @@ function resolveHelperInstallScriptPath() {
     }
   }
   return path.join(ROOT_DIR, 'helper', 'install-helper.sh');
+}
+
+function resolveHelperUninstallScriptPath() {
+  const baseDirs = [
+    path.join(ROOT_DIR, 'helper'),
+    path.join(ROOT_DIR, 'scripts'),
+    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'helper'),
+    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'scripts'),
+    path.join(process.resourcesPath || '', 'helper'),
+    path.join(process.resourcesPath || '', 'scripts'),
+  ];
+  const candidates = baseDirs.map((baseDir) => path.join(baseDir, 'uninstall-helper.sh'));
+  for (const candidate of candidates) {
+    if (candidate && fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return path.join(ROOT_DIR, 'helper', 'uninstall-helper.sh');
 }
 
 function getHelperPaths() {
@@ -447,23 +472,76 @@ async function getHelperStatus() {
   };
 }
 
+function normalizeHelperStatusPayload(result) {
+  const data = result && result.data ? result.data : {};
+  const state = String(data.state || 'unknown');
+  return {
+    state,
+    installed: Boolean(data.installed),
+    running: Boolean(data.running),
+    binaryExists: Boolean(data.binaryExists),
+    plistExists: Boolean(data.plistExists),
+    logPath: String(data.logPath || '/var/log/clashfox-helper.log'),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function persistHelperStatusToSettings(result) {
+  try {
+    const settings = readAppSettings();
+    settings.helperStatus = normalizeHelperStatusPayload(result);
+    writeAppSettings(settings);
+    return settings.helperStatus;
+  } catch {
+    return null;
+  }
+}
+
+async function syncHelperStatusToSettings() {
+  try {
+    const status = await getHelperStatus();
+    persistHelperStatusToSettings(status);
+    return status;
+  } catch {
+    return null;
+  }
+}
+
 async function openHelperLogs() {
-  const { logs } = getHelperPaths();
-  for (const targetPath of logs) {
-    if (!fs.existsSync(targetPath)) {
-      continue;
-    }
-    const result = await shell.openPath(targetPath);
-    if (!result) {
-      return { ok: true, path: targetPath };
-    }
+  const targetPath = '/var/log/clashfox-helper.log';
+  if (!fs.existsSync(targetPath)) {
+    return { ok: false, error: 'log_missing', path: targetPath };
   }
-  const fallback = '/var/log';
-  const fallbackResult = await shell.openPath(fallback);
-  if (!fallbackResult) {
-    return { ok: true, path: fallback, fallback: true };
+
+  const primary = await shell.openPath(targetPath);
+  if (!primary) {
+    return { ok: true, path: targetPath, method: 'shell.openPath' };
   }
-  return { ok: false, error: fallbackResult || 'open_failed' };
+
+  const tryOpen = (args = []) => new Promise((resolve) => {
+    execFile('/usr/bin/open', args, { timeout: 8000 }, (err) => {
+      resolve(!err);
+    });
+  });
+
+  if (await tryOpen(['-b', 'com.apple.Console', targetPath])) {
+    return { ok: true, path: targetPath, method: 'open-console' };
+  }
+  if (await tryOpen(['-a', '/System/Applications/Utilities/Console.app', targetPath])) {
+    return { ok: true, path: targetPath, method: 'open-console-app' };
+  }
+  if (await tryOpen(['-a', '/Applications/Utilities/Console.app', targetPath])) {
+    return { ok: true, path: targetPath, method: 'open-console-app-legacy' };
+  }
+  if (await tryOpen(['-t', targetPath])) {
+    return { ok: true, path: targetPath, method: 'open-text' };
+  }
+  try {
+    shell.showItemInFolder(targetPath);
+    return { ok: true, path: targetPath, method: 'reveal' };
+  } catch {
+    return { ok: false, error: primary || 'open_failed', path: targetPath };
+  }
 }
 
 function installHelperWithSystemAuth() {
@@ -471,6 +549,57 @@ function installHelperWithSystemAuth() {
     const scriptPath = resolveHelperInstallScriptPath();
     if (!fs.existsSync(scriptPath)) {
       resolve({ ok: false, error: 'install_script_missing', path: scriptPath });
+      return;
+    }
+    const quote = (value) => `'${String(value || '').replace(/'/g, `'\\''`)}'`;
+    const command = `/bin/bash ${quote(scriptPath)}`;
+    const script = [
+      'try',
+      `set out to do shell script ${JSON.stringify(command)} with administrator privileges`,
+      'return out',
+      'on error errMsg number errNum',
+      `return "${SYSTEM_AUTH_ERROR_PREFIX}:" & (errNum as text) & ":" & errMsg`,
+      'end try',
+    ].join('\n');
+    execFile('osascript', ['-e', script], { timeout: 180 * 1000 }, (error, stdout) => {
+      if (error) {
+        resolve({
+          ok: false,
+          error: 'system_auth_failed',
+          details: error.message || String(error),
+          path: scriptPath,
+        });
+        return;
+      }
+      const output = String(stdout || '').trim();
+      if (output.startsWith(`${SYSTEM_AUTH_ERROR_PREFIX}:`)) {
+        const payload = output.slice(SYSTEM_AUTH_ERROR_PREFIX.length + 1);
+        const firstColonIndex = payload.indexOf(':');
+        const errNumRaw = firstColonIndex >= 0 ? payload.slice(0, firstColonIndex) : payload;
+        const errMsg = firstColonIndex >= 0 ? payload.slice(firstColonIndex + 1).trim() : '';
+        const errNum = Number.parseInt(String(errNumRaw || '').trim(), 10);
+        if (errNum === -128) {
+          resolve({ ok: false, error: 'sudo_required', path: scriptPath });
+          return;
+        }
+        resolve({
+          ok: false,
+          error: 'system_auth_failed',
+          details: errMsg || 'system_authorization_failed',
+          path: scriptPath,
+        });
+        return;
+      }
+      resolve({ ok: true, output, path: scriptPath });
+    });
+  });
+}
+
+function uninstallHelperWithSystemAuth() {
+  return new Promise((resolve) => {
+    const scriptPath = resolveHelperUninstallScriptPath();
+    if (!fs.existsSync(scriptPath)) {
+      resolve({ ok: false, error: 'uninstall_script_missing', path: scriptPath });
       return;
     }
     const quote = (value) => `'${String(value || '').replace(/'/g, `'\\''`)}'`;
@@ -621,6 +750,50 @@ function persistSystemProxyEnabledToAppSettings(enabled) {
     return parsed;
   } catch {
     return null;
+  }
+}
+
+function normalizeMihomoRunningValue(value, command = '') {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  const cmd = String(command || '').trim();
+  if (cmd === 'start' || cmd === 'restart') {
+    return true;
+  }
+  if (cmd === 'stop') {
+    return false;
+  }
+  return null;
+}
+
+function persistMihomoStatusToSettings(runningValue, source = 'unknown') {
+  const running = normalizeMihomoRunningValue(runningValue);
+  if (running === null) {
+    return false;
+  }
+  try {
+    ensureAppDirs();
+    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
+    const parsed = readAppSettings() || {};
+    const previous = parsed && parsed.mihomoStatus && typeof parsed.mihomoStatus === 'object'
+      ? parsed.mihomoStatus
+      : null;
+    const previousRunning = previous && typeof previous.running === 'boolean'
+      ? previous.running
+      : null;
+    if (previousRunning === running) {
+      return false;
+    }
+    parsed.mihomoStatus = {
+      running,
+      source: String(source || 'unknown'),
+      updatedAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(settingsPath, `${JSON.stringify(parsed, null, 2)}\n`);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -1136,6 +1309,20 @@ async function runBridgeWithAutoAuth(command, args = [], options = {}) {
     && PRIVILEGED_COMMANDS.has(cmd)
   ) {
     result = await runBridgeWithSystemAuth([cmd, ...cmdArgs]);
+  }
+  if (result && result.ok) {
+    const cmdLower = cmd.toLowerCase();
+    if (cmdLower === 'status') {
+      const runningValue = result.data && Object.prototype.hasOwnProperty.call(result.data, 'running')
+        ? result.data.running
+        : null;
+      persistMihomoStatusToSettings(runningValue, 'status');
+    } else if (cmdLower === 'start' || cmdLower === 'stop' || cmdLower === 'restart') {
+      const runningValue = result.data && Object.prototype.hasOwnProperty.call(result.data, 'running')
+        ? result.data.running
+        : normalizeMihomoRunningValue(null, cmdLower);
+      persistMihomoStatusToSettings(runningValue, cmdLower);
+    }
   }
   return result;
 }
@@ -2237,6 +2424,10 @@ function runBridge(args, options = {}) {
           resolve(helperResult);
           return;
         }
+        if (commandType && STRICT_HELPER_COMMANDS.has(commandType) && process.platform === 'darwin') {
+          resolve({ ok: false, error: 'helper_unreachable' });
+          return;
+        }
 
         const startBridgeProcess = () => {
 
@@ -2656,6 +2847,9 @@ app.whenReady().then(() => {
   setTimeout(() => {
     checkHelperOnStartup().catch(() => {});
   }, 1200);
+  setTimeout(() => {
+    syncHelperStatusToSettings().catch(() => {});
+  }, 1500);
   setTimeout(setDockIcon, 500);
   setTimeout(setDockIcon, 1500);
   setTimeout(setDockIcon, 3000);
@@ -2890,7 +3084,7 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('clashfox:readSettings', () => {
+  ipcMain.handle('clashfox:readSettings', async () => {
     try {
       ensureAppDirs();
       const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
@@ -2898,7 +3092,14 @@ app.whenReady().then(() => {
       if (!fs.existsSync(settingsPath)) {
         const defaults = {
           configFile: defaultConfigPath,
+          mihomoStatus: {
+            running: false,
+            source: 'init',
+            updatedAt: new Date().toISOString(),
+          },
         };
+        const status = await getHelperStatus();
+        defaults.helperStatus = normalizeHelperStatusPayload(status);
         fs.writeFileSync(settingsPath, `${JSON.stringify(defaults, null, 2)}\n`);
         return { ok: true, data: defaults };
       }
@@ -2917,6 +3118,19 @@ app.whenReady().then(() => {
         parsed.configFile = defaultConfigPath;
         changed = true;
       }
+      if (!parsed.helperStatus || typeof parsed.helperStatus !== 'object') {
+        const status = await getHelperStatus();
+        parsed.helperStatus = normalizeHelperStatusPayload(status);
+        changed = true;
+      }
+      if (!parsed.mihomoStatus || typeof parsed.mihomoStatus !== 'object' || typeof parsed.mihomoStatus.running !== 'boolean') {
+        parsed.mihomoStatus = {
+          running: false,
+          source: 'init',
+          updatedAt: new Date().toISOString(),
+        };
+        changed = true;
+      }
       if (changed) {
         fs.writeFileSync(settingsPath, `${JSON.stringify(parsed, null, 2)}\n`);
       }
@@ -2931,13 +3145,15 @@ app.whenReady().then(() => {
       ensureAppDirs();
       const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
       const payload = data && typeof data === 'object' ? { ...data } : {};
+      const existing = readAppSettings();
+      const merged = { ...existing, ...payload };
       if (!payload.configFile && typeof payload.configPath === 'string') {
-        payload.configFile = payload.configPath;
+        merged.configFile = payload.configPath;
       }
-      if (Object.prototype.hasOwnProperty.call(payload, 'configPath')) {
-        delete payload.configPath;
+      if (Object.prototype.hasOwnProperty.call(merged, 'configPath')) {
+        delete merged.configPath;
       }
-      const json = JSON.stringify(payload, null, 2);
+      const json = JSON.stringify(merged, null, 2);
       fs.writeFileSync(settingsPath, `${json}\n`);
       refreshTrayMenuLabelsOnly();
       createTrayMenu().catch(() => {});
@@ -2982,7 +3198,16 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:installHelper', async () => {
     const result = await installHelperWithSystemAuth();
+    const status = await getHelperStatus();
+    persistHelperStatusToSettings(status);
     return result || { ok: false, error: 'install_failed' };
+  });
+
+  ipcMain.handle('clashfox:uninstallHelper', async () => {
+    const result = await uninstallHelperWithSystemAuth();
+    const status = await getHelperStatus();
+    persistHelperStatusToSettings(status);
+    return result || { ok: false, error: 'uninstall_failed' };
   });
 
   ipcMain.handle('clashfox:runHelperInstallInTerminal', async () => {
@@ -3002,6 +3227,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:getHelperStatus', async () => {
     const result = await getHelperStatus();
+    persistHelperStatusToSettings(result);
     return result || { ok: false, error: 'status_unavailable' };
   });
 
