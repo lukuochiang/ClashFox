@@ -1255,8 +1255,17 @@ body[data-page="settings"] #settingsLogIntervalPreset {
   }
 }
 
+body[data-page="help"] .help-stack {
+  display: grid;
+  gap: 14px;
+}
+
+body[data-page="help"] .help-stack .card {
+  margin: 0;
+}
+
 .help-card {
-  margin-bottom: 14px;
+  margin-bottom: 0;
 }
 
 .help-link {
@@ -3129,6 +3138,12 @@ body[data-page="logs"] .logs-clean-action {
 .help-list {
   padding-left: 18px;
   line-height: 1.7;
+}
+
+.help-ack-intro {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .help-intro-meta {

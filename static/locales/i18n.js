@@ -124,7 +124,9 @@ const I18N = {
       "line3": "If you are running on non-macOS, the toolkit functions are disabled.",
       "project": "Project: ClashFox GUI for Mihomo",
       "githubLabel": "GitHub:",
-      "telegramLabel": "Telegram:"
+      "telegramLabel": "Telegram:",
+      "ackTitle": "Acknowledgements",
+      "ackDesc": "Special thanks to the following projects and developers:"
     },
     "dashboard": {
       "title": "Dashboard",
@@ -466,7 +468,9 @@ const I18N = {
       "line3": "如果运行在非 macOS 系统，工具功能会被禁用。",
       "project": "项目：ClashFox GUI for Mihomo",
       "githubLabel": "GitHub：",
-      "telegramLabel": "Telegram："
+      "telegramLabel": "Telegram：",
+      "ackTitle": "致谢",
+      "ackDesc": "特别感谢以下项目和开发者："
     },
     "dashboard": {
       "title": "Dashboard面板",
@@ -808,7 +812,9 @@ const I18N = {
       "line3": "macOS 以外の場合、ツール機能は無効になります。",
       "project": "プロジェクト：ClashFox GUI",
       "githubLabel": "GitHub：",
-      "telegramLabel": "Telegram："
+      "telegramLabel": "Telegram：",
+      "ackTitle": "謝辞",
+      "ackDesc": "以下のプロジェクトと開発者に感謝します。"
     },
     "dashboard": {
       "title": "Dashboard パネル",
@@ -1144,7 +1150,9 @@ const I18N = {
       "line3": "macOS가 아닌 경우 도구 기능이 비활성화됩니다.",
       "project": "프로젝트: ClashFox GUI",
       "githubLabel": "GitHub:",
-      "telegramLabel": "Telegram:"
+      "telegramLabel": "Telegram:",
+      "ackTitle": "감사",
+      "ackDesc": "다음 프로젝트와 개발자에게 특별히 감사드립니다:"
     },
     "dashboard": {
       "title": "Dashboard 패널",
@@ -1480,7 +1488,9 @@ const I18N = {
       "line3": "Si vous n’êtes pas sur macOS, les fonctions sont désactivées.",
       "project": "Projet : ClashFox GUI for Mihomo",
       "githubLabel": "GitHub :",
-      "telegramLabel": "Telegram :"
+      "telegramLabel": "Telegram :",
+      "ackTitle": "Remerciements",
+      "ackDesc": "Un grand merci aux projets et développeurs suivants :"
     },
     "dashboard": {
       "title": "Panneau Dashboard",
@@ -1816,7 +1826,9 @@ const I18N = {
       "line3": "Wenn Sie nicht unter macOS laufen, sind die Toolkit-Funktionen deaktiviert.",
       "project": "Projekt: ClashFox GUI",
       "githubLabel": "GitHub:",
-      "telegramLabel": "Telegram:"
+      "telegramLabel": "Telegram:",
+      "ackTitle": "Danksagung",
+      "ackDesc": "Besonderer Dank an die folgenden Projekte und Entwickler:"
     },
     "dashboard": {
       "title": "Dashboard-Panel",
@@ -2152,7 +2164,9 @@ const I18N = {
       "line3": "Если вы не на macOS, функции инструмента отключены.",
       "project": "Проект: ClashFox GUI",
       "githubLabel": "GitHub:",
-      "telegramLabel": "Telegram:"
+      "telegramLabel": "Telegram:",
+      "ackTitle": "Благодарности",
+      "ackDesc": "Особая благодарность следующим проектам и разработчикам:"
     },
     "dashboard": {
       "title": "Панель Dashboard",

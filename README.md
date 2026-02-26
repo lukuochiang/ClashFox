@@ -6,7 +6,7 @@
 
 ## GUI
 
-This repository includes an Electron GUI that wraps the ClashFox Mihomo Toolkit script.
+This repository includes an Electron GUI that wraps the ClashFox Mihomo Toolkit Script.
 
 ### Run
 

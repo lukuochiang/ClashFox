@@ -496,6 +496,13 @@ function applyCardIcons() {
   document.querySelectorAll('.card h3').forEach((h) => {
     h.classList.add('iconized');
 
+    const explicitIcon = (h.dataset.cardIcon || '').trim();
+    if (explicitIcon) {
+      const iconVar = explicitIcon.startsWith('var(') ? explicitIcon : `var(--icon-${explicitIcon})`;
+      h.style.setProperty('--card-icon-mask', iconVar);
+      return;
+    }
+
     // Respect explicit icon classes to avoid i18n text matching side effects.
     if (h.classList.contains('outbound-icon') || h.classList.contains('conn-live-icon') || h.classList.contains('quick-actions-icon')) {
       h.style.removeProperty('--card-icon-mask');
