@@ -122,7 +122,10 @@ jobs:
           fi
 
           find dist -type f -name "*.zip" -exec cp -v {} artifacts/ \;
-          find dist -type f -name "*.yml" -exec cp -v {} artifacts/ \;
+          find dist -type f -name "*.yml" \
+            ! -name "builder-debug.yml" \
+            ! -name "latest-mac.yml" \
+            -exec cp -v {} artifacts/ \;
           ls -al artifacts
 
       - name: Create/Update release

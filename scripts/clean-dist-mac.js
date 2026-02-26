@@ -30,8 +30,11 @@ if (isPreclean) {
 
 const keepExts = new Set(['.zip', '.yml']);
 const keepNames = new Set([
-  'latest-mac.yml',
   'latest.yml',
+]);
+const dropNames = new Set([
+  'builder-debug.yml',
+  'latest-mac.yml',
 ]);
 
 for (const name of fs.readdirSync(distDir)) {
@@ -53,6 +56,10 @@ for (const name of fs.readdirSync(distDir)) {
     continue;
   }
   const ext = path.extname(name);
+  if (dropNames.has(name)) {
+    fs.unlinkSync(filePath);
+    continue;
+  }
   if (!keepExts.has(ext) && !keepNames.has(name)) {
     fs.unlinkSync(filePath);
     continue;
