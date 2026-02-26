@@ -2043,7 +2043,28 @@ tr_msg() {
 # ClashFox 默认目录 - 默认值，可通过命令行参数或交互方式修改
 CLASHFOX_DEFAULT_DIR="/Applications/ClashFox"
 CLASHFOX_DIR="$CLASHFOX_DEFAULT_DIR"
-CLASHFOX_USER_DATA_DIR="$HOME/Library/Application Support/ClashFox"
+resolve_clashfox_user_data_dir() {
+    if [ -n "${CLASHFOX_USER_DATA_DIR:-}" ]; then
+        printf '%s\n' "$CLASHFOX_USER_DATA_DIR"
+        return
+    fi
+
+    if [ -n "${HOME:-}" ]; then
+        printf '%s\n' "$HOME/Library/Application Support/ClashFox"
+        return
+    fi
+
+    local console_user=""
+    console_user="$(stat -f%Su /dev/console 2>/dev/null || true)"
+    if [ -n "$console_user" ] && [ "$console_user" != "root" ] && [ "$console_user" != "loginwindow" ]; then
+        printf '%s\n' "/Users/$console_user/Library/Application Support/ClashFox"
+        return
+    fi
+
+    printf '%s\n' "/Library/Application Support/ClashFox"
+}
+
+CLASHFOX_USER_DATA_DIR="$(resolve_clashfox_user_data_dir)"
 
 # ClashFox 子目录定义
 set_clashfox_subdirectories() {

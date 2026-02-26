@@ -1,7 +1,7 @@
 {
   "name": "ClashFox",
-  "version": "0.3.8",
-  "buildNumber": 45,
+  "version": "0.3.9",
+  "buildNumber": 1,
   "description": "ClashFox GUI for Mihomo",
   "author": "Kuochiang Lu <lukuochiang@gmail.com> (https://github.com/lukuochiang/ClashFox)",
   "main": "src/main.js",
@@ -9,7 +9,8 @@
   "scripts": {
     "start": "electron .",
     "dev": "node scripts/bump-version.js && CLASHFOX_DEV=1 electron .",
-    "build:mac": "node scripts/clean-dist-mac.js --pre; CLASHFOX_BUILD_NUMBER=$(node -p \"require('./package.json').buildNumber\") CSC_IDENTITY_AUTO_DISCOVERY=false PYTHON=${PYTHON:-python3} sh -c 'electron-builder --mac zip --x64 && electron-builder --mac zip --arm64 && electron-builder --mac zip --universal'; code=$?; node scripts/clean-dist-mac.js; exit $code",
+    "build:helper": "bash helper/build-helper.sh && cp -f helper/.build/release/com.clashfox.helper helper/com.clashfox.helper && chmod +x helper/com.clashfox.helper && test -f helper/com.clashfox.helper && rm -rf helper/.build",
+    "build:mac": "npm run build:helper && node scripts/clean-dist-mac.js --pre; CLASHFOX_BUILD_NUMBER=$(node -p \"require('./package.json').buildNumber\") CSC_IDENTITY_AUTO_DISCOVERY=false PYTHON=${PYTHON:-python3} sh -c 'electron-builder --mac zip --x64 && electron-builder --mac zip --arm64 && electron-builder --mac zip --universal'; code=$?; node scripts/clean-dist-mac.js; exit $code",
     "clean:mac": "node scripts/clean-dist-mac.js"
   },
   "devDependencies": {
@@ -20,18 +21,63 @@
   "build": {
     "appId": "com.clashfox.gui",
     "productName": "ClashFox",
+    "electronLanguages": [
+      "en",
+      "zh-CN"
+    ],
     "files": [
       "src/**/*",
       "scripts/**/*",
+      "helper/**/*",
       "assets/**/*",
       "static/**/*",
       "package.json",
+      "!helper/.build/**",
+      "!helper/cmd/**",
+      "!helper/go.mod",
+      "!helper/.DS_Store",
       "!**/dist/**",
       "!**/node_modules/**",
       "!**/.DS_Store"
     ],
-    "asarUnpack": [
-      "scripts/**"
+    "extraResources": [
+      {
+        "from": "scripts",
+        "to": "scripts",
+        "filter": [
+          "*.sh"
+        ]
+      },
+      {
+        "from": "helper",
+        "to": "helper",
+        "filter": [
+          "*.sh",
+          "com.clashfox.helper.plist",
+          "allowed-commands.json",
+          "com.clashfox.helper"
+        ]
+      },
+      {
+        "from": "static/default.yaml",
+        "to": "default.yaml"
+      },
+      {
+        "from": "static/geoip.metadb",
+        "to": "geoip.metadb"
+      },
+      {
+        "from": "static/geoip-lite.dat",
+        "to": "geoip-lite.dat"
+      },
+      {
+        "from": "static/GeoLite2-ASN.mmdb",
+        "to": "GeoLite2-ASN.mmdb"
+      },
+      {
+        "from": "static/geosite.dat",
+        "to": "geosite.dat"
+      }
     ],
     "mac": {
       "category": "public.app-category.utilities",

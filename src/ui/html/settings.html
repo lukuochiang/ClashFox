@@ -180,31 +180,31 @@
 
             <div class="card card-full helper-card">
               <div class="helper-card-header">
-                <div class="helper-card-info">
-                  <h3 data-i18n="settings.helperTitle">Privileged Helper</h3>
-                  <p data-i18n="settings.helperDesc">Runs as a system service to enable privileged operations like TUN and system proxy.</p>
+                <div class="helper-card-main">
+                  <h3 class="card-title helper-card-title">
+<!--                    <span class="card-icon helper-shield" aria-hidden="true"></span>-->
+                    <span data-i18n="settings.helperTitle">Privileged Helper</span>
+                  </h3>
+                </div>
+                <div class="helper-card-side">
+                  <span class="helper-install-status" id="helperStatusText">Not Installed</span>
+                  <button class="icon-btn ghost small helper-refresh-btn" id="helperRefreshBtn" type="button" aria-label="Refresh helper status">
+                    <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                      <path d="M17.64 6.36A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.76-4.24L14 10h6V4l-2.36 2.36Z"></path>
+                    </svg>
+                  </button>
                 </div>
               </div>
+              <p class="helper-card-desc" data-i18n="settings.helperDesc">The privileged helper enables advanced features like Enhanced Mode (TUN). It runs as a system service and requires administrator privileges to install.</p>
               <div class="helper-card-actions">
-                <button class="btn primary" id="helperInstallBtn" data-i18n="settings.helperInstall">Install / Repair Helper</button>
-                <button class="btn ghost" id="helperInstallTerminalBtn" data-i18n="settings.helperInstallTerminal">Run In Terminal</button>
-                <button class="btn ghost" id="helperInstallPathBtn" data-i18n="settings.helperInstallPath">Show Install Script</button>
-              </div>
-              <div class="helper-card-path" id="helperInstallPath">-</div>
-            </div>
-
-            <div class="card card-full helper-card helper-logs-card">
-              <div class="helper-card-header">
-                <div class="helper-card-info">
-                  <h3 data-i18n="settings.helperLogsTitle">Helper Logs</h3>
-                  <p data-i18n="settings.helperLogsDesc">View the privileged helper service logs.</p>
-                </div>
-              </div>
-              <div class="helper-card-actions">
+                <button class="btn primary" id="helperInstallBtn" data-i18n="settings.helperInstall">Install</button>
                 <button class="btn ghost" id="helperLogsOpenBtn" data-i18n="settings.helperLogsOpen">View Helper Logs</button>
-                <button class="btn ghost" id="helperLogsRevealBtn" data-i18n="settings.helperLogsReveal">Reveal in Finder</button>
               </div>
-              <div class="helper-card-path" id="helperLogsPath">-</div>
+              <button class="is-hidden" id="helperInstallTerminalBtn" type="button"></button>
+              <button class="is-hidden" id="helperInstallPathBtn" type="button"></button>
+              <button class="is-hidden" id="helperLogsRevealBtn" type="button"></button>
+              <div class="helper-card-path is-hidden" id="helperInstallPath">-</div>
+              <div class="helper-card-path is-hidden" id="helperLogsPath">-</div>
             </div>
 
             <div class="card card-full user-paths-card">

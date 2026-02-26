@@ -27,6 +27,7 @@
   --icon-switch: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5.2 5.5H16l-2.1-2.1a1 1 0 1 1 1.4-1.4l3.9 3.9a1 1 0 0 1 0 1.4l-3.9 3.9a1 1 0 1 1-1.4-1.4L16 7.5H5.2a1 1 0 0 1 0-2Z' fill='%23000'/%3E%3Cpath d='M14.8 14.5H4l2.1 2.1a1 1 0 0 1-1.4 1.4l-3.9-3.9a1 1 0 0 1 0-1.4l3.9-3.9a1 1 0 0 1 1.4 1.4L4 12.5h10.8a1 1 0 0 1 0 2Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-kernel: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='5' y='5' width='10' height='10' rx='2' stroke='%23000' stroke-width='1.5'/%3E%3Crect x='8' y='8' width='4' height='4' rx='1' fill='%23000'/%3E%3Cpath d='M3 7h2M3 10h2M3 13h2M15 7h2M15 10h2M15 13h2M7 3v2M10 3v2M13 3v2M7 15v2M10 15v2M13 15v2' stroke='%23000' stroke-width='1.3' stroke-linecap='round'/%3E%3C/svg%3E");
   --icon-gear: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11.7 2.2 12 4a6.5 6.5 0 0 1 1.4.8l1.7-.7a1 1 0 0 1 1.3.5l.7 1.5a1 1 0 0 1-.4 1.3l-1.5.9a6.4 6.4 0 0 1 0 1.6l1.5.9a1 1 0 0 1 .4 1.3l-.7 1.5a1 1 0 0 1-1.3.5l-1.7-.7a6.5 6.5 0 0 1-1.4.8L11.7 18a1 1 0 0 1-1 .8h-1.4a1 1 0 0 1-1-.8l-.3-1.8a6.5 6.5 0 0 1-1.4-.8l-1.7.7a1 1 0 0 1-1.3-.5l-.7-1.5a1 1 0 0 1 .4-1.3l1.5-.9a6.4 6.4 0 0 1 0-1.6l-1.5-.9a1 1 0 0 1-.4-1.3l.7-1.5a1 1 0 0 1 1.3-.5l1.7.7a6.5 6.5 0 0 1 1.4-.8L8.3 2.2a1 1 0 0 1 1-.8h1.4a1 1 0 0 1 1 .8ZM10 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z' fill='%23000'/%3E%3C/svg%3E");
+  --icon-shield: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 2 4.8 4.2V9c0 3.6 2.1 7 5.2 8.5 3.1-1.5 5.2-4.9 5.2-8.5V4.2L10 2Zm2.65 5.1a.8.8 0 0 1 0 1.13l-3.18 3.18a.8.8 0 0 1-1.13 0L6.96 10.04a.8.8 0 1 1 1.13-1.13l.82.82 2.62-2.63a.8.8 0 0 1 1.12 0Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-backup: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M6.5 4.5a4.5 4.5 0 0 1 8.75 1h.75A3.5 3.5 0 0 1 19.5 9c0 1.9-1.6 3.5-3.5 3.5H6a3.5 3.5 0 1 1 .5-6.97Z' fill='%23000' opacity='0.9'/%3E%3Cpath d='M10 9.2v4.6l1.5-1.5a1 1 0 1 1 1.4 1.4l-3.3 3.3a1 1 0 0 1-1.4 0l-3.3-3.3a1 1 0 1 1 1.4-1.4L9 13.8V9.2a1 1 0 1 1 2 0Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-doc: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11.2 2.2 15.8 6.8c.3.3.4.6.4 1v8.5a1.5 1.5 0 0 1-1.5 1.5h-9a1.5 1.5 0 0 1-1.5-1.5v-14A1.5 1.5 0 0 1 5.2 1h5c.4 0 .7.1 1 .4ZM11 3.9V6a1 1 0 0 0 1 1h2.1L11 3.9ZM6 9.5a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H7a1 1 0 0 1-1-1Zm0 3a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H7a1 1 0 0 1-1-1Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-sliders: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 4.5a1.5 1.5 0 1 1 3 0V5h8a1 1 0 1 1 0 2H7v.5a1.5 1.5 0 1 1-3 0V7H3a1 1 0 0 1 0-2h1V4.5ZM13 10.5a1.5 1.5 0 1 1 3 0V11h1a1 1 0 1 1 0 2h-1v.5a1.5 1.5 0 1 1-3 0V13H3a1 1 0 1 1 0-2h10v-.5Z' fill='%23000'/%3E%3C/svg%3E");
@@ -825,6 +826,26 @@ h1 {
   -webkit-mask-repeat: no-repeat;
 }
 
+.card-icon.helper-shield {
+  background: rgba(244, 179, 74, 0.16);
+  border-color: rgba(244, 179, 74, 0.45);
+}
+
+.card-icon.helper-shield::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  background-color: rgba(244, 179, 74, 0.9);
+  mask-image: var(--icon-shield);
+  mask-size: contain;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  -webkit-mask-image: var(--icon-shield);
+  -webkit-mask-size: contain;
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+}
+
 .quick-actions {
   /*margin-bottom: 10px;*/
 }
@@ -1449,71 +1470,64 @@ body[data-theme="day"] .history-axis {
 .helper-card {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .helper-card-header {
   display: flex;
   align-items: center;
-  gap: 16px;
+  justify-content: space-between;
+  gap: 14px;
 }
 
-.helper-card-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  background: rgba(244, 179, 74, 0.15);
-  border: 1px solid rgba(244, 179, 74, 0.35);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--ink);
-  font-size: 20px;
+.helper-card-main {
+  min-width: 240px;
 }
 
-.helper-card-icon-muted {
-  background: rgba(148, 171, 197, 0.15);
-  border-color: rgba(148, 171, 197, 0.35);
-  color: var(--muted);
-  font-size: 14px;
-  letter-spacing: 0.08em;
-}
-
-.helper-card-info h3 {
+.helper-card-title {
   margin: 0;
 }
 
-.helper-card-info p {
-  margin: 6px 0 0;
+.helper-card-desc {
+  margin: -2px 0 0;
   color: var(--muted);
   font-size: 13px;
+  line-height: 1.45;
 }
 
-.helper-card-status {
-  margin-left: auto;
+.helper-card-side {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--muted);
+  gap: 10px;
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
-.helper-status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: rgba(148, 171, 197, 0.6);
-  box-shadow: 0 0 0 4px rgba(148, 171, 197, 0.12);
+.helper-install-status {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ff5f66;
 }
 
-.helper-status-dot[data-state="running"] {
-  background: #2ad67a;
-  box-shadow: 0 0 0 4px rgba(42, 214, 122, 0.15);
+.helper-install-status[data-state="running"] {
+  color: #2ad67a;
 }
 
-.helper-status-dot[data-state="stopped"] {
-  background: #ff7a4a;
-  box-shadow: 0 0 0 4px rgba(255, 122, 74, 0.18);
+.helper-install-status[data-state="stopped"],
+.helper-install-status[data-state="unknown"] {
+  color: #ff5f66;
+}
+
+.helper-refresh-btn {
+  border-radius: 999px;
+  width: 32px;
+  height: 32px;
+}
+
+.helper-refresh-btn svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
 }
 
 .helper-card-actions {
@@ -1531,6 +1545,22 @@ body[data-theme="day"] .history-axis {
   border-radius: 10px;
   padding: 10px 12px;
   word-break: break-all;
+}
+
+@media (max-width: 1024px) {
+  .helper-card-main {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 680px) {
+  .helper-card-header {
+    flex-direction: column;
+  }
+
+  .helper-card-side {
+    align-self: flex-start;
+  }
 }
 
 .paths-input {

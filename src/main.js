@@ -32,10 +32,17 @@ function ensureAppDirs() {
 }
 
 function getBridgePath() {
-  if (!app.isPackaged) {
-    return path.join(ROOT_DIR, 'scripts', 'gui_bridge.sh');
+  const candidates = [
+    path.join(ROOT_DIR, 'scripts', 'gui_bridge.sh'),
+    path.join(process.resourcesPath || '', 'scripts', 'gui_bridge.sh'),
+    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'scripts', 'gui_bridge.sh'),
+  ];
+  for (const candidate of candidates) {
+    if (candidate && fs.existsSync(candidate)) {
+      return candidate;
+    }
   }
-  return path.join(process.resourcesPath, 'app.asar.unpacked', 'scripts', 'gui_bridge.sh');
+  return path.join(ROOT_DIR, 'scripts', 'gui_bridge.sh');
 }
 let mainWindow = null;
 let tray = null;
@@ -68,7 +75,7 @@ const RESTART_TRANSITION_MAX_MS = 4000;
 const RESTART_TRANSITION_RATIO = 0.5;
 let trayCoreStartupEstimateMs = 1500;
 const PRIVILEGED_COMMANDS = new Set(['install', 'start', 'stop', 'restart', 'delete-backups', 'system-proxy-enable', 'system-proxy-disable']);
-const HELPER_COMMANDS = new Set([
+const DEFAULT_HELPER_COMMAND_LIST = [
   'ping',
   'status',
   'start',
@@ -81,7 +88,41 @@ const HELPER_COMMANDS = new Set([
   'system-proxy-disable',
   'tun-status',
   'tun',
-]);
+];
+
+function loadHelperCommandList() {
+  const candidates = [
+    path.join(ROOT_DIR, 'helper', 'allowed-commands.json'),
+    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'helper', 'allowed-commands.json'),
+    path.join(process.resourcesPath || '', 'helper', 'allowed-commands.json'),
+  ];
+  for (const filePath of candidates) {
+    try {
+      if (!filePath || !fs.existsSync(filePath)) {
+        continue;
+      }
+      const raw = fs.readFileSync(filePath, 'utf8');
+      const parsed = JSON.parse(raw);
+      const list = Array.isArray(parsed)
+        ? parsed
+        : (parsed && Array.isArray(parsed.commands) ? parsed.commands : null);
+      if (!list || !list.length) {
+        continue;
+      }
+      const normalized = list
+        .map((item) => String(item || '').trim())
+        .filter(Boolean);
+      if (normalized.length) {
+        return normalized;
+      }
+    } catch {
+      // ignore and continue fallback
+    }
+  }
+  return DEFAULT_HELPER_COMMAND_LIST;
+}
+
+const HELPER_COMMANDS = new Set(loadHelperCommandList());
 const HELPER_SOCKET_PATH = '/var/run/clashfox-helper.sock';
 const DEFAULT_HELPER_HTTP_PORT = 19999;
 const SYSTEM_AUTH_ERROR_PREFIX = '__CLASHFOX_SYSTEM_AUTH_ERROR__';
@@ -350,17 +391,79 @@ function readHelperConfigFromSettings() {
 }
 
 function resolveHelperInstallScriptPath() {
-  const candidates = [
-    path.join(ROOT_DIR, 'helper', 'install.sh'),
-    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'helper', 'install.sh'),
-    path.join(process.resourcesPath || '', 'helper', 'install.sh'),
+  const baseDirs = [
+    path.join(ROOT_DIR, 'helper'),
+    path.join(ROOT_DIR, 'scripts'),
+    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'helper'),
+    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'scripts'),
+    path.join(process.resourcesPath || '', 'helper'),
+    path.join(process.resourcesPath || '', 'scripts'),
   ];
+  const candidates = baseDirs.map((baseDir) => path.join(baseDir, 'install-helper.sh'));
   for (const candidate of candidates) {
     if (candidate && fs.existsSync(candidate)) {
       return candidate;
     }
   }
-  return path.join(ROOT_DIR, 'helper', 'install.sh');
+  return path.join(ROOT_DIR, 'helper', 'install-helper.sh');
+}
+
+function getHelperPaths() {
+  return {
+    binary: '/Library/PrivilegedHelperTools/com.clashfox.helper',
+    plist: '/Library/LaunchDaemons/com.clashfox.helper.plist',
+    logs: [
+      '/var/log/clashfox-helper.log',
+      '/var/log/com.clashfox.helper.log',
+    ],
+  };
+}
+
+async function getHelperStatus() {
+  const paths = getHelperPaths();
+  const binaryExists = fs.existsSync(paths.binary);
+  const plistExists = fs.existsSync(paths.plist);
+  const installed = binaryExists && plistExists;
+  const ping = await pingHelper();
+  const running = Boolean(ping && ping.ok);
+  let state = 'stopped';
+  if (running) {
+    state = 'running';
+  } else if (!installed) {
+    state = 'not_installed';
+  }
+  const logPath = paths.logs.find((p) => fs.existsSync(p)) || paths.logs[0];
+  return {
+    ok: true,
+    data: {
+      state,
+      running,
+      installed,
+      binaryExists,
+      plistExists,
+      logPath,
+      ping: ping || { ok: false, error: 'helper_unreachable' },
+    },
+  };
+}
+
+async function openHelperLogs() {
+  const { logs } = getHelperPaths();
+  for (const targetPath of logs) {
+    if (!fs.existsSync(targetPath)) {
+      continue;
+    }
+    const result = await shell.openPath(targetPath);
+    if (!result) {
+      return { ok: true, path: targetPath };
+    }
+  }
+  const fallback = '/var/log';
+  const fallbackResult = await shell.openPath(fallback);
+  if (!fallbackResult) {
+    return { ok: true, path: fallback, fallback: true };
+  }
+  return { ok: false, error: fallbackResult || 'open_failed' };
 }
 
 function installHelperWithSystemAuth() {
@@ -2895,6 +2998,16 @@ app.whenReady().then(() => {
   ipcMain.handle('clashfox:pingHelper', async () => {
     const result = await pingHelper();
     return result || { ok: false, error: 'helper_unreachable' };
+  });
+
+  ipcMain.handle('clashfox:getHelperStatus', async () => {
+    const result = await getHelperStatus();
+    return result || { ok: false, error: 'status_unavailable' };
+  });
+
+  ipcMain.handle('clashfox:openHelperLogs', async () => {
+    const result = await openHelperLogs();
+    return result || { ok: false, error: 'open_failed' };
   });
 
   ipcMain.handle('clashfox:openPath', async (_event, targetPath) => {

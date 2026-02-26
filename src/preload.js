@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('clashfox', {
   runHelperInstallInTerminal: () => ipcRenderer.invoke('clashfox:runHelperInstallInTerminal'),
   getHelperInstallPath: () => ipcRenderer.invoke('clashfox:getHelperInstallPath'),
   pingHelper: () => ipcRenderer.invoke('clashfox:pingHelper'),
+  getHelperStatus: () => ipcRenderer.invoke('clashfox:getHelperStatus'),
+  openHelperLogs: () => ipcRenderer.invoke('clashfox:openHelperLogs'),
   openPath: (targetPath) => ipcRenderer.invoke('clashfox:openPath', targetPath),
   // openAbout: () => ipcRenderer.invoke('clashfox:openAbout'),
   openExternal: (url) => ipcRenderer.invoke('clashfox:openExternal', url),

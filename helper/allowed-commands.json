@@ -1,0 +1,14 @@
+[
+  "ping",
+  "status",
+  "start",
+  "stop",
+  "restart",
+  "install",
+  "delete-backups",
+  "system-proxy-status",
+  "system-proxy-enable",
+  "system-proxy-disable",
+  "tun-status",
+  "tun"
+]

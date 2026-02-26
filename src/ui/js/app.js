@@ -217,6 +217,7 @@ let helperInstallPathBtn = document.getElementById('helperInstallPathBtn');
 let helperInstallPath = document.getElementById('helperInstallPath');
 let helperStatusText = document.getElementById('helperStatusText');
 let helperStatusDot = document.querySelector('.helper-status-dot');
+let helperRefreshBtn = document.getElementById('helperRefreshBtn');
 let helperLogsOpenBtn = document.getElementById('helperLogsOpenBtn');
 let helperLogsRevealBtn = document.getElementById('helperLogsRevealBtn');
 let helperLogsPath = document.getElementById('helperLogsPath');
@@ -437,6 +438,7 @@ function applyCardIcons() {
     if (tname.includes('running status')) return 'var(--icon-activity)';
     if (tname.includes('realtime connections') || tname.includes('real-time connections') || tname.includes('实时连接')) return 'var(--icon-connections)';
     if (tname.includes('network status')) return 'var(--icon-wifi)';
+    if (tname.includes('privileged helper') || tname.includes('特权助手')) return 'var(--icon-shield)';
     if (tname.includes('kernel list')) return 'var(--icon-list)';
     if (tname.includes('recommended configs')) return 'var(--icon-list)';
     if (tname.includes('backup inventory')) return 'var(--icon-list)';
@@ -3213,6 +3215,7 @@ function refreshHelperLogPath() {
 function setHelperStatus(state, text) {
   if (helperStatusText) {
     helperStatusText.textContent = text || '-';
+    helperStatusText.dataset.state = state || 'unknown';
   }
   if (helperStatusDot) {
     helperStatusDot.dataset.state = state || 'unknown';
@@ -3220,6 +3223,23 @@ function setHelperStatus(state, text) {
 }
 
 async function refreshHelperStatus() {
+  if (window.clashfox && typeof window.clashfox.getHelperStatus === 'function') {
+    const response = await window.clashfox.getHelperStatus();
+    if (response && response.ok && response.data) {
+      const logPath = response.data.logPath || '/var/log/clashfox-helper.log';
+      if (helperLogsPath) {
+        helperLogsPath.textContent = logPath;
+      }
+      if (response.data.state === 'running') {
+        setHelperStatus('running', ti('settings.helperStatusRunning', 'Running'));
+      } else if (response.data.state === 'not_installed') {
+        setHelperStatus('stopped', ti('settings.helperStatusStopped', 'Not Installed'));
+      } else {
+        setHelperStatus('stopped', 'Stopped');
+      }
+      return;
+    }
+  }
   if (!window.clashfox || typeof window.clashfox.pingHelper !== 'function') {
     setHelperStatus('unknown', '-');
     return;
@@ -3228,7 +3248,7 @@ async function refreshHelperStatus() {
   if (response && response.ok) {
     setHelperStatus('running', ti('settings.helperStatusRunning', 'Running'));
   } else {
-    setHelperStatus('stopped', ti('settings.helperStatusStopped', 'Not running'));
+    setHelperStatus('stopped', ti('settings.helperStatusStopped', 'Not Installed'));
   }
 }
 
@@ -3315,12 +3335,28 @@ if (helperInstallPathBtn) {
   });
 }
 
+if (helperRefreshBtn) {
+  helperRefreshBtn.addEventListener('click', async () => {
+    helperRefreshBtn.disabled = true;
+    await Promise.all([
+      refreshHelperStatus(),
+      refreshHelperInstallPath(),
+      Promise.resolve(refreshHelperLogPath()),
+    ]);
+    helperRefreshBtn.disabled = false;
+  });
+}
+
 if (helperLogsOpenBtn) {
   helperLogsOpenBtn.addEventListener('click', async () => {
-    const logPath = helperLogsPath ? helperLogsPath.textContent.trim() : '';
-    if (!logPath || logPath === '-') {
+    if (window.clashfox && typeof window.clashfox.openHelperLogs === 'function') {
+      const response = await window.clashfox.openHelperLogs();
+      if (!response || !response.ok) {
+        showToast(ti('settings.helperLogsOpenFailed', 'Unable to open helper logs'), 'error');
+      }
       return;
     }
+    const logPath = helperLogsPath ? helperLogsPath.textContent.trim() : '';
     if (window.clashfox && typeof window.clashfox.openPath === 'function') {
       const response = await window.clashfox.openPath(logPath);
       if (!response || !response.ok) {
@@ -4455,6 +4491,13 @@ async function initApp() {
   loadStatus();
   setTimeout(() => loadStatus(), 1200);
   setTimeout(() => loadStatus(), 4000);
+  if (currentPage === 'settings') {
+    await Promise.all([
+      refreshHelperStatus(),
+      refreshHelperInstallPath(),
+      Promise.resolve(refreshHelperLogPath()),
+    ]);
+  }
   if (currentPage === 'overview') {
     Promise.all([
       loadOverview(),
