@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld('clashfox', {
   runCommand: (command, args = [], options = {}) => ipcRenderer.invoke('clashfox:command', command, args, options),
   cancelCommand: () => ipcRenderer.invoke('clashfox:cancelCommand'),
   selectConfig: () => ipcRenderer.invoke('clashfox:selectConfig'),
+  importConfig: () => ipcRenderer.invoke('clashfox:importConfig'),
+  deleteConfig: (targetPath) => ipcRenderer.invoke('clashfox:deleteConfig', targetPath),
   selectDirectory: (title) => ipcRenderer.invoke('clashfox:selectDirectory', title),
   getAppInfo: () => ipcRenderer.invoke('clashfox:appInfo'),
   checkUpdates: (options = {}) => ipcRenderer.invoke('clashfox:checkUpdates', options),

@@ -32,11 +32,18 @@
           <div class="card control-card">
             <div class="card-header-row">
               <h3 data-i18n="control.title">Config Control</h3>
-              <button class="icon-btn ghost small control-refresh-btn" id="configsRefresh" type="button" data-i18n-tip="control.refresh" data-position="bottom" data-native-title="false" aria-label="Refresh configs">
-                <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-                  <path d="M17.64 6.36A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.76-4.24L14 10h6V4l-2.36 2.36Z"></path>
-                </svg>
-              </button>
+              <div class="control-actions">
+                <button class="icon-btn ghost small control-import-btn" id="configsImport" type="button" data-tip-key="control.import" data-position="bottom" data-native-title="false" aria-label="Import config">
+                  <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                    <path d="M12 3a1 1 0 0 1 1 1v7h3.6a1 1 0 0 1 .7 1.7l-5.3 5.3a1 1 0 0 1-1.4 0l-5.3-5.3A1 1 0 0 1 6 11h3.6V4a1 1 0 0 1 1-1h1.4ZM5 19a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"></path>
+                  </svg>
+                </button>
+                <button class="icon-btn ghost small control-refresh-btn" id="configsRefresh" type="button" data-tip-key="control.refresh" data-position="bottom" data-native-title="false" aria-label="Refresh configs">
+                  <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                    <path d="M17.64 6.36A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.76-4.24L14 10h6V4l-2.36 2.36Z"></path>
+                  </svg>
+                </button>
+              </div>
             </div>
 <!--            <div class="form-row">-->
 <!--              <label data-i18n="control.config">Config Path</label>-->
@@ -46,6 +53,22 @@
 <!--              </div>-->
 <!--            </div>-->
             <div class="table" id="configTable"></div>
+            <div class="pagination">
+              <div class="page-controls">
+                <button class="btn ghost" id="configPrev">Prev</button>
+                <div class="page-info" id="configPageInfo">1 / 1</div>
+                <button class="btn ghost" id="configNext">Next</button>
+              </div>
+              <div class="page-size">
+                <span data-i18n="pagination.size">Per page</span>
+                <select id="configPageSize">
+                  <option value="5">5</option>
+                  <option value="10" selected>10</option>
+                  <option value="20">20</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+            </div>
           </div>
           <div class="card">
             <h3 data-i18n="control.recommendationsTitle">Recommended Configs</h3>

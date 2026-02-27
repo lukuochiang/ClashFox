@@ -155,13 +155,14 @@ let backupTable = document.getElementById('backupTable');
 let backupTableFull = document.getElementById('backupTableFull');
 let kernelCurrentTable = document.getElementById('kernelCurrentTable');
 let configsRefresh = document.getElementById('configsRefresh');
+let configsImport = document.getElementById('configsImport');
 let configTable = document.getElementById('configTable');
+let configPrev = document.getElementById('configPrev');
+let configNext = document.getElementById('configNext');
+let configPageInfo = document.getElementById('configPageInfo');
+let configPageSize = document.getElementById('configPageSize');
 let kernelTable = document.getElementById('kernelTable');
 let kernelRefresh = document.getElementById('kernelRefresh');
-let kernelModeSwitchBtn = document.getElementById('kernelModeSwitchBtn');
-let kernelModeManageBtn = document.getElementById('kernelModeManageBtn');
-let kernelSwitchSection = document.getElementById('kernelSwitchSection');
-let kernelManageSection = document.getElementById('kernelManageSection');
 let kernelPrev = document.getElementById('kernelPrev');
 let kernelNext = document.getElementById('kernelNext');
 let kernelPageInfo = document.getElementById('kernelPageInfo');
@@ -271,7 +272,10 @@ const DEFAULT_SETTINGS = {
   logAutoRefresh: false,
   logIntervalPreset: '3',
   kernelPageSize: '10',
+  switchPageSize: '10',
   backupsPageSize: '10',
+  configPageSize: '10',
+  recommendPageSize: '10',
   acceptBeta: false,
   debugMode: false,
   windowWidth: MAIN_WINDOW_DEFAULT_WIDTH,
@@ -299,11 +303,14 @@ const state = {
   logIntervalMs: 3000,
   switchPage: 1,
   backupsPage: 1,
-  kernelListMode: 'switch',
+  configPage: 1,
   recommendPage: 1,
   kernelsPage: 1,
   kernelPageSizeLocal: null,
-  generalPageSizeLocal: null,
+  switchPageSizeLocal: null,
+  backupsPageSizeLocal: null,
+  configPageSizeLocal: null,
+  recommendPageSizeLocal: null,
   selectedBackupPaths: new Set(),
   theme: 'night',
   themePreference: 'auto',
@@ -421,17 +428,10 @@ function applyI18n() {
     const tip = t(key);
     el.textContent = tip;
   });
-  document.querySelectorAll('[data-i18n-tip]').forEach((el) => {
-    const key = el.dataset.i18nTipKey || el.dataset.i18nTip;
-    if (!el.dataset.i18nTipKey) {
-      el.dataset.i18nTipKey = el.dataset.i18nTip;
-    }
-    if (el.dataset.i18nTipKey) {
-      el.dataset.i18nTip = el.dataset.i18nTipKey;
-    }
+  document.querySelectorAll('[data-tip-key]').forEach((el) => {
+    const key = el.dataset.tipKey || '';
     const tip = t(key) || '';
     el.dataset.tip = tip;
-    el.setAttribute('data-tooltip', tip);
     if (el.dataset.nativeTitle === 'false') {
       el.removeAttribute('title');
     } else {
@@ -549,6 +549,15 @@ function normalizeSettingsForUi(settings) {
   }
   if ((!normalized.backupsPageSize || String(normalized.backupsPageSize).trim() === '') && normalized.kernelPageSize) {
     normalized.backupsPageSize = normalized.kernelPageSize;
+  }
+  if (!normalized.switchPageSize || String(normalized.switchPageSize).trim() === '') {
+    normalized.switchPageSize = normalized.backupsPageSize || normalized.kernelPageSize || '10';
+  }
+  if (!normalized.configPageSize || String(normalized.configPageSize).trim() === '') {
+    normalized.configPageSize = normalized.backupsPageSize || normalized.kernelPageSize || '10';
+  }
+  if (!normalized.recommendPageSize || String(normalized.recommendPageSize).trim() === '') {
+    normalized.recommendPageSize = normalized.backupsPageSize || normalized.kernelPageSize || '10';
   }
   if (Object.prototype.hasOwnProperty.call(normalized, 'configFile')) {
     delete normalized.configFile;
@@ -836,23 +845,42 @@ function updateTipPosition(el) {
   }
   const rootRect = contentRoot.getBoundingClientRect();
   const rect = el.getBoundingClientRect();
-  const topGap = rect.top - rootRect.top;
-  const bottomGap = rootRect.bottom - rect.bottom;
-  const leftGap = rect.left - rootRect.left;
-  const rightGap = rootRect.right - rect.right;
-  const tipPad = 140;
-  if (topGap < 36 && bottomGap > 36) {
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  const topGap = centerY - rootRect.top;
+  const bottomGap = rootRect.bottom - centerY;
+  const leftGap = centerX - rootRect.left;
+  const rightGap = rootRect.right - centerX;
+  const tipText = String(el.dataset.tip || '').trim();
+  const estimatedTipWidth = Math.min(320, Math.max(120, tipText.length * 7 + 24));
+  const estimatedTipHeight = 42;
+  const spacing = 12;
+  const halfWidth = estimatedTipWidth / 2;
+  const fits = {
+    top: topGap >= estimatedTipHeight + spacing && leftGap >= halfWidth && rightGap >= halfWidth,
+    bottom: bottomGap >= estimatedTipHeight + spacing && leftGap >= halfWidth && rightGap >= halfWidth,
+    left: leftGap >= estimatedTipWidth + spacing,
+    right: rightGap >= estimatedTipWidth + spacing,
+  };
+  if (fits.top) {
+    el.dataset.position = 'top';
+    return;
+  }
+  if (fits.bottom) {
     el.dataset.position = 'bottom';
-  } else if (bottomGap < 36 && topGap > 36) {
-    el.dataset.position = 'top';
-  } else {
-    el.dataset.position = 'top';
+    return;
   }
-  if (rightGap < tipPad && leftGap > tipPad) {
-    el.dataset.position = 'left';
-  } else if (leftGap < tipPad && rightGap > tipPad) {
+  if (fits.right) {
     el.dataset.position = 'right';
+    return;
   }
+  if (fits.left) {
+    el.dataset.position = 'left';
+    return;
+  }
+  const spaces = { top: topGap, bottom: bottomGap, right: rightGap, left: leftGap };
+  const best = Object.entries(spaces).sort((a, b) => b[1] - a[1])[0];
+  el.dataset.position = best ? best[0] : 'top';
 }
 
 function applyTheme(theme) {
@@ -1015,19 +1043,25 @@ function applySettings(settings) {
   updateExternalUiUrlField();
   updateDashboardFrameSrc();
   const unifiedPageSize = state.settings.backupsPageSize || state.settings.kernelPageSize || '10';
-  state.kernelPageSizeLocal = unifiedPageSize;
-  state.generalPageSizeLocal = state.settings.backupsPageSize || unifiedPageSize;
+  state.kernelPageSizeLocal = state.settings.kernelPageSize || unifiedPageSize;
+  state.switchPageSizeLocal = state.settings.switchPageSize || unifiedPageSize;
+  state.backupsPageSizeLocal = state.settings.backupsPageSize || unifiedPageSize;
+  state.configPageSizeLocal = state.settings.configPageSize || unifiedPageSize;
+  state.recommendPageSizeLocal = state.settings.recommendPageSize || unifiedPageSize;
   if (kernelPageSize) {
     kernelPageSize.value = state.kernelPageSizeLocal;
   }
   if (switchPageSize) {
-    switchPageSize.value = state.kernelPageSizeLocal;
+    switchPageSize.value = state.switchPageSizeLocal;
   }
   if (backupsPageSize) {
-    backupsPageSize.value = state.kernelPageSizeLocal;
+    backupsPageSize.value = state.backupsPageSizeLocal;
   }
   if (recommendPageSize) {
-    recommendPageSize.value = state.generalPageSizeLocal;
+    recommendPageSize.value = state.recommendPageSizeLocal;
+  }
+  if (configPageSize) {
+    configPageSize.value = state.configPageSizeLocal;
   }
   if (settingsBackupsPageSize) {
     settingsBackupsPageSize.value = state.settings.backupsPageSize;
@@ -2436,6 +2470,15 @@ function renderBackups(targetEl, withRadio, pageInfo, pageSize, multiSelect) {
 
     if (items.length === 0) {
       html += `<tr><td class="empty-cell" colspan="3">${t('labels.noBackups')}</td></tr>`;
+    } else if (pageData.items.length < pageSize) {
+      const fillCount = pageSize - pageData.items.length;
+      for (let i = 0; i < fillCount; i += 1) {
+        html += '<tr class="placeholder" aria-hidden="true">';
+        html += '<td class="check-col">&nbsp;</td>';
+        html += '<td class="version-col">&nbsp;</td>';
+        html += '<td class="time-col">&nbsp;</td>';
+        html += '</tr>';
+      }
     }
     html += '</tbody></table>';
     targetEl.innerHTML = html;
@@ -2461,6 +2504,13 @@ function renderBackups(targetEl, withRadio, pageInfo, pageSize, multiSelect) {
 
   if (items.length === 0) {
     html += `<div class="table-row empty"><div class="empty-cell">${t('labels.noBackups')}</div></div>`;
+  } else if (pageData.items.length < pageSize) {
+    const fillCount = pageSize - pageData.items.length;
+    for (let i = 0; i < fillCount; i += 1) {
+      html += '<div class="table-row backup placeholder" aria-hidden="true">';
+      html += withRadio ? '<div class="pick-cell">&nbsp;</div>' : '<div class="index-cell">&nbsp;</div>';
+      html += '<div class="version-cell">&nbsp;</div><div class="time-cell">&nbsp;</div></div>';
+    }
   }
 
   targetEl.innerHTML = html;
@@ -2540,10 +2590,16 @@ function getControllerArgs() {
 }
 
 function renderConfigTable() {
-  if (!configTable) {
+  if (!configTable || !configPageInfo || !configPrev || !configNext || !configPageSize) {
     return;
   }
-  const items = state.configs;
+  const items = state.configs || [];
+  const size = Number.parseInt(state.configPageSizeLocal || configPageSize.value || '10', 10) || 10;
+  const pageData = paginate(items, state.configPage, size);
+  state.configPage = pageData.page;
+  configPageInfo.textContent = `${pageData.page} / ${pageData.totalPages} · ${items.length}`;
+  configPrev.disabled = pageData.page <= 1;
+  configNext.disabled = pageData.page >= pageData.totalPages;
   const currentPath = getCurrentConfigPath();
   let html = '<table class="backup-table config-table" aria-label="Configs">';
   html += '<thead><tr>';
@@ -2551,9 +2607,10 @@ function renderConfigTable() {
   html += `<th class="name-col">${t('table.name')}</th>`;
   // html += `<th class="path-col">${t('table.path')}</th>`;
   html += `<th class="modified-col">${t('table.modified')}</th>`;
+  html += `<th class="action-col">${t('table.action') || 'Action'}</th>`;
   // html += `<th class="current-col">${t('table.current')}</th>`;
   html += '</tr></thead><tbody>';
-  items.forEach((item) => {
+  pageData.items.forEach((item) => {
     const isCurrent = currentPath && item.path === currentPath;
     const rowClass = isCurrent ? 'selectable selected' : 'selectable';
     html += `<tr class="${rowClass}" data-path="${item.path || ''}">`;
@@ -2561,11 +2618,28 @@ function renderConfigTable() {
     html += `<td class="name-col">${item.name || '-'} ${isCurrent ? `<span class="tag current">${t('labels.current')}</span>` : ''}</td>`;
     // html += `<td class="path-col">${item.path || '-'}</td>`;
     html += `<td class="modified-col">${item.modified || '-'}</td>`;
+    html += '<td class="action-col">';
+    if (!isCurrent) {
+      html += `<button class="icon-btn ghost small table-icon-btn list-action-icon-btn config-delete-btn" type="button" data-action="delete-config" data-path="${item.path || ''}" data-name="${item.name || ''}" data-tip-key="actions.delete" data-tip="${ti('actions.delete', 'Delete')}" data-position="top" data-native-title="false" aria-label="${ti('actions.delete', 'Delete')}"><svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 6h2v9h-2V9Zm4 0h2v9h-2V9ZM7 9h2v9H7V9Z"></path></svg></button>`;
+    } else {
+      html += '-';
+    }
+    html += '</td>';
     // html += `<td class="current-col">${isCurrent ? t('labels.current') : '-'}</td>`;
     html += '</tr>';
   });
   if (items.length === 0) {
-    html += `<tr><td class="empty-cell" colspan="3">${t('labels.configsEmpty')}</td></tr>`;
+    html += `<tr><td class="empty-cell" colspan="4">${t('labels.configsEmpty')}</td></tr>`;
+  } else if (pageData.items.length < size) {
+    const fillCount = size - pageData.items.length;
+    for (let i = 0; i < fillCount; i += 1) {
+      html += '<tr class="placeholder" aria-hidden="true">';
+      html += '<td class="check-col">&nbsp;</td>';
+      html += '<td class="name-col">&nbsp;</td>';
+      html += '<td class="modified-col">&nbsp;</td>';
+      html += '<td class="action-col">&nbsp;</td>';
+      html += '</tr>';
+    }
   }
   html += '</tbody></table>';
   configTable.innerHTML = html;
@@ -2604,7 +2678,6 @@ function renderKernelTable() {
 
   const pageSizeRaw = state.kernelPageSizeLocal
     || (kernelPageSize && kernelPageSize.value)
-    || state.settings.backupsPageSize
     || state.settings.kernelPageSize
     || '10';
   const size = Number.parseInt(pageSizeRaw, 10) || 10;
@@ -2657,16 +2730,51 @@ function renderKernelTable() {
     if (isBackup) {
       tags.push(`<span class="tag backup">${t('labels.backup')}</span>`);
     }
+    let backupPath = item && item.path ? item.path : '';
+    if (!backupPath && Array.isArray(state.lastBackups) && state.lastBackups.length) {
+      const matchedBackup = state.lastBackups.find((backupItem) => {
+        if (!backupItem || !backupItem.path) {
+          return false;
+        }
+        if (backupItem.name === name) {
+          return true;
+        }
+        if (backupItem.version && backupItem.version === displayName) {
+          return true;
+        }
+        return false;
+      });
+      if (matchedBackup) {
+        backupPath = matchedBackup.path;
+      }
+    }
+    const backupName = displayName || name || '-';
+    const backupPathAttr = backupPath ? ` data-delete-path="${backupPath}"` : '';
+    const backupNameAttr = backupName ? ` data-delete-name="${backupName}"` : '';
+    const deleteDisabledAttr = backupPath ? '' : ' disabled';
     // add selectable class for hover styling
     html += '<div class="table-row kernel selectable">';
     html += `<div class="index-cell">${pageOffset + idx + 1}</div>`;
     html += `<div class="version-cell"><span class="kernel-name">${displayName || '-'}</span>${tags.length ? ` <span class="tag-group">${tags.join('')}</span>` : ''}</div>`;
     html += `<div class="time-cell">${timestamp}</div>`;
-    html += `<div class="action-cell"><button class="btn ghost row-action-btn kernel-switch-action" data-switch-index="${pageOffset + idx + 1}">${ti('confirm.switchConfirm', 'Switch')}</button></div></div>`;
+    html += '<div class="action-cell"><div class="kernel-action-group">';
+    html += `<button class="icon-btn ghost small table-icon-btn list-action-icon-btn kernel-switch-action" data-switch-index="${pageOffset + idx + 1}" data-tip-key="confirm.switchConfirm" data-tip="${ti('confirm.switchConfirm', 'Switch')}" data-position="top" data-native-title="false" aria-label="${ti('confirm.switchConfirm', 'Switch')}"><svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M4 7h8V4l6 5-6 5v-3H4V7Zm16 10h-8v3l-6-5 6-5v3h8v4Z"></path></svg></button>`;
+    html += `<button class="icon-btn ghost small table-icon-btn list-action-icon-btn kernel-delete-action"${backupPathAttr}${backupNameAttr}${deleteDisabledAttr} data-tip-key="actions.delete" data-tip="${ti('actions.delete', 'Delete')}" data-position="top" data-native-title="false" aria-label="${ti('actions.delete', 'Delete')}"><svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 6h2v9h-2V9Zm4 0h2v9h-2V9ZM7 9h2v9H7V9Z"></path></svg></button>`;
+    html += '</div></div></div>';
   });
 
   if (backupItems.length === 0) {
     html += `<div class="table-row kernel empty"><div class="empty-cell">${t('labels.noBackups')}</div></div>`;
+  } else if (pageData.items.length < size) {
+    const fillCount = size - pageData.items.length;
+    for (let i = 0; i < fillCount; i += 1) {
+      html += '<div class="table-row kernel placeholder" aria-hidden="true">';
+      html += '<div class="index-cell">&nbsp;</div>';
+      html += '<div class="version-cell">&nbsp;</div>';
+      html += '<div class="time-cell">&nbsp;</div>';
+      html += '<div class="action-cell">&nbsp;</div>';
+      html += '</div>';
+    }
   }
 
   kernelTable.innerHTML = html;
@@ -2695,6 +2803,33 @@ async function switchKernelByIndex(index) {
     loadBackups();
   } else {
     showToast(response.error || ti('labels.switchFailed', 'Switch failed'), 'error');
+  }
+}
+
+async function deleteKernelBackupByPath(targetPath, backupName = '') {
+  const pathValue = String(targetPath || '').trim();
+  if (!pathValue) {
+    showToast(ti('labels.deleteFailed', 'Delete failed'), 'error');
+    return;
+  }
+  const confirmed = await promptConfirm({
+    title: t('confirm.deleteTitle'),
+    body: backupName ? `${t('confirm.deleteBody')}\n${backupName}` : t('confirm.deleteBody'),
+    confirmLabel: t('confirm.deleteConfirm'),
+    confirmTone: 'danger',
+  });
+  if (!confirmed) {
+    return;
+  }
+  const response = await runCommandWithSudo('delete-backups', ['--path', pathValue]);
+  if (response.ok) {
+    showToast(t('labels.deleteSuccess'));
+    await Promise.all([
+      loadKernels(),
+      loadBackups(),
+    ]);
+  } else {
+    showToast(response.error || ti('labels.deleteFailed', 'Delete failed'), 'error');
   }
 }
 
@@ -2745,11 +2880,9 @@ function renderSwitchTable() {
   if (!backupTable || !switchPageInfo || !switchPrev || !switchNext) {
     return;
   }
-  const pageSizeRaw = state.kernelPageSizeLocal
+  const pageSizeRaw = state.switchPageSizeLocal
     || (switchPageSize && switchPageSize.value)
-    || (kernelPageSize && kernelPageSize.value)
-    || state.settings.backupsPageSize
-    || state.settings.kernelPageSize
+    || state.settings.switchPageSize
     || '10';
   const size = Number.parseInt(pageSizeRaw, 10) || 10;
   const pageData = renderBackups(backupTable, true, state.switchPage, size, false);
@@ -2763,10 +2896,9 @@ function renderBackupsTable() {
   if (!backupTableFull || !backupsPageInfo || !backupsPrev || !backupsNext) {
     return;
   }
-  const pageSizeRaw = state.kernelPageSizeLocal
-    || (kernelPageSize && kernelPageSize.value)
+  const pageSizeRaw = state.backupsPageSizeLocal
+    || (backupsPageSize && backupsPageSize.value)
     || state.settings.backupsPageSize
-    || state.settings.kernelPageSize
     || '10';
   const size = Number.parseInt(pageSizeRaw, 10) || 10;
   const pageData = renderBackups(backupTableFull, false, state.backupsPage, size, true);
@@ -2780,7 +2912,7 @@ function renderRecommendTable() {
   if (!recommendTableBody || !recommendPageSize || !recommendPageInfo || !recommendPrev || !recommendNext) {
     return;
   }
-  const size = Number.parseInt(state.generalPageSizeLocal || recommendPageSize.value || '10', 10) || 10;
+  const size = Number.parseInt(state.recommendPageSizeLocal || recommendPageSize.value || '10', 10) || 10;
   const pageData = paginate(RECOMMENDED_CONFIGS, state.recommendPage, size);
   state.recommendPage = pageData.page;
   recommendPageInfo.textContent = `${pageData.page} / ${pageData.totalPages} · ${RECOMMENDED_CONFIGS.length}`;
@@ -2803,6 +2935,17 @@ function renderRecommendTable() {
   });
   if (pageData.items.length === 0) {
     html = `<tr><td class="empty-cell" colspan="5">${t('labels.configsEmpty')}</td></tr>`;
+  } else if (pageData.items.length < size) {
+    const fillCount = size - pageData.items.length;
+    for (let i = 0; i < fillCount; i += 1) {
+      html += '<tr class="placeholder" aria-hidden="true">';
+      html += '<td class="index-col">&nbsp;</td>';
+      html += '<td class="name-col">&nbsp;</td>';
+      html += '<td class="github-col">&nbsp;</td>';
+      html += '<td class="dir-col">&nbsp;</td>';
+      html += '<td class="rating-col">&nbsp;</td>';
+      html += '</tr>';
+    }
   }
   recommendTableBody.innerHTML = html;
 }
@@ -2969,13 +3112,14 @@ function refreshPageRefs() {
   backupTableFull = document.getElementById('backupTableFull');
   kernelCurrentTable = document.getElementById('kernelCurrentTable');
   configsRefresh = document.getElementById('configsRefresh');
+  configsImport = document.getElementById('configsImport');
   configTable = document.getElementById('configTable');
+  configPrev = document.getElementById('configPrev');
+  configNext = document.getElementById('configNext');
+  configPageInfo = document.getElementById('configPageInfo');
+  configPageSize = document.getElementById('configPageSize');
   kernelTable = document.getElementById('kernelTable');
   kernelRefresh = document.getElementById('kernelRefresh');
-  kernelModeSwitchBtn = document.getElementById('kernelModeSwitchBtn');
-  kernelModeManageBtn = document.getElementById('kernelModeManageBtn');
-  kernelSwitchSection = document.getElementById('kernelSwitchSection');
-  kernelManageSection = document.getElementById('kernelManageSection');
   kernelPrev = document.getElementById('kernelPrev');
   kernelNext = document.getElementById('kernelNext');
   kernelPageInfo = document.getElementById('kernelPageInfo');
@@ -3108,23 +3252,6 @@ function bindTopbarActions() {
   }
 }
 
-function setKernelListMode(mode) {
-  const nextMode = mode === 'manage' ? 'manage' : 'switch';
-  state.kernelListMode = nextMode;
-  if (kernelSwitchSection) {
-    kernelSwitchSection.classList.toggle('is-hidden', nextMode !== 'switch');
-  }
-  if (kernelManageSection) {
-    kernelManageSection.classList.toggle('is-hidden', nextMode !== 'manage');
-  }
-  if (kernelModeSwitchBtn) {
-    kernelModeSwitchBtn.classList.toggle('is-active', nextMode === 'switch');
-  }
-  if (kernelModeManageBtn) {
-    kernelModeManageBtn.classList.toggle('is-active', nextMode === 'manage');
-  }
-}
-
 function refreshPageView() {
   renderConfigTable();
   renderKernelTable();
@@ -3150,9 +3277,6 @@ function refreshPageView() {
   }
   if (currentPage === 'settings') {
     invokeHelperPanelRefresh();
-  }
-  if (currentPage === 'kernel') {
-    setKernelListMode(state.kernelListMode || 'switch');
   }
 }
 
@@ -3391,7 +3515,7 @@ externalLinks.forEach((link) => {
   });
 });
 bindOverviewDrag();
-document.querySelectorAll('[data-i18n-tip]').forEach((el) => {
+document.querySelectorAll('[data-tip-key]').forEach((el) => {
   if (el.dataset.tipBound === 'true') {
     return;
   }
@@ -3399,21 +3523,23 @@ document.querySelectorAll('[data-i18n-tip]').forEach((el) => {
   el.addEventListener('mouseenter', () => updateTipPosition(el));
   el.addEventListener('focus', () => updateTipPosition(el));
 });
+if (document.body && document.body.dataset.tipDelegationBound !== 'true') {
+  document.body.dataset.tipDelegationBound = 'true';
+  const delegatedTipHandler = (event) => {
+    const target = event.target && event.target.closest
+      ? event.target.closest('[data-tip-key]')
+      : null;
+    if (!target) {
+      return;
+    }
+    updateTipPosition(target);
+  };
+  document.addEventListener('mouseover', delegatedTipHandler, true);
+  document.addEventListener('focusin', delegatedTipHandler, true);
+}
   langButtons.forEach((btn) => {
     btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
   });
-
-  if (kernelModeSwitchBtn && kernelModeSwitchBtn.dataset.bound !== 'true') {
-    kernelModeSwitchBtn.dataset.bound = 'true';
-    kernelModeSwitchBtn.addEventListener('click', () => setKernelListMode('switch'));
-  }
-  if (kernelModeManageBtn && kernelModeManageBtn.dataset.bound !== 'true') {
-    kernelModeManageBtn.dataset.bound = 'true';
-    kernelModeManageBtn.addEventListener('click', () => setKernelListMode('manage'));
-  }
-  if (kernelSwitchSection || kernelManageSection) {
-    setKernelListMode(state.kernelListMode || 'switch');
-  }
 
   if (settingsLang) {
   settingsLang.addEventListener('change', (event) => {
@@ -3886,6 +4012,52 @@ async function handleConfigBrowse() {
   }
 }
 
+async function handleConfigImport() {
+  if (!window.clashfox || typeof window.clashfox.importConfig !== 'function') {
+    return;
+  }
+  const result = await window.clashfox.importConfig();
+  if (!result || !result.ok) {
+    if (result && result.error && result.error !== 'cancelled') {
+      showToast(`${t('labels.configImportFailed')}: ${result.error}`, 'error');
+    }
+    return;
+  }
+  const fileName = result.data && result.data.fileName ? result.data.fileName : '';
+  if (fileName) {
+    showToast(`${t('labels.configImported')}: ${fileName}`, 'info');
+  } else {
+    showToast(t('labels.configImported'), 'info');
+  }
+  await loadConfigs(true);
+}
+
+async function handleConfigDelete(targetPath, configName = '') {
+  if (!targetPath || !window.clashfox || typeof window.clashfox.deleteConfig !== 'function') {
+    return;
+  }
+  const confirmed = await promptConfirm({
+    title: ti('confirm.deleteConfigTitle', 'Delete Config?'),
+    body: `${ti('confirm.deleteConfigBody', 'This will permanently delete the selected config file.')} ${configName || ''}`.trim(),
+    confirmLabel: ti('confirm.deleteConfirm', 'Delete'),
+    confirmTone: 'danger',
+  });
+  if (!confirmed) {
+    return;
+  }
+  const response = await window.clashfox.deleteConfig(targetPath);
+  if (response && response.ok) {
+    showToast(ti('labels.configDeleteSuccess', 'Config deleted.'));
+    await loadConfigs();
+    return;
+  }
+  if (response && response.error === 'current_config') {
+    showToast(ti('labels.configDeleteCurrent', 'Cannot delete current config.'), 'error');
+    return;
+  }
+  showToast(`${ti('labels.configDeleteFailed', 'Delete config failed')}: ${response && response.error ? response.error : ''}`.trim(), 'error');
+}
+
 async function handleDirectoryBrowse(title) {
   if (!window.clashfox || typeof window.clashfox.selectDirectory !== 'function') {
     return { ok: false };
@@ -3962,22 +4134,24 @@ if (overviewConfigReset) {
 
 if (kernelRefresh) {
   kernelRefresh.addEventListener('click', () => {
-    if (currentPage === 'kernel' && state.kernelListMode === 'manage') {
-      loadBackups(true);
-      return;
-    }
     loadKernels();
   });
 }
 
 if (kernelTable) {
   kernelTable.addEventListener('click', async (event) => {
-    const target = event.target.closest('.kernel-switch-action');
-    if (!target) {
+    const switchTarget = event.target.closest('.kernel-switch-action');
+    if (switchTarget) {
+      const index = switchTarget.dataset.switchIndex || '';
+      await switchKernelByIndex(index);
       return;
     }
-    const index = target.dataset.switchIndex || '';
-    await switchKernelByIndex(index);
+    const deleteTarget = event.target.closest('.kernel-delete-action');
+    if (deleteTarget) {
+      const path = deleteTarget.getAttribute('data-delete-path') || '';
+      const name = deleteTarget.getAttribute('data-delete-name') || '';
+      await deleteKernelBackupByPath(path, name);
+    }
   });
 }
 
@@ -3995,36 +4169,18 @@ if (kernelNext) {
 }
 if (kernelPageSize) {
   kernelPageSize.addEventListener('change', () => {
-    if (switchPageSize) {
-      switchPageSize.value = kernelPageSize.value;
-    }
-    if (backupsPageSize) {
-      backupsPageSize.value = kernelPageSize.value;
-    }
     state.kernelPageSizeLocal = kernelPageSize.value;
     state.kernelsPage = 1;
-    state.switchPage = 1;
-    state.backupsPage = 1;
     renderKernelTable();
-    renderSwitchTable();
-    renderBackupsTable();
+    saveSettings({ kernelPageSize: kernelPageSize.value });
   });
 }
 if (switchPageSize) {
   switchPageSize.addEventListener('change', () => {
-    if (kernelPageSize) {
-      kernelPageSize.value = switchPageSize.value;
-    }
-    if (backupsPageSize) {
-      backupsPageSize.value = switchPageSize.value;
-    }
-    state.kernelPageSizeLocal = switchPageSize.value;
-    state.kernelsPage = 1;
+    state.switchPageSizeLocal = switchPageSize.value;
     state.switchPage = 1;
-    state.backupsPage = 1;
-    renderKernelTable();
     renderSwitchTable();
-    renderBackupsTable();
+    saveSettings({ switchPageSize: switchPageSize.value });
   });
 }
 
@@ -4347,6 +4503,15 @@ if (tunStackSelect) {
 
 if (configTable) {
   configTable.addEventListener('click', async (event) => {
+    const deleteBtn = event.target.closest('button[data-action="delete-config"]');
+    if (deleteBtn) {
+      event.preventDefault();
+      event.stopPropagation();
+      const targetPath = deleteBtn.getAttribute('data-path') || '';
+      const configName = deleteBtn.getAttribute('data-name') || '';
+      await handleConfigDelete(targetPath, configName);
+      return;
+    }
     const row = event.target.closest('tr[data-path]');
     if (!row) {
       return;
@@ -4381,6 +4546,29 @@ if (backupsRefresh) {
 }
 if (configsRefresh) {
   configsRefresh.addEventListener('click', () => loadConfigs(true));
+}
+if (configsImport) {
+  configsImport.addEventListener('click', handleConfigImport);
+}
+if (configPrev) {
+  configPrev.addEventListener('click', () => {
+    state.configPage = Math.max(1, state.configPage - 1);
+    renderConfigTable();
+  });
+}
+if (configNext) {
+  configNext.addEventListener('click', () => {
+    state.configPage += 1;
+    renderConfigTable();
+  });
+}
+if (configPageSize) {
+  configPageSize.addEventListener('change', () => {
+    state.configPage = 1;
+    state.configPageSizeLocal = configPageSize.value;
+    saveSettings({ configPageSize: configPageSize.value });
+    renderConfigTable();
+  });
 }
 if (backupTable) {
   backupTable.addEventListener('click', (event) => {
@@ -4465,28 +4653,12 @@ if (settingsLogIntervalPreset) {
 
 if (settingsBackupsPageSize) {
   settingsBackupsPageSize.addEventListener('change', () => {
-    if (kernelPageSize) {
-      kernelPageSize.value = settingsBackupsPageSize.value;
-    }
-    if (switchPageSize) {
-      switchPageSize.value = settingsBackupsPageSize.value;
-    }
     if (backupsPageSize) {
       backupsPageSize.value = settingsBackupsPageSize.value;
     }
-    state.kernelPageSizeLocal = settingsBackupsPageSize.value;
-    state.switchPage = 1;
-    state.kernelsPage = 1;
+    state.backupsPageSizeLocal = settingsBackupsPageSize.value;
     state.backupsPage = 1;
-    renderKernelTable();
-    renderSwitchTable();
     renderBackupsTable();
-    if (recommendPageSize) {
-      recommendPageSize.value = settingsBackupsPageSize.value;
-    }
-    state.generalPageSizeLocal = settingsBackupsPageSize.value;
-    state.recommendPage = 1;
-    renderRecommendTable();
     saveSettings({ backupsPageSize: settingsBackupsPageSize.value });
   });
 }
@@ -4504,19 +4676,10 @@ if (backupsNext) {
 }
 if (backupsPageSize) {
   backupsPageSize.addEventListener('change', () => {
-    if (kernelPageSize) {
-      kernelPageSize.value = backupsPageSize.value;
-    }
-    if (switchPageSize) {
-      switchPageSize.value = backupsPageSize.value;
-    }
-    state.kernelPageSizeLocal = backupsPageSize.value;
-    state.kernelsPage = 1;
-    state.switchPage = 1;
+    state.backupsPageSizeLocal = backupsPageSize.value;
     state.backupsPage = 1;
-    renderKernelTable();
-    renderSwitchTable();
     renderBackupsTable();
+    saveSettings({ backupsPageSize: backupsPageSize.value });
   });
 }
 
@@ -4535,8 +4698,9 @@ if (recommendNext) {
 if (recommendPageSize) {
   recommendPageSize.addEventListener('change', () => {
     state.recommendPage = 1;
+    state.recommendPageSizeLocal = recommendPageSize.value;
+    saveSettings({ recommendPageSize: recommendPageSize.value });
     renderRecommendTable();
-    state.generalPageSizeLocal = recommendPageSize.value;
   });
 }
 

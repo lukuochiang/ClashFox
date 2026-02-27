@@ -391,6 +391,29 @@ function resolveCheckUpdateUrlFromSettings() {
   return settings && settings.acceptBeta ? CHECK_UPDATE_BETA_URL : CHECK_UPDATE_STABLE_URL;
 }
 
+function resolveConfigDirectoryFromSettings() {
+  const settings = readAppSettings();
+  const configured = settings && typeof settings.configDir === 'string'
+    ? settings.configDir.trim()
+    : '';
+  if (configured) {
+    return path.resolve(configured);
+  }
+  return path.join(APP_DATA_DIR, 'config');
+}
+
+function buildUniqueFilePath(targetDir, fileName) {
+  const ext = path.extname(fileName || '');
+  const base = path.basename(fileName || '', ext) || 'imported-config';
+  let candidate = path.join(targetDir, `${base}${ext}`);
+  let idx = 1;
+  while (fs.existsSync(candidate)) {
+    candidate = path.join(targetDir, `${base}-${idx}${ext}`);
+    idx += 1;
+  }
+  return candidate;
+}
+
 function normalizeVersionTag(version) {
   return String(version || '').trim().replace(/^v/i, '');
 }
@@ -3294,6 +3317,73 @@ app.whenReady().then(() => {
     }
 
     return { ok: true, path: result.filePaths[0] };
+  });
+
+  ipcMain.handle('clashfox:deleteConfig', async (_event, targetPath) => {
+    try {
+      if (!targetPath || typeof targetPath !== 'string') {
+        return { ok: false, error: 'invalid_path' };
+      }
+      const resolvedTarget = path.resolve(String(targetPath));
+      const configDir = resolveConfigDirectoryFromSettings();
+      const normalizedDir = path.resolve(configDir);
+      const dirPrefix = `${normalizedDir}${path.sep}`;
+      if (!(resolvedTarget === normalizedDir || resolvedTarget.startsWith(dirPrefix))) {
+        return { ok: false, error: 'outside_config_dir' };
+      }
+      const settings = readAppSettings();
+      const currentConfig = settings && typeof settings.configFile === 'string'
+        ? path.resolve(settings.configFile)
+        : '';
+      if (currentConfig && resolvedTarget === currentConfig) {
+        return { ok: false, error: 'current_config' };
+      }
+      if (!fs.existsSync(resolvedTarget)) {
+        return { ok: false, error: 'not_found' };
+      }
+      const stat = fs.statSync(resolvedTarget);
+      if (!stat.isFile()) {
+        return { ok: false, error: 'not_file' };
+      }
+      fs.unlinkSync(resolvedTarget);
+      return { ok: true, path: resolvedTarget };
+    } catch (err) {
+      return { ok: false, error: err && err.message ? err.message : 'delete_failed' };
+    }
+  });
+
+  ipcMain.handle('clashfox:importConfig', async () => {
+    const selection = await dialog.showOpenDialog({
+      title: 'Import Config File',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Config', extensions: ['yaml', 'yml', 'json'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    if (selection.canceled || selection.filePaths.length === 0) {
+      return { ok: false, error: 'cancelled' };
+    }
+    const sourcePath = selection.filePaths[0];
+    try {
+      ensureAppDirs();
+      const targetDir = resolveConfigDirectoryFromSettings();
+      fs.mkdirSync(targetDir, { recursive: true });
+      const sourceName = path.basename(sourcePath);
+      const targetPath = buildUniqueFilePath(targetDir, sourceName);
+      fs.copyFileSync(sourcePath, targetPath);
+      return {
+        ok: true,
+        data: {
+          sourcePath,
+          targetPath,
+          fileName: path.basename(targetPath),
+          configDir: targetDir,
+        },
+      };
+    } catch (err) {
+      return { ok: false, error: err && err.message ? err.message : 'import_failed' };
+    }
   });
 
   ipcMain.handle('clashfox:selectDirectory', async (_event, title) => {

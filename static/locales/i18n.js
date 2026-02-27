@@ -85,7 +85,9 @@ const I18N = {
       "title": "Config Control",
       "config": "Config Path",
       "browse": "Browse",
+      "import": "Import Config",
       "refresh": "Refresh",
+      "delete": "Delete",
       "recommendationsTitle": "Recommended Configs"
     },
     "switch": {
@@ -102,6 +104,7 @@ const I18N = {
       "title": "ClashFlox Logs",
       "lines": "Lines",
       "refresh": "Refresh",
+      "delete": "Delete",
       "auto": "Auto refresh",
       "interval": "Interval"
     },
@@ -137,7 +140,8 @@ const I18N = {
       "start": "Start",
       "stop": "Stop",
       "restart": "Restart",
-      "refresh": "Refresh"
+      "refresh": "Refresh",
+      "delete": "Delete"
     },
     "table": {
       "index": "#",
@@ -204,6 +208,11 @@ const I18N = {
       "cleanDone": "Cleanup completed.",
       "deleteSuccess": "Deleted selected backups.",
       "deleteEmpty": "Select backups to delete.",
+      "configDeleteSuccess": "Config deleted.",
+      "configDeleteFailed": "Delete config failed.",
+      "configDeleteCurrent": "Cannot delete current config.",
+      "configImported": "Config imported.",
+      "configImportFailed": "Import config failed.",
       "notice": "Notice"
     },
     "sudo": {
@@ -222,6 +231,8 @@ const I18N = {
       "deleteTitle": "Delete Backups?",
       "deleteBody": "This will delete the selected backups and cannot be undone.",
       "deleteConfirm": "Delete",
+      "deleteConfigTitle": "Delete Config?",
+      "deleteConfigBody": "This will permanently delete the selected config file.",
       "switchTitle": "Switch Kernel?",
       "switchBody": "Switch to the selected backup version now?",
       "switchConfirm": "Switch",
@@ -431,7 +442,9 @@ const I18N = {
       "title": "配置控制",
       "config": "配置路径",
       "browse": "浏览",
+      "import": "导入配置",
       "refresh": "刷新",
+      "delete": "删除",
       "recommendationsTitle": "推荐配置"
     },
     "switch": {
@@ -448,6 +461,7 @@ const I18N = {
       "title": "内核日志",
       "lines": "行数",
       "refresh": "刷新",
+      "delete": "删除",
       "auto": "自动刷新",
       "interval": "间隔"
     },
@@ -483,7 +497,8 @@ const I18N = {
       "start": "启动",
       "stop": "停止",
       "restart": "重启",
-      "refresh": "刷新"
+      "refresh": "刷新",
+      "delete": "删除"
     },
     "table": {
       "index": "序号",
@@ -550,6 +565,11 @@ const I18N = {
       "cleanDone": "清理完成。",
       "deleteSuccess": "已删除所选备份。",
       "deleteEmpty": "请选择要删除的备份。",
+      "configDeleteSuccess": "配置已删除。",
+      "configDeleteFailed": "删除配置失败。",
+      "configDeleteCurrent": "不能删除当前配置。",
+      "configImported": "配置已导入。",
+      "configImportFailed": "导入配置失败。",
       "notice": "提示"
     },
     "sudo": {
@@ -568,6 +588,8 @@ const I18N = {
       "deleteTitle": "删除备份？",
       "deleteBody": "将删除所选备份，且无法恢复。",
       "deleteConfirm": "删除",
+      "deleteConfigTitle": "删除配置？",
+      "deleteConfigBody": "此操作会永久删除所选配置文件。",
       "switchTitle": "切换内核？",
       "switchBody": "确定切换到所选备份版本吗？",
       "switchConfirm": "切换",
@@ -777,7 +799,9 @@ const I18N = {
       "title": "設定コントロール",
       "config": "設定パス",
       "browse": "参照",
+      "import": "設定をインポート",
       "refresh": "更新",
+      "delete": "削除",
       "recommendationsTitle": "おすすめ設定"
     },
     "switch": {
@@ -794,6 +818,7 @@ const I18N = {
       "title": "カーネルログ",
       "lines": "行数",
       "refresh": "更新",
+      "delete": "削除",
       "auto": "自動更新",
       "interval": "間隔"
     },
@@ -829,7 +854,8 @@ const I18N = {
       "start": "開始",
       "stop": "停止",
       "restart": "再起動",
-      "refresh": "更新"
+      "refresh": "更新",
+      "delete": "削除"
     },
     "table": {
       "index": "番号",
@@ -896,6 +922,11 @@ const I18N = {
       "cleanDone": "削除が完了しました。",
       "deleteSuccess": "選択したバックアップを削除しました。",
       "deleteEmpty": "削除するバックアップを選択してください。",
+      "configDeleteSuccess": "設定を削除しました。",
+      "configDeleteFailed": "設定の削除に失敗しました。",
+      "configDeleteCurrent": "現在の設定は削除できません。",
+      "configImported": "設定をインポートしました。",
+      "configImportFailed": "設定のインポートに失敗しました。",
       "notice": "通知"
     },
     "sudo": {
@@ -914,6 +945,8 @@ const I18N = {
       "deleteTitle": "バックアップを削除しますか？",
       "deleteBody": "選択したバックアップは削除され、元に戻せません。",
       "deleteConfirm": "削除",
+      "deleteConfigTitle": "設定を削除しますか？",
+      "deleteConfigBody": "選択した設定ファイルを完全に削除します。",
       "switchTitle": "カーネルを切替えますか？",
       "switchBody": "選択したバックアップ版に切替えますか？",
       "switchConfirm": "切替",
@@ -1117,7 +1150,9 @@ const I18N = {
       "title": "설정 제어",
       "config": "설정 경로",
       "browse": "찾아보기",
+      "import": "설정 가져오기",
       "refresh": "새로고침",
+      "delete": "삭제",
       "recommendationsTitle": "추천 구성"
     },
     "switch": {
@@ -1134,6 +1169,7 @@ const I18N = {
       "title": "커널 로그",
       "lines": "줄 수",
       "refresh": "새로고침",
+      "delete": "삭제",
       "auto": "자동 새로고침",
       "interval": "간격"
     },
@@ -1169,7 +1205,8 @@ const I18N = {
       "start": "시작",
       "stop": "중지",
       "restart": "재시작",
-      "refresh": "새로고침"
+      "refresh": "새로고침",
+      "delete": "삭제"
     },
     "table": {
       "index": "#",
@@ -1236,6 +1273,11 @@ const I18N = {
       "cleanDone": "정리가 완료되었습니다.",
       "deleteSuccess": "선택한 백업을 삭제했습니다.",
       "deleteEmpty": "삭제할 백업을 선택하세요.",
+      "configDeleteSuccess": "설정을 삭제했습니다.",
+      "configDeleteFailed": "설정 삭제에 실패했습니다.",
+      "configDeleteCurrent": "현재 설정은 삭제할 수 없습니다.",
+      "configImported": "설정을 가져왔습니다.",
+      "configImportFailed": "설정 가져오기에 실패했습니다.",
       "notice": "알림"
     },
     "sudo": {
@@ -1254,6 +1296,8 @@ const I18N = {
       "deleteTitle": "백업을 삭제할까요?",
       "deleteBody": "선택한 백업이 삭제되며 되돌릴 수 없습니다.",
       "deleteConfirm": "삭제",
+      "deleteConfigTitle": "설정을 삭제할까요?",
+      "deleteConfigBody": "선택한 설정 파일이 영구적으로 삭제됩니다.",
       "switchTitle": "커널을 전환할까요?",
       "switchBody": "선택한 백업 버전으로 전환하시겠습니까?",
       "switchConfirm": "전환",
@@ -1457,7 +1501,9 @@ const I18N = {
       "title": "Contrôle de configuration",
       "config": "Chemin de configuration",
       "browse": "Parcourir",
+      "import": "Importer la configuration",
       "refresh": "Actualiser",
+      "delete": "Supprimer",
       "recommendationsTitle": "Configurations recommandées"
     },
     "switch": {
@@ -1474,6 +1520,7 @@ const I18N = {
       "title": "Journaux du noyau",
       "lines": "Lignes",
       "refresh": "Actualiser",
+      "delete": "Supprimer",
       "auto": "Actualisation automatique",
       "interval": "Intervalle"
     },
@@ -1509,7 +1556,8 @@ const I18N = {
       "start": "Démarrer",
       "stop": "Arrêter",
       "restart": "Redémarrer",
-      "refresh": "Actualiser"
+      "refresh": "Actualiser",
+      "delete": "Supprimer"
     },
     "table": {
       "index": "#",
@@ -1576,6 +1624,11 @@ const I18N = {
       "cleanDone": "Nettoyage terminé.",
       "deleteSuccess": "Sauvegardes sélectionnées supprimées.",
       "deleteEmpty": "Sélectionnez des sauvegardes à supprimer.",
+      "configDeleteSuccess": "Configuration supprimée.",
+      "configDeleteFailed": "Échec de la suppression de la configuration.",
+      "configDeleteCurrent": "Impossible de supprimer la configuration actuelle.",
+      "configImported": "Configuration importée.",
+      "configImportFailed": "Échec de l'import de la configuration.",
       "notice": "Notification"
     },
     "sudo": {
@@ -1594,6 +1647,8 @@ const I18N = {
       "deleteTitle": "Supprimer les sauvegardes ?",
       "deleteBody": "Les sauvegardes sélectionnées seront supprimées définitivement.",
       "deleteConfirm": "Supprimer",
+      "deleteConfigTitle": "Supprimer la configuration ?",
+      "deleteConfigBody": "Cela supprimera définitivement le fichier de configuration sélectionné.",
       "switchTitle": "Changer le noyau ?",
       "switchBody": "Basculer vers la version sélectionnée ?",
       "switchConfirm": "Basculer",
@@ -1797,7 +1852,9 @@ const I18N = {
       "title": "Konfigurationssteuerung",
       "config": "Konfigurationspfad",
       "browse": "Durchsuchen",
+      "import": "Konfiguration importieren",
       "refresh": "Aktualisieren",
+      "delete": "Löschen",
       "recommendationsTitle": "Empfohlene Konfigurationen"
     },
     "switch": {
@@ -1814,6 +1871,7 @@ const I18N = {
       "title": "Kernel-Logs",
       "lines": "Zeilen",
       "refresh": "Aktualisieren",
+      "delete": "Löschen",
       "auto": "Automatisch aktualisieren",
       "interval": "Intervall"
     },
@@ -1849,7 +1907,8 @@ const I18N = {
       "start": "Starten",
       "stop": "Stoppen",
       "restart": "Neu starten",
-      "refresh": "Aktualisieren"
+      "refresh": "Aktualisieren",
+      "delete": "Löschen"
     },
     "table": {
       "index": "#",
@@ -1916,6 +1975,11 @@ const I18N = {
       "cleanDone": "Bereinigung abgeschlossen.",
       "deleteSuccess": "Ausgewählte Backups gelöscht.",
       "deleteEmpty": "Backups zum Löschen auswählen.",
+      "configDeleteSuccess": "Konfiguration gelöscht.",
+      "configDeleteFailed": "Löschen der Konfiguration fehlgeschlagen.",
+      "configDeleteCurrent": "Aktuelle Konfiguration kann nicht gelöscht werden.",
+      "configImported": "Konfiguration importiert.",
+      "configImportFailed": "Import der Konfiguration fehlgeschlagen.",
       "notice": "Hinweis"
     },
     "sudo": {
@@ -1934,6 +1998,8 @@ const I18N = {
       "deleteTitle": "Backups löschen?",
       "deleteBody": "Die ausgewählten Backups werden endgültig gelöscht.",
       "deleteConfirm": "Löschen",
+      "deleteConfigTitle": "Konfiguration löschen?",
+      "deleteConfigBody": "Diese Aktion löscht die ausgewählte Konfigurationsdatei dauerhaft.",
       "switchTitle": "Kernel wechseln?",
       "switchBody": "Zur ausgewählten Backup-Version wechseln?",
       "switchConfirm": "Wechseln",
@@ -2137,7 +2203,9 @@ const I18N = {
       "title": "Управление конфигурацией",
       "config": "Путь к конфигурации",
       "browse": "Обзор",
+      "import": "Импорт конфигурации",
       "refresh": "Обновить",
+      "delete": "Удалить",
       "recommendationsTitle": "Рекомендуемые конфигурации"
     },
     "switch": {
@@ -2154,6 +2222,7 @@ const I18N = {
       "title": "Журналы ядра",
       "lines": "Строки",
       "refresh": "Обновить",
+      "delete": "Удалить",
       "auto": "Автообновление",
       "interval": "Интервал"
     },
@@ -2189,7 +2258,8 @@ const I18N = {
       "start": "Запустить",
       "stop": "Остановить",
       "restart": "Перезапустить",
-      "refresh": "Обновить"
+      "refresh": "Обновить",
+      "delete": "Удалить"
     },
     "table": {
       "index": "#",
@@ -2256,6 +2326,11 @@ const I18N = {
       "cleanDone": "Очистка завершена.",
       "deleteSuccess": "Выбранные резервные копии удалены.",
       "deleteEmpty": "Выберите резервные копии для удаления.",
+      "configDeleteSuccess": "Конфигурация удалена.",
+      "configDeleteFailed": "Не удалось удалить конфигурацию.",
+      "configDeleteCurrent": "Нельзя удалить текущую конфигурацию.",
+      "configImported": "Конфигурация импортирована.",
+      "configImportFailed": "Не удалось импортировать конфигурацию.",
       "notice": "Уведомление"
     },
     "sudo": {
@@ -2274,6 +2349,8 @@ const I18N = {
       "deleteTitle": "Удалить резервные копии?",
       "deleteBody": "Выбранные резервные копии будут удалены без возможности восстановления.",
       "deleteConfirm": "Удалить",
+      "deleteConfigTitle": "Удалить конфигурацию?",
+      "deleteConfigBody": "Это действие навсегда удалит выбранный файл конфигурации.",
       "switchTitle": "Переключить ядро?",
       "switchBody": "Переключить на выбранную резервную версию?",
       "switchConfirm": "Переключить",
