@@ -28,6 +28,7 @@ let noticePop = document.getElementById('noticePop');
 let noticePopBody = document.getElementById('noticePopBody');
 let contentRoot = document.getElementById('contentRoot');
 let currentPage = document.body ? document.body.dataset.page : '';
+const VALID_PAGES = new Set(['overview', 'kernel', 'config', 'logs', 'settings', 'help', 'dashboard']);
 let noticePopTimer = null;
 
 let statusRunning = document.getElementById('statusRunning');
@@ -3262,10 +3263,10 @@ function refreshPageView() {
     loadLogs();
   }
   loadStatus();
-  if (currentPage === 'install' || currentPage === 'kernel') {
+  if (currentPage === 'kernel') {
     loadKernels();
   }
-  if (currentPage === 'switch' || currentPage === 'backups' || currentPage === 'kernel') {
+  if (currentPage === 'kernel') {
     loadBackups();
   }
   if (currentPage === 'overview') {
@@ -3291,21 +3292,18 @@ async function invokeHelperPanelRefresh(force = false) {
   }
 }
 
-function normalizePageName(page) {
-  if (page === 'status') return 'overview';
-  if (page === 'control') return 'config';
-  if (page === 'install' || page === 'switch' || page === 'backups') return 'kernel';
-  return page;
-}
-
 function getPageFromLocation() {
   const path = window.location.pathname || '';
   const match = path.match(/([^/]+)\.html$/);
-  return normalizePageName(match ? match[1] : currentPage);
+  const page = match ? match[1] : currentPage;
+  return VALID_PAGES.has(page) ? page : currentPage;
 }
 
 async function navigatePage(targetPage, pushState = true) {
-  const normalized = normalizePageName(targetPage);
+  const normalized = String(targetPage || '').trim();
+  if (!VALID_PAGES.has(normalized)) {
+    return;
+  }
   if (!normalized || normalized === currentPage) {
     return;
   }
@@ -5119,7 +5117,8 @@ async function initApp() {
 }
 
 window.addEventListener('popstate', () => {
-  const target = (history.state && history.state.page) || getPageFromLocation();
+  const historyPage = history.state && history.state.page ? String(history.state.page) : '';
+  const target = VALID_PAGES.has(historyPage) ? historyPage : getPageFromLocation();
   navigatePage(target, false);
 });
 

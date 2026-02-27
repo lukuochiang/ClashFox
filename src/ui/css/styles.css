@@ -505,10 +505,7 @@ body[data-theme="day"] .brand-mark .logo-night {
 
 .nav-btn[data-page="overview"]::before { mask-image: var(--icon-overview); }
 .nav-btn[data-page="kernel"]::before { mask-image: var(--icon-kernel); }
-.nav-btn[data-page="install"]::before { mask-image: var(--icon-download); }
-.nav-btn[data-page="switch"]::before { mask-image: var(--icon-switch); }
 .nav-btn[data-page="config"]::before { mask-image: var(--icon-config); }
-.nav-btn[data-page="backups"]::before { mask-image: var(--icon-backup); }
 .nav-btn[data-page="logs"]::before { mask-image: var(--icon-doc); }
 .nav-btn[data-tray-action="open-dashboard"]::before { mask-image: var(--icon-dashboard); }
 .nav-btn[data-page="settings"]::before { mask-image: var(--icon-settings); }
