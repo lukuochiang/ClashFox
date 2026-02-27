@@ -24,9 +24,11 @@ window.addEventListener('load', () => {
 
 let navButtons = Array.from(document.querySelectorAll('.nav-btn'));
 let panels = Array.from(document.querySelectorAll('.panel'));
-let toast = document.getElementById('toast');
+let noticePop = document.getElementById('noticePop');
+let noticePopBody = document.getElementById('noticePopBody');
 let contentRoot = document.getElementById('contentRoot');
 let currentPage = document.body ? document.body.dataset.page : '';
+let noticePopTimer = null;
 
 let statusRunning = document.getElementById('statusRunning');
 let statusVersion = document.getElementById('statusVersion');
@@ -1067,7 +1069,7 @@ if (window.clashfox && typeof window.clashfox.onMainToast === 'function') {
     if (!payload || !payload.message) {
       return;
     }
-    showToast(payload.message, payload.type || 'info');
+    showNoticePop(payload.message, payload.type || 'info');
   });
 }
 
@@ -1351,13 +1353,23 @@ function formatCoreActionError(action, response) {
 }
 
 function showToast(message, type = 'info') {
-  if (!message || message === 'empty_object') {
+  showNoticePop(message, type);
+}
+
+function showNoticePop(message, type = 'info') {
+  if (!message || !noticePop || !noticePopBody) {
     return;
   }
-  toast.textContent = message;
-  toast.dataset.type = type;
-  toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 2200);
+  noticePopBody.textContent = message;
+  noticePop.dataset.type = type;
+  noticePop.classList.add('show');
+  if (noticePopTimer) {
+    clearTimeout(noticePopTimer);
+  }
+  noticePopTimer = setTimeout(() => {
+    noticePop.classList.remove('show');
+    noticePopTimer = null;
+  }, 3200);
 }
 
 function setInstallState(nextState, errorMessage = '') {
@@ -2868,7 +2880,8 @@ function refreshLayoutRefs() {
 
 function refreshPageRefs() {
   panels = Array.from(document.querySelectorAll('.panel'));
-  toast = document.getElementById('toast');
+  noticePop = document.getElementById('noticePop');
+  noticePopBody = document.getElementById('noticePopBody');
   contentRoot = document.getElementById('contentRoot');
 
   statusRunning = document.getElementById('statusRunning');

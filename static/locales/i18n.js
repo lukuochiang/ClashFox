@@ -203,7 +203,8 @@ const I18N = {
       "logMissing": "Log file not found.",
       "cleanDone": "Cleanup completed.",
       "deleteSuccess": "Deleted selected backups.",
-      "deleteEmpty": "Select backups to delete."
+      "deleteEmpty": "Select backups to delete.",
+      "notice": "Notice"
     },
     "sudo": {
       "title": "Authorization Required",
@@ -548,7 +549,8 @@ const I18N = {
       "logMissing": "日志文件不存在。",
       "cleanDone": "清理完成。",
       "deleteSuccess": "已删除所选备份。",
-      "deleteEmpty": "请选择要删除的备份。"
+      "deleteEmpty": "请选择要删除的备份。",
+      "notice": "提示"
     },
     "sudo": {
       "title": "授权请求",
@@ -893,7 +895,8 @@ const I18N = {
       "logMissing": "ログファイルが見つかりません。",
       "cleanDone": "削除が完了しました。",
       "deleteSuccess": "選択したバックアップを削除しました。",
-      "deleteEmpty": "削除するバックアップを選択してください。"
+      "deleteEmpty": "削除するバックアップを選択してください。",
+      "notice": "通知"
     },
     "sudo": {
       "title": "認証が必要",
@@ -1232,7 +1235,8 @@ const I18N = {
       "logMissing": "로그 파일이 없습니다.",
       "cleanDone": "정리가 완료되었습니다.",
       "deleteSuccess": "선택한 백업을 삭제했습니다.",
-      "deleteEmpty": "삭제할 백업을 선택하세요."
+      "deleteEmpty": "삭제할 백업을 선택하세요.",
+      "notice": "알림"
     },
     "sudo": {
       "title": "권한 필요",
@@ -1571,7 +1575,8 @@ const I18N = {
       "logMissing": "Fichier journal introuvable.",
       "cleanDone": "Nettoyage terminé.",
       "deleteSuccess": "Sauvegardes sélectionnées supprimées.",
-      "deleteEmpty": "Sélectionnez des sauvegardes à supprimer."
+      "deleteEmpty": "Sélectionnez des sauvegardes à supprimer.",
+      "notice": "Notification"
     },
     "sudo": {
       "title": "Autorisation requise",
@@ -1910,7 +1915,8 @@ const I18N = {
       "logMissing": "Logdatei nicht gefunden.",
       "cleanDone": "Bereinigung abgeschlossen.",
       "deleteSuccess": "Ausgewählte Backups gelöscht.",
-      "deleteEmpty": "Backups zum Löschen auswählen."
+      "deleteEmpty": "Backups zum Löschen auswählen.",
+      "notice": "Hinweis"
     },
     "sudo": {
       "title": "Autorisierung erforderlich",
@@ -2249,7 +2255,8 @@ const I18N = {
       "logMissing": "Файл журнала не найден.",
       "cleanDone": "Очистка завершена.",
       "deleteSuccess": "Выбранные резервные копии удалены.",
-      "deleteEmpty": "Выберите резервные копии для удаления."
+      "deleteEmpty": "Выберите резервные копии для удаления.",
+      "notice": "Уведомление"
     },
     "sudo": {
       "title": "Требуется авторизация",

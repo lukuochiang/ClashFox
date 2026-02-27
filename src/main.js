@@ -3,6 +3,7 @@ const os = require('os');
 const path = require('path');
 const net = require('net');
 const http = require('http');
+const https = require('https');
 const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme, shell, Tray, session, clipboard, screen } = require('electron');
 const { spawn, execFileSync, execFile } = require('child_process');
 
@@ -132,6 +133,7 @@ const OUTBOUND_MODE_BADGE = {
   direct: 'D',
 };
 const CONNECTIVITY_REFRESH_MS = 1500;
+const CHECK_UPDATE_API_URL = 'https://api.github.com/repos/lukuochiang/ClashFox/releases?per_page=30';
 const CHECK_UPDATE_STABLE_URL = 'https://github.com/lukuochiang/ClashFox/releases/latest';
 const CHECK_UPDATE_BETA_URL = 'https://github.com/lukuochiang/ClashFox/releases';
 const DEFAULT_MAIN_WINDOW_WIDTH = 997;
@@ -387,6 +389,173 @@ function readAppSettings() {
 function resolveCheckUpdateUrlFromSettings() {
   const settings = readAppSettings();
   return settings && settings.acceptBeta ? CHECK_UPDATE_BETA_URL : CHECK_UPDATE_STABLE_URL;
+}
+
+function normalizeVersionTag(version) {
+  return String(version || '').trim().replace(/^v/i, '');
+}
+
+function parseVersion(version) {
+  const normalized = normalizeVersionTag(version);
+  const match = normalized.match(/^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/);
+  if (!match) {
+    return null;
+  }
+  const [, major, minor, patch, prereleaseRaw] = match;
+  const prerelease = prereleaseRaw
+    ? prereleaseRaw.split('.').map((token) => {
+      if (/^\d+$/.test(token)) {
+        return Number.parseInt(token, 10);
+      }
+      return token.toLowerCase();
+    })
+    : [];
+  return {
+    major: Number.parseInt(major, 10),
+    minor: Number.parseInt(minor, 10),
+    patch: Number.parseInt(patch, 10),
+    prerelease,
+    raw: normalized,
+  };
+}
+
+function comparePrerelease(left = [], right = []) {
+  if (!left.length && !right.length) {
+    return 0;
+  }
+  if (!left.length) {
+    return 1;
+  }
+  if (!right.length) {
+    return -1;
+  }
+  const maxLen = Math.max(left.length, right.length);
+  for (let i = 0; i < maxLen; i += 1) {
+    const a = left[i];
+    const b = right[i];
+    if (a === undefined) return -1;
+    if (b === undefined) return 1;
+    if (a === b) continue;
+    const aNum = typeof a === 'number';
+    const bNum = typeof b === 'number';
+    if (aNum && bNum) {
+      return a > b ? 1 : -1;
+    }
+    if (aNum) return -1;
+    if (bNum) return 1;
+    return String(a).localeCompare(String(b));
+  }
+  return 0;
+}
+
+function compareVersions(left, right) {
+  const a = parseVersion(left);
+  const b = parseVersion(right);
+  if (!a || !b) {
+    return String(normalizeVersionTag(left)).localeCompare(String(normalizeVersionTag(right)));
+  }
+  if (a.major !== b.major) return a.major > b.major ? 1 : -1;
+  if (a.minor !== b.minor) return a.minor > b.minor ? 1 : -1;
+  if (a.patch !== b.patch) return a.patch > b.patch ? 1 : -1;
+  return comparePrerelease(a.prerelease, b.prerelease);
+}
+
+function fetchJson(url, timeoutMs = 6000) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, {
+      headers: {
+        'User-Agent': `ClashFox/${app.getVersion() || '0.0.0'}`,
+        Accept: 'application/vnd.github+json',
+      },
+    }, (res) => {
+      const statusCode = Number(res.statusCode || 0);
+      if (statusCode >= 300 && statusCode < 400 && res.headers.location) {
+        res.resume();
+        fetchJson(res.headers.location, timeoutMs).then(resolve).catch(reject);
+        return;
+      }
+      if (statusCode < 200 || statusCode >= 300) {
+        res.resume();
+        reject(new Error(`HTTP_${statusCode}`));
+        return;
+      }
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        body += chunk;
+      });
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(body));
+        } catch {
+          reject(new Error('INVALID_JSON'));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error('TIMEOUT'));
+    });
+  });
+}
+
+function pickLatestRelease(releases = [], acceptBeta = false) {
+  if (!Array.isArray(releases)) {
+    return null;
+  }
+  for (const release of releases) {
+    if (!release || release.draft) {
+      continue;
+    }
+    if (!acceptBeta && release.prerelease) {
+      continue;
+    }
+    return release;
+  }
+  return null;
+}
+
+async function checkForUpdates({ manual = false } = {}) {
+  const settings = readAppSettings();
+  const acceptBeta = Boolean(settings && settings.acceptBeta);
+  const currentVersion = normalizeVersionTag(app.getVersion());
+  try {
+    const releases = await fetchJson(CHECK_UPDATE_API_URL);
+    const latest = pickLatestRelease(releases, acceptBeta);
+    if (!latest || !latest.tag_name) {
+      return {
+        ok: false,
+        status: 'error',
+        manual,
+        acceptBeta,
+        currentVersion,
+        error: 'NO_RELEASE_FOUND',
+      };
+    }
+    const latestVersion = normalizeVersionTag(latest.tag_name);
+    const compare = compareVersions(latestVersion, currentVersion);
+    return {
+      ok: true,
+      status: compare > 0 ? 'update_available' : 'up_to_date',
+      manual,
+      acceptBeta,
+      currentVersion,
+      latestVersion,
+      releaseUrl: latest.html_url || resolveCheckUpdateUrlFromSettings(),
+      releaseName: latest.name || latest.tag_name,
+      publishedAt: latest.published_at || '',
+      prerelease: Boolean(latest.prerelease),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      status: 'error',
+      manual,
+      acceptBeta,
+      currentVersion,
+      error: err && err.message ? err.message : 'CHECK_UPDATE_FAILED',
+    };
+  }
 }
 
 function writeAppSettings(settings = {}) {
@@ -2291,7 +2460,17 @@ async function handleTrayMenuAction(action, payload = {}) {
     case 'check-update':
       hideTrayMenuWindow();
       try {
-        await shell.openExternal(resolveCheckUpdateUrlFromSettings());
+        const result = await checkForUpdates({ manual: true });
+        if (!result.ok) {
+          emitMainToast('Check for updates failed.', 'error');
+          return { ok: false, hide: true, result };
+        }
+        if (result.status === 'update_available') {
+          await shell.openExternal(result.releaseUrl || resolveCheckUpdateUrlFromSettings());
+          emitMainToast(`Update available: v${result.latestVersion}`, 'info');
+          return { ok: true, hide: true, result };
+        }
+        emitMainToast('Already up to date.', 'info');
         return { ok: true, hide: true };
       } catch {
         return { ok: false, hide: true };
@@ -3310,6 +3489,21 @@ app.whenReady().then(() => {
         buildNumber: getBuildNumber(),
       },
     };
+  });
+
+  ipcMain.handle('clashfox:checkUpdates', async (_event, options = {}) => {
+    const manual = Boolean(options && options.manual);
+    const result = await checkForUpdates({ manual });
+    if (manual) {
+      if (!result.ok) {
+        emitMainToast('Check for updates failed.', 'error');
+      } else if (result.status === 'update_available') {
+        emitMainToast(`Update available: v${result.latestVersion}`, 'info');
+      } else {
+        emitMainToast('Already up to date.', 'info');
+      }
+    }
+    return result;
   });
 
   ipcMain.handle('clashfox:installHelper', async () => {
