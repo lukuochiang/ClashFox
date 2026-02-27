@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('clashfox', {
   selectDirectory: (title) => ipcRenderer.invoke('clashfox:selectDirectory', title),
   getAppInfo: () => ipcRenderer.invoke('clashfox:appInfo'),
   checkUpdates: (options = {}) => ipcRenderer.invoke('clashfox:checkUpdates', options),
+  checkKernelUpdates: (options = {}) => ipcRenderer.invoke('clashfox:checkKernelUpdates', options),
   installHelper: () => ipcRenderer.invoke('clashfox:installHelper'),
   uninstallHelper: () => ipcRenderer.invoke('clashfox:uninstallHelper'),
   runHelperInstallInTerminal: () => ipcRenderer.invoke('clashfox:runHelperInstallInTerminal'),

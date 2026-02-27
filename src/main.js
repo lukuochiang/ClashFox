@@ -136,6 +136,10 @@ const CONNECTIVITY_REFRESH_MS = 1500;
 const CHECK_UPDATE_API_URL = 'https://api.github.com/repos/lukuochiang/ClashFox/releases?per_page=30';
 const CHECK_UPDATE_STABLE_URL = 'https://github.com/lukuochiang/ClashFox/releases/latest';
 const CHECK_UPDATE_BETA_URL = 'https://github.com/lukuochiang/ClashFox/releases';
+const KERNEL_RELEASE_API = {
+  vernesong: 'https://api.github.com/repos/vernesong/mihomo/releases?per_page=50',
+  MetaCubeX: 'https://api.github.com/repos/MetaCubeX/mihomo/releases?per_page=50',
+};
 const DEFAULT_MAIN_WINDOW_WIDTH = 997;
 const DEFAULT_MAIN_WINDOW_HEIGHT = 655;
 const MIN_MAIN_WINDOW_WIDTH = 980;
@@ -536,6 +540,103 @@ function pickLatestRelease(releases = [], acceptBeta = false) {
     return release;
   }
   return null;
+}
+
+function pickLatestKernelRelease(releases = [], acceptBeta = false) {
+  if (!Array.isArray(releases)) {
+    return null;
+  }
+  let fallback = null;
+  for (const release of releases) {
+    if (!release || release.draft) {
+      continue;
+    }
+    if (!acceptBeta && release.prerelease) {
+      continue;
+    }
+    if (!fallback) {
+      fallback = release;
+    }
+    const latestTag = String(release.tag_name || release.name || '').trim();
+    const latest = extractKernelSemver(latestTag);
+    if (latest) {
+      return release;
+    }
+  }
+  return fallback;
+}
+
+function extractKernelSemver(raw = '') {
+  const source = String(raw || '').trim();
+  if (!source) {
+    return '';
+  }
+  const match = source.match(/v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/);
+  return match ? normalizeVersionTag(match[0]) : '';
+}
+
+async function checkKernelUpdates({ source = 'vernesong', currentVersion = '', acceptBeta } = {}) {
+  const sourceKey = Object.prototype.hasOwnProperty.call(KERNEL_RELEASE_API, source) ? source : 'vernesong';
+  const settings = readAppSettings();
+  const allowBeta = typeof acceptBeta === 'boolean'
+    ? acceptBeta
+    : Boolean(settings && settings.acceptBeta);
+  const current = extractKernelSemver(currentVersion);
+  try {
+    const releases = await fetchJson(KERNEL_RELEASE_API[sourceKey]);
+    const latestRelease = pickLatestKernelRelease(releases, allowBeta);
+    if (!latestRelease || !latestRelease.tag_name) {
+      return {
+        ok: false,
+        status: 'error',
+        source: sourceKey,
+        currentVersion: current,
+        error: 'NO_RELEASE_FOUND',
+      };
+    }
+    const latestTag = String(latestRelease.tag_name || latestRelease.name || '').trim();
+    const latest = extractKernelSemver(latestTag);
+    if (!latest) {
+      return {
+        ok: true,
+        status: 'unknown_latest',
+        source: sourceKey,
+        currentVersion: current,
+        latestVersion: normalizeVersionTag(latestTag),
+        releaseUrl: latestRelease.html_url || '',
+        prerelease: Boolean(latestRelease.prerelease),
+      };
+    }
+    if (!current) {
+      return {
+        ok: true,
+        status: 'unknown_current',
+        source: sourceKey,
+        currentVersion: '',
+        latestVersion: latest,
+        releaseUrl: latestRelease.html_url || '',
+        prerelease: Boolean(latestRelease.prerelease),
+      };
+    }
+    const compare = compareVersions(latest, current);
+    return {
+      ok: true,
+      status: compare > 0 ? 'update_available' : 'up_to_date',
+      source: sourceKey,
+      currentVersion: current,
+      latestVersion: latest,
+      releaseUrl: latestRelease.html_url || '',
+      prerelease: Boolean(latestRelease.prerelease),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      status: 'error',
+      source: sourceKey,
+      currentVersion: current,
+      error: err && err.message ? err.message : 'CHECK_KERNEL_UPDATE_FAILED',
+    };
+  }
 }
 
 async function checkForUpdates({ manual = false } = {}) {
@@ -1605,6 +1706,38 @@ function emitMainCoreAction(payload = {}) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('clashfox:mainCoreAction', payload);
   }
+}
+
+function detectInstallPhaseFromLine(line = '') {
+  const text = String(line || '').trim();
+  if (!text) return null;
+  const lower = text.toLowerCase();
+  if (
+    lower.includes('download')
+    || lower.includes('fetch')
+    || lower.includes('wget')
+    || text.includes('下载')
+  ) {
+    return { phase: 'downloading', message: 'Downloading kernel package...' };
+  }
+  if (
+    lower.includes('extract')
+    || lower.includes('unzip')
+    || lower.includes('untar')
+    || text.includes('解压')
+  ) {
+    return { phase: 'extracting', message: 'Extracting package...' };
+  }
+  if (
+    lower.includes('install')
+    || lower.includes('update')
+    || lower.includes('replace')
+    || text.includes('安装')
+    || text.includes('更新')
+  ) {
+    return { phase: 'installing', message: 'Installing / updating kernel...' };
+  }
+  return null;
 }
 
 function clamp(value, min, max) {
@@ -2776,7 +2909,22 @@ function runBridge(args, options = {}) {
       // 输出收集
       if (child.stdout) {
         child.stdout.on('data', (chunk) => {
-          stdout += chunk.toString();
+          const text = chunk.toString();
+          stdout += text;
+          if (isInstallCommand) {
+            const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+            lines.forEach((line) => {
+              const phaseInfo = detectInstallPhaseFromLine(line);
+              if (phaseInfo) {
+                emitMainCoreAction({
+                  action: 'install',
+                  phase: phaseInfo.phase,
+                  message: phaseInfo.message,
+                  raw: line,
+                });
+              }
+            });
+          }
         });
       }
 
@@ -3594,6 +3742,10 @@ app.whenReady().then(() => {
       }
     }
     return result;
+  });
+
+  ipcMain.handle('clashfox:checkKernelUpdates', async (_event, options = {}) => {
+    return checkKernelUpdates(options || {});
   });
 
   ipcMain.handle('clashfox:installHelper', async () => {

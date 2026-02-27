@@ -141,6 +141,7 @@ const I18N = {
       "stop": "Stop",
       "restart": "Restart",
       "refresh": "Refresh",
+      "copy": "Copy",
       "delete": "Delete"
     },
     "table": {
@@ -212,6 +213,9 @@ const I18N = {
       "configDeleteFailed": "Delete config failed.",
       "configDeleteCurrent": "Cannot delete current config.",
       "configImported": "Config imported.",
+      "kernelCopied": "Kernel version copied.",
+      "copied": "Copied.",
+      "copyFailed": "Copy failed.",
       "configImportFailed": "Import config failed.",
       "notice": "Notice"
     },
@@ -498,6 +502,7 @@ const I18N = {
       "stop": "停止",
       "restart": "重启",
       "refresh": "刷新",
+      "copy": "复制",
       "delete": "删除"
     },
     "table": {
@@ -569,6 +574,9 @@ const I18N = {
       "configDeleteFailed": "删除配置失败。",
       "configDeleteCurrent": "不能删除当前配置。",
       "configImported": "配置已导入。",
+      "kernelCopied": "内核版本已复制。",
+      "copied": "已复制。",
+      "copyFailed": "复制失败。",
       "configImportFailed": "导入配置失败。",
       "notice": "提示"
     },
@@ -855,6 +863,7 @@ const I18N = {
       "stop": "停止",
       "restart": "再起動",
       "refresh": "更新",
+      "copy": "コピー",
       "delete": "削除"
     },
     "table": {
@@ -926,6 +935,9 @@ const I18N = {
       "configDeleteFailed": "設定の削除に失敗しました。",
       "configDeleteCurrent": "現在の設定は削除できません。",
       "configImported": "設定をインポートしました。",
+      "kernelCopied": "カーネルバージョンをコピーしました。",
+      "copied": "コピーしました。",
+      "copyFailed": "コピーに失敗しました。",
       "configImportFailed": "設定のインポートに失敗しました。",
       "notice": "通知"
     },
@@ -1206,6 +1218,7 @@ const I18N = {
       "stop": "중지",
       "restart": "재시작",
       "refresh": "새로고침",
+      "copy": "복사",
       "delete": "삭제"
     },
     "table": {
@@ -1277,6 +1290,9 @@ const I18N = {
       "configDeleteFailed": "설정 삭제에 실패했습니다.",
       "configDeleteCurrent": "현재 설정은 삭제할 수 없습니다.",
       "configImported": "설정을 가져왔습니다.",
+      "kernelCopied": "커널 버전을 복사했습니다.",
+      "copied": "복사했습니다.",
+      "copyFailed": "복사에 실패했습니다.",
       "configImportFailed": "설정 가져오기에 실패했습니다.",
       "notice": "알림"
     },
@@ -1557,6 +1573,7 @@ const I18N = {
       "stop": "Arrêter",
       "restart": "Redémarrer",
       "refresh": "Actualiser",
+      "copy": "Copier",
       "delete": "Supprimer"
     },
     "table": {
@@ -1628,6 +1645,9 @@ const I18N = {
       "configDeleteFailed": "Échec de la suppression de la configuration.",
       "configDeleteCurrent": "Impossible de supprimer la configuration actuelle.",
       "configImported": "Configuration importée.",
+      "kernelCopied": "Version du noyau copiée.",
+      "copied": "Copié.",
+      "copyFailed": "Échec de la copie.",
       "configImportFailed": "Échec de l'import de la configuration.",
       "notice": "Notification"
     },
@@ -1908,6 +1928,7 @@ const I18N = {
       "stop": "Stoppen",
       "restart": "Neu starten",
       "refresh": "Aktualisieren",
+      "copy": "Kopieren",
       "delete": "Löschen"
     },
     "table": {
@@ -1979,6 +2000,9 @@ const I18N = {
       "configDeleteFailed": "Löschen der Konfiguration fehlgeschlagen.",
       "configDeleteCurrent": "Aktuelle Konfiguration kann nicht gelöscht werden.",
       "configImported": "Konfiguration importiert.",
+      "kernelCopied": "Kernel-Version kopiert.",
+      "copied": "Kopiert.",
+      "copyFailed": "Kopieren fehlgeschlagen.",
       "configImportFailed": "Import der Konfiguration fehlgeschlagen.",
       "notice": "Hinweis"
     },
@@ -2259,6 +2283,7 @@ const I18N = {
       "stop": "Остановить",
       "restart": "Перезапустить",
       "refresh": "Обновить",
+      "copy": "Копировать",
       "delete": "Удалить"
     },
     "table": {
@@ -2330,6 +2355,9 @@ const I18N = {
       "configDeleteFailed": "Не удалось удалить конфигурацию.",
       "configDeleteCurrent": "Нельзя удалить текущую конфигурацию.",
       "configImported": "Конфигурация импортирована.",
+      "kernelCopied": "Версия ядра скопирована.",
+      "copied": "Скопировано.",
+      "copyFailed": "Не удалось скопировать.",
       "configImportFailed": "Не удалось импортировать конфигурацию.",
       "notice": "Уведомление"
     },

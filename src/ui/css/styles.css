@@ -1115,6 +1115,34 @@ h1 {
   text-overflow: ellipsis;
 }
 
+.meta-value-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.meta-value-inline > span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overview-inline-copy-btn.icon-btn {
+  width: 13px;
+  height: 13px;
+  min-width: 13px;
+  border-radius: 3px;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+.overview-inline-copy-btn.icon-btn svg {
+  width: 11px;
+  height: 11px;
+}
+
 .overview-meta .meta-label,
 .overview-meta .meta-value {
   white-space: nowrap;
@@ -2236,6 +2264,18 @@ body[data-page="kernel"] #kernel.panel .pagination {
   color: #ff9a7a;
   border-color: rgba(255, 154, 122, 0.5);
   background: rgba(255, 154, 122, 0.12);
+}
+
+.install-status[data-state="warn"] {
+  color: var(--accent);
+  border-color: rgba(244, 179, 74, 0.48);
+  background: rgba(244, 179, 74, 0.14);
+}
+
+.install-status[data-state="ready"] {
+  color: var(--mint);
+  border-color: rgba(140, 224, 198, 0.45);
+  background: rgba(140, 224, 198, 0.1);
 }
 
 .install-form {

@@ -43,6 +43,7 @@ let overviewConnections = document.getElementById('overviewConnections');
 let overviewMemory = document.getElementById('overviewMemory');
 let overviewStatus = document.getElementById('overviewStatus');
 let overviewKernel = document.getElementById('overviewKernel');
+let overviewKernelCopy = document.getElementById('overviewKernelCopy');
 let overviewSystem = document.getElementById('overviewSystem');
 let overviewVersion = document.getElementById('overviewVersion');
 let overviewInternet = document.getElementById('overviewInternet');
@@ -52,6 +53,9 @@ let overviewNetwork = document.getElementById('overviewNetwork');
 let overviewLocalIp = document.getElementById('overviewLocalIp');
 let overviewProxyIp = document.getElementById('overviewProxyIp');
 let overviewInternetIp = document.getElementById('overviewInternetIp');
+let overviewLocalIpCopy = document.getElementById('overviewLocalIpCopy');
+let overviewProxyIpCopy = document.getElementById('overviewProxyIpCopy');
+let overviewInternetIpCopy = document.getElementById('overviewInternetIpCopy');
 let overviewConnCurrent = document.getElementById('overviewConnCurrent');
 let overviewConnPeak = document.getElementById('overviewConnPeak');
 let overviewConnAvg = document.getElementById('overviewConnAvg');
@@ -320,6 +324,13 @@ const state = {
   dashboardLoaded: false,
   autoPanelInstalled: false,
   panelInstallRequested: false,
+  helperAuthFallbackHintShown: false,
+  kernelUpdateInfo: null,
+  kernelUpdateChecking: false,
+  kernelUpdateCheckedAt: 0,
+  kernelUpdateNotifiedVersion: '',
+  kernelUpdateRequestSeq: 0,
+  githubSourceManualOverride: false,
   coreVersionRaw: '',
   coreStatusTimer: null,
   overviewTimer: null,
@@ -357,6 +368,11 @@ const state = {
     internet: '',
     dns: '',
     router: '',
+  },
+  overviewIpRaw: {
+    local: '',
+    proxy: '',
+    internet: '',
   },
   hasKernel: false,
   configDefault: '',
@@ -443,6 +459,9 @@ function applyI18n() {
   document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
     const key = el.dataset.i18nPlaceholder;
     el.setAttribute('placeholder', t(key));
+  });
+  document.querySelectorAll('.overview-inline-copy-btn').forEach((el) => {
+    el.setAttribute('aria-label', ti('actions.copy', 'Copy'));
   });
 
   applyCardIcons();
@@ -1113,6 +1132,13 @@ if (window.clashfox && typeof window.clashfox.onMainCoreAction === 'function') {
     if (!payload || !payload.action) {
       return;
     }
+    if (payload.action === 'install') {
+      setInstallState('loading');
+      if (installStatus && payload.message) {
+        installStatus.textContent = payload.message;
+      }
+      return;
+    }
     // Always sync from real kernel state; avoid synthetic transition states.
     loadStatusSilently();
   });
@@ -1342,6 +1368,33 @@ async function runCommandWithSudo(command, args = []) {
   return runCommand(command, args);
 }
 
+async function maybeNotifyHelperAuthFallback(command = '') {
+  const cmd = String(command || '').trim();
+  if (!cmd || state.helperAuthFallbackHintShown) {
+    return;
+  }
+  if (!window.clashfox || typeof window.clashfox.getHelperStatus !== 'function') {
+    return;
+  }
+  const privileged = new Set(['install', 'start', 'stop', 'restart', 'delete-backups']);
+  if (!privileged.has(cmd)) {
+    return;
+  }
+  try {
+    const response = await window.clashfox.getHelperStatus();
+    const running = Boolean(response && response.ok && response.data && response.data.running);
+    if (!running) {
+      state.helperAuthFallbackHintShown = true;
+      showNoticePop(
+        ti('labels.helperAuthFallbackHint', 'Privileged Helper is not running. macOS authorization dialog may appear.'),
+        'warn',
+      );
+    }
+  } catch {
+    // ignore helper status check errors
+  }
+}
+
 function isTunConflictError(message) {
   const text = String(message || '').toLowerCase();
   if (!text) return false;
@@ -1407,6 +1460,65 @@ function showNoticePop(message, type = 'info') {
   }, 3200);
 }
 
+async function copyTextToClipboard(text) {
+  const value = String(text || '').trim();
+  if (!value) {
+    return false;
+  }
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {}
+  }
+  const fallbackInput = document.createElement('textarea');
+  fallbackInput.value = value;
+  fallbackInput.setAttribute('readonly', 'readonly');
+  fallbackInput.style.position = 'fixed';
+  fallbackInput.style.left = '-9999px';
+  document.body.appendChild(fallbackInput);
+  fallbackInput.focus();
+  fallbackInput.select();
+  let copied = false;
+  try {
+    copied = document.execCommand('copy');
+  } catch {
+    copied = false;
+  }
+  document.body.removeChild(fallbackInput);
+  return copied;
+}
+
+async function handleOverviewKernelCopy() {
+  const kernelText = overviewKernel ? String(overviewKernel.textContent || '').trim() : '';
+  if (!kernelText || kernelText === '-') {
+    showNoticePop(ti('labels.copyFailed', 'Copy failed.'), 'error');
+    return;
+  }
+  const copied = await copyTextToClipboard(kernelText);
+  showNoticePop(
+    copied
+      ? ti('labels.kernelCopied', 'Kernel version copied.')
+      : ti('labels.copyFailed', 'Copy failed.'),
+    copied ? 'success' : 'error',
+  );
+}
+
+async function handleOverviewTextCopy(value) {
+  const text = String(value || '').trim();
+  if (!text || text === '-') {
+    showNoticePop(ti('labels.copyFailed', 'Copy failed.'), 'error');
+    return;
+  }
+  const copied = await copyTextToClipboard(text);
+  showNoticePop(
+    copied
+      ? ti('labels.copied', 'Copied.')
+      : ti('labels.copyFailed', 'Copy failed.'),
+    copied ? 'success' : 'error',
+  );
+}
+
 function setInstallState(nextState, errorMessage = '') {
   state.installState = nextState;
   if (!installStatus || !installProgress) {
@@ -1432,6 +1544,152 @@ function setInstallState(nextState, errorMessage = '') {
   }
   if (installVersion) {
     installVersion.disabled = nextState === 'loading';
+  }
+  if (nextState === 'idle') {
+    applyKernelUpdateInstallHint();
+  }
+}
+
+function extractKernelSemver(raw = '') {
+  const text = String(raw || '').trim();
+  if (!text) {
+    return '';
+  }
+  const match = text.match(/v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/);
+  return match ? match[0].replace(/^v/i, '') : '';
+}
+
+function resolveKernelUpdateSourceByVersion(rawVersion = '', fallbackSource = '') {
+  const fallback = 'MetaCubeX';
+  const text = String(rawVersion || '').toLowerCase();
+  if (!text) {
+    const selected = String(fallbackSource || '').trim();
+    return selected === 'vernesong' || selected === 'MetaCubeX' ? selected : fallback;
+  }
+  if (text.includes('alpha-smart') || text.includes('-smart-') || text.includes('vernesong')) {
+    return 'vernesong';
+  }
+  return fallback;
+}
+
+function normalizeKernelSource(source = '') {
+  const text = String(source || '').trim();
+  if (text === 'vernesong' || text === 'MetaCubeX') {
+    return text;
+  }
+  return '';
+}
+
+function syncGithubSourceFromKernelVersion() {
+  if (!githubUser) {
+    return;
+  }
+  if (state.githubSourceManualOverride) {
+    return;
+  }
+  const current = String(githubUser.value || '').trim() || 'vernesong';
+  const next = resolveKernelUpdateSourceByVersion(state.coreVersionRaw || '', current);
+  if (next === current) {
+    return;
+  }
+  githubUser.value = next;
+  updateInstallVersionVisibility();
+  state.kernelUpdateCheckedAt = 0;
+  state.kernelUpdateInfo = { ok: false, status: 'checking', source: next };
+  applyKernelUpdateInstallHint();
+  if (currentPage === 'kernel' && state.installState !== 'loading') {
+    refreshKernelUpdateNotice(true);
+  }
+}
+
+function applyKernelUpdateInstallHint() {
+  if (!installStatus || state.installState === 'loading') {
+    return;
+  }
+  const info = state.kernelUpdateInfo;
+  if (info && info.status === 'checking') {
+    installStatus.textContent = ti('install.kernelChecking', `Checking updates from ${info.source || 'source'}...`);
+    installStatus.dataset.state = 'loading';
+    return;
+  }
+  if (info && info.ok && info.status === 'update_available' && info.latestVersion) {
+    installStatus.textContent = ti('install.kernelUpdateAvailable', `Kernel update available: v${info.latestVersion}`);
+    installStatus.dataset.state = 'warn';
+    return;
+  }
+  installStatus.textContent = t('install.ready');
+  installStatus.dataset.state = 'idle';
+}
+
+async function refreshKernelUpdateNotice(force = false) {
+  if (!window.clashfox || typeof window.clashfox.checkKernelUpdates !== 'function') {
+    return;
+  }
+  if (state.kernelUpdateChecking) {
+    return;
+  }
+  const now = Date.now();
+  if (!force && (now - state.kernelUpdateCheckedAt) < 5 * 60 * 1000) {
+    applyKernelUpdateInstallHint();
+    return;
+  }
+  const selectedSource = (githubUser && githubUser.value)
+    || (state.settings && state.settings.githubUser)
+    || 'vernesong';
+  const source = normalizeKernelSource(selectedSource)
+    || resolveKernelUpdateSourceByVersion(state.coreVersionRaw || '', selectedSource);
+  const requestSeq = (state.kernelUpdateRequestSeq || 0) + 1;
+  state.kernelUpdateRequestSeq = requestSeq;
+  state.kernelUpdateInfo = { ok: false, status: 'checking', source };
+  applyKernelUpdateInstallHint();
+  const currentVersion = extractKernelSemver(state.coreVersionRaw || '');
+  state.kernelUpdateChecking = true;
+  try {
+    const result = await window.clashfox.checkKernelUpdates({
+      source,
+      currentVersion,
+      acceptBeta: Boolean(state.settings && state.settings.acceptBeta),
+    });
+    if (requestSeq !== state.kernelUpdateRequestSeq) {
+      return;
+    }
+    state.kernelUpdateInfo = result || null;
+    state.kernelUpdateCheckedAt = Date.now();
+    if (
+      result
+      && result.ok
+      && result.latestVersion
+      && String(source || '').toLowerCase() === 'metacubex'
+      && installVersion
+    ) {
+      const latest = String(result.latestVersion || '').trim();
+      installVersion.value = latest ? (latest.startsWith('v') ? latest : `v${latest}`) : '';
+    }
+    if (
+      result
+      && result.ok
+      && result.status === 'update_available'
+      && result.latestVersion
+      && state.kernelUpdateNotifiedVersion !== result.latestVersion
+    ) {
+      state.kernelUpdateNotifiedVersion = result.latestVersion;
+      showNoticePop(
+        ti('install.kernelUpdateAvailable', `Kernel update available: v${result.latestVersion}`),
+        'info',
+      );
+    }
+    applyKernelUpdateInstallHint();
+  } catch {
+    if (requestSeq !== state.kernelUpdateRequestSeq) {
+      return;
+    }
+    state.kernelUpdateInfo = { ok: false, status: 'error', source };
+    state.kernelUpdateCheckedAt = Date.now();
+    applyKernelUpdateInstallHint();
+  } finally {
+    if (requestSeq === state.kernelUpdateRequestSeq) {
+      state.kernelUpdateChecking = false;
+    }
   }
 }
 
@@ -1531,6 +1789,7 @@ function updateStatusUI(data) {
   const running = data.running;
   applyKernelRunningState(running, 'status');
   state.coreVersionRaw = data.version || '';
+  syncGithubSourceFromKernelVersion();
   state.configDefault = data.configDefault || '';
   const configValue = getCurrentConfigPath() || data.configDefault || '-';
   const hasKernel = Boolean(data.kernelExists);
@@ -1585,6 +1844,9 @@ function updateStatusUI(data) {
     settingsExternalUiUrl.placeholder = '-';
     // ensure value reflects current panel
     updateExternalUiUrlField();
+  }
+  if (currentPage === 'kernel') {
+    refreshKernelUpdateNotice();
   }
   syncRunningIndicators(state.coreRunning);
   renderConfigTable();
@@ -1718,9 +1980,11 @@ function updateInstallVersionVisibility() {
     '';
   const isMetaCubeX = String(currentUser).toLowerCase() === 'metacubex';
   installVersionRow.classList.toggle('is-hidden', !isMetaCubeX);
+  installVersion.readOnly = !isMetaCubeX;
   if (!isMetaCubeX) {
     installVersion.value = '';
   }
+  installVersion.disabled = state.installState === 'loading';
 }
 
 function formatUptime(seconds) {
@@ -2100,7 +2364,11 @@ function updateOverviewUI(data) {
   state.overviewRunningUpdatedAt = Date.now();
   // Keep overview runtime data independent; running indicator is driven by status probe.
   if (overviewKernel) {
-    overviewKernel.textContent = formatKernelDisplay(data.kernelVersion);
+    const kernelDisplay = formatKernelDisplay(data.kernelVersion);
+    overviewKernel.textContent = kernelDisplay;
+    if (overviewKernelCopy) {
+      overviewKernelCopy.disabled = !kernelDisplay || kernelDisplay === '-';
+    }
   }
   if (overviewSystem) {
     overviewSystem.textContent = data.systemName || '-';
@@ -2163,14 +2431,32 @@ function updateOverviewUI(data) {
     overviewNetwork.textContent = data.networkName || '-';
   }
   if (overviewLocalIp) {
-    overviewLocalIp.textContent = data.localIp || '-';
+    const rawLocalIp = String(data.localIp || '').trim();
+    state.overviewIpRaw.local = rawLocalIp;
+    const text = rawLocalIp || '-';
+    overviewLocalIp.textContent = text;
+    if (overviewLocalIpCopy) {
+      overviewLocalIpCopy.disabled = !rawLocalIp;
+    }
   }
   if (overviewProxyIp) {
-    overviewProxyIp.textContent = maskIpAddress(data.proxyIp) || '-';
+    const rawProxyIp = String(data.proxyIp || '').trim();
+    state.overviewIpRaw.proxy = rawProxyIp;
+    const text = maskIpAddress(rawProxyIp) || '-';
+    overviewProxyIp.textContent = text;
+    if (overviewProxyIpCopy) {
+      overviewProxyIpCopy.disabled = !rawProxyIp;
+    }
   }
   if (overviewInternetIp) {
-    const ipValue = data.internetIp4 || data.internetIp || '-';
-    overviewInternetIp.textContent = maskIpAddress(ipValue) || '-';
+    const ipValue = data.internetIp4 || data.internetIp || '';
+    const rawInternetIp = String(ipValue || '').trim();
+    state.overviewIpRaw.internet = rawInternetIp;
+    const text = maskIpAddress(rawInternetIp) || '-';
+    overviewInternetIp.textContent = text;
+    if (overviewInternetIpCopy) {
+      overviewInternetIpCopy.disabled = !rawInternetIp;
+    }
   }
   // Prefer /traffic realtime stream. If it stalls, fallback to /overview byte counters.
   if (!state.lastProxyTrafficAt || (Date.now() - state.lastProxyTrafficAt) > 1500) {
@@ -3040,6 +3326,7 @@ function refreshPageRefs() {
   overviewMemory = document.getElementById('overviewMemory');
   overviewStatus = document.getElementById('overviewStatus');
   overviewKernel = document.getElementById('overviewKernel');
+  overviewKernelCopy = document.getElementById('overviewKernelCopy');
   overviewSystem = document.getElementById('overviewSystem');
   overviewVersion = document.getElementById('overviewVersion');
   overviewInternet = document.getElementById('overviewInternet');
@@ -3049,6 +3336,9 @@ function refreshPageRefs() {
   overviewLocalIp = document.getElementById('overviewLocalIp');
   overviewProxyIp = document.getElementById('overviewProxyIp');
   overviewInternetIp = document.getElementById('overviewInternetIp');
+  overviewLocalIpCopy = document.getElementById('overviewLocalIpCopy');
+  overviewProxyIpCopy = document.getElementById('overviewProxyIpCopy');
+  overviewInternetIpCopy = document.getElementById('overviewInternetIpCopy');
   overviewConnCurrent = document.getElementById('overviewConnCurrent');
   overviewConnPeak = document.getElementById('overviewConnPeak');
   overviewConnAvg = document.getElementById('overviewConnAvg');
@@ -3268,6 +3558,7 @@ function refreshPageView() {
   }
   if (currentPage === 'kernel') {
     loadBackups();
+    refreshKernelUpdateNotice(true);
   }
   if (currentPage === 'overview') {
     Promise.all([
@@ -3534,6 +3825,22 @@ if (document.body && document.body.dataset.tipDelegationBound !== 'true') {
   };
   document.addEventListener('mouseover', delegatedTipHandler, true);
   document.addEventListener('focusin', delegatedTipHandler, true);
+}
+if (overviewKernelCopy && overviewKernelCopy.dataset.bound !== 'true') {
+  overviewKernelCopy.dataset.bound = 'true';
+  overviewKernelCopy.addEventListener('click', handleOverviewKernelCopy);
+}
+if (overviewLocalIpCopy && overviewLocalIpCopy.dataset.bound !== 'true') {
+  overviewLocalIpCopy.dataset.bound = 'true';
+  overviewLocalIpCopy.addEventListener('click', () => handleOverviewTextCopy(state.overviewIpRaw.local));
+}
+if (overviewProxyIpCopy && overviewProxyIpCopy.dataset.bound !== 'true') {
+  overviewProxyIpCopy.dataset.bound = 'true';
+  overviewProxyIpCopy.addEventListener('click', () => handleOverviewTextCopy(state.overviewIpRaw.proxy));
+}
+if (overviewInternetIpCopy && overviewInternetIpCopy.dataset.bound !== 'true') {
+  overviewInternetIpCopy.dataset.bound = 'true';
+  overviewInternetIpCopy.addEventListener('click', () => handleOverviewTextCopy(state.overviewIpRaw.internet));
 }
   langButtons.forEach((btn) => {
     btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
@@ -3943,13 +4250,19 @@ if (installBtn) {
     if (githubUser && githubUser.value === 'MetaCubeX' && installVersion && installVersion.value.trim()) {
       args.push('--version', installVersion.value.trim());
     }
+    await maybeNotifyHelperAuthFallback('install');
     const response = await runCommandWithSudo('install', args);
     if (response.ok) {
       setInstallState('success');
-      showToast(t('labels.installSuccess'));
-      showToast(t('labels.installConfigHint'), 'info');
+      showNoticePop(`${t('labels.installSuccess')} ${t('labels.installConfigHint')}`, 'success');
       loadKernels();
       loadStatus();
+      refreshKernelUpdateNotice(true);
+      setTimeout(() => {
+        if (state.installState === 'success') {
+          setInstallState('idle');
+        }
+      }, 1200);
     } else if (response.error === 'cancelled') {
         setInstallState('idle');
         showToast(t('install.cancelSuccess'), 'info');
@@ -3975,22 +4288,49 @@ if (cancelInstallBtn) {
 if (settingsGithubUser) {
   settingsGithubUser.addEventListener('change', (event) => {
     const value = event.target.value;
+    const normalized = normalizeKernelSource(value) || 'vernesong';
     if (githubUser) {
-      githubUser.value = value;
+      githubUser.value = normalized;
     }
+    state.githubSourceManualOverride = true;
     updateInstallVersionVisibility();
-    saveSettings({ githubUser: value });
+    saveSettings({ githubUser: normalized });
+    state.kernelUpdateCheckedAt = 0;
+    state.kernelUpdateInfo = {
+      ok: false,
+      status: 'checking',
+      source: normalized,
+    };
+    applyKernelUpdateInstallHint();
+    if (state.installState !== 'loading') {
+      setInstallState('idle');
+    }
+    if (currentPage === 'kernel') {
+      refreshKernelUpdateNotice(true);
+    }
   });
 }
 
 if (githubUser) {
   githubUser.addEventListener('change', (event) => {
     const value = event.target.value;
-    if (settingsGithubUser) {
-      settingsGithubUser.value = value;
-    }
+    const normalized = normalizeKernelSource(value) || 'vernesong';
+    githubUser.value = normalized;
+    state.githubSourceManualOverride = true;
     updateInstallVersionVisibility();
-    saveSettings({ githubUser: value });
+    state.kernelUpdateCheckedAt = 0;
+    state.kernelUpdateInfo = {
+      ok: false,
+      status: 'checking',
+      source: normalized,
+    };
+    applyKernelUpdateInstallHint();
+    if (state.installState !== 'loading') {
+      setInstallState('idle');
+    }
+    if (currentPage === 'kernel') {
+      refreshKernelUpdateNotice(true);
+    }
   });
 }
 
@@ -4069,6 +4409,9 @@ function refreshPathDependentViews() {
   loadKernels();
   loadBackups();
   loadLogs();
+  if (currentPage === 'kernel') {
+    refreshKernelUpdateNotice(true);
+  }
 }
 
 async function resetConfigPath() {
@@ -4330,6 +4673,7 @@ async function handleCoreAction(action, button) {
     
     // 执行操作
     const commandStartedAt = Date.now();
+    await maybeNotifyHelperAuthFallback(command);
     const response = await runCommandWithSudo(command, args);
     if (response.ok) {
       if (action === 'start') {
