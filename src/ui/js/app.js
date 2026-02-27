@@ -1473,9 +1473,7 @@ async function loadAppInfo() {
       appName.textContent = response.data.name || 'ClashFox';
     }
     const version = response.data.version || '0.0.0';
-    const buildNumber = response.data.buildNumber;
-    const suffix = buildNumber ? `(${buildNumber})` : '';
-    const displayVersion = `v${version}${suffix}`;
+    const displayVersion = `v${version}`;
     if (appVersion) {
       appVersion.textContent = displayVersion;
     }
