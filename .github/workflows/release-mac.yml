@@ -140,6 +140,8 @@ jobs:
             ! -name "latest-mac.yml" \
             -exec cp -v {} artifacts/ \;
 
+          printf '%s\n' "${{ steps.meta.outputs.version }}" > artifacts/version.txt
+
           ls -al artifacts
 
       - name: Create/Update release

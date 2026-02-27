@@ -133,6 +133,7 @@ let overviewNetworkRefresh = document.getElementById('overviewNetworkRefresh');
 let githubUser = document.getElementById('githubUser');
 let installBtn = document.getElementById('installBtn');
 let installStatus = document.getElementById('installStatus');
+let installCurrentKernel = document.getElementById('installCurrentKernel');
 let installProgress = document.getElementById('installProgress');
 let installVersionRow = document.getElementById('installVersionRow');
 let installVersion = document.getElementById('installVersion');
@@ -327,6 +328,7 @@ const state = {
   helperAuthFallbackHintShown: false,
   kernelUpdateInfo: null,
   kernelUpdateChecking: false,
+  kernelUpdatePendingRefresh: false,
   kernelUpdateCheckedAt: 0,
   kernelUpdateNotifiedVersion: '',
   kernelUpdateRequestSeq: 0,
@@ -1598,6 +1600,10 @@ function syncGithubSourceFromKernelVersion() {
   state.kernelUpdateInfo = { ok: false, status: 'checking', source: next };
   applyKernelUpdateInstallHint();
   if (currentPage === 'kernel' && state.installState !== 'loading') {
+    if (state.kernelUpdateChecking) {
+      state.kernelUpdatePendingRefresh = true;
+      return;
+    }
     refreshKernelUpdateNotice(true);
   }
 }
@@ -1617,6 +1623,16 @@ function applyKernelUpdateInstallHint() {
     installStatus.dataset.state = 'warn';
     return;
   }
+  if (
+    info
+    && info.ok
+    && info.latestVersion
+    && String(info.source || '').toLowerCase() === 'vernesong'
+  ) {
+    installStatus.textContent = ti('install.kernelLatestVersion', `Latest version: v${info.latestVersion}`);
+    installStatus.dataset.state = 'ready';
+    return;
+  }
   installStatus.textContent = t('install.ready');
   installStatus.dataset.state = 'idle';
 }
@@ -1626,6 +1642,9 @@ async function refreshKernelUpdateNotice(force = false) {
     return;
   }
   if (state.kernelUpdateChecking) {
+    if (force) {
+      state.kernelUpdatePendingRefresh = true;
+    }
     return;
   }
   const now = Date.now();
@@ -1642,13 +1661,12 @@ async function refreshKernelUpdateNotice(force = false) {
   state.kernelUpdateRequestSeq = requestSeq;
   state.kernelUpdateInfo = { ok: false, status: 'checking', source };
   applyKernelUpdateInstallHint();
-  const currentVersion = extractKernelSemver(state.coreVersionRaw || '');
+  const currentVersion = String(state.coreVersionRaw || '').trim();
   state.kernelUpdateChecking = true;
   try {
     const result = await window.clashfox.checkKernelUpdates({
       source,
       currentVersion,
-      acceptBeta: Boolean(state.settings && state.settings.acceptBeta),
     });
     if (requestSeq !== state.kernelUpdateRequestSeq) {
       return;
@@ -1689,6 +1707,10 @@ async function refreshKernelUpdateNotice(force = false) {
   } finally {
     if (requestSeq === state.kernelUpdateRequestSeq) {
       state.kernelUpdateChecking = false;
+      if (state.kernelUpdatePendingRefresh) {
+        state.kernelUpdatePendingRefresh = false;
+        refreshKernelUpdateNotice(true);
+      }
     }
   }
 }
@@ -1802,6 +1824,10 @@ function updateStatusUI(data) {
   }
   if (statusVersion) {
     statusVersion.textContent = data.version || t('labels.notInstalled');
+  }
+  if (installCurrentKernel) {
+    const kernelText = formatKernelDisplay(data.version || '');
+    installCurrentKernel.textContent = kernelText && kernelText !== '-' ? kernelText : t('labels.notInstalled');
   }
   syncQuickActionButtons();
   if (quickHintNodes.length) {
@@ -3374,6 +3400,7 @@ function refreshPageRefs() {
   githubUser = document.getElementById('githubUser');
   installBtn = document.getElementById('installBtn');
   installStatus = document.getElementById('installStatus');
+  installCurrentKernel = document.getElementById('installCurrentKernel');
   installProgress = document.getElementById('installProgress');
   installVersionRow = document.getElementById('installVersionRow');
   installVersion = document.getElementById('installVersion');

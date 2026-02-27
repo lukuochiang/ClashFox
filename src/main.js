@@ -140,6 +140,10 @@ const KERNEL_RELEASE_API = {
   vernesong: 'https://api.github.com/repos/vernesong/mihomo/releases?per_page=50',
   MetaCubeX: 'https://api.github.com/repos/MetaCubeX/mihomo/releases?per_page=50',
 };
+const KERNEL_BETA_VERSION_TXT_URL = {
+  vernesong: 'https://github.com/vernesong/mihomo/releases/download/Prerelease-Alpha/version.txt',
+  MetaCubeX: 'https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/version.txt',
+};
 const DEFAULT_MAIN_WINDOW_WIDTH = 997;
 const DEFAULT_MAIN_WINDOW_HEIGHT = 655;
 const MIN_MAIN_WINDOW_WIDTH = 980;
@@ -526,6 +530,41 @@ function fetchJson(url, timeoutMs = 6000) {
   });
 }
 
+function fetchText(url, timeoutMs = 6000) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, {
+      headers: {
+        'User-Agent': `ClashFox/${app.getVersion() || '0.0.0'}`,
+        Accept: 'text/plain,*/*',
+      },
+    }, (res) => {
+      const statusCode = Number(res.statusCode || 0);
+      if (statusCode >= 300 && statusCode < 400 && res.headers.location) {
+        res.resume();
+        fetchText(res.headers.location, timeoutMs).then(resolve).catch(reject);
+        return;
+      }
+      if (statusCode < 200 || statusCode >= 300) {
+        res.resume();
+        reject(new Error(`HTTP_${statusCode}`));
+        return;
+      }
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        body += chunk;
+      });
+      res.on('end', () => {
+        resolve(String(body || ''));
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error('TIMEOUT'));
+    });
+  });
+}
+
 function pickLatestRelease(releases = [], acceptBeta = false) {
   if (!Array.isArray(releases)) {
     return null;
@@ -577,12 +616,53 @@ function extractKernelSemver(raw = '') {
 
 async function checkKernelUpdates({ source = 'vernesong', currentVersion = '', acceptBeta } = {}) {
   const sourceKey = Object.prototype.hasOwnProperty.call(KERNEL_RELEASE_API, source) ? source : 'vernesong';
-  const settings = readAppSettings();
+  const currentRaw = String(currentVersion || '').trim();
+  const current = extractKernelSemver(currentRaw);
+  // Kernel update channel follows the currently running kernel:
+  // prerelease core -> prerelease channel, stable core -> stable channel.
+  // Explicit acceptBeta (if provided) takes precedence.
+  const parsedCurrent = parseVersion(current);
+  const inferredAllowBeta = Boolean(
+    parsedCurrent
+    && Array.isArray(parsedCurrent.prerelease)
+    && parsedCurrent.prerelease.length > 0,
+  );
   const allowBeta = typeof acceptBeta === 'boolean'
     ? acceptBeta
-    : Boolean(settings && settings.acceptBeta);
-  const current = extractKernelSemver(currentVersion);
+    : (sourceKey === 'vernesong' ? true : inferredAllowBeta);
   try {
+    if (allowBeta && KERNEL_BETA_VERSION_TXT_URL[sourceKey]) {
+      try {
+        const text = await fetchText(KERNEL_BETA_VERSION_TXT_URL[sourceKey]);
+        const latestRaw = String(text || '').split(/\r?\n/).map((line) => line.trim()).find(Boolean) || '';
+        if (latestRaw) {
+          const latestSemver = extractKernelSemver(latestRaw);
+          let status = 'unknown_current';
+          if (latestSemver && current) {
+            status = compareVersions(latestSemver, current) > 0 ? 'update_available' : 'up_to_date';
+          } else if (currentRaw) {
+            const normalizedCurrent = currentRaw.toLowerCase();
+            const normalizedLatest = latestRaw.toLowerCase();
+            status = (
+              normalizedCurrent === normalizedLatest
+              || normalizedCurrent.includes(normalizedLatest)
+              || normalizedLatest.includes(normalizedCurrent)
+            ) ? 'up_to_date' : 'update_available';
+          }
+          return {
+            ok: true,
+            status,
+            source: sourceKey,
+            currentVersion: current || currentRaw,
+            latestVersion: latestSemver || normalizeVersionTag(latestRaw) || latestRaw,
+            releaseUrl: KERNEL_BETA_VERSION_TXT_URL[sourceKey],
+            prerelease: true,
+          };
+        }
+      } catch {
+        // Fallback to GitHub API list below if version.txt is temporarily unavailable.
+      }
+    }
     const releases = await fetchJson(KERNEL_RELEASE_API[sourceKey]);
     const latestRelease = pickLatestKernelRelease(releases, allowBeta);
     if (!latestRelease || !latestRelease.tag_name) {
