@@ -1,5 +1,12 @@
 #!/bin/bash
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMMON_LIB="$SCRIPT_DIR/lib/clashfox_script_common.sh"
+if [ -f "$COMMON_LIB" ]; then
+    # shellcheck source=/dev/null
+    . "$COMMON_LIB"
+fi
+
 # -----------------------------------------------------------------------------
 # ClashFox Mihomo Kernel Management CLI
 # Copyright (c) 2026 Kuochiang Lu
@@ -36,52 +43,49 @@ SCRIPT_VERSION="v1.2.5(12)"
 # Language settings: set CLASHFOX_LANG=zh|en|auto (default: auto)
 CLASHFOX_LANG="${CLASHFOX_LANG:-auto}"
 
+# Pre-parse --lang for early boot logs before full argument validation.
+preparse_cli_language() {
+    local prev_was_lang=false
+    local arg value
+    for arg in "$@"; do
+        if [ "$prev_was_lang" = true ]; then
+            value="$arg"
+            prev_was_lang=false
+            case "$value" in
+                zh|en|auto) CLASHFOX_LANG="$value" ;;
+            esac
+            continue
+        fi
+        case "$arg" in
+            --lang|-l)
+                prev_was_lang=true
+                ;;
+            --lang=*|-l=*)
+                value="${arg#*=}"
+                case "$value" in
+                    zh|en|auto) CLASHFOX_LANG="$value" ;;
+                esac
+                ;;
+        esac
+    done
+}
+preparse_cli_language "$@"
+
 detect_language() {
     case "$CLASHFOX_LANG" in
-        zh|en|ja|ko|fr|de|ru)
+        zh|en)
             echo "$CLASHFOX_LANG"
             return
             ;;
+        auto|"")
+            echo "en"
+            return
+            ;;
+        *)
+            echo "en"
+            return
+            ;;
     esac
-
-    local apple_locale
-    apple_locale=$(defaults read -g AppleLocale 2>/dev/null)
-    if [[ "$apple_locale" == zh* || "$apple_locale" == *zh* ]]; then
-        echo "zh"
-        return
-    elif [[ "$apple_locale" == ja* || "$apple_locale" == *ja* ]]; then
-        echo "ja"
-        return
-    elif [[ "$apple_locale" == ko* || "$apple_locale" == *ko* ]]; then
-        echo "ko"
-        return
-    elif [[ "$apple_locale" == fr* || "$apple_locale" == *fr* ]]; then
-        echo "fr"
-        return
-    elif [[ "$apple_locale" == de* || "$apple_locale" == *de* ]]; then
-        echo "de"
-        return
-    elif [[ "$apple_locale" == ru* || "$apple_locale" == *ru* ]]; then
-        echo "ru"
-        return
-    fi
-
-    local sys_lang="${LC_ALL:-${LANG:-}}"
-    if [[ "$sys_lang" == zh* || "$sys_lang" == *zh* ]]; then
-        echo "zh"
-    elif [[ "$sys_lang" == ja* || "$sys_lang" == *ja* ]]; then
-        echo "ja"
-    elif [[ "$sys_lang" == ko* || "$sys_lang" == *ko* ]]; then
-        echo "ko"
-    elif [[ "$sys_lang" == fr* || "$sys_lang" == *fr* ]]; then
-        echo "fr"
-    elif [[ "$sys_lang" == de* || "$sys_lang" == *de* ]]; then
-        echo "de"
-    elif [[ "$sys_lang" == ru* || "$sys_lang" == *ru* ]]; then
-        echo "ru"
-    else
-        echo "en"
-    fi
 }
 
 tr_msg() {
@@ -273,7 +277,7 @@ tr_msg() {
                 MSG_HELP_TITLE) printf "帮助信息" ;;
                 MSG_HELP_ARGS) printf "命令行参数:" ;;
                 MSG_HELP_DIR_ARG) printf "  -d|--directory <路径>  自定义 ClashFox 安装目录" ;;
-                MSG_HELP_LANG_ARG) printf "  -l|--lang <zh|en|ja|ko|fr|de|ru|auto>  指定显示语言" ;;
+                MSG_HELP_LANG_ARG) printf "  -l|--lang <zh|en|auto>  指定显示语言" ;;
                 MSG_HELP_STATUS) printf "  status                 查看当前内核状态" ;;
                 MSG_HELP_LIST) printf "  list                   列出所有内核备份" ;;
                 MSG_HELP_SWITCH) printf "  switch                 切换内核版本" ;;
@@ -330,11 +334,11 @@ tr_msg() {
                 MSG_EXIT_ABNORMAL) printf "[退出] 程序已异常终止" ;;
 
                 MSG_ARG_DIR_REQUIRED) printf "-d/--directory 参数需要指定目录路径" ;;
-                MSG_ARG_LANG_REQUIRED) printf "-l/--lang 参数需要指定语言(zh|en|ja|ko|fr|de|ru|auto)" ;;
-                MSG_ARG_LANG_INVALID) printf "无效语言: %s (支持: zh|en|ja|ko|fr|de|ru|auto)" "$@" ;;
+                MSG_ARG_LANG_REQUIRED) printf "-l/--lang 参数需要指定语言(zh|en|auto)" ;;
+                MSG_ARG_LANG_INVALID) printf "无效语言: %s (支持: zh|en|auto)" "$@" ;;
                 MSG_UNKNOWN_COMMAND) printf "未知命令: %s" "$@" ;;
                 MSG_AVAILABLE_COMMANDS) printf "可用命令: status, list, switch, logs, clean, help, version" ;;
-                MSG_AVAILABLE_ARGS) printf "可用参数: -d/--directory <路径> - 自定义 ClashFox 安装目录; -l/--lang <zh|en|ja|ko|fr|de|ru|auto> - 指定显示语言" ;;
+                MSG_AVAILABLE_ARGS) printf "可用参数: -d/--directory <路径> - 自定义 ClashFox 安装目录; -l/--lang <zh|en|auto> - 指定显示语言" ;;
 
                 MSG_SAVED_DIR_LOADED) printf "已加载保存的目录: %s" "$@" ;;
                 MSG_SAVED_DIR_NOT_FOUND) printf "未找到保存的目录，将使用默认目录: %s" "$@" ;;
@@ -551,7 +555,7 @@ tr_msg() {
                 MSG_HELP_TITLE) printf "Help" ;;
                 MSG_HELP_ARGS) printf "Command-line arguments:" ;;
                 MSG_HELP_DIR_ARG) printf "  -d|--directory <path>  Custom ClashFox install directory" ;;
-                MSG_HELP_LANG_ARG) printf "  -l|--lang <zh|en|ja|ko|fr|de|ru|auto>  Set UI language" ;;
+                MSG_HELP_LANG_ARG) printf "  -l|--lang <zh|en|auto>  Set UI language" ;;
                 MSG_HELP_STATUS) printf "  status                 Show current kernel status" ;;
                 MSG_HELP_LIST) printf "  list                   List all kernel backups" ;;
                 MSG_HELP_SWITCH) printf "  switch                 Switch kernel version" ;;
@@ -608,11 +612,11 @@ tr_msg() {
                 MSG_EXIT_ABNORMAL) printf "[Exit] Program terminated unexpectedly" ;;
 
                 MSG_ARG_DIR_REQUIRED) printf "-d/--directory requires a directory path." ;;
-                MSG_ARG_LANG_REQUIRED) printf "-l/--lang requires a language (zh|en|ja|ko|fr|de|ru|auto)." ;;
-                MSG_ARG_LANG_INVALID) printf "Invalid language: %s (supported: zh|en|ja|ko|fr|de|ru|auto)" "$@" ;;
+                MSG_ARG_LANG_REQUIRED) printf "-l/--lang requires a language (zh|en|auto)." ;;
+                MSG_ARG_LANG_INVALID) printf "Invalid language: %s (supported: zh|en|auto)" "$@" ;;
                 MSG_UNKNOWN_COMMAND) printf "Unknown command: %s" "$@" ;;
                 MSG_AVAILABLE_COMMANDS) printf "Available commands: status, list, switch, logs, clean, help, version" ;;
-                MSG_AVAILABLE_ARGS) printf "Available args: -d/--directory <path> - custom ClashFox install dir; -l/--lang <zh|en|ja|ko|fr|de|ru|auto> - set UI language" ;;
+                MSG_AVAILABLE_ARGS) printf "Available args: -d/--directory <path> - custom ClashFox install dir; -l/--lang <zh|en|auto> - set UI language" ;;
 
                 MSG_SAVED_DIR_LOADED) printf "Loaded saved directory: %s" "$@" ;;
                 MSG_SAVED_DIR_NOT_FOUND) printf "No saved directory found. Using default: %s" "$@" ;;
@@ -829,7 +833,7 @@ tr_msg() {
                 MSG_HELP_TITLE) printf "ヘルプ" ;;
                 MSG_HELP_ARGS) printf "コマンドライン引数:" ;;
                 MSG_HELP_DIR_ARG) printf "  -d|--directory <path>  ClashFox インストール先を指定" ;;
-                MSG_HELP_LANG_ARG) printf "  -l|--lang <zh|en|ja|ko|fr|de|ru|auto>  表示言語を指定" ;;
+                MSG_HELP_LANG_ARG) printf "  -l|--lang <zh|en|auto>  表示言語を指定" ;;
                 MSG_HELP_STATUS) printf "  status                 現在のカーネル状態を表示" ;;
                 MSG_HELP_LIST) printf "  list                   すべてのバックアップを一覧" ;;
                 MSG_HELP_SWITCH) printf "  switch                 カーネル版を切替" ;;
@@ -886,11 +890,11 @@ tr_msg() {
                 MSG_EXIT_ABNORMAL) printf "[終了] プログラムが異常終了しました" ;;
 
                 MSG_ARG_DIR_REQUIRED) printf "-d/--directory にはディレクトリパスが必要です。" ;;
-                MSG_ARG_LANG_REQUIRED) printf "-l/--lang には言語(zh|en|ja|ko|fr|de|ru|auto)が必要です。" ;;
-                MSG_ARG_LANG_INVALID) printf "無効な言語: %s (対応: zh|en|ja|ko|fr|de|ru|auto)" "$@" ;;
+                MSG_ARG_LANG_REQUIRED) printf "-l/--lang には言語(zh|en|auto)が必要です。" ;;
+                MSG_ARG_LANG_INVALID) printf "無効な言語: %s (対応: zh|en|auto)" "$@" ;;
                 MSG_UNKNOWN_COMMAND) printf "不明なコマンド: %s" "$@" ;;
                 MSG_AVAILABLE_COMMANDS) printf "利用可能コマンド: status, list, switch, logs, clean, help, version" ;;
-                MSG_AVAILABLE_ARGS) printf "利用可能引数: -d/--directory <path> - ClashFoxのインストール先; -l/--lang <zh|en|ja|ko|fr|de|ru|auto> - 表示言語" ;;
+                MSG_AVAILABLE_ARGS) printf "利用可能引数: -d/--directory <path> - ClashFoxのインストール先; -l/--lang <zh|en|auto> - 表示言語" ;;
 
                 MSG_SAVED_DIR_LOADED) printf "保存済みディレクトリを読み込みました: %s" "$@" ;;
                 MSG_SAVED_DIR_NOT_FOUND) printf "保存済みディレクトリがありません。デフォルトを使用: %s" "$@" ;;
@@ -1107,7 +1111,7 @@ tr_msg() {
                 MSG_HELP_TITLE) printf "도움말" ;;
                 MSG_HELP_ARGS) printf "명령줄 인자:" ;;
                 MSG_HELP_DIR_ARG) printf "  -d|--directory <path>  ClashFox 설치 경로 지정" ;;
-                MSG_HELP_LANG_ARG) printf "  -l|--lang <zh|en|ja|ko|fr|de|ru|auto>  UI 언어 지정" ;;
+                MSG_HELP_LANG_ARG) printf "  -l|--lang <zh|en|auto>  UI 언어 지정" ;;
                 MSG_HELP_STATUS) printf "  status                 현재 커널 상태 보기" ;;
                 MSG_HELP_LIST) printf "  list                   모든 백업 목록" ;;
                 MSG_HELP_SWITCH) printf "  switch                 커널 버전 전환" ;;
@@ -1164,11 +1168,11 @@ tr_msg() {
                 MSG_EXIT_ABNORMAL) printf "[종료] 프로그램이 비정상 종료되었습니다" ;;
 
                 MSG_ARG_DIR_REQUIRED) printf "-d/--directory 에는 디렉터리 경로가 필요합니다." ;;
-                MSG_ARG_LANG_REQUIRED) printf "-l/--lang 에는 언어(zh|en|ja|ko|fr|de|ru|auto)가 필요합니다." ;;
-                MSG_ARG_LANG_INVALID) printf "잘못된 언어: %s (지원: zh|en|ja|ko|fr|de|ru|auto)" "$@" ;;
+                MSG_ARG_LANG_REQUIRED) printf "-l/--lang 에는 언어(zh|en|auto)가 필요합니다." ;;
+                MSG_ARG_LANG_INVALID) printf "잘못된 언어: %s (지원: zh|en|auto)" "$@" ;;
                 MSG_UNKNOWN_COMMAND) printf "알 수 없는 명령: %s" "$@" ;;
                 MSG_AVAILABLE_COMMANDS) printf "사용 가능한 명령: status, list, switch, logs, clean, help, version" ;;
-                MSG_AVAILABLE_ARGS) printf "사용 가능한 인자: -d/--directory <path> - ClashFox 설치 경로; -l/--lang <zh|en|ja|ko|fr|de|ru|auto> - UI 언어" ;;
+                MSG_AVAILABLE_ARGS) printf "사용 가능한 인자: -d/--directory <path> - ClashFox 설치 경로; -l/--lang <zh|en|auto> - UI 언어" ;;
 
                 MSG_SAVED_DIR_LOADED) printf "저장된 디렉터리 불러옴: %s" "$@" ;;
                 MSG_SAVED_DIR_NOT_FOUND) printf "저장된 디렉터리가 없습니다. 기본값 사용: %s" "$@" ;;
@@ -1385,7 +1389,7 @@ tr_msg() {
                 MSG_HELP_TITLE) printf "Aide" ;;
                 MSG_HELP_ARGS) printf "Arguments de ligne de commande :" ;;
                 MSG_HELP_DIR_ARG) printf "  -d|--directory <path>  Répertoire d'installation ClashFox" ;;
-                MSG_HELP_LANG_ARG) printf "  -l|--lang <zh|en|ja|ko|fr|de|ru|auto>  Langue de l'interface" ;;
+                MSG_HELP_LANG_ARG) printf "  -l|--lang <zh|en|auto>  Langue de l'interface" ;;
                 MSG_HELP_STATUS) printf "  status                 Afficher l'état du noyau" ;;
                 MSG_HELP_LIST) printf "  list                   Lister toutes les sauvegardes" ;;
                 MSG_HELP_SWITCH) printf "  switch                 Changer la version du noyau" ;;
@@ -1442,11 +1446,11 @@ tr_msg() {
                 MSG_EXIT_ABNORMAL) printf "[Quitter] Programme interrompu de manière inattendue" ;;
 
                 MSG_ARG_DIR_REQUIRED) printf "-d/--directory requiert un chemin de répertoire." ;;
-                MSG_ARG_LANG_REQUIRED) printf "-l/--lang requiert une langue (zh|en|ja|ko|fr|de|ru|auto)." ;;
-                MSG_ARG_LANG_INVALID) printf "Langue invalide : %s (supportées : zh|en|ja|ko|fr|de|ru|auto)" "$@" ;;
+                MSG_ARG_LANG_REQUIRED) printf "-l/--lang requiert une langue (zh|en|auto)." ;;
+                MSG_ARG_LANG_INVALID) printf "Langue invalide : %s (supportées : zh|en|auto)" "$@" ;;
                 MSG_UNKNOWN_COMMAND) printf "Commande inconnue : %s" "$@" ;;
                 MSG_AVAILABLE_COMMANDS) printf "Commandes disponibles : status, list, switch, logs, clean, help, version" ;;
-                MSG_AVAILABLE_ARGS) printf "Arguments disponibles : -d/--directory <path> - répertoire d'installation ClashFox; -l/--lang <zh|en|ja|ko|fr|de|ru|auto> - langue UI" ;;
+                MSG_AVAILABLE_ARGS) printf "Arguments disponibles : -d/--directory <path> - répertoire d'installation ClashFox; -l/--lang <zh|en|auto> - langue UI" ;;
 
                 MSG_SAVED_DIR_LOADED) printf "Répertoire enregistré chargé : %s" "$@" ;;
                 MSG_SAVED_DIR_NOT_FOUND) printf "Aucun répertoire enregistré. Utilisation par défaut : %s" "$@" ;;
@@ -1663,7 +1667,7 @@ tr_msg() {
                 MSG_HELP_TITLE) printf "Hilfe" ;;
                 MSG_HELP_ARGS) printf "Kommandozeilenargumente:" ;;
                 MSG_HELP_DIR_ARG) printf "  -d|--directory <path>  ClashFox-Installationsverzeichnis" ;;
-                MSG_HELP_LANG_ARG) printf "  -l|--lang <zh|en|ja|ko|fr|de|ru|auto>  UI-Sprache" ;;
+                MSG_HELP_LANG_ARG) printf "  -l|--lang <zh|en|auto>  UI-Sprache" ;;
                 MSG_HELP_STATUS) printf "  status                 Aktuellen Kernelstatus anzeigen" ;;
                 MSG_HELP_LIST) printf "  list                   Alle Backups auflisten" ;;
                 MSG_HELP_SWITCH) printf "  switch                 Kernel-Version wechseln" ;;
@@ -1720,11 +1724,11 @@ tr_msg() {
                 MSG_EXIT_ABNORMAL) printf "[Beenden] Programm unerwartet beendet" ;;
 
                 MSG_ARG_DIR_REQUIRED) printf "-d/--directory erfordert einen Verzeichnispfad." ;;
-                MSG_ARG_LANG_REQUIRED) printf "-l/--lang erfordert eine Sprache (zh|en|ja|ko|fr|de|ru|auto)." ;;
-                MSG_ARG_LANG_INVALID) printf "Ungültige Sprache: %s (unterstützt: zh|en|ja|ko|fr|de|ru|auto)" "$@" ;;
+                MSG_ARG_LANG_REQUIRED) printf "-l/--lang erfordert eine Sprache (zh|en|auto)." ;;
+                MSG_ARG_LANG_INVALID) printf "Ungültige Sprache: %s (unterstützt: zh|en|auto)" "$@" ;;
                 MSG_UNKNOWN_COMMAND) printf "Unbekannter Befehl: %s" "$@" ;;
                 MSG_AVAILABLE_COMMANDS) printf "Verfügbare Befehle: status, list, switch, logs, clean, help, version" ;;
-                MSG_AVAILABLE_ARGS) printf "Verfügbare Argumente: -d/--directory <path> - ClashFox-Installationsverzeichnis; -l/--lang <zh|en|ja|ko|fr|de|ru|auto> - UI-Sprache" ;;
+                MSG_AVAILABLE_ARGS) printf "Verfügbare Argumente: -d/--directory <path> - ClashFox-Installationsverzeichnis; -l/--lang <zh|en|auto> - UI-Sprache" ;;
 
                 MSG_SAVED_DIR_LOADED) printf "Gespeichertes Verzeichnis geladen: %s" "$@" ;;
                 MSG_SAVED_DIR_NOT_FOUND) printf "Kein gespeichertes Verzeichnis gefunden. Verwende Standard: %s" "$@" ;;
@@ -1941,7 +1945,7 @@ tr_msg() {
                 MSG_HELP_TITLE) printf "Справка" ;;
                 MSG_HELP_ARGS) printf "Аргументы командной строки:" ;;
                 MSG_HELP_DIR_ARG) printf "  -d|--directory <path>  Каталог установки ClashFox" ;;
-                MSG_HELP_LANG_ARG) printf "  -l|--lang <zh|en|ja|ko|fr|de|ru|auto>  Язык интерфейса" ;;
+                MSG_HELP_LANG_ARG) printf "  -l|--lang <zh|en|auto>  Язык интерфейса" ;;
                 MSG_HELP_STATUS) printf "  status                 Показать текущий статус ядра" ;;
                 MSG_HELP_LIST) printf "  list                   Список всех резервных копий" ;;
                 MSG_HELP_SWITCH) printf "  switch                 Переключить версию ядра" ;;
@@ -1998,11 +2002,11 @@ tr_msg() {
                 MSG_EXIT_ABNORMAL) printf "[Выход] Программа завершилась неожиданно" ;;
 
                 MSG_ARG_DIR_REQUIRED) printf "-d/--directory требует путь к каталогу." ;;
-                MSG_ARG_LANG_REQUIRED) printf "-l/--lang требует язык (zh|en|ja|ko|fr|de|ru|auto)." ;;
-                MSG_ARG_LANG_INVALID) printf "Недопустимый язык: %s (поддерживаются: zh|en|ja|ko|fr|de|ru|auto)" "$@" ;;
+                MSG_ARG_LANG_REQUIRED) printf "-l/--lang требует язык (zh|en|auto)." ;;
+                MSG_ARG_LANG_INVALID) printf "Недопустимый язык: %s (поддерживаются: zh|en|auto)" "$@" ;;
                 MSG_UNKNOWN_COMMAND) printf "Неизвестная команда: %s" "$@" ;;
                 MSG_AVAILABLE_COMMANDS) printf "Доступные команды: status, list, switch, logs, clean, help, version" ;;
-                MSG_AVAILABLE_ARGS) printf "Доступные параметры: -d/--directory <path> - каталог установки ClashFox; -l/--lang <zh|en|ja|ko|fr|de|ru|auto> - язык UI" ;;
+                MSG_AVAILABLE_ARGS) printf "Доступные параметры: -d/--directory <path> - каталог установки ClashFox; -l/--lang <zh|en|auto> - язык UI" ;;
 
                 MSG_SAVED_DIR_LOADED) printf "Сохранённый каталог загружен: %s" "$@" ;;
                 MSG_SAVED_DIR_NOT_FOUND) printf "Сохранённый каталог не найден. Используется по умолчанию: %s" "$@" ;;
@@ -3529,7 +3533,7 @@ parse_arguments() {
                 shift
                 if [ -n "$1" ]; then
                     case "$1" in
-                        zh|en|ja|ko|fr|de|ru|auto)
+                        zh|en|auto)
                             CLASHFOX_LANG="$1"
                             ;;
                         *)
@@ -3547,7 +3551,7 @@ parse_arguments() {
                 LANG_VALUE="${1#*=}"
                 if [ -n "$LANG_VALUE" ]; then
                     case "$LANG_VALUE" in
-                        zh|en|ja|ko|fr|de|ru|auto)
+                        zh|en|auto)
                             CLASHFOX_LANG="$LANG_VALUE"
                             ;;
                         *)

@@ -2,6 +2,7 @@
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT_PATH="$ROOT_DIR/scripts/clashfox_mihomo_toolkit.sh"
+COMMON_LIB="$ROOT_DIR/scripts/lib/clashfox_script_common.sh"
 
 if [ "$(uname -s)" != "Darwin" ]; then
     printf '{"ok":false,"error":"unsupported_os"}\n'
@@ -13,8 +14,16 @@ if [ ! -f "$SCRIPT_PATH" ]; then
     exit 2
 fi
 
+if [ ! -f "$COMMON_LIB" ]; then
+    printf '{"ok":false,"error":"common_lib_missing"}\n'
+    exit 2
+fi
+
 export CLASHFOX_GUI_MODE=1
 export CLASHFOX_SILENT=1
+
+# shellcheck source=/dev/null
+. "$COMMON_LIB"
 
 # shellcheck source=/dev/null
 . "$SCRIPT_PATH"
@@ -38,16 +47,6 @@ ensure_runtime_dirs
 
 get_backup_files_sorted() {
     ls -1t "$CLASHFOX_BACKUP_DIR"/mihomo.backup.* 2>/dev/null | awk 'NF'
-}
-
-json_escape() {
-    local s="$1"
-    s="${s//\\/\\\\}"
-    s="${s//"/\\"}"
-    s="${s//$'\n'/\\n}"
-    s="${s//$'\r'/\\r}"
-    s="${s//$'\t'/\\t}"
-    printf '%s' "$s"
 }
 
 extract_ipip_ip() {
@@ -354,26 +353,35 @@ resolve_kernel_version_from_pid() {
     bin="${cmd%% *}"
     if [ -n "$bin" ]; then
         if [ -x "$bin" ]; then
-            "$bin" -v 2>/dev/null | head -n 1 | tr -d '\r'
+            resolve_kernel_version_from_binary "$bin"
             return
         fi
         if [[ "$bin" != /* ]]; then
             candidate="$CLASHFOX_CORE_DIR/${bin#./}"
             if [ -x "$candidate" ]; then
-                "$candidate" -v 2>/dev/null | head -n 1 | tr -d '\r'
+                resolve_kernel_version_from_binary "$candidate"
                 return
             fi
         fi
     fi
     if [ -n "$ACTIVE_CORE" ] && [ -x "$CLASHFOX_CORE_DIR/$ACTIVE_CORE" ]; then
-        "$CLASHFOX_CORE_DIR/$ACTIVE_CORE" -v 2>/dev/null | head -n 1 | tr -d '\r'
+        resolve_kernel_version_from_binary "$CLASHFOX_CORE_DIR/$ACTIVE_CORE"
         return
     fi
     if command -v mihomo >/dev/null 2>&1; then
-        mihomo -v 2>/dev/null | head -n 1 | tr -d '\r'
+        resolve_kernel_version_from_binary "mihomo"
         return
     fi
     echo ""
+}
+
+resolve_kernel_version_from_binary() {
+    local bin="$1"
+    if [ -z "$bin" ]; then
+        echo ""
+        return
+    fi
+    "$bin" -v 2>/dev/null | head -n 1 | tr -d '\r'
 }
 
 resolve_kernel_path_from_pid() {
@@ -409,21 +417,6 @@ resolve_kernel_path_from_pid() {
         return
     fi
     echo ""
-}
-
-print_ok() {
-    printf '{"ok":true,"data":%s}\n' "$1"
-}
-
-print_err() {
-    local msg="$1"
-    printf '{"ok":false,"error":"%s"}\n' "$(json_escape "$msg")"
-}
-
-print_err_with_details() {
-    local msg="$1"
-    local details="$2"
-    printf '{"ok":false,"error":"%s","details":"%s"}\n' "$(json_escape "$msg")" "$(json_escape "$details")"
 }
 
 extract_recent_start_failure_detail() {
@@ -673,6 +666,1853 @@ get_mihomo_connections() {
     '
 }
 
+# Runtime snapshot (kernel path / pid / running / version) shared by status-like commands.
+collect_runtime_snapshot() {
+    local kernel_path="$CLASHFOX_CORE_DIR/$ACTIVE_CORE"
+    local pid_file="$CLASHFOX_PID_DIR/clashfox.pid"
+    local kernel_exists=false
+    local kernel_exec=false
+    local running=false
+    local pid=""
+    local version=""
+
+    if [ -f "$kernel_path" ]; then
+        kernel_exists=true
+    fi
+    if [ -x "$kernel_path" ]; then
+        kernel_exec=true
+    fi
+
+    if [ -f "$pid_file" ]; then
+        pid="$(cat "$pid_file" 2>/dev/null)"
+        if pid_is_running "$pid"; then
+            running=true
+        else
+            pid=""
+        fi
+    fi
+    if [ "$running" = false ]; then
+        pid="$(find_mihomo_pid)"
+        if pid_is_running "$pid"; then
+            running=true
+        else
+            pid=""
+        fi
+    fi
+
+    if [ -n "$pid" ] && [ ! -x "$kernel_path" ]; then
+        local resolved_path
+        resolved_path="$(resolve_kernel_path_from_pid "$pid")"
+        if [ -n "$resolved_path" ]; then
+            kernel_path="$resolved_path"
+            kernel_exists=true
+            kernel_exec=true
+        fi
+    fi
+
+    if [ -x "$kernel_path" ]; then
+        version="$(resolve_kernel_version_from_binary "$kernel_path")"
+    fi
+    if [ -z "$version" ] && [ -n "$pid" ]; then
+        version="$(resolve_kernel_version_from_pid "$pid")"
+    fi
+    if [ -n "$version" ] && [ "$kernel_exists" = false ]; then
+        kernel_exists=true
+    fi
+
+    CF_RT_KERNEL_PATH="$kernel_path"
+    CF_RT_PID="$pid"
+    CF_RT_RUNNING="$running"
+    CF_RT_KERNEL_EXISTS="$kernel_exists"
+    CF_RT_KERNEL_EXEC="$kernel_exec"
+    CF_RT_KERNEL_VERSION="$version"
+}
+
+resolve_runtime_uptime_sec() {
+    local running="$1"
+    local pid="$2"
+    local uptime_sec=0
+    if [ "$running" = true ] && [ -n "$pid" ]; then
+        uptime_sec="$(get_mihomo_uptime_sec "$pid")"
+    fi
+    if ! echo "$uptime_sec" | grep -qE '^[0-9]+$'; then
+        uptime_sec=0
+    fi
+    printf '%s' "$uptime_sec"
+}
+
+resolve_runtime_memory() {
+    local kernel_path="$1"
+    local running="$2"
+    local pid="$3"
+    local memory=""
+    if [ "$running" != true ]; then
+        printf '%s' "$memory"
+        return
+    fi
+    local memory_pid="$pid"
+    if [ -z "$memory_pid" ]; then
+        memory_pid="$(find_mihomo_pid)"
+    fi
+    if [ -n "$memory_pid" ]; then
+        local memory_mb
+        memory_mb="$(get_mihomo_rss_mb "$memory_pid")"
+        if [ -z "$memory_mb" ]; then
+            local rss_kb
+            rss_kb="$(get_mihomo_rss_kb "$kernel_path")"
+            if [ -n "$rss_kb" ]; then
+                memory_mb="$(awk -v rss="$rss_kb" 'BEGIN{printf "%.1f", rss/1024}')"
+            fi
+        fi
+        if [ -n "$memory_mb" ]; then
+            memory="${memory_mb} MB"
+        fi
+    fi
+    printf '%s' "$memory"
+}
+
+parse_common_controller_args() {
+    # Usage:
+    #   parse_common_controller_args "$@"
+    #   parse_common_controller_args --allow-cache "$@"
+    CF_ARG_CONFIG_PATH=""
+    CF_ARG_CONTROLLER_OVERRIDE=""
+    CF_ARG_SECRET_OVERRIDE=""
+    CF_ARG_CACHE_TTL="2"
+    CF_ARG_DISABLE_CACHE=false
+
+    local allow_cache=false
+    if [ "${1:-}" = "--allow-cache" ]; then
+        allow_cache=true
+        shift || true
+    fi
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --config|--config-path)
+                shift || true
+                CF_ARG_CONFIG_PATH="${1:-}"
+                ;;
+            --controller)
+                shift || true
+                CF_ARG_CONTROLLER_OVERRIDE="${1:-}"
+                ;;
+            --secret)
+                shift || true
+                CF_ARG_SECRET_OVERRIDE="${1:-}"
+                ;;
+            --cache-ttl)
+                if [ "$allow_cache" = true ]; then
+                    shift || true
+                    if echo "${1:-}" | grep -qE '^[0-9]+$'; then
+                        CF_ARG_CACHE_TTL="$1"
+                    fi
+                fi
+                ;;
+            --no-cache)
+                if [ "$allow_cache" = true ]; then
+                    CF_ARG_DISABLE_CACHE=true
+                fi
+                ;;
+        esac
+        shift || true
+    done
+}
+
+apply_controller_overrides() {
+    local config_path="$1"
+    local controller_override="$2"
+    local secret_override="$3"
+    resolve_controller_from_config "$config_path"
+    resolve_proxy_port_from_config "$config_path"
+    if [ -n "$controller_override" ]; then
+        if ! echo "$controller_override" | grep -qE '^https?://'; then
+            MIHOMO_CONTROLLER="http://$controller_override"
+        else
+            MIHOMO_CONTROLLER="$controller_override"
+        fi
+    fi
+    if [ -n "$secret_override" ]; then
+        MIHOMO_SECRET="$secret_override"
+    fi
+}
+
+handle_runtime_status() {
+    rotate_logs
+    parse_common_controller_args "$@"
+    local config_path="$CF_ARG_CONFIG_PATH"
+    if [ -z "$config_path" ]; then
+        config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+    fi
+    apply_controller_overrides "$config_path" "$CF_ARG_CONTROLLER_OVERRIDE" "$CF_ARG_SECRET_OVERRIDE"
+
+    collect_runtime_snapshot
+    local kernel_path="$CF_RT_KERNEL_PATH"
+    local pid="$CF_RT_PID"
+    local running="$CF_RT_RUNNING"
+    local kernel_exists="$CF_RT_KERNEL_EXISTS"
+    local kernel_exec="$CF_RT_KERNEL_EXEC"
+    local version="$CF_RT_KERNEL_VERSION"
+
+    local log_path="$CLASHFOX_LOG_DIR/clashfox.log"
+    local config_default="$CLASHFOX_CONFIG_DIR/default.yaml"
+    local config_exists=false
+    if [ -f "$config_default" ]; then
+        config_exists=true
+    fi
+
+    local data
+    data=$(cat <<JSON
+{"kernelPath":"$(json_escape "$kernel_path")","kernelExists":$kernel_exists,"kernelExec":$kernel_exec,"version":"$(json_escape "$version")","running":$running,"pid":"$(json_escape "$pid")","configDefault":"$(json_escape "$config_default")","configExists":$config_exists,"logPath":"$(json_escape "$log_path")","coreDir":"$(json_escape "$CLASHFOX_CORE_DIR")","configDir":"$(json_escape "$CLASHFOX_CONFIG_DIR")","dataDir":"$(json_escape "$CLASHFOX_DATA_DIR")"}
+JSON
+)
+    print_ok "$data"
+}
+
+handle_runtime_overview_lite() {
+    rotate_logs
+    parse_common_controller_args "$@"
+    local config_path="$CF_ARG_CONFIG_PATH"
+    if [ -z "$config_path" ]; then
+        config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+    fi
+    apply_controller_overrides "$config_path" "$CF_ARG_CONTROLLER_OVERRIDE" "$CF_ARG_SECRET_OVERRIDE"
+
+    collect_runtime_snapshot
+    local kernel_path="$CF_RT_KERNEL_PATH"
+    local pid="$CF_RT_PID"
+    local running="$CF_RT_RUNNING"
+    local uptime_sec
+    uptime_sec="$(resolve_runtime_uptime_sec "$running" "$pid")"
+
+    local connections=""
+    local memory=""
+    connections="$(get_mihomo_connections)"
+    if [ "$running" = false ] && [ -n "$connections" ]; then
+        running=true
+    fi
+    memory="$(resolve_runtime_memory "$kernel_path" "$running" "$pid")"
+
+    local data
+    data=$(cat <<JSON
+{"running":$running,"uptimeSec":$uptime_sec,"connections":"$(json_escape "$connections")","memory":"$(json_escape "$memory")"}
+JSON
+)
+    print_ok "$data"
+}
+
+handle_runtime_memory() {
+    collect_runtime_snapshot
+    local kernel_path="$CF_RT_KERNEL_PATH"
+    local pid="$CF_RT_PID"
+    local running="$CF_RT_RUNNING"
+    local memory
+    memory="$(resolve_runtime_memory "$kernel_path" "$running" "$pid")"
+    local data
+    data=$(cat <<JSON
+{"memory":"$(json_escape "$memory")"}
+JSON
+)
+    print_ok "$data"
+}
+
+handle_traffic() {
+    parse_common_controller_args "$@"
+    local config_path="$CF_ARG_CONFIG_PATH"
+    if [ -z "$config_path" ]; then
+        config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+    fi
+    if [ ! -f "$config_path" ]; then
+        print_ok '{"up":"","down":""}'
+        return
+    fi
+
+    local controller secret
+    controller="$(grep -E '^[[:space:]]*external-controller:' "$config_path" | head -n 1 | sed -E 's/^[[:space:]]*external-controller:[[:space:]]*//')"
+    controller="${controller%\"}"
+    controller="${controller#\"}"
+    controller="${controller%\'}"
+    controller="${controller#\'}"
+
+    secret="$(grep -E '^[[:space:]]*secret:' "$config_path" | head -n 1 | sed -E 's/^[[:space:]]*secret:[[:space:]]*//')"
+    secret="${secret%\"}"
+    secret="${secret#\"}"
+    secret="${secret%\'}"
+    secret="${secret#\'}"
+
+    if [ -n "$CF_ARG_CONTROLLER_OVERRIDE" ]; then
+        controller="$CF_ARG_CONTROLLER_OVERRIDE"
+    fi
+    if [ -n "$CF_ARG_SECRET_OVERRIDE" ]; then
+        secret="$CF_ARG_SECRET_OVERRIDE"
+    fi
+    if [ -z "$controller" ]; then
+        print_ok '{"up":"","down":""}'
+        return
+    fi
+    if ! echo "$controller" | grep -qE '^https?://'; then
+        controller="http://$controller"
+    fi
+
+    local traffic_resp up_val down_val parsed_traffic
+    if [ -n "$secret" ]; then
+        traffic_resp="$(curl -s --max-time 1 -H "Authorization: Bearer $secret" "$controller/traffic" 2>/dev/null)"
+    else
+        traffic_resp="$(curl -s --max-time 1 "$controller/traffic" 2>/dev/null)"
+    fi
+
+    up_val=""
+    down_val=""
+    if [ -n "$traffic_resp" ] && command -v python3 >/dev/null 2>&1; then
+        parsed_traffic="$(CLASHFOX_TRAFFIC_RESP="$traffic_resp" python3 - <<'PY'
+import json, os
+raw = os.environ.get("CLASHFOX_TRAFFIC_RESP", "")
+if not raw:
+    print("|")
+    raise SystemExit
+try:
+    data = json.loads(raw)
+except Exception:
+    print("|")
+    raise SystemExit
+def as_num(v):
+    try:
+        return float(v)
+    except Exception:
+        return None
+up = as_num(data.get("up"))
+down = as_num(data.get("down"))
+up_s = str(int(up)) if up is not None and up >= 0 else ""
+down_s = str(int(down)) if down is not None and down >= 0 else ""
+print(f"{up_s}|{down_s}")
+PY
+)"
+        up_val="${parsed_traffic%%|*}"
+        down_val="${parsed_traffic#*|}"
+    fi
+    if [ -z "$up_val" ] || [ -z "$down_val" ]; then
+        up_val="$(printf '%s' "$traffic_resp" | sed -n 's/.*"up"[[:space:]]*:[[:space:]]*\\([0-9]\\+\\).*/\\1/p')"
+        down_val="$(printf '%s' "$traffic_resp" | sed -n 's/.*"down"[[:space:]]*:[[:space:]]*\\([0-9]\\+\\).*/\\1/p')"
+    fi
+
+    local data
+    data=$(cat <<JSON
+{"up":"$(json_escape "$up_val")","down":"$(json_escape "$down_val")"}
+JSON
+)
+    print_ok "$data"
+}
+
+handle_tun_status() {
+    parse_common_controller_args "$@"
+    local config_path="$CF_ARG_CONFIG_PATH"
+    if [ -z "$config_path" ]; then
+        config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+    fi
+    apply_controller_overrides "$config_path" "$CF_ARG_CONTROLLER_OVERRIDE" "$CF_ARG_SECRET_OVERRIDE"
+
+    if [ -z "$MIHOMO_CONTROLLER" ]; then
+        print_err "controller_missing"
+        return 1
+    fi
+    if ! command -v curl >/dev/null 2>&1; then
+        print_err "curl_missing"
+        return 1
+    fi
+    local auth_args=()
+    if [ -n "$MIHOMO_SECRET" ]; then
+        auth_args=(-H "Authorization: Bearer $MIHOMO_SECRET")
+    fi
+    local json enabled stack
+    json="$(curl -s --max-time 2 "${auth_args[@]}" "$MIHOMO_CONTROLLER/configs" 2>/dev/null | tr '\n' ' ')"
+    if [ -z "$json" ]; then
+        print_err "request_failed"
+        return 1
+    fi
+    enabled="$(printf '%s' "$json" | sed -nE 's/.*\"tun\"[[:space:]]*:[[:space:]]*\\{[^}]*\"(enable|enabled)\"[[:space:]]*:[[:space:]]*([^,}\\ ]+).*/\\2/p')"
+    if [ -z "$enabled" ]; then
+        enabled="$(printf '%s' "$json" | sed -nE 's/.*\"tun\"[[:space:]]*:[[:space:]]*(true|false).*/\\1/p')"
+    fi
+    stack="$(printf '%s' "$json" | sed -nE 's/.*\"tun\"[[:space:]]*:[[:space:]]*\\{[^}]*\"stack\"[[:space:]]*:[[:space:]]*\"([^\"]+)\".*/\\1/p')"
+    if [ -z "$enabled" ]; then
+        print_err "tun_parse_failed"
+        return 1
+    fi
+    if [ -z "$stack" ]; then
+        stack="mixed"
+    fi
+    print_ok "{\"enabled\":$enabled,\"stack\":\"$(json_escape "$stack")\"}"
+}
+
+handle_tun() {
+    local enable_value=""
+    local stack_value=""
+    local config_path=""
+    local controller_override=""
+    local secret_override=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --enable)
+                shift || true
+                enable_value="${1:-}"
+                ;;
+            --stack)
+                shift || true
+                stack_value="${1:-}"
+                ;;
+            --config|--config-path)
+                shift || true
+                config_path="${1:-}"
+                ;;
+            --controller)
+                shift || true
+                controller_override="${1:-}"
+                ;;
+            --secret)
+                shift || true
+                secret_override="${1:-}"
+                ;;
+        esac
+        shift || true
+    done
+
+    if [ -z "$config_path" ]; then
+        config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+    fi
+    apply_controller_overrides "$config_path" "$controller_override" "$secret_override"
+
+    if [ -z "$MIHOMO_CONTROLLER" ]; then
+        print_err "controller_missing"
+        return 1
+    fi
+    if ! command -v curl >/dev/null 2>&1; then
+        print_err "curl_missing"
+        return 1
+    fi
+
+    local payload=""
+    if [ -n "$enable_value" ]; then
+        case "$enable_value" in
+            true|false) ;;
+            *) print_err "invalid_tun"; return 1 ;;
+        esac
+        payload="{\"tun\":{\"enable\":$enable_value}}"
+    fi
+    if [ -n "$stack_value" ]; then
+        case "$stack_value" in
+            Mixed) stack_value="mixed" ;;
+            gVisor) stack_value="gvisor" ;;
+            System) stack_value="system" ;;
+            Lwip|LWIP) stack_value="lwip" ;;
+        esac
+        case "$stack_value" in
+            mixed|gvisor|system|lwip) ;;
+            *) print_err "invalid_tun"; return 1 ;;
+        esac
+        if [ -n "$payload" ]; then
+            payload="{\"tun\":{\"enable\":${enable_value:-false},\"stack\":\"$stack_value\"}}"
+        else
+            payload="{\"tun\":{\"stack\":\"$stack_value\"}}"
+        fi
+    fi
+    if [ -z "$payload" ]; then
+        print_err "invalid_tun"
+        return 1
+    fi
+
+    local auth_args=()
+    if [ -n "$MIHOMO_SECRET" ]; then
+        auth_args=(-H "Authorization: Bearer $MIHOMO_SECRET")
+    fi
+    local code
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 -X PATCH "${auth_args[@]}" -H "Content-Type: application/json" -d "$payload" "$MIHOMO_CONTROLLER/configs" 2>/dev/null)"
+    if echo "$code" | grep -qE '^(200|204)$'; then
+        print_ok "{}"
+    else
+        print_err "request_failed"
+        return 1
+    fi
+}
+
+handle_configs() {
+    if [ ! -d "$CLASHFOX_CONFIG_DIR" ]; then
+        print_ok "[]"
+        return
+    fi
+    shopt -s nullglob
+    local files=( "$CLASHFOX_CONFIG_DIR"/*.yaml "$CLASHFOX_CONFIG_DIR"/*.yml "$CLASHFOX_CONFIG_DIR"/*.json )
+    shopt -u nullglob
+    if [ ${#files[@]} -eq 0 ]; then
+        print_ok "[]"
+        return
+    fi
+    local sorted
+    sorted="$(printf '%s\0' "${files[@]}" | xargs -0 ls -1t 2>/dev/null)"
+    if [ -z "$sorted" ]; then
+        print_ok "[]"
+        return
+    fi
+    local json="[" first=true
+    while IFS= read -r file; do
+        if [ ! -f "$file" ]; then
+            continue
+        fi
+        local name modified
+        name="$(basename "$file")"
+        modified="$(stat -f "%Sm" -t "%Y-%m-%d %H:%M:%S" "$file" 2>/dev/null)"
+        if [ -z "$modified" ]; then
+            modified="-"
+        fi
+        if [ "$first" = true ]; then
+            first=false
+        else
+            json+=","
+        fi
+        json+="{\"name\":\"$(json_escape "$name")\",\"path\":\"$(json_escape "$file")\",\"modified\":\"$(json_escape "$modified")\"}"
+    done <<< "$sorted"
+    json+="]"
+    print_ok "$json"
+}
+
+handle_cores() {
+    local files_sorted
+    files_sorted="$(ls -1t "$CLASHFOX_CORE_DIR"/* "$CLASHFOX_BACKUP_DIR"/mihomo.backup.* 2>/dev/null | awk 'NF')"
+    if [ -z "$files_sorted" ]; then
+        print_ok "[]"
+        return
+    fi
+    local json="[" first=true
+    while IFS= read -r file; do
+        [ -z "$file" ] && continue
+        if [ ! -f "$file" ]; then
+            continue
+        fi
+        local name modified size_bytes
+        name="$(basename "$file")"
+        modified="$(stat -f "%Sm" -t "%Y-%m-%d %H:%M:%S" "$file" 2>/dev/null)"
+        if [ -z "$modified" ]; then
+            modified="-"
+        fi
+        size_bytes="$(stat -f "%z" "$file" 2>/dev/null)"
+        if [ -z "$size_bytes" ]; then
+            size_bytes="0"
+        fi
+        if [ "$first" = true ]; then
+            first=false
+        else
+            json+=","
+        fi
+        json+="{\"name\":\"$(json_escape "$name")\",\"path\":\"$(json_escape "$file")\",\"modified\":\"$(json_escape "$modified")\",\"size\":\"$(json_escape "$size_bytes")\"}"
+    done <<< "$files_sorted"
+    json+="]"
+    print_ok "$json"
+}
+
+handle_backups() {
+    local items="" index=1
+    local backup_files
+    backup_files="$(get_backup_files_sorted)"
+    while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        local base ts version item
+        base="$(basename "$line")"
+        ts=$(echo "$base" | sed -E 's/^mihomo\.backup\.mihomo-darwin-(amd64|arm64)-.+\.([0-9]{8}_[0-9]{6})$/\2/')
+        version=$(echo "$base" | sed -E 's/^mihomo\.backup\.(mihomo-darwin-(amd64|arm64)-.+)\.[0-9]{8}_[0-9]{6}$/\1/')
+        item=$(cat <<JSON
+{"index":$index,"name":"$(json_escape "$base")","version":"$(json_escape "$version")","timestamp":"$(json_escape "$ts")","path":"$(json_escape "$line")"}
+JSON
+)
+        if [ -z "$items" ]; then
+            items="$item"
+        else
+            items="$items,$item"
+        fi
+        index=$((index + 1))
+    done <<< "$backup_files"
+    print_ok "[${items}]"
+}
+
+handle_panel_install() {
+    local panel_name=""
+    local panel_url=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --name)
+                shift || true
+                panel_name="${1:-}"
+                ;;
+            --url)
+                shift || true
+                panel_url="${1:-}"
+                ;;
+        esac
+        shift || true
+    done
+
+    if [ -z "$panel_name" ] || [ -z "$panel_url" ]; then
+        print_err "missing_panel_info"
+        return 1
+    fi
+    if ! command -v curl >/dev/null 2>&1; then
+        print_err "curl_missing"
+        return 1
+    fi
+    local unzip_available=false
+    local tar_available=false
+    if command -v unzip >/dev/null 2>&1; then
+        unzip_available=true
+    fi
+    if command -v tar >/dev/null 2>&1; then
+        tar_available=true
+    fi
+
+    if [ -z "$CLASHFOX_DATA_DIR" ]; then
+        CLASHFOX_DATA_DIR="$CLASHFOX_USER_DATA_DIR/data"
+    fi
+    if ! mkdir -p "$CLASHFOX_DATA_DIR/ui" 2>/dev/null; then
+        local fallback_dir="$CLASHFOX_USER_DATA_DIR/data"
+        if [ -n "$fallback_dir" ] && mkdir -p "$fallback_dir/ui" 2>/dev/null; then
+            CLASHFOX_DATA_DIR="$fallback_dir"
+        else
+            print_err "data_dir_unwritable"
+            return 1
+        fi
+    fi
+    chmod u+rwx "$CLASHFOX_DATA_DIR" "$CLASHFOX_DATA_DIR/ui" 2>/dev/null || true
+
+    local panel_dir="$CLASHFOX_DATA_DIR/ui/$panel_name"
+    if [ -d "$panel_dir" ] && [ -n "$(ls -A "$panel_dir" 2>/dev/null)" ]; then
+        print_ok "{\"installed\":false,\"path\":\"$(json_escape "$panel_dir")\",\"skipped\":true}"
+        return
+    fi
+
+    local temp_dir archive_path unpack_dir
+    temp_dir="$(mktemp -d)"
+    archive_path="$temp_dir/panel.archive"
+    unpack_dir="$temp_dir/unpack"
+    mkdir -p "$unpack_dir"
+
+    if ! curl -L -o "$archive_path" "$panel_url"; then
+        rm -rf "$temp_dir"
+        print_err "download_failed"
+        return 1
+    fi
+
+    case "$panel_url" in
+        *.tgz|*.tar.gz)
+            if [ "$tar_available" = false ]; then
+                rm -rf "$temp_dir"
+                print_err "tar_missing"
+                return 1
+            fi
+            if ! tar -xzf "$archive_path" -C "$unpack_dir"; then
+                rm -rf "$temp_dir"
+                print_err "untar_failed"
+                return 1
+            fi
+            ;;
+        *)
+            if [ "$unzip_available" = false ]; then
+                rm -rf "$temp_dir"
+                print_err "unzip_missing"
+                return 1
+            fi
+            if ! unzip -q "$archive_path" -d "$unpack_dir"; then
+                rm -rf "$temp_dir"
+                print_err "unzip_failed"
+                return 1
+            fi
+            ;;
+    esac
+
+    local src_dir="$unpack_dir"
+    shopt -s nullglob
+    local entries=( "$unpack_dir"/* )
+    shopt -u nullglob
+    if [ ${#entries[@]} -eq 1 ] && [ -d "${entries[0]}" ]; then
+        src_dir="${entries[0]}"
+    fi
+    rm -rf "$panel_dir"
+    mkdir -p "$panel_dir"
+    if [ ! -w "$panel_dir" ]; then
+        rm -rf "$temp_dir"
+        print_err "data_dir_unwritable"
+        return 1
+    fi
+    if [ -z "$(ls -A "$src_dir" 2>/dev/null)" ]; then
+        rm -rf "$temp_dir"
+        print_err "empty_archive"
+        return 1
+    fi
+    if ! cp -R "$src_dir"/. "$panel_dir"/; then
+        rm -rf "$temp_dir"
+        print_err "copy_failed"
+        return 1
+    fi
+
+    rm -rf "$temp_dir"
+    print_ok "{\"installed\":true,\"path\":\"$(json_escape "$panel_dir")\"}"
+}
+
+handle_panel_activate() {
+    local panel_name=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --name)
+                shift || true
+                panel_name="${1:-}"
+                ;;
+        esac
+        shift || true
+    done
+
+    if [ -z "$panel_name" ]; then
+        print_err "missing_panel_info"
+        return 1
+    fi
+    if [ -z "$CLASHFOX_DATA_DIR" ]; then
+        CLASHFOX_DATA_DIR="$CLASHFOX_USER_DATA_DIR/data"
+    fi
+    local panel_dir="$CLASHFOX_DATA_DIR/ui/$panel_name"
+    if [ ! -d "$panel_dir" ] || [ ! -f "$panel_dir/index.html" ]; then
+        print_err "panel_missing"
+        return 1
+    fi
+
+    if [ -f "$panel_dir/index.html" ]; then
+        local tmp_file
+        tmp_file="$(mktemp)"
+        if ! sed -E \
+            -e "s#([\"'])/assets/#\\1assets/#g" \
+            -e "s#([\"'])/_nuxt/#\\1_nuxt/#g" \
+            -e "s#([\"'])/_fonts/#\\1_fonts/#g" \
+            -e "s#([\"'])/registerSW\\.js#\\1registerSW.js#g" \
+            -e "s#([\"'])/manifest\\.webmanifest#\\1manifest.webmanifest#g" \
+            -e "s#([\"'])/favicon\\.ico#\\1favicon.ico#g" \
+            -e "s#([\"'])/favicon\\.svg#\\1favicon.svg#g" \
+            "$panel_dir/index.html" > "$tmp_file"; then
+            rm -f "$tmp_file"
+            print_err "config_update_failed"
+            return 1
+        fi
+        if ! mv "$tmp_file" "$panel_dir/index.html"; then
+            rm -f "$tmp_file"
+            print_err "config_update_failed"
+            return 1
+        fi
+    fi
+
+    print_ok "{\"configured\":true,\"path\":\"$(json_escape "$panel_dir")\"}"
+}
+
+handle_system_proxy_status() {
+    local config_path=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --config|--config-path)
+                shift || true
+                config_path="${1:-}"
+                ;;
+        esac
+        shift || true
+    done
+    if [ -z "$config_path" ]; then
+        config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+    fi
+    resolve_proxy_port_from_config "$config_path"
+    if [ -z "$MIHOMO_PROXY_PORT" ]; then
+        MIHOMO_PROXY_PORT="7890"
+    fi
+    local service
+    service="$(resolve_active_network_service)"
+    if [ -z "$service" ]; then
+        print_err "network_service_not_found"
+        return 1
+    fi
+
+    local web_enabled web_server web_port secure_enabled secure_server secure_port socks_enabled socks_server socks_port
+    IFS='|' read -r web_enabled web_server web_port <<< "$(read_network_proxy_triplet "$service" "-getwebproxy")"
+    IFS='|' read -r secure_enabled secure_server secure_port <<< "$(read_network_proxy_triplet "$service" "-getsecurewebproxy")"
+    IFS='|' read -r socks_enabled socks_server socks_port <<< "$(read_network_proxy_triplet "$service" "-getsocksfirewallproxy")"
+
+    local data
+    data="$(build_system_proxy_status_json "$service" "$MIHOMO_PROXY_PORT" "$web_enabled" "$web_server" "$web_port" "$secure_enabled" "$secure_server" "$secure_port" "$socks_enabled" "$socks_server" "$socks_port")"
+    print_ok "$data"
+}
+
+handle_system_proxy_enable() {
+    local config_path=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --config|--config-path)
+                shift || true
+                config_path="${1:-}"
+                ;;
+        esac
+        shift || true
+    done
+
+    if ! ensure_sudo ""; then
+        return 1
+    fi
+    if [ -z "$config_path" ]; then
+        config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+    fi
+    resolve_proxy_port_from_config "$config_path"
+    if [ -z "$MIHOMO_PROXY_PORT" ]; then
+        MIHOMO_PROXY_PORT="7890"
+    fi
+    local service
+    service="$(resolve_active_network_service)"
+    if [ -z "$service" ]; then
+        print_err "network_service_not_found"
+        return 1
+    fi
+
+    local web_enabled web_server web_port secure_enabled secure_server secure_port socks_enabled socks_server socks_port
+    IFS='|' read -r web_enabled web_server web_port <<< "$(read_network_proxy_triplet "$service" "-getwebproxy")"
+    IFS='|' read -r secure_enabled secure_server secure_port <<< "$(read_network_proxy_triplet "$service" "-getsecurewebproxy")"
+    IFS='|' read -r socks_enabled socks_server socks_port <<< "$(read_network_proxy_triplet "$service" "-getsocksfirewallproxy")"
+
+    local takeover_active=false
+    if is_yes_value "$web_enabled" && is_loopback_host "$web_server" && [ "$web_port" = "$MIHOMO_PROXY_PORT" ]; then
+        takeover_active=true
+    fi
+    if is_yes_value "$secure_enabled" && is_loopback_host "$secure_server" && [ "$secure_port" = "$MIHOMO_PROXY_PORT" ]; then
+        takeover_active=true
+    fi
+    if is_yes_value "$socks_enabled" && is_loopback_host "$socks_server" && [ "$socks_port" = "$MIHOMO_PROXY_PORT" ]; then
+        takeover_active=true
+    fi
+    if [ "$takeover_active" = false ]; then
+        save_system_proxy_snapshot "$service" "$web_enabled" "$web_server" "$web_port" "$secure_enabled" "$secure_server" "$secure_port" "$socks_enabled" "$socks_server" "$socks_port"
+    fi
+
+    if ! set_system_proxy_on "$service" "127.0.0.1" "$MIHOMO_PROXY_PORT"; then
+        print_err "set_system_proxy_failed"
+        return 1
+    fi
+
+    local data
+    data="$(build_system_proxy_status_json "$service" "$MIHOMO_PROXY_PORT" "Yes" "127.0.0.1" "$MIHOMO_PROXY_PORT" "Yes" "127.0.0.1" "$MIHOMO_PROXY_PORT" "Yes" "127.0.0.1" "$MIHOMO_PROXY_PORT")"
+    print_ok "$data"
+}
+
+handle_system_proxy_disable() {
+    if ! ensure_sudo ""; then
+        return 1
+    fi
+
+    local active_service
+    active_service="$(resolve_active_network_service)"
+    if [ -z "$active_service" ]; then
+        print_err "network_service_not_found"
+        return 1
+    fi
+
+    local restore_service="$active_service"
+    local web_enabled="" web_server="" web_port=""
+    local secure_enabled="" secure_server="" secure_port=""
+    local socks_enabled="" socks_server="" socks_port=""
+
+    if [ -f "$SYSTEM_PROXY_STATE_FILE" ]; then
+        # shellcheck disable=SC1090
+        . "$SYSTEM_PROXY_STATE_FILE"
+        if [ -n "${service:-}" ]; then
+            restore_service="$service"
+        fi
+        web_enabled="${web_enabled:-}"
+        web_server="${web_server:-}"
+        web_port="${web_port:-}"
+        secure_enabled="${secure_enabled:-}"
+        secure_server="${secure_server:-}"
+        secure_port="${secure_port:-}"
+        socks_enabled="${socks_enabled:-}"
+        socks_server="${socks_server:-}"
+        socks_port="${socks_port:-}"
+    fi
+
+    if ! restore_system_proxy_triplet "$restore_service" "-setwebproxy" "-setwebproxystate" "$web_enabled" "$web_server" "$web_port"; then
+        print_err "restore_system_proxy_failed"
+        return 1
+    fi
+    if ! restore_system_proxy_triplet "$restore_service" "-setsecurewebproxy" "-setsecurewebproxystate" "$secure_enabled" "$secure_server" "$secure_port"; then
+        print_err "restore_system_proxy_failed"
+        return 1
+    fi
+    if ! restore_system_proxy_triplet "$restore_service" "-setsocksfirewallproxy" "-setsocksfirewallproxystate" "$socks_enabled" "$socks_server" "$socks_port"; then
+        print_err "restore_system_proxy_failed"
+        return 1
+    fi
+
+    rm -f "$SYSTEM_PROXY_STATE_FILE"
+    local data
+    data=$(cat <<JSON
+{"enabled":false,"service":"$(json_escape "$restore_service")"}
+JSON
+)
+    print_ok "$data"
+}
+
+resolve_effective_config_path() {
+    local config_path="$1"
+    if [ -z "$config_path" ]; then
+        config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+    fi
+    if [ ! -f "$config_path" ]; then
+        local fallback_config="$CLASHFOX_CONFIG_DIR/default.yaml"
+        if [ -f "$fallback_config" ]; then
+            config_path="$fallback_config"
+        else
+            print_err "config_not_found"
+            return 1
+        fi
+    fi
+    printf '%s' "$config_path"
+}
+
+handle_mode() {
+    local mode=""
+    parse_common_controller_args "$@"
+    local config_path="$CF_ARG_CONFIG_PATH"
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --mode)
+                shift || true
+                mode="${1:-}"
+                ;;
+        esac
+        shift || true
+    done
+
+    case "$mode" in
+        global|rule|direct)
+            ;;
+        *)
+            print_err "invalid_mode"
+            return 1
+            ;;
+    esac
+
+    if [ -z "$config_path" ]; then
+        config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+    fi
+    apply_controller_overrides "$config_path" "$CF_ARG_CONTROLLER_OVERRIDE" "$CF_ARG_SECRET_OVERRIDE"
+
+    if [ -z "$MIHOMO_CONTROLLER" ]; then
+        print_err "controller_missing"
+        return 1
+    fi
+    if ! command -v curl >/dev/null 2>&1; then
+        print_err "curl_missing"
+        return 1
+    fi
+
+    local auth_args=()
+    if [ -n "$MIHOMO_SECRET" ]; then
+        auth_args=(-H "Authorization: Bearer $MIHOMO_SECRET")
+    fi
+    local code
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 -X PATCH "${auth_args[@]}" -H "Content-Type: application/json" -d "{\"mode\":\"$mode\"}" "$MIHOMO_CONTROLLER/configs" 2>/dev/null)"
+    if echo "$code" | grep -qE '^(200|204)$'; then
+        print_ok "{}"
+    else
+        print_err "request_failed"
+        return 1
+    fi
+}
+
+handle_install() {
+    local github_user=""
+    local version_branch=""
+    local sudo_pass="${CLASHFOX_SUDO_PASS:-}"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --github-user)
+                shift || true
+                github_user="${1:-}"
+                ;;
+            --version)
+                shift || true
+                version_branch="${1:-}"
+                ;;
+            --sudo-pass)
+                shift || true
+                sudo_pass="${1:-}"
+                ;;
+        esac
+        shift || true
+    done
+
+    if [ -n "$github_user" ]; then
+        export CLASHFOX_GITHUB_USER="$github_user"
+    fi
+    if [ -n "$version_branch" ]; then
+        export CLASHFOX_VERSION_BRANCH="$version_branch"
+    fi
+    export CLASHFOX_AUTO_YES=1
+
+    if ! ensure_sudo "$sudo_pass"; then
+        return 1
+    fi
+    if install_core; then
+        print_ok "{}"
+    else
+        print_err "install_failed"
+        return 1
+    fi
+}
+
+handle_start() {
+    local config_path=""
+    local sudo_pass="${CLASHFOX_SUDO_PASS:-}"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --config)
+                shift || true
+                config_path="${1:-}"
+                ;;
+            --sudo-pass)
+                shift || true
+                sudo_pass="${1:-}"
+                ;;
+        esac
+        shift || true
+    done
+
+    local effective_config_path
+    effective_config_path="$(resolve_effective_config_path "$config_path")" || return 1
+    export CLASHFOX_CONFIG_PATH="$effective_config_path"
+    if ! ensure_sudo "$sudo_pass"; then
+        return 1
+    fi
+    export CLASHFOX_SUDO_PASS="$sudo_pass"
+
+    if start_mihomo_kernel; then
+        if wait_for_kernel_running 25; then
+            unset CLASHFOX_SUDO_PASS
+            print_ok "{}"
+            return
+        fi
+    fi
+
+    unset CLASHFOX_SUDO_PASS
+    local fail_details
+    fail_details="$(extract_recent_start_failure_detail)"
+    if [ -n "$fail_details" ]; then
+        print_err_with_details "start_failed" "$fail_details"
+    else
+        print_err "start_failed"
+    fi
+    return 1
+}
+
+handle_stop() {
+    local sudo_pass="${CLASHFOX_SUDO_PASS:-}"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --sudo-pass)
+                shift || true
+                sudo_pass="${1:-}"
+                ;;
+        esac
+        shift || true
+    done
+
+    if ! ensure_sudo "$sudo_pass"; then
+        return 1
+    fi
+    export CLASHFOX_SUDO_PASS="$sudo_pass"
+
+    if kill_mihomo_kernel; then
+        if is_running; then
+            sleep 0.6
+        fi
+        if is_running; then
+            force_kill
+            sleep 0.6
+        fi
+    fi
+
+    unset CLASHFOX_SUDO_PASS
+    if is_running; then
+        print_err "stop_failed"
+        return 1
+    fi
+    print_ok "{}"
+}
+
+handle_restart() {
+    local config_path=""
+    local sudo_pass="${CLASHFOX_SUDO_PASS:-}"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --config)
+                shift || true
+                config_path="${1:-}"
+                ;;
+            --sudo-pass)
+                shift || true
+                sudo_pass="${1:-}"
+                ;;
+        esac
+        shift || true
+    done
+
+    local effective_config_path
+    effective_config_path="$(resolve_effective_config_path "$config_path")" || return 1
+    export CLASHFOX_CONFIG_PATH="$effective_config_path"
+    if ! ensure_sudo "$sudo_pass"; then
+        return 1
+    fi
+    export CLASHFOX_SUDO_PASS="$sudo_pass"
+
+    if kill_mihomo_kernel; then
+        if is_running; then
+            force_kill
+        fi
+    fi
+    if is_running; then
+        unset CLASHFOX_SUDO_PASS
+        print_err "stop_failed"
+        return 1
+    fi
+
+    if start_mihomo_kernel; then
+        if wait_for_kernel_running 25; then
+            unset CLASHFOX_SUDO_PASS
+            print_ok "{}"
+            return
+        fi
+        unset CLASHFOX_SUDO_PASS
+        local start_fail_details
+        start_fail_details="$(extract_recent_start_failure_detail)"
+        if [ -n "$start_fail_details" ]; then
+            print_err_with_details "start_failed" "$start_fail_details"
+        else
+            print_err "start_failed"
+        fi
+        return 1
+    fi
+
+    unset CLASHFOX_SUDO_PASS
+    local restart_fail_details
+    restart_fail_details="$(extract_recent_start_failure_detail)"
+    if [ -n "$restart_fail_details" ]; then
+        print_err_with_details "restart_failed" "$restart_fail_details"
+    else
+        print_err "restart_failed"
+    fi
+    return 1
+}
+
+handle_switch() {
+    local index=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --index)
+                shift || true
+                index="${1:-}"
+                ;;
+        esac
+        shift || true
+    done
+
+    if [ -z "$index" ]; then
+        print_err "missing_index"
+        return 1
+    fi
+    if [ ! -d "$CLASHFOX_CORE_DIR" ]; then
+        print_err "core_dir_missing"
+        return 1
+    fi
+    cd "$CLASHFOX_CORE_DIR" || {
+        print_err "core_dir_enter_fail"
+        return 1
+    }
+
+    local backup_files target_backup tmp_core
+    backup_files="$(get_backup_files_sorted)"
+    if [ -z "$backup_files" ]; then
+        print_err "no_backups"
+        return 1
+    fi
+    target_backup="$(echo "$backup_files" | sed -n "${index}p")"
+    if [ -z "$target_backup" ]; then
+        print_err "backup_not_found"
+        return 1
+    fi
+
+    tmp_core="${ACTIVE_CORE}.tmp"
+    if ! cp "$target_backup" "$tmp_core" 2>/dev/null; then
+        print_err "switch_copy_failed"
+        return 1
+    fi
+    mv -f "$tmp_core" "$ACTIVE_CORE"
+    chmod +x "$ACTIVE_CORE"
+    print_ok "{}"
+}
+
+handle_logs() {
+    local lines=200
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --lines)
+                shift || true
+                lines="${1:-}"
+                ;;
+        esac
+        shift || true
+    done
+
+    local log_path="$CLASHFOX_LOG_DIR/clashfox.log"
+    if [ ! -f "$log_path" ]; then
+        print_err "log_missing"
+        return 1
+    fi
+
+    local content content_b64 data
+    content="$(tail -n "$lines" "$log_path" 2>/dev/null)"
+    content_b64="$(printf '%s' "$content" | base64 | tr -d '\n')"
+    data=$(cat <<JSON
+{"path":"$(json_escape "$log_path")","lines":$lines,"contentBase64":"$content_b64","encoding":"base64"}
+JSON
+)
+    print_ok "$data"
+}
+
+handle_clean() {
+    local mode=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --mode)
+                shift || true
+                mode="${1:-}"
+                ;;
+        esac
+        shift || true
+    done
+
+    case "$mode" in
+        all)
+            rm -f "$CLASHFOX_LOG_DIR"/clashfox.log.*.log
+            rm -f "$CLASHFOX_LOG_DIR"/clashfox.log.*.gz
+            ;;
+        7d)
+            find "$CLASHFOX_LOG_DIR" -name "clashfox.log.*.log" -mtime +7 -delete
+            find "$CLASHFOX_LOG_DIR" -name "clashfox.log.*.gz" -mtime +7 -delete
+            ;;
+        30d)
+            find "$CLASHFOX_LOG_DIR" -name "clashfox.log.*.log" -mtime +30 -delete
+            find "$CLASHFOX_LOG_DIR" -name "clashfox.log.*.gz" -mtime +30 -delete
+            ;;
+        *)
+            print_err "invalid_mode"
+            return 1
+            ;;
+    esac
+    print_ok "{}"
+}
+
+handle_delete_backups() {
+    local sudo_pass="${CLASHFOX_SUDO_PASS:-}"
+    local paths=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --path)
+                shift || true
+                paths+=("${1:-}")
+                ;;
+            --sudo-pass)
+                shift || true
+                sudo_pass="${1:-}"
+                ;;
+        esac
+        shift || true
+    done
+
+    if [ "${#paths[@]}" -eq 0 ]; then
+        print_err "missing_paths"
+        return 1
+    fi
+    if ! ensure_sudo "$sudo_pass"; then
+        return 1
+    fi
+    local p
+    for p in "${paths[@]}"; do
+        case "$p" in
+            "$CLASHFOX_BACKUP_DIR"/mihomo.backup.*)
+                sudo rm -f "$p"
+                ;;
+        esac
+    done
+    print_ok "{}"
+}
+
+resolve_overview_iface() {
+    local default_route="$1"
+    local iface primary_iface fallback_iface cand
+    iface="$(echo "$default_route" | awk '/interface:/{print $2; exit}')"
+
+    primary_iface="$(scutil --nwi 2>/dev/null | awk -F': ' '/Primary interface:/{print $2; exit}')"
+    if [ -n "$primary_iface" ]; then
+        iface="$primary_iface"
+    fi
+    if [[ "$iface" == utun* ]]; then
+        iface=""
+    fi
+
+    if [[ "$iface" == utun* ]] || [ -z "$iface" ]; then
+        fallback_iface="$(scutil --nwi 2>/dev/null | awk '/Network interfaces:/{print $3; exit}')"
+        if [ -n "$fallback_iface" ]; then
+            iface="$fallback_iface"
+        else
+            for cand in $(ifconfig -l); do
+                case "$cand" in
+                    en*|bridge*|pdp_ip*)
+                        if ipconfig getifaddr "$cand" >/dev/null 2>&1; then
+                            iface="$cand"
+                            break
+                        fi
+                        ;;
+                esac
+            done
+        fi
+    fi
+    printf '%s' "$iface"
+}
+
+resolve_overview_traffic_bytes() {
+    local iface="$1"
+    local rx_bytes="" tx_bytes=""
+    if [ -n "$iface" ]; then
+        read -r rx_bytes tx_bytes <<EOF
+$(netstat -ibn 2>/dev/null | awk -v iface="$iface" '$1==iface {ibytes=$7; obytes=$10} END {print ibytes, obytes}')
+EOF
+    fi
+    if ! echo "$rx_bytes" | grep -qE '^[0-9]+$'; then
+        rx_bytes=""
+    fi
+    if ! echo "$tx_bytes" | grep -qE '^[0-9]+$'; then
+        tx_bytes=""
+    fi
+    printf '%s|%s' "$rx_bytes" "$tx_bytes"
+}
+
+resolve_overview_gateway() {
+    local iface="$1"
+    local default_route="$2"
+    local gateway="" scoped_route=""
+    if [ -n "$iface" ]; then
+        gateway="$(ipconfig getoption "$iface" router 2>/dev/null)"
+    fi
+    if [ -z "$gateway" ]; then
+        scoped_route="$(route -n get -ifscope "$iface" default 2>/dev/null)"
+        gateway="$(echo "$scoped_route" | awk '/gateway:/{print $2; exit}')"
+    fi
+    if [ -z "$gateway" ]; then
+        gateway="$(ipconfig getoption en0 router 2>/dev/null)"
+    fi
+    if [ -z "$gateway" ]; then
+        gateway="$(ipconfig getoption en1 router 2>/dev/null)"
+    fi
+    if [ -z "$gateway" ]; then
+        gateway="$(echo "$default_route" | awk '/gateway:/{print $2; exit}')"
+    fi
+    printf '%s' "$gateway"
+}
+
+resolve_overview_network_name() {
+    local iface="$1"
+    local network_name="" service_name=""
+    if [ -n "$iface" ] && command -v networksetup >/dev/null 2>&1; then
+        service_name="$(networksetup -listnetworkserviceorder 2>/dev/null | awk -v iface="$iface" '
+            $0 ~ "\\(" iface "\\)" {print last; exit}
+            {last=$0}
+        ' | sed -E 's/^\\([0-9]+\\) //')"
+        network_name="$service_name"
+        if [ -z "$network_name" ]; then
+            network_name="$(networksetup -listallhardwareports | awk -v iface="$iface" '
+                $1=="Hardware" && $2=="Port:" {port=$0; sub("Hardware Port: ","",port)}
+                $1=="Device:" && $2==iface {print port; exit}
+            ')"
+        fi
+    fi
+    if [[ "$iface" == en* ]]; then
+        network_name="Wi-Fi"
+    elif echo "$network_name" | grep -qiE 'hotspot|iphone|ipad'; then
+        network_name="Personal Hotspot"
+    elif echo "$network_name" | grep -qiE 'wi[- ]?fi|airport|wlan'; then
+        network_name="Wi-Fi"
+    fi
+    if [ -z "$network_name" ] || [[ "$network_name" == utun* ]]; then
+        network_name="Wi-Fi"
+    fi
+    printf '%s' "$network_name"
+}
+
+resolve_overview_local_ip() {
+    local iface="$1"
+    local local_ip=""
+    local_ip="$(ipconfig getifaddr en0 2>/dev/null)"
+    if [ -n "$local_ip" ] && ! echo "$local_ip" | grep -q '\.'; then
+        local_ip=""
+    fi
+    if [ -z "$local_ip" ] && [ -n "$iface" ]; then
+        local_ip="$(ipconfig getifaddr "$iface" 2>/dev/null)"
+    fi
+    if [ -n "$local_ip" ] && ! echo "$local_ip" | grep -q '\.'; then
+        local_ip=""
+    fi
+    if [ -z "$local_ip" ] && [ -n "$iface" ]; then
+        local_ip="$(ifconfig "$iface" 2>/dev/null | awk '/inet /{print $2; exit}')"
+    fi
+    if [ -n "$local_ip" ] && ! echo "$local_ip" | grep -q '\.'; then
+        local_ip=""
+    fi
+    if [ -z "$local_ip" ]; then
+        local_ip="$(ipconfig getifaddr en1 2>/dev/null)"
+    fi
+    if [ -n "$local_ip" ] && ! echo "$local_ip" | grep -q '\.'; then
+        local_ip=""
+    fi
+    printf '%s' "$local_ip"
+}
+
+load_overview_cache_state() {
+    local cache_file="$1"
+    local disable_cache="$2"
+    local cache_ttl="$3"
+    local now_ts="$4"
+
+    cache_valid=false
+    cached_internet_ms=""
+    cached_dns_ms=""
+    cached_router_ms=""
+
+    if [ "$disable_cache" = false ] && [ -r "$cache_file" ]; then
+        # shellcheck disable=SC1090
+        . "$cache_file" 2>/dev/null || return 0
+        cached_internet_ms="${internet_ms:-}"
+        cached_dns_ms="${dns_ms:-}"
+        cached_router_ms="${router_ms:-}"
+        if [ -n "${ts:-}" ] && [ $((now_ts - ts)) -lt "$cache_ttl" ]; then
+            cache_valid=true
+            internet_ip_v4="${internet_ip_v4:-}"
+            internet_ip_v6="${internet_ip_v6:-}"
+            internet_ms="${internet_ms:-}"
+            proxy_ip="${proxy_ip:-}"
+            dns_ms="${dns_ms:-}"
+            router_ms="${router_ms:-}"
+            if [ -n "$internet_ip_v6" ] && ! echo "$internet_ip_v6" | grep -q ':'; then
+                if [ -z "$internet_ip_v4" ] && echo "$internet_ip_v6" | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$'; then
+                    internet_ip_v4="$internet_ip_v6"
+                fi
+                internet_ip_v6=""
+            fi
+            if [ -n "$internet_ip_v4" ] && ! echo "$internet_ip_v4" | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$'; then
+                internet_ip_v4=""
+            fi
+        fi
+    fi
+}
+
+save_overview_cache_state() {
+    local cache_file="$1"
+    local disable_cache="$2"
+    local now_ts="$3"
+    local cache_dir
+    cache_dir="$(dirname "$cache_file")"
+    if [ "$disable_cache" = false ] && [ -d "$cache_dir" ] && [ -w "$cache_dir" ]; then
+        {
+            printf 'ts=%s\n' "$now_ts"
+            printf 'internet_ip_v4=%q\n' "$internet_ip_v4"
+            printf 'internet_ip_v6=%q\n' "$internet_ip_v6"
+            printf 'internet_ms=%q\n' "$internet_ms"
+            printf 'proxy_ip=%q\n' "$proxy_ip"
+            printf 'dns_ms=%q\n' "$dns_ms"
+            printf 'router_ms=%q\n' "$router_ms"
+        } > "$cache_file" 2>/dev/null || true
+    fi
+}
+
+normalize_overview_runtime_fields() {
+    router_ms="$(printf '%s' "$router_ms" | tr -d '[:space:]')"
+    dns_ms="$(printf '%s' "$dns_ms" | tr -d '[:space:]')"
+    internet_ms="$(printf '%s' "$internet_ms" | tr -d '[:space:]')"
+    if [ -n "$router_ms" ] && ! echo "$router_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
+        router_ms=""
+    fi
+    if [ -n "$dns_ms" ] && ! echo "$dns_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
+        dns_ms=""
+    fi
+    if [ -n "$internet_ms" ] && ! echo "$internet_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
+        internet_ms=""
+    fi
+    if [ -n "$cached_dns_ms" ] && ! echo "$cached_dns_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
+        cached_dns_ms=""
+    fi
+    if [ -n "$cached_router_ms" ] && ! echo "$cached_router_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
+        cached_router_ms=""
+    fi
+    if [ -n "$cached_internet_ms" ] && ! echo "$cached_internet_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
+        cached_internet_ms=""
+    fi
+    if [ -z "$dns_ms" ] && [ -n "$cached_dns_ms" ]; then
+        dns_ms="$cached_dns_ms"
+    fi
+    if [ -z "$router_ms" ] && [ -n "$cached_router_ms" ]; then
+        router_ms="$cached_router_ms"
+    fi
+    if [ -z "$internet_ms" ] && [ -n "$cached_internet_ms" ]; then
+        internet_ms="$cached_internet_ms"
+    fi
+    if [ -z "$router_ms" ]; then
+        router_ms="$(awk -v d="$dns_ms" -v i="$internet_ms" 'BEGIN{
+            val="";
+            if (d ~ /^[0-9]+([.][0-9]+)?$/ && d+0 > 0) {
+                # Router latency is typically lower than DNS latency.
+                val = int((d * 0.6) + 0.5);
+            } else if (i ~ /^[0-9]+([.][0-9]+)?$/ && i+0 > 0) {
+                # Use Internet latency as a weaker fallback signal.
+                val = int((i * 0.35) + 0.5);
+            }
+            if (val == "" || val < 1) val = "";
+            if (val != "") printf "%d", val;
+        }')"
+    fi
+    if [ -n "$internet_ip_direct" ]; then
+        internet_ip="$internet_ip_direct"
+    elif [ -n "$internet_ip_v4" ]; then
+        internet_ip="$internet_ip_v4"
+    else
+        internet_ip="-"
+    fi
+
+    proxy_ip="$(printf '%s' "$proxy_ip" | tr -d '[:space:]')"
+    if [ -n "$proxy_ip" ]; then
+        if [ -n "$internet_ip_v4" ] && [ "$proxy_ip" = "$internet_ip_v4" ]; then
+            proxy_ip=""
+        fi
+        if [ -n "$internet_ip_v6" ] && [ "$proxy_ip" = "$internet_ip_v6" ]; then
+            proxy_ip=""
+        fi
+    fi
+    if [ -z "$proxy_ip" ]; then
+        proxy_ip="-"
+    fi
+}
+
+probe_overview_ips() {
+    local iface="$1"
+    local curl_env=(
+        env
+        -u http_proxy
+        -u https_proxy
+        -u all_proxy
+        -u HTTP_PROXY
+        -u HTTPS_PROXY
+        -u ALL_PROXY
+        -u no_proxy
+        -u NO_PROXY
+    )
+    local direct_curl_args=()
+    if [ -n "${CLASHFOX_CURL_BIND_IFACE:-}" ]; then
+        direct_curl_args=(--interface "$CLASHFOX_CURL_BIND_IFACE")
+    fi
+
+    local ipip_curl_args=("${direct_curl_args[@]}")
+    if [ ${#ipip_curl_args[@]} -eq 0 ] && [ -n "$iface" ]; then
+        case "$iface" in
+            en*|bridge*|pdp_ip*)
+                ipip_curl_args=(--interface "$iface")
+                ;;
+        esac
+    fi
+    local ipip_url
+    ipip_url="https://myip.ipip.net/json?t=$(date +%s)$RANDOM"
+
+    local internet_ip_resp=""
+    internet_ip_resp="$("${curl_env[@]}" curl "${ipip_curl_args[@]}" -s --connect-timeout 3 --max-time 8 --noproxy '*' "$ipip_url" 2>/dev/null)"
+    if [ -n "$internet_ip_resp" ]; then
+        internet_ip_direct="$(extract_ipip_ip "$internet_ip_resp")"
+    fi
+    if [ -z "$internet_ip_direct" ]; then
+        internet_ip_resp="$("${curl_env[@]}" curl -s --connect-timeout 3 --max-time 8 --noproxy '*' "$ipip_url" 2>/dev/null)"
+        if [ -n "$internet_ip_resp" ]; then
+            internet_ip_direct="$(extract_ipip_ip "$internet_ip_resp")"
+        fi
+    fi
+    if [ -z "$internet_ip_direct" ]; then
+        internet_ip_resp="$(curl -s "$ipip_url" 2>/dev/null)"
+        if [ -n "$internet_ip_resp" ]; then
+            internet_ip_direct="$(extract_ipip_ip "$internet_ip_resp")"
+        fi
+    fi
+    if [ -n "$internet_ip_direct" ]; then
+        if echo "$internet_ip_direct" | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$'; then
+            internet_ip_v4="$internet_ip_direct"
+            internet_ip_v6=""
+        elif echo "$internet_ip_direct" | grep -qE '^[0-9]+\\.[0-9]+\\.\\*\\.[0-9]+$'; then
+            internet_ip_v4="$internet_ip_direct"
+            internet_ip_v6=""
+        elif echo "$internet_ip_direct" | grep -q ':'; then
+            internet_ip_v6="$internet_ip_direct"
+            internet_ip_v4=""
+        fi
+    fi
+    if [ -n "$internet_ip_v6" ] && ! echo "$internet_ip_v6" | grep -q ':'; then
+        if [ -z "$internet_ip_v4" ] && echo "$internet_ip_v6" | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$'; then
+            internet_ip_v4="$internet_ip_v6"
+        fi
+        internet_ip_v6=""
+    fi
+    if [ -n "$internet_ip_v4" ] && ! echo "$internet_ip_v4" | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$|^[0-9]+\\.[0-9]+\\.\\*\\.[0-9]+$'; then
+        internet_ip_v4=""
+    fi
+
+    proxy_ip=""
+    if [ -n "$MIHOMO_PROXY_PORT" ]; then
+        proxy_ip="$("${curl_env[@]}" curl --proxy "http://127.0.0.1:$MIHOMO_PROXY_PORT" --noproxy '' -s --max-time 3 https://api.ipify.org 2>/dev/null)"
+        if [ -z "$proxy_ip" ]; then
+            proxy_ip="$("${curl_env[@]}" curl --proxy "http://127.0.0.1:$MIHOMO_PROXY_PORT" --noproxy '' -s --max-time 3 https://ifconfig.me/ip 2>/dev/null)"
+        fi
+        if [ -z "$proxy_ip" ]; then
+            proxy_ip="$("${curl_env[@]}" curl --proxy "http://127.0.0.1:$MIHOMO_PROXY_PORT" --noproxy '' -s --max-time 3 https://icanhazip.com 2>/dev/null | tr -d '[:space:]')"
+        fi
+    fi
+}
+
+probe_overview_latencies() {
+    local iface="$1"
+    local gateway="$2"
+    local local_ip="$3"
+    local curl_env=(
+        env
+        -u http_proxy
+        -u https_proxy
+        -u all_proxy
+        -u HTTP_PROXY
+        -u HTTPS_PROXY
+        -u ALL_PROXY
+        -u no_proxy
+        -u NO_PROXY
+    )
+    local direct_curl_args=()
+    if [ -n "${CLASHFOX_CURL_BIND_IFACE:-}" ]; then
+        direct_curl_args=(--interface "$CLASHFOX_CURL_BIND_IFACE")
+    fi
+
+    dns_ms=""
+    if command -v python3 >/dev/null 2>&1; then
+        dns_ms="$(python3 - <<'PY'
+import socket, time
+start = time.time()
+try:
+    socket.getaddrinfo("apple.com", 80)
+    print(int((time.time() - start) * 1000))
+except Exception:
+    print("")
+PY
+)"
+    fi
+
+    internet_ms=""
+    if command -v python3 >/dev/null 2>&1; then
+        internet_ms="$(python3 - <<'PY'
+import socket, time
+start = time.time()
+try:
+    sock = socket.create_connection(("1.1.1.1", 443), timeout=1.5)
+    sock.close()
+    print(int((time.time() - start) * 1000))
+except Exception:
+    print("")
+PY
+)"
+    fi
+    if [ -z "$internet_ms" ] && command -v python3 >/dev/null 2>&1; then
+        internet_ms="$(python3 - <<'PY'
+import socket, time
+for host, port in (("1.1.1.1", 53), ("8.8.8.8", 53)):
+    start = time.time()
+    try:
+        sock = socket.create_connection((host, port), timeout=1.5)
+        sock.close()
+        print(int((time.time() - start) * 1000))
+        raise SystemExit
+    except Exception:
+        pass
+print("")
+PY
+)"
+    fi
+    if [ -z "$internet_ms" ] && command -v curl >/dev/null 2>&1; then
+        internet_ms="$("${curl_env[@]}" curl "${direct_curl_args[@]}" -s -o /dev/null -w '%{time_connect}' --max-time 2 --noproxy '*' https://1.1.1.1 2>/dev/null | awk '{if ($1>0) printf "%.0f", $1*1000}')"
+    fi
+    if [ -z "$internet_ms" ]; then
+        internet_ms="$(ping -c 1 -W 1000 1.1.1.1 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
+        if [ -z "$internet_ms" ]; then
+            internet_ms="$(ping -c 1 -t 1 1.1.1.1 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
+        fi
+    fi
+
+    router_ms=""
+    local probe_gateway="$gateway"
+    if [ -z "$probe_gateway" ] && [ -n "$local_ip" ] && echo "$local_ip" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+        probe_gateway="$(echo "$local_ip" | awk -F'.' '{print $1"."$2"."$3".1"}')"
+    fi
+    if [ -n "$probe_gateway" ] && command -v python3 >/dev/null 2>&1; then
+        router_ms="$(CLASHFOX_GATEWAY="$probe_gateway" python3 - <<'PY'
+import os, socket, time
+gw = os.environ.get("CLASHFOX_GATEWAY", "").strip()
+if not gw:
+    print("")
+    raise SystemExit
+refused_codes = {61, 111, 10061}
+for port in (53, 443, 80, 22):
+    start = time.time()
+    sock = None
+    try:
+        family = socket.AF_INET6 if ":" in gw else socket.AF_INET
+        sock = socket.socket(family, socket.SOCK_STREAM)
+        sock.settimeout(1.2)
+        err = sock.connect_ex((gw, port))
+        elapsed = int((time.time() - start) * 1000)
+        if err == 0 or err in refused_codes:
+            print(max(elapsed, 1))
+            raise SystemExit
+    except Exception:
+        pass
+    finally:
+        try:
+            if sock is not None:
+                sock.close()
+        except Exception:
+            pass
+print("")
+PY
+)"
+    fi
+    if [ -z "$router_ms" ] && [ -n "$probe_gateway" ]; then
+        router_ms="$(ping -c 1 -W 1000 "$probe_gateway" 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
+        if [ -z "$router_ms" ]; then
+            router_ms="$(ping -c 1 -t 1 "$probe_gateway" 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
+        fi
+    fi
+    if [ -z "$router_ms" ] && command -v traceroute >/dev/null 2>&1; then
+        router_ms="$(traceroute -n -m 1 -q 1 -w 1 1.1.1.1 2>/dev/null | awk '
+            NR==2 {
+                for (i=1; i<=NF; i++) {
+                    if ($(i+1)=="ms" && $i ~ /^[0-9]+(\.[0-9]+)?$/) {
+                        printf "%s", $i;
+                        exit;
+                    }
+                }
+            }
+        ')"
+    fi
+}
+
+collect_overview_system_info() {
+    system_name="$(sw_vers -productName 2>/dev/null)"
+    system_version="$(sw_vers -productVersion 2>/dev/null)"
+    system_build="$(sw_vers -buildVersion 2>/dev/null)"
+}
+
+collect_overview_runtime_extensions() {
+    local kernel_path="$1"
+    local pid="$2"
+    connections=""
+    memory=""
+    connections="$(get_mihomo_connections)"
+    if [ "$running" = false ] && [ -n "$connections" ]; then
+        running=true
+    fi
+    memory="$(resolve_runtime_memory "$kernel_path" "$running" "$pid")"
+}
+
+build_overview_payload_json() {
+    local kernel_version="$1"
+    local uptime_sec="$2"
+    local system_name="$3"
+    local system_version="$4"
+    local system_build="$5"
+    local network_name="$6"
+    local local_ip="$7"
+    local proxy_ip="$8"
+    local internet_ip="$9"
+    local internet_ip_v4="${10}"
+    local internet_ip_v6="${11}"
+    local internet_ms="${12}"
+    local dns_ms="${13}"
+    local router_ms="${14}"
+    local connections="${15}"
+    local memory="${16}"
+    local rx_bytes="${17}"
+    local tx_bytes="${18}"
+
+    cat <<JSON
+{"running":$running,"kernelVersion":"$(json_escape "$kernel_version")","uptimeSec":$uptime_sec,"systemName":"$(json_escape "$system_name")","systemVersion":"$(json_escape "$system_version")","systemBuild":"$(json_escape "$system_build")","networkName":"$(json_escape "$network_name")","localIp":"$(json_escape "$local_ip")","proxyIp":"$(json_escape "$proxy_ip")","internetIp":"$(json_escape "$internet_ip")","internetIp4":"$(json_escape "$internet_ip_v4")","internetIp6":"$(json_escape "$internet_ip_v6")","internetMs":"$(json_escape "$internet_ms")","dnsMs":"$(json_escape "$dns_ms")","routerMs":"$(json_escape "$router_ms")","connections":"$(json_escape "$connections")","memory":"$(json_escape "$memory")","rxBytes":"$(json_escape "$rx_bytes")","txBytes":"$(json_escape "$tx_bytes")"}
+JSON
+}
+
+handle_overview() {
+        rotate_logs
+        parse_common_controller_args --allow-cache "$@"
+        config_path="$CF_ARG_CONFIG_PATH"
+        cache_ttl="$CF_ARG_CACHE_TTL"
+        disable_cache="$CF_ARG_DISABLE_CACHE"
+        if [ -z "$config_path" ]; then
+            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+        fi
+        apply_controller_overrides "$config_path" "$CF_ARG_CONTROLLER_OVERRIDE" "$CF_ARG_SECRET_OVERRIDE"
+
+        collect_runtime_snapshot
+        kernel_path="$CF_RT_KERNEL_PATH"
+        pid="$CF_RT_PID"
+        running="$CF_RT_RUNNING"
+        kernel_version="$CF_RT_KERNEL_VERSION"
+        uptime_sec="$(resolve_runtime_uptime_sec "$running" "$pid")"
+
+        collect_overview_system_info
+
+        default_route="$(route get default 2>/dev/null)"
+        iface="$(resolve_overview_iface "$default_route")"
+        IFS='|' read -r rx_bytes tx_bytes <<< "$(resolve_overview_traffic_bytes "$iface")"
+        gateway="$(resolve_overview_gateway "$iface" "$default_route")"
+        network_name="$(resolve_overview_network_name "$iface")"
+        local_ip="$(resolve_overview_local_ip "$iface")"
+
+        internet_ms=""
+        internet_ip_v4=""
+        internet_ip_v6=""
+        internet_ip_direct=""
+        proxy_ip=""
+        dns_ms=""
+        router_ms=""
+        cached_internet_ms=""
+        cached_dns_ms=""
+        cached_router_ms=""
+
+        cache_file="$CLASHFOX_PID_DIR/overview_cache"
+        now_ts="$(date +%s)"
+        load_overview_cache_state "$cache_file" "$disable_cache" "$cache_ttl" "$now_ts"
+
+        if [ "$cache_valid" = false ]; then
+        probe_overview_ips "$iface"
+        probe_overview_latencies "$iface" "$gateway" "$local_ip"
+        save_overview_cache_state "$cache_file" "$disable_cache" "$now_ts"
+        fi
+
+        normalize_overview_runtime_fields
+
+        collect_overview_runtime_extensions "$kernel_path" "$pid"
+        data="$(build_overview_payload_json "$kernel_version" "$uptime_sec" "$system_name" "$system_version" "$system_build" "$network_name" "$local_ip" "$proxy_ip" "$internet_ip" "$internet_ip_v4" "$internet_ip_v6" "$internet_ms" "$dns_ms" "$router_ms" "$connections" "$memory" "$rx_bytes" "$tx_bytes")"
+        print_ok "$data"
+}
+
 command="${1:-}"
 shift || true
 
@@ -716,1896 +2556,76 @@ ensure_runtime_dirs
 
 case "$command" in
     status)
-        rotate_logs
-        config_path=""
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                --config|--config-path)
-                    shift || true
-                    config_path="${1:-}"
-                    ;;
-            esac
-            shift || true
-        done
-        if [ -z "$config_path" ]; then
-            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
-        fi
-        resolve_controller_from_config "$config_path"
-        resolve_proxy_port_from_config "$config_path"
-
-        kernel_path="$CLASHFOX_CORE_DIR/$ACTIVE_CORE"
-        pid_file="$CLASHFOX_PID_DIR/clashfox.pid"
-        log_path="$CLASHFOX_LOG_DIR/clashfox.log"
-        config_default="$CLASHFOX_CONFIG_DIR/default.yaml"
-
-        kernel_exists=false
-        kernel_exec=false
-        if [ -f "$kernel_path" ]; then
-            kernel_exists=true
-        fi
-        if [ -x "$kernel_path" ]; then
-            kernel_exec=true
-        fi
-
-        running=false
-        pid=""
-        if [ -f "$pid_file" ]; then
-            pid="$(cat "$pid_file" 2>/dev/null)"
-            if pid_is_running "$pid"; then
-                running=true
-            else
-                pid=""
-            fi
-        fi
-        if [ "$running" = false ]; then
-            pid="$(find_mihomo_pid)"
-            if pid_is_running "$pid"; then
-                running=true
-            else
-                pid=""
-            fi
-        fi
-
-        if [ -n "$pid" ] && [ ! -x "$kernel_path" ]; then
-            resolved_path="$(resolve_kernel_path_from_pid "$pid")"
-            if [ -n "$resolved_path" ]; then
-                kernel_path="$resolved_path"
-                kernel_exists=true
-                kernel_exec=true
-            fi
-        fi
-
-        version=""
-        if [ -x "$kernel_path" ]; then
-            version="$($kernel_path -v 2>/dev/null | head -n 1 | tr -d '\r')"
-        fi
-        if [ -z "$version" ] && [ -n "$pid" ]; then
-            version="$(resolve_kernel_version_from_pid "$pid")"
-        fi
-        if [ -n "$version" ] && [ "$kernel_exists" = false ]; then
-            kernel_exists=true
-        fi
-
-        config_exists=false
-        if [ -f "$config_default" ]; then
-            config_exists=true
-        fi
-
-        data=$(cat <<JSON
-{"kernelPath":"$(json_escape "$kernel_path")","kernelExists":$kernel_exists,"kernelExec":$kernel_exec,"version":"$(json_escape "$version")","running":$running,"pid":"$(json_escape "$pid")","configDefault":"$(json_escape "$config_default")","configExists":$config_exists,"logPath":"$(json_escape "$log_path")","coreDir":"$(json_escape "$CLASHFOX_CORE_DIR")","configDir":"$(json_escape "$CLASHFOX_CONFIG_DIR")","dataDir":"$(json_escape "$CLASHFOX_DATA_DIR")"}
-JSON
-)
-        print_ok "$data"
+        handle_runtime_status "$@"
         ;;
     configs)
-        if [ ! -d "$CLASHFOX_CONFIG_DIR" ]; then
-            print_ok "[]"
-            exit 0
-        fi
-        shopt -s nullglob
-        files=( "$CLASHFOX_CONFIG_DIR"/*.yaml "$CLASHFOX_CONFIG_DIR"/*.yml "$CLASHFOX_CONFIG_DIR"/*.json )
-        shopt -u nullglob
-        if [ ${#files[@]} -eq 0 ]; then
-            print_ok "[]"
-            exit 0
-        fi
-        sorted="$(printf '%s\0' "${files[@]}" | xargs -0 ls -1t 2>/dev/null)"
-        if [ -z "$sorted" ]; then
-            print_ok "[]"
-            exit 0
-        fi
-        json="["
-        first=true
-        while IFS= read -r file; do
-            if [ ! -f "$file" ]; then
-                continue
-            fi
-            name="$(basename "$file")"
-            modified="$(stat -f "%Sm" -t "%Y-%m-%d %H:%M:%S" "$file" 2>/dev/null)"
-            if [ -z "$modified" ]; then
-                modified="-"
-            fi
-            if [ "$first" = true ]; then
-                first=false
-            else
-                json+=","
-            fi
-            json+="{\"name\":\"$(json_escape "$name")\",\"path\":\"$(json_escape "$file")\",\"modified\":\"$(json_escape "$modified")\"}"
-        done <<< "$sorted"
-        json+="]"
-        print_ok "$json"
+        handle_configs "$@"
         ;;
     overview)
-        rotate_logs
-        config_path=""
-        controller_override=""
-        secret_override=""
-        cache_ttl=2
-        disable_cache=false
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                --config|--config-path)
-                    shift || true
-                    config_path="${1:-}"
-                    ;;
-                --controller)
-                    shift || true
-                    controller_override="${1:-}"
-                    ;;
-                --secret)
-                    shift || true
-                    secret_override="${1:-}"
-                    ;;
-                --cache-ttl)
-                    shift || true
-                    if echo "${1:-}" | grep -qE '^[0-9]+$'; then
-                        cache_ttl="$1"
-                    fi
-                    ;;
-                --no-cache)
-                    disable_cache=true
-                    ;;
-            esac
-            shift || true
-        done
-        if [ -z "$config_path" ]; then
-            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
-        fi
-        resolve_controller_from_config "$config_path"
-        resolve_proxy_port_from_config "$config_path"
-        if [ -n "$controller_override" ]; then
-            if ! echo "$controller_override" | grep -qE '^https?://'; then
-                MIHOMO_CONTROLLER="http://$controller_override"
-            else
-                MIHOMO_CONTROLLER="$controller_override"
-            fi
-        fi
-        if [ -n "$secret_override" ]; then
-            MIHOMO_SECRET="$secret_override"
-        fi
-
-        kernel_path="$CLASHFOX_CORE_DIR/$ACTIVE_CORE"
-        pid_file="$CLASHFOX_PID_DIR/clashfox.pid"
-
-        running=false
-        pid=""
-        if [ -f "$pid_file" ]; then
-            pid="$(cat "$pid_file" 2>/dev/null)"
-            if pid_is_running "$pid"; then
-                running=true
-            else
-                pid=""
-            fi
-        fi
-        if [ -z "$pid" ]; then
-            pid="$(find_mihomo_pid)"
-            if pid_is_running "$pid"; then
-                running=true
-            else
-                pid=""
-            fi
-        fi
-
-        if [ -n "$pid" ] && [ ! -x "$kernel_path" ]; then
-            resolved_path="$(resolve_kernel_path_from_pid "$pid")"
-            if [ -n "$resolved_path" ]; then
-                kernel_path="$resolved_path"
-            fi
-        fi
-
-        kernel_version=""
-        if [ -x "$kernel_path" ]; then
-            kernel_version="$($kernel_path -v 2>/dev/null | head -n 1 | tr -d '\r')"
-        fi
-        if [ -z "$kernel_version" ] && [ -n "$pid" ]; then
-            kernel_version="$(resolve_kernel_version_from_pid "$pid")"
-        fi
-
-        uptime_sec=0
-        if [ "$running" = true ] && [ -n "$pid" ]; then
-            uptime_sec="$(get_mihomo_uptime_sec "$pid")"
-        fi
-        if ! echo "$uptime_sec" | grep -qE '^[0-9]+$'; then
-            uptime_sec=0
-        fi
-
-        system_name="$(sw_vers -productName 2>/dev/null)"
-        system_version="$(sw_vers -productVersion 2>/dev/null)"
-        system_build="$(sw_vers -buildVersion 2>/dev/null)"
-
-        default_route="$(route get default 2>/dev/null)"
-        iface="$(echo "$default_route" | awk '/interface:/{print $2; exit}')"
-
-        primary_iface="$(scutil --nwi 2>/dev/null | awk -F': ' '/Primary interface:/{print $2; exit}')"
-        if [ -n "$primary_iface" ]; then
-            iface="$primary_iface"
-        fi
-        if [[ "$iface" == utun* ]]; then
-            iface=""
-        fi
-
-        if [[ "$iface" == utun* ]] || [ -z "$iface" ]; then
-            fallback_iface="$(scutil --nwi 2>/dev/null | awk '/Network interfaces:/{print $3; exit}')"
-            if [ -n "$fallback_iface" ]; then
-                iface="$fallback_iface"
-            else
-                for cand in $(ifconfig -l); do
-                    case "$cand" in
-                        en*|bridge*|pdp_ip*)
-                            if ipconfig getifaddr "$cand" >/dev/null 2>&1; then
-                                iface="$cand"
-                                break
-                            fi
-                            ;;
-                    esac
-                done
-            fi
-        fi
-
-        rx_bytes=""
-        tx_bytes=""
-        if [ -n "$iface" ]; then
-            read -r rx_bytes tx_bytes <<EOF
-$(netstat -ibn 2>/dev/null | awk -v iface="$iface" '$1==iface {ibytes=$7; obytes=$10} END {print ibytes, obytes}')
-EOF
-        fi
-        if ! echo "$rx_bytes" | grep -qE '^[0-9]+$'; then
-            rx_bytes=""
-        fi
-        if ! echo "$tx_bytes" | grep -qE '^[0-9]+$'; then
-            tx_bytes=""
-        fi
-
-        gateway=""
-        if [ -n "$iface" ]; then
-            gateway="$(ipconfig getoption "$iface" router 2>/dev/null)"
-        fi
-        if [ -z "$gateway" ]; then
-            scoped_route="$(route -n get -ifscope "$iface" default 2>/dev/null)"
-            gateway="$(echo "$scoped_route" | awk '/gateway:/{print $2; exit}')"
-        fi
-        if [ -z "$gateway" ]; then
-            gateway="$(ipconfig getoption en0 router 2>/dev/null)"
-        fi
-        if [ -z "$gateway" ]; then
-            gateway="$(ipconfig getoption en1 router 2>/dev/null)"
-        fi
-        if [ -z "$gateway" ]; then
-            gateway="$(echo "$default_route" | awk '/gateway:/{print $2; exit}')"
-        fi
-
-        network_name=""
-        if [ -n "$iface" ] && command -v networksetup >/dev/null 2>&1; then
-            service_name="$(networksetup -listnetworkserviceorder 2>/dev/null | awk -v iface="$iface" '
-                $0 ~ "\\(" iface "\\)" {print last; exit}
-                {last=$0}
-            ' | sed -E 's/^\\([0-9]+\\) //')"
-            network_name="$service_name"
-            if [ -z "$network_name" ]; then
-                network_name="$(networksetup -listallhardwareports | awk -v iface="$iface" '
-                    $1=="Hardware" && $2=="Port:" {port=$0; sub("Hardware Port: ","",port)}
-                    $1=="Device:" && $2==iface {print port; exit}
-                ')"
-            fi
-        fi
-        if [[ "$iface" == en* ]]; then
-            network_name="Wi-Fi"
-        elif echo "$network_name" | grep -qiE 'hotspot|iphone|ipad'; then
-            network_name="Personal Hotspot"
-        elif echo "$network_name" | grep -qiE 'wi[- ]?fi|airport|wlan'; then
-            network_name="Wi-Fi"
-        fi
-        if [ -z "$network_name" ] || [[ "$network_name" == utun* ]]; then
-            network_name="Wi-Fi"
-        fi
-
-        local_ip=""
-        local_ip="$(ipconfig getifaddr en0 2>/dev/null)"
-        if [ -n "$local_ip" ] && ! echo "$local_ip" | grep -q '\.'; then
-            local_ip=""
-        fi
-        if [ -z "$local_ip" ] && [ -n "$iface" ]; then
-            local_ip="$(ipconfig getifaddr "$iface" 2>/dev/null)"
-        fi
-        if [ -n "$local_ip" ] && ! echo "$local_ip" | grep -q '\.'; then
-            local_ip=""
-        fi
-        if [ -z "$local_ip" ] && [ -n "$iface" ]; then
-            local_ip="$(ifconfig "$iface" 2>/dev/null | awk '/inet /{print $2; exit}')"
-        fi
-        if [ -n "$local_ip" ] && ! echo "$local_ip" | grep -q '\.'; then
-            local_ip=""
-        fi
-        if [ -z "$local_ip" ]; then
-            local_ip="$(ipconfig getifaddr en1 2>/dev/null)"
-        fi
-        if [ -n "$local_ip" ] && ! echo "$local_ip" | grep -q '\.'; then
-            local_ip=""
-        fi
-
-        internet_ms=""
-        internet_ip_v4=""
-        internet_ip_v6=""
-        internet_ip_direct=""
-        proxy_ip=""
-        dns_ms=""
-        router_ms=""
-        cached_internet_ms=""
-        cached_dns_ms=""
-        cached_router_ms=""
-
-        cache_file="$CLASHFOX_PID_DIR/overview_cache"
-        cache_valid=false
-        now_ts="$(date +%s)"
-        if [ "$disable_cache" = false ] && [ -f "$cache_file" ]; then
-            # shellcheck disable=SC1090
-            . "$cache_file"
-            cached_internet_ms="${internet_ms:-}"
-            cached_dns_ms="${dns_ms:-}"
-            cached_router_ms="${router_ms:-}"
-            if [ -n "${ts:-}" ] && [ $((now_ts - ts)) -lt "$cache_ttl" ]; then
-                cache_valid=true
-                internet_ip_v4="${internet_ip_v4:-}"
-                internet_ip_v6="${internet_ip_v6:-}"
-                internet_ms="${internet_ms:-}"
-                proxy_ip="${proxy_ip:-}"
-                dns_ms="${dns_ms:-}"
-                router_ms="${router_ms:-}"
-                if [ -n "$internet_ip_v6" ] && ! echo "$internet_ip_v6" | grep -q ':'; then
-                    if [ -z "$internet_ip_v4" ] && echo "$internet_ip_v6" | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$'; then
-                        internet_ip_v4="$internet_ip_v6"
-                    fi
-                    internet_ip_v6=""
-                fi
-                if [ -n "$internet_ip_v4" ] && ! echo "$internet_ip_v4" | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$'; then
-                    internet_ip_v4=""
-                fi
-            fi
-        fi
-
-        if [ "$cache_valid" = false ]; then
-        curl_env=(
-            env
-            -u http_proxy
-            -u https_proxy
-            -u all_proxy
-            -u HTTP_PROXY
-            -u HTTPS_PROXY
-            -u ALL_PROXY
-            -u no_proxy
-            -u NO_PROXY
-        )
-        direct_iface_curl_args=()
-        if [ -n "$iface" ]; then
-            case "$iface" in
-                en*|bridge*|pdp_ip*)
-                    direct_iface_curl_args=(--interface "$iface")
-                    ;;
-            esac
-        fi
-        direct_curl_args=()
-        if [ -n "${CLASHFOX_CURL_BIND_IFACE:-}" ]; then
-            direct_curl_args=(--interface "$CLASHFOX_CURL_BIND_IFACE")
-        fi
-
-        ipip_curl_args=("${direct_curl_args[@]}")
-        if [ ${#ipip_curl_args[@]} -eq 0 ] && [ -n "$iface" ]; then
-            case "$iface" in
-                en*|bridge*|pdp_ip*)
-                    ipip_curl_args=(--interface "$iface")
-                    ;;
-            esac
-        fi
-        ipip_url="https://myip.ipip.net/json?t=$(date +%s)$RANDOM"
-
-        # Primary source: assign Internet IP directly from ipip JSON endpoint.
-        internet_ip_resp="$("${curl_env[@]}" curl "${ipip_curl_args[@]}" -s --connect-timeout 3 --max-time 8 --noproxy '*' "$ipip_url" 2>/dev/null)"
-        if [ -n "$internet_ip_resp" ]; then
-            internet_ip_direct="$(extract_ipip_ip "$internet_ip_resp")"
-        fi
-
-        # Optional retry with the same endpoint without interface binding.
-        if [ -z "$internet_ip_direct" ]; then
-            internet_ip_resp="$("${curl_env[@]}" curl -s --connect-timeout 3 --max-time 8 --noproxy '*' "$ipip_url" 2>/dev/null)"
-            if [ -n "$internet_ip_resp" ]; then
-                internet_ip_direct="$(extract_ipip_ip "$internet_ip_resp")"
-            fi
-        fi
-        # Final retry: use plain curl path (same behavior as manual command).
-        if [ -z "$internet_ip_direct" ]; then
-            internet_ip_resp="$(curl -s "$ipip_url" 2>/dev/null)"
-            if [ -n "$internet_ip_resp" ]; then
-                internet_ip_direct="$(extract_ipip_ip "$internet_ip_resp")"
-            fi
-        fi
-        if [ -n "$internet_ip_direct" ]; then
-            if echo "$internet_ip_direct" | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$'; then
-                internet_ip_v4="$internet_ip_direct"
-                internet_ip_v6=""
-            elif echo "$internet_ip_direct" | grep -qE '^[0-9]+\\.[0-9]+\\.\\*\\.[0-9]+$'; then
-                # ipip may return masked IPv4 such as 36.4.*.226
-                internet_ip_v4="$internet_ip_direct"
-                internet_ip_v6=""
-            elif echo "$internet_ip_direct" | grep -q ':'; then
-                internet_ip_v6="$internet_ip_direct"
-                internet_ip_v4=""
-            fi
-        fi
-
-        if [ -n "$internet_ip_v6" ] && ! echo "$internet_ip_v6" | grep -q ':'; then
-            if [ -z "$internet_ip_v4" ] && echo "$internet_ip_v6" | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$'; then
-                internet_ip_v4="$internet_ip_v6"
-            fi
-            internet_ip_v6=""
-        fi
-
-        if [ -n "$internet_ip_v4" ] && ! echo "$internet_ip_v4" | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$|^[0-9]+\\.[0-9]+\\.\\*\\.[0-9]+$'; then
-            internet_ip_v4=""
-        fi
-        if [ -n "$internet_ip_direct" ]; then
-            internet_ip="$internet_ip_direct"
-        elif [ -n "$internet_ip_v4" ]; then
-            internet_ip="$internet_ip_v4"
-        else
-            internet_ip="-"
-        fi
-        proxy_ip=""
-        if [ -n "$MIHOMO_PROXY_PORT" ]; then
-            proxy_ip="$("${curl_env[@]}" curl --proxy "http://127.0.0.1:$MIHOMO_PROXY_PORT" --noproxy '' -s --max-time 3 https://api.ipify.org 2>/dev/null)"
-            if [ -z "$proxy_ip" ]; then
-                proxy_ip="$("${curl_env[@]}" curl --proxy "http://127.0.0.1:$MIHOMO_PROXY_PORT" --noproxy '' -s --max-time 3 https://ifconfig.me/ip 2>/dev/null)"
-            fi
-            if [ -z "$proxy_ip" ]; then
-                proxy_ip="$("${curl_env[@]}" curl --proxy "http://127.0.0.1:$MIHOMO_PROXY_PORT" --noproxy '' -s --max-time 3 https://icanhazip.com 2>/dev/null | tr -d '[:space:]')"
-            fi
-        fi
-        proxy_ip="$(printf '%s' "$proxy_ip" | tr -d '[:space:]')"
-        if [ -z "$proxy_ip" ]; then
-            proxy_ip="-"
-        fi
-
-        dns_ms=""
-        if command -v python3 >/dev/null 2>&1; then
-            dns_ms="$(python3 - <<'PY'
-import socket, time
-start = time.time()
-try:
-    socket.getaddrinfo("apple.com", 80)
-    print(int((time.time() - start) * 1000))
-except Exception:
-    print("")
-PY
-)"
-        fi
-        # Keep Internet latency refresh in the same cycle as DNS/Router and avoid
-        # coupling to public-IP probe success.
-        internet_ms=""
-        if command -v python3 >/dev/null 2>&1; then
-            internet_ms="$(python3 - <<'PY'
-import socket, time
-start = time.time()
-try:
-    sock = socket.create_connection(("1.1.1.1", 443), timeout=1.5)
-    sock.close()
-    print(int((time.time() - start) * 1000))
-except Exception:
-    print("")
-PY
-)"
-        fi
-        if [ -z "$internet_ms" ] && command -v python3 >/dev/null 2>&1; then
-            internet_ms="$(python3 - <<'PY'
-import socket, time
-for host, port in (("1.1.1.1", 53), ("8.8.8.8", 53)):
-    start = time.time()
-    try:
-        sock = socket.create_connection((host, port), timeout=1.5)
-        sock.close()
-        print(int((time.time() - start) * 1000))
-        raise SystemExit
-    except Exception:
-        pass
-print("")
-PY
-)"
-        fi
-        if [ -z "$internet_ms" ] && command -v curl >/dev/null 2>&1; then
-            internet_ms="$("${curl_env[@]}" curl "${direct_curl_args[@]}" -s -o /dev/null -w '%{time_connect}' --max-time 2 --noproxy '*' https://1.1.1.1 2>/dev/null | awk '{if ($1>0) printf "%.0f", $1*1000}')"
-        fi
-        if [ -z "$internet_ms" ]; then
-            internet_ms="$(ping -c 1 -W 1000 1.1.1.1 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
-            if [ -z "$internet_ms" ]; then
-                internet_ms="$(ping -c 1 -t 1 1.1.1.1 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
-            fi
-        fi
-
-        router_ms=""
-        probe_gateway="$gateway"
-        if [ -z "$probe_gateway" ] && [ -n "$local_ip" ] && echo "$local_ip" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
-            probe_gateway="$(echo "$local_ip" | awk -F'.' '{print $1"."$2"."$3".1"}')"
-        fi
-        if [ -n "$probe_gateway" ] && command -v python3 >/dev/null 2>&1; then
-            router_ms="$(CLASHFOX_GATEWAY="$probe_gateway" python3 - <<'PY'
-import os, socket, time
-gw = os.environ.get("CLASHFOX_GATEWAY", "").strip()
-if not gw:
-    print("")
-    raise SystemExit
-refused_codes = {61, 111, 10061}
-for port in (53, 443, 80, 22):
-    start = time.time()
-    sock = None
-    try:
-        family = socket.AF_INET6 if ":" in gw else socket.AF_INET
-        sock = socket.socket(family, socket.SOCK_STREAM)
-        sock.settimeout(1.2)
-        err = sock.connect_ex((gw, port))
-        elapsed = int((time.time() - start) * 1000)
-        if err == 0 or err in refused_codes:
-            print(max(elapsed, 1))
-            raise SystemExit
-    except Exception:
-        pass
-    finally:
-        try:
-            if sock is not None:
-                sock.close()
-        except Exception:
-            pass
-print("")
-PY
-)"
-        fi
-        if [ -z "$router_ms" ] && [ -n "$probe_gateway" ]; then
-            router_ms="$(ping -c 1 -W 1000 "$probe_gateway" 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
-            if [ -z "$router_ms" ]; then
-                router_ms="$(ping -c 1 -t 1 "$probe_gateway" 2>/dev/null | sed -n 's/.*time=\\([0-9.]*\\).*/\\1/p' | head -n 1)"
-            fi
-        fi
-        if [ -z "$router_ms" ] && command -v traceroute >/dev/null 2>&1; then
-            router_ms="$(traceroute -n -m 1 -q 1 -w 1 1.1.1.1 2>/dev/null | awk '
-                NR==2 {
-                    for (i=1; i<=NF; i++) {
-                        if ($(i+1)=="ms" && $i ~ /^[0-9]+(\.[0-9]+)?$/) {
-                            printf "%s", $i;
-                            exit;
-                        }
-                    }
-                }
-            ')"
-        fi
-
-        if [ "$disable_cache" = false ]; then
-            {
-                printf 'ts=%s\n' "$now_ts"
-                printf 'internet_ip_v4=%q\n' "$internet_ip_v4"
-                printf 'internet_ip_v6=%q\n' "$internet_ip_v6"
-                printf 'internet_ms=%q\n' "$internet_ms"
-                printf 'proxy_ip=%q\n' "$proxy_ip"
-                printf 'dns_ms=%q\n' "$dns_ms"
-                printf 'router_ms=%q\n' "$router_ms"
-            } > "$cache_file" 2>/dev/null || true
-        fi
-        fi
-
-        # Normalize latency fields.
-        router_ms="$(printf '%s' "$router_ms" | tr -d '[:space:]')"
-        dns_ms="$(printf '%s' "$dns_ms" | tr -d '[:space:]')"
-        internet_ms="$(printf '%s' "$internet_ms" | tr -d '[:space:]')"
-        if [ -n "$router_ms" ] && ! echo "$router_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
-            router_ms=""
-        fi
-        if [ -n "$dns_ms" ] && ! echo "$dns_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
-            dns_ms=""
-        fi
-        if [ -n "$internet_ms" ] && ! echo "$internet_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
-            internet_ms=""
-        fi
-        if [ -n "$cached_dns_ms" ] && ! echo "$cached_dns_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
-            cached_dns_ms=""
-        fi
-        if [ -n "$cached_router_ms" ] && ! echo "$cached_router_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
-            cached_router_ms=""
-        fi
-        if [ -n "$cached_internet_ms" ] && ! echo "$cached_internet_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
-            cached_internet_ms=""
-        fi
-        if [ -z "$dns_ms" ] && [ -n "$cached_dns_ms" ]; then
-            dns_ms="$cached_dns_ms"
-        fi
-        if [ -z "$router_ms" ] && [ -n "$cached_router_ms" ]; then
-            router_ms="$cached_router_ms"
-        fi
-        if [ -z "$internet_ms" ] && [ -n "$cached_internet_ms" ]; then
-            internet_ms="$cached_internet_ms"
-        fi
-        if [ -z "$router_ms" ]; then
-            router_ms="$(awk -v d="$dns_ms" -v i="$internet_ms" 'BEGIN{
-                val="";
-                if (d ~ /^[0-9]+([.][0-9]+)?$/ && d+0 > 0) {
-                    # Router latency is typically lower than DNS latency.
-                    val = int((d * 0.6) + 0.5);
-                } else if (i ~ /^[0-9]+([.][0-9]+)?$/ && i+0 > 0) {
-                    # Use Internet latency as a weaker fallback signal.
-                    val = int((i * 0.35) + 0.5);
-                }
-                if (val == "" || val < 1) val = "";
-                if (val != "") printf "%d", val;
-            }')"
-        fi
-        if [ -n "$internet_ip_direct" ]; then
-            internet_ip="$internet_ip_direct"
-        elif [ -n "$internet_ip_v4" ]; then
-            internet_ip="$internet_ip_v4"
-        else
-            internet_ip="-"
-        fi
-
-        proxy_ip="$(printf '%s' "$proxy_ip" | tr -d '[:space:]')"
-        if [ -n "$proxy_ip" ]; then
-            if [ -n "$internet_ip_v4" ] && [ "$proxy_ip" = "$internet_ip_v4" ]; then
-                proxy_ip=""
-            fi
-            if [ -n "$internet_ip_v6" ] && [ "$proxy_ip" = "$internet_ip_v6" ]; then
-                proxy_ip=""
-            fi
-        fi
-        if [ -z "$proxy_ip" ]; then
-            proxy_ip="-"
-        fi
-
-        connections=""
-        memory=""
-        connections="$(get_mihomo_connections)"
-        if [ "$running" = false ] && [ -n "$connections" ]; then
-            running=true
-        fi
-        memory_pid="$(find_mihomo_pid)"
-        if [ "$running" = true ] && [ -n "$memory_pid" ]; then
-            memory_mb="$(get_mihomo_rss_mb "$memory_pid")"
-            if [ -z "$memory_mb" ]; then
-                rss_kb="$(get_mihomo_rss_kb "$kernel_path")"
-                if [ -n "$rss_kb" ]; then
-                    memory_mb="$(awk -v rss="$rss_kb" 'BEGIN{printf "%.1f", rss/1024}')"
-                fi
-            fi
-            if [ -n "$memory_mb" ]; then
-                memory="${memory_mb} MB"
-            fi
-        fi
-
-        data=$(cat <<JSON
-{"running":$running,"kernelVersion":"$(json_escape "$kernel_version")","uptimeSec":$uptime_sec,"systemName":"$(json_escape "$system_name")","systemVersion":"$(json_escape "$system_version")","systemBuild":"$(json_escape "$system_build")","networkName":"$(json_escape "$network_name")","localIp":"$(json_escape "$local_ip")","proxyIp":"$(json_escape "$proxy_ip")","internetIp":"$(json_escape "$internet_ip")","internetIp4":"$(json_escape "$internet_ip_v4")","internetIp6":"$(json_escape "$internet_ip_v6")","internetMs":"$(json_escape "$internet_ms")","dnsMs":"$(json_escape "$dns_ms")","routerMs":"$(json_escape "$router_ms")","connections":"$(json_escape "$connections")","memory":"$(json_escape "$memory")","rxBytes":"$(json_escape "$rx_bytes")","txBytes":"$(json_escape "$tx_bytes")"}
-JSON
-)
-        print_ok "$data"
+        handle_overview "$@"
         ;;
     traffic)
-        config_path=""
-        controller_override=""
-        secret_override=""
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                --config|--config-path)
-                    shift || true
-                    config_path="${1:-}"
-                    ;;
-                --controller)
-                    shift || true
-                    controller_override="${1:-}"
-                    ;;
-                --secret)
-                    shift || true
-                    secret_override="${1:-}"
-                    ;;
-            esac
-            shift || true
-        done
-
-        if [ -z "$config_path" ]; then
-            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
-        fi
-
-        if [ ! -f "$config_path" ]; then
-            print_ok '{"up":"","down":""}'
-            exit 0
-        fi
-
-        controller="$(grep -E '^[[:space:]]*external-controller:' "$config_path" | head -n 1 | sed -E 's/^[[:space:]]*external-controller:[[:space:]]*//')"
-        controller="${controller%\"}"
-        controller="${controller#\"}"
-        controller="${controller%\'}"
-        controller="${controller#\'}"
-
-        secret="$(grep -E '^[[:space:]]*secret:' "$config_path" | head -n 1 | sed -E 's/^[[:space:]]*secret:[[:space:]]*//')"
-        secret="${secret%\"}"
-        secret="${secret#\"}"
-        secret="${secret%\'}"
-        secret="${secret#\'}"
-
-        if [ -n "$controller_override" ]; then
-            controller="$controller_override"
-        fi
-        if [ -n "$secret_override" ]; then
-            secret="$secret_override"
-        fi
-
-        if [ -z "$controller" ]; then
-            print_ok '{"up":"","down":""}'
-            exit 0
-        fi
-
-        if ! echo "$controller" | grep -qE '^https?://'; then
-            controller="http://$controller"
-        fi
-
-        if [ -n "$secret" ]; then
-            traffic_resp="$(curl -s --max-time 1 -H "Authorization: Bearer $secret" "$controller/traffic" 2>/dev/null)"
-        else
-            traffic_resp="$(curl -s --max-time 1 "$controller/traffic" 2>/dev/null)"
-        fi
-
-        up_val=""
-        down_val=""
-        if [ -n "$traffic_resp" ] && command -v python3 >/dev/null 2>&1; then
-            parsed_traffic="$(CLASHFOX_TRAFFIC_RESP="$traffic_resp" python3 - <<'PY'
-import json, os
-raw = os.environ.get("CLASHFOX_TRAFFIC_RESP", "")
-if not raw:
-    print("|")
-    raise SystemExit
-try:
-    data = json.loads(raw)
-except Exception:
-    print("|")
-    raise SystemExit
-def as_num(v):
-    try:
-        return float(v)
-    except Exception:
-        return None
-up = as_num(data.get("up"))
-down = as_num(data.get("down"))
-up_s = str(int(up)) if up is not None and up >= 0 else ""
-down_s = str(int(down)) if down is not None and down >= 0 else ""
-print(f"{up_s}|{down_s}")
-PY
-)"
-            up_val="${parsed_traffic%%|*}"
-            down_val="${parsed_traffic#*|}"
-        fi
-        if [ -z "$up_val" ] || [ -z "$down_val" ]; then
-            up_val="$(printf '%s' "$traffic_resp" | sed -n 's/.*"up"[[:space:]]*:[[:space:]]*\\([0-9]\\+\\).*/\\1/p')"
-            down_val="$(printf '%s' "$traffic_resp" | sed -n 's/.*"down"[[:space:]]*:[[:space:]]*\\([0-9]\\+\\).*/\\1/p')"
-        fi
-        if [ -z "$up_val" ]; then
-            up_val=""
-        fi
-        if [ -z "$down_val" ]; then
-            down_val=""
-        fi
-
-        data=$(cat <<JSON
-{"up":"$(json_escape "$up_val")","down":"$(json_escape "$down_val")"}
-JSON
-)
-        print_ok "$data"
+        handle_traffic "$@"
         ;;
     overview-lite)
-        rotate_logs
-        config_path=""
-        controller_override=""
-        secret_override=""
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                --config|--config-path)
-                    shift || true
-                    config_path="${1:-}"
-                    ;;
-                --controller)
-                    shift || true
-                    controller_override="${1:-}"
-                    ;;
-                --secret)
-                    shift || true
-                    secret_override="${1:-}"
-                    ;;
-            esac
-            shift || true
-        done
-        if [ -z "$config_path" ]; then
-            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
-        fi
-        resolve_controller_from_config "$config_path"
-        resolve_proxy_port_from_config "$config_path"
-        if [ -n "$controller_override" ]; then
-            if ! echo "$controller_override" | grep -qE '^https?://'; then
-                MIHOMO_CONTROLLER="http://$controller_override"
-            else
-                MIHOMO_CONTROLLER="$controller_override"
-            fi
-        fi
-        if [ -n "$secret_override" ]; then
-            MIHOMO_SECRET="$secret_override"
-        fi
-
-        kernel_path="$CLASHFOX_CORE_DIR/$ACTIVE_CORE"
-        pid_file="$CLASHFOX_PID_DIR/clashfox.pid"
-        running=false
-        pid=""
-        if [ -f "$pid_file" ]; then
-            pid="$(cat "$pid_file" 2>/dev/null)"
-            if pid_is_running "$pid"; then
-                running=true
-            else
-                pid=""
-            fi
-        fi
-        if [ -z "$pid" ]; then
-            pid="$(find_mihomo_pid)"
-            if pid_is_running "$pid"; then
-                running=true
-            else
-                pid=""
-            fi
-        fi
-
-        uptime_sec=0
-        if [ "$running" = true ] && [ -n "$pid" ]; then
-            uptime_sec="$(get_mihomo_uptime_sec "$pid")"
-        fi
-        if ! echo "$uptime_sec" | grep -qE '^[0-9]+$'; then
-            uptime_sec=0
-        fi
-
-        connections=""
-        memory=""
-        pids=""
-        if [ "$running" = true ]; then
-            if [ -n "$pid" ]; then
-                pids="$pid"
-            fi
-            extra_pids="$(pgrep -x "$ACTIVE_CORE" 2>/dev/null | tr '\n' ' ')"
-            if [ -n "$extra_pids" ]; then
-                pids="$pids $extra_pids"
-            fi
-            extra_path_pids="$(pgrep -f "$kernel_path" 2>/dev/null | tr '\n' ' ')"
-            if [ -n "$extra_path_pids" ]; then
-                pids="$pids $extra_path_pids"
-            fi
-            pids="$(echo "$pids" | awk '{for (i=1;i<=NF;i++) if (!seen[$i]++) printf "%s ", $i}')"
-            pids="$(echo "$pids" | xargs)"
-        fi
-
-        connections="$(get_mihomo_connections)"
-        if [ "$running" = false ] && [ -n "$connections" ]; then
-            running=true
-        fi
-        memory_pid="$(find_mihomo_pid)"
-        if [ -n "$pids" ] && [ -n "$memory_pid" ]; then
-            memory_mb="$(get_mihomo_rss_mb "$memory_pid")"
-            if [ -z "$memory_mb" ]; then
-                rss_kb="$(get_mihomo_rss_kb "$kernel_path")"
-                if [ -n "$rss_kb" ]; then
-                    memory_mb="$(awk -v rss="$rss_kb" 'BEGIN{printf "%.1f", rss/1024}')"
-                fi
-            fi
-            if [ -n "$memory_mb" ]; then
-                memory="${memory_mb} MB"
-            fi
-        fi
-
-        data=$(cat <<JSON
-{"running":$running,"uptimeSec":$uptime_sec,"connections":"$(json_escape "$connections")","memory":"$(json_escape "$memory")"}
-JSON
-)
-        print_ok "$data"
+        handle_runtime_overview_lite "$@"
         ;;
     overview-memory)
-        kernel_path="$CLASHFOX_CORE_DIR/$ACTIVE_CORE"
-        running=false
-        pid="$(find_mihomo_pid)"
-        if pid_is_running "$pid"; then
-            running=true
-        else
-            pid=""
-        fi
-
-        memory=""
-        if [ "$running" = true ] && [ -n "$pid" ]; then
-            memory_mb="$(get_mihomo_rss_mb "$pid")"
-            if [ -z "$memory_mb" ]; then
-                rss_kb="$(get_mihomo_rss_kb "$kernel_path")"
-                if [ -n "$rss_kb" ]; then
-                    memory_mb="$(awk -v rss="$rss_kb" 'BEGIN{printf "%.1f", rss/1024}')"
-                fi
-            fi
-            if [ -n "$memory_mb" ]; then
-                memory="${memory_mb} MB"
-            fi
-        fi
-
-        data=$(cat <<JSON
-{"memory":"$(json_escape "$memory")"}
-JSON
-)
-        print_ok "$data"
+        handle_runtime_memory "$@"
         ;;
     panel-install)
-        panel_name=""
-        panel_url=""
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                --name)
-                    shift || true
-                    panel_name="${1:-}"
-                    ;;
-                --url)
-                    shift || true
-                    panel_url="${1:-}"
-                    ;;
-            esac
-            shift || true
-        done
-
-        if [ -z "$panel_name" ] || [ -z "$panel_url" ]; then
-            print_err "missing_panel_info"
-            exit 1
-        fi
-        if ! command -v curl >/dev/null 2>&1; then
-            print_err "curl_missing"
-            exit 1
-        fi
-        if ! command -v unzip >/dev/null 2>&1; then
-            unzip_available=false
-        else
-            unzip_available=true
-        fi
-        if ! command -v tar >/dev/null 2>&1; then
-            tar_available=false
-        else
-            tar_available=true
-        fi
-
-        if [ -z "$CLASHFOX_DATA_DIR" ]; then
-            CLASHFOX_DATA_DIR="$CLASHFOX_USER_DATA_DIR/data"
-        fi
-        if ! mkdir -p "$CLASHFOX_DATA_DIR/ui" 2>/dev/null; then
-            fallback_dir="$CLASHFOX_USER_DATA_DIR/data"
-            if [ -n "$fallback_dir" ] && mkdir -p "$fallback_dir/ui" 2>/dev/null; then
-                CLASHFOX_DATA_DIR="$fallback_dir"
-            else
-                rm -rf "$temp_dir"
-                print_err "data_dir_unwritable"
-                exit 1
-            fi
-        fi
-        chmod u+rwx "$CLASHFOX_DATA_DIR" "$CLASHFOX_DATA_DIR/ui" 2>/dev/null || true
-
-        panel_dir="$CLASHFOX_DATA_DIR/ui/$panel_name"
-        if [ -d "$panel_dir" ] && [ -n "$(ls -A "$panel_dir" 2>/dev/null)" ]; then
-            print_ok "{\"installed\":false,\"path\":\"$(json_escape "$panel_dir")\",\"skipped\":true}"
-            exit 0
-        fi
-
-        temp_dir="$(mktemp -d)"
-        archive_path="$temp_dir/panel.archive"
-        unpack_dir="$temp_dir/unpack"
-        mkdir -p "$unpack_dir"
-
-        if ! curl -L -o "$archive_path" "$panel_url"; then
-            rm -rf "$temp_dir"
-            print_err "download_failed"
-            exit 1
-        fi
-
-        case "$panel_url" in
-            *.tgz|*.tar.gz)
-                if [ "$tar_available" = false ]; then
-                    rm -rf "$temp_dir"
-                    print_err "tar_missing"
-                    exit 1
-                fi
-                if ! tar -xzf "$archive_path" -C "$unpack_dir"; then
-                    rm -rf "$temp_dir"
-                    print_err "untar_failed"
-                    exit 1
-                fi
-                ;;
-            *)
-                if [ "$unzip_available" = false ]; then
-                    rm -rf "$temp_dir"
-                    print_err "unzip_missing"
-                    exit 1
-                fi
-                if ! unzip -q "$archive_path" -d "$unpack_dir"; then
-                    rm -rf "$temp_dir"
-                    print_err "unzip_failed"
-                    exit 1
-                fi
-                ;;
-        esac
-
-        src_dir="$unpack_dir"
-        shopt -s nullglob
-        entries=( "$unpack_dir"/* )
-        shopt -u nullglob
-        if [ ${#entries[@]} -eq 1 ] && [ -d "${entries[0]}" ]; then
-            src_dir="${entries[0]}"
-        fi
-        rm -rf "$panel_dir"
-        mkdir -p "$panel_dir"
-        if [ ! -w "$panel_dir" ]; then
-            rm -rf "$temp_dir"
-            print_err "data_dir_unwritable"
-            exit 1
-        fi
-        if [ -z "$(ls -A "$src_dir" 2>/dev/null)" ]; then
-            rm -rf "$temp_dir"
-            print_err "empty_archive"
-            exit 1
-        fi
-        if ! cp -R "$src_dir"/. "$panel_dir"/; then
-            rm -rf "$temp_dir"
-            print_err "copy_failed"
-            exit 1
-        fi
-
-        rm -rf "$temp_dir"
-        print_ok "{\"installed\":true,\"path\":\"$(json_escape "$panel_dir")\"}"
+        handle_panel_install "$@"
         ;;
     panel-activate)
-        panel_name=""
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                --name)
-                    shift || true
-                    panel_name="${1:-}"
-                    ;;
-            esac
-            shift || true
-        done
-
-        if [ -z "$panel_name" ]; then
-            print_err "missing_panel_info"
-            exit 1
-        fi
-
-        if [ -z "$CLASHFOX_DATA_DIR" ]; then
-            CLASHFOX_DATA_DIR="$CLASHFOX_USER_DATA_DIR/data"
-        fi
-        panel_dir="$CLASHFOX_DATA_DIR/ui/$panel_name"
-        if [ ! -d "$panel_dir" ] || [ ! -f "$panel_dir/index.html" ]; then
-            print_err "panel_missing"
-            exit 1
-        fi
-
-        if [ -f "$panel_dir/index.html" ]; then
-            tmp_file="$(mktemp)"
-            if ! sed -E \
-                -e "s#([\"'])/assets/#\\1assets/#g" \
-                -e "s#([\"'])/_nuxt/#\\1_nuxt/#g" \
-                -e "s#([\"'])/_fonts/#\\1_fonts/#g" \
-                -e "s#([\"'])/registerSW\\.js#\\1registerSW.js#g" \
-                -e "s#([\"'])/manifest\\.webmanifest#\\1manifest.webmanifest#g" \
-                -e "s#([\"'])/favicon\\.ico#\\1favicon.ico#g" \
-                -e "s#([\"'])/favicon\\.svg#\\1favicon.svg#g" \
-                "$panel_dir/index.html" > "$tmp_file"; then
-                rm -f "$tmp_file"
-                print_err "config_update_failed"
-                exit 1
-            fi
-            if ! mv "$tmp_file" "$panel_dir/index.html"; then
-                rm -f "$tmp_file"
-                print_err "config_update_failed"
-                exit 1
-            fi
-        fi
-
-        print_ok "{\"configured\":true,\"path\":\"$(json_escape "$panel_dir")\"}"
+        handle_panel_activate "$@"
         ;;
     system-proxy-status)
-        config_path=""
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                --config|--config-path)
-                    shift || true
-                    config_path="${1:-}"
-                    ;;
-            esac
-            shift || true
-        done
-        if [ -z "$config_path" ]; then
-            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
-        fi
-        resolve_proxy_port_from_config "$config_path"
-        if [ -z "$MIHOMO_PROXY_PORT" ]; then
-            MIHOMO_PROXY_PORT="7890"
-        fi
-        service="$(resolve_active_network_service)"
-        if [ -z "$service" ]; then
-            print_err "network_service_not_found"
-            exit 1
-        fi
-
-        IFS='|' read -r web_enabled web_server web_port <<< "$(read_network_proxy_triplet "$service" "-getwebproxy")"
-        IFS='|' read -r secure_enabled secure_server secure_port <<< "$(read_network_proxy_triplet "$service" "-getsecurewebproxy")"
-        IFS='|' read -r socks_enabled socks_server socks_port <<< "$(read_network_proxy_triplet "$service" "-getsocksfirewallproxy")"
-
-        data="$(build_system_proxy_status_json "$service" "$MIHOMO_PROXY_PORT" "$web_enabled" "$web_server" "$web_port" "$secure_enabled" "$secure_server" "$secure_port" "$socks_enabled" "$socks_server" "$socks_port")"
-        print_ok "$data"
+        handle_system_proxy_status "$@"
         ;;
     system-proxy-enable)
-        config_path=""
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                --config|--config-path)
-                    shift || true
-                    config_path="${1:-}"
-                    ;;
-            esac
-            shift || true
-        done
-
-        if ! ensure_sudo ""; then
-            exit 1
-        fi
-        if [ -z "$config_path" ]; then
-            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
-        fi
-        resolve_proxy_port_from_config "$config_path"
-        if [ -z "$MIHOMO_PROXY_PORT" ]; then
-            MIHOMO_PROXY_PORT="7890"
-        fi
-        service="$(resolve_active_network_service)"
-        if [ -z "$service" ]; then
-            print_err "network_service_not_found"
-            exit 1
-        fi
-
-        IFS='|' read -r web_enabled web_server web_port <<< "$(read_network_proxy_triplet "$service" "-getwebproxy")"
-        IFS='|' read -r secure_enabled secure_server secure_port <<< "$(read_network_proxy_triplet "$service" "-getsecurewebproxy")"
-        IFS='|' read -r socks_enabled socks_server socks_port <<< "$(read_network_proxy_triplet "$service" "-getsocksfirewallproxy")"
-
-        takeover_active=false
-        if is_yes_value "$web_enabled" && is_loopback_host "$web_server" && [ "$web_port" = "$MIHOMO_PROXY_PORT" ]; then
-            takeover_active=true
-        fi
-        if is_yes_value "$secure_enabled" && is_loopback_host "$secure_server" && [ "$secure_port" = "$MIHOMO_PROXY_PORT" ]; then
-            takeover_active=true
-        fi
-        if is_yes_value "$socks_enabled" && is_loopback_host "$socks_server" && [ "$socks_port" = "$MIHOMO_PROXY_PORT" ]; then
-            takeover_active=true
-        fi
-
-        if [ "$takeover_active" = false ]; then
-            save_system_proxy_snapshot "$service" "$web_enabled" "$web_server" "$web_port" "$secure_enabled" "$secure_server" "$secure_port" "$socks_enabled" "$socks_server" "$socks_port"
-        fi
-
-        if ! set_system_proxy_on "$service" "127.0.0.1" "$MIHOMO_PROXY_PORT"; then
-            print_err "set_system_proxy_failed"
-            exit 1
-        fi
-
-        data="$(build_system_proxy_status_json "$service" "$MIHOMO_PROXY_PORT" "Yes" "127.0.0.1" "$MIHOMO_PROXY_PORT" "Yes" "127.0.0.1" "$MIHOMO_PROXY_PORT" "Yes" "127.0.0.1" "$MIHOMO_PROXY_PORT")"
-        print_ok "$data"
+        handle_system_proxy_enable "$@"
         ;;
     system-proxy-disable)
-        if ! ensure_sudo ""; then
-            exit 1
-        fi
-
-        active_service="$(resolve_active_network_service)"
-        if [ -z "$active_service" ]; then
-            print_err "network_service_not_found"
-            exit 1
-        fi
-
-        restore_service="$active_service"
-        web_enabled=""
-        web_server=""
-        web_port=""
-        secure_enabled=""
-        secure_server=""
-        secure_port=""
-        socks_enabled=""
-        socks_server=""
-        socks_port=""
-
-        if [ -f "$SYSTEM_PROXY_STATE_FILE" ]; then
-            # shellcheck disable=SC1090
-            . "$SYSTEM_PROXY_STATE_FILE"
-            if [ -n "${service:-}" ]; then
-                restore_service="$service"
-            fi
-            web_enabled="${web_enabled:-}"
-            web_server="${web_server:-}"
-            web_port="${web_port:-}"
-            secure_enabled="${secure_enabled:-}"
-            secure_server="${secure_server:-}"
-            secure_port="${secure_port:-}"
-            socks_enabled="${socks_enabled:-}"
-            socks_server="${socks_server:-}"
-            socks_port="${socks_port:-}"
-        fi
-
-        if ! restore_system_proxy_triplet "$restore_service" "-setwebproxy" "-setwebproxystate" "$web_enabled" "$web_server" "$web_port"; then
-            print_err "restore_system_proxy_failed"
-            exit 1
-        fi
-        if ! restore_system_proxy_triplet "$restore_service" "-setsecurewebproxy" "-setsecurewebproxystate" "$secure_enabled" "$secure_server" "$secure_port"; then
-            print_err "restore_system_proxy_failed"
-            exit 1
-        fi
-        if ! restore_system_proxy_triplet "$restore_service" "-setsocksfirewallproxy" "-setsocksfirewallproxystate" "$socks_enabled" "$socks_server" "$socks_port"; then
-            print_err "restore_system_proxy_failed"
-            exit 1
-        fi
-
-        rm -f "$SYSTEM_PROXY_STATE_FILE"
-        data=$(cat <<JSON
-{"enabled":false,"service":"$(json_escape "$restore_service")"}
-JSON
-)
-        print_ok "$data"
+        handle_system_proxy_disable "$@"
         ;;
     mode)
-        mode=""
-        config_path=""
-        controller_override=""
-        secret_override=""
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                --mode)
-                    shift
-                    mode="$1"
-                    ;;
-                --config|--config-path)
-                    shift || true
-                    config_path="${1:-}"
-                    ;;
-                --controller)
-                    shift
-                    controller_override="${1:-}"
-                    ;;
-                --secret)
-                    shift
-                    secret_override="${1:-}"
-                    ;;
-            esac
-            shift || true
-        done
-
-        case "$mode" in
-            global|rule|direct)
-                ;;
-            *)
-                print_err "invalid_mode"
-                exit 1
-                ;;
-        esac
-
-        if [ -z "$config_path" ]; then
-            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
-        fi
-        resolve_controller_from_config "$config_path"
-
-        if [ -n "$controller_override" ]; then
-            if ! echo "$controller_override" | grep -qE '^https?://'; then
-                MIHOMO_CONTROLLER="http://$controller_override"
-            else
-                MIHOMO_CONTROLLER="$controller_override"
-            fi
-        fi
-        if [ -n "$secret_override" ]; then
-            MIHOMO_SECRET="$secret_override"
-        fi
-
-        if [ -z "$MIHOMO_CONTROLLER" ]; then
-            print_err "controller_missing"
-            exit 1
-        fi
-        if ! command -v curl >/dev/null 2>&1; then
-            print_err "curl_missing"
-            exit 1
-        fi
-
-        auth_args=()
-        if [ -n "$MIHOMO_SECRET" ]; then
-            auth_args=(-H "Authorization: Bearer $MIHOMO_SECRET")
-        fi
-        code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 -X PATCH "${auth_args[@]}" -H "Content-Type: application/json" -d "{\"mode\":\"$mode\"}" "$MIHOMO_CONTROLLER/configs" 2>/dev/null)"
-        if echo "$code" | grep -qE '^(200|204)$'; then
-            print_ok "{}"
-        else
-            print_err "request_failed"
-            exit 1
-        fi
+        handle_mode "$@"
         ;;
     tun-status)
-        config_path=""
-        controller_override=""
-        secret_override=""
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                --config|--config-path)
-                    shift || true
-                    config_path="${1:-}"
-                    ;;
-                --controller)
-                    shift || true
-                    controller_override="${1:-}"
-                    ;;
-                --secret)
-                    shift || true
-                    secret_override="${1:-}"
-                    ;;
-            esac
-            shift || true
-        done
-
-        if [ -z "$config_path" ]; then
-            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
-        fi
-        resolve_controller_from_config "$config_path"
-
-        if [ -n "$controller_override" ]; then
-            if ! echo "$controller_override" | grep -qE '^https?://'; then
-                MIHOMO_CONTROLLER="http://$controller_override"
-            else
-                MIHOMO_CONTROLLER="$controller_override"
-            fi
-        fi
-        if [ -n "$secret_override" ]; then
-            MIHOMO_SECRET="$secret_override"
-        fi
-
-        if [ -z "$MIHOMO_CONTROLLER" ]; then
-            print_err "controller_missing"
-            exit 1
-        fi
-        if ! command -v curl >/dev/null 2>&1; then
-            print_err "curl_missing"
-            exit 1
-        fi
-        auth_args=()
-        if [ -n "$MIHOMO_SECRET" ]; then
-            auth_args=(-H "Authorization: Bearer $MIHOMO_SECRET")
-        fi
-        json="$(curl -s --max-time 2 "${auth_args[@]}" "$MIHOMO_CONTROLLER/configs" 2>/dev/null | tr '\n' ' ')"
-        if [ -z "$json" ]; then
-            print_err "request_failed"
-            exit 1
-        fi
-        enabled="$(printf '%s' "$json" | sed -nE 's/.*\"tun\"[[:space:]]*:[[:space:]]*\\{[^}]*\"(enable|enabled)\"[[:space:]]*:[[:space:]]*([^,}\\ ]+).*/\\2/p')"
-        if [ -z "$enabled" ]; then
-            enabled="$(printf '%s' "$json" | sed -nE 's/.*\"tun\"[[:space:]]*:[[:space:]]*(true|false).*/\\1/p')"
-        fi
-        stack="$(printf '%s' "$json" | sed -nE 's/.*\"tun\"[[:space:]]*:[[:space:]]*\\{[^}]*\"stack\"[[:space:]]*:[[:space:]]*\"([^\"]+)\".*/\\1/p')"
-        if [ -z "$enabled" ]; then
-            print_err "tun_parse_failed"
-            exit 1
-        fi
-        if [ -z "$stack" ]; then
-            stack="mixed"
-        fi
-        print_ok "{\"enabled\":$enabled,\"stack\":\"$(json_escape "$stack")\"}"
+        handle_tun_status "$@"
         ;;
     tun)
-        enable_value=""
-        stack_value=""
-        config_path=""
-        controller_override=""
-        secret_override=""
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                --enable)
-                    shift || true
-                    enable_value="${1:-}"
-                    ;;
-                --stack)
-                    shift || true
-                    stack_value="${1:-}"
-                    ;;
-                --config|--config-path)
-                    shift || true
-                    config_path="${1:-}"
-                    ;;
-                --controller)
-                    shift || true
-                    controller_override="${1:-}"
-                    ;;
-                --secret)
-                    shift || true
-                    secret_override="${1:-}"
-                    ;;
-            esac
-            shift || true
-        done
-
-        if [ -z "$config_path" ]; then
-            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
-        fi
-        resolve_controller_from_config "$config_path"
-
-        if [ -n "$controller_override" ]; then
-            if ! echo "$controller_override" | grep -qE '^https?://'; then
-                MIHOMO_CONTROLLER="http://$controller_override"
-            else
-                MIHOMO_CONTROLLER="$controller_override"
-            fi
-        fi
-        if [ -n "$secret_override" ]; then
-            MIHOMO_SECRET="$secret_override"
-        fi
-
-        if [ -z "$MIHOMO_CONTROLLER" ]; then
-            print_err "controller_missing"
-            exit 1
-        fi
-        if ! command -v curl >/dev/null 2>&1; then
-            print_err "curl_missing"
-            exit 1
-        fi
-
-        payload=""
-        if [ -n "$enable_value" ]; then
-            case "$enable_value" in
-                true|false) ;;
-                *) print_err "invalid_tun"; exit 1 ;;
-            esac
-            payload="{\"tun\":{\"enable\":$enable_value}}"
-        fi
-        if [ -n "$stack_value" ]; then
-            case "$stack_value" in
-                Mixed) stack_value="mixed" ;;
-                gVisor) stack_value="gvisor" ;;
-                System) stack_value="system" ;;
-                Lwip|LWIP) stack_value="lwip" ;;
-            esac
-            case "$stack_value" in
-                mixed|gvisor|system|lwip) ;;
-                *) print_err "invalid_tun"; exit 1 ;;
-            esac
-            if [ -n "$payload" ]; then
-                payload="{\"tun\":{\"enable\":${enable_value:-false},\"stack\":\"$stack_value\"}}"
-            else
-                payload="{\"tun\":{\"stack\":\"$stack_value\"}}"
-            fi
-        fi
-        if [ -z "$payload" ]; then
-            print_err "invalid_tun"
-            exit 1
-        fi
-
-        auth_args=()
-        if [ -n "$MIHOMO_SECRET" ]; then
-            auth_args=(-H "Authorization: Bearer $MIHOMO_SECRET")
-        fi
-        code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 -X PATCH "${auth_args[@]}" -H "Content-Type: application/json" -d "$payload" "$MIHOMO_CONTROLLER/configs" 2>/dev/null)"
-        if echo "$code" | grep -qE '^(200|204)$'; then
-            print_ok "{}"
-        else
-            print_err "request_failed"
-            exit 1
-        fi
+        handle_tun "$@"
         ;;
     cores)
-        files_sorted="$(ls -1t "$CLASHFOX_CORE_DIR"/* "$CLASHFOX_BACKUP_DIR"/mihomo.backup.* 2>/dev/null | awk 'NF')"
-        if [ -z "$files_sorted" ]; then
-            print_ok "[]"
-            exit 0
-        fi
-        json="["
-        first=true
-        while IFS= read -r file; do
-            [ -z "$file" ] && continue
-            if [ ! -f "$file" ]; then
-                continue
-            fi
-            name="$(basename "$file")"
-            modified="$(stat -f "%Sm" -t "%Y-%m-%d %H:%M:%S" "$file" 2>/dev/null)"
-            if [ -z "$modified" ]; then
-                modified="-"
-            fi
-            size_bytes="$(stat -f "%z" "$file" 2>/dev/null)"
-            if [ -z "$size_bytes" ]; then
-                size_bytes="0"
-            fi
-            if [ "$first" = true ]; then
-                first=false
-            else
-                json+=","
-            fi
-            json+="{\"name\":\"$(json_escape "$name")\",\"path\":\"$(json_escape "$file")\",\"modified\":\"$(json_escape "$modified")\",\"size\":\"$(json_escape "$size_bytes")\"}"
-        done <<< "$files_sorted"
-        json+="]"
-        print_ok "$json"
+        handle_cores "$@"
         ;;
     backups)
-        items=""
-        index=1
-        backup_files="$(get_backup_files_sorted)"
-        while IFS= read -r line; do
-            [ -z "$line" ] && continue
-            base="$(basename "$line")"
-            ts=$(echo "$base" | sed -E 's/^mihomo\.backup\.mihomo-darwin-(amd64|arm64)-.+\.([0-9]{8}_[0-9]{6})$/\2/')
-            version=$(echo "$base" | sed -E 's/^mihomo\.backup\.(mihomo-darwin-(amd64|arm64)-.+)\.[0-9]{8}_[0-9]{6}$/\1/')
-            item=$(cat <<JSON
-{"index":$index,"name":"$(json_escape "$base")","version":"$(json_escape "$version")","timestamp":"$(json_escape "$ts")","path":"$(json_escape "$line")"}
-JSON
-)
-            if [ -z "$items" ]; then
-                items="$item"
-            else
-                items="$items,$item"
-            fi
-            index=$((index + 1))
-        done <<< "$backup_files"
-
-        print_ok "[${items}]"
+        handle_backups "$@"
         ;;
     install)
-        github_user=""
-        version_branch=""
-        sudo_pass="${CLASHFOX_SUDO_PASS:-}"
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                --github-user)
-                    shift
-                    github_user="$1"
-                    ;;
-                --version)
-                    shift
-                    version_branch="$1"
-                    ;;
-                --sudo-pass)
-                    shift
-                    sudo_pass="$1"
-                    ;;
-            esac
-            shift || true
-        done
-
-        if [ -n "$github_user" ]; then
-            export CLASHFOX_GITHUB_USER="$github_user"
-        fi
-        if [ -n "$version_branch" ]; then
-            export CLASHFOX_VERSION_BRANCH="$version_branch"
-        fi
-        export CLASHFOX_AUTO_YES=1
-
-        if ! ensure_sudo "$sudo_pass"; then
-            exit 1
-        fi
-
-        if install_core; then
-            print_ok "{}"
-        else
-            print_err "install_failed"
-            exit 1
-        fi
+        handle_install "$@"
         ;;
     start)
-        config_path=""
-        sudo_pass="${CLASHFOX_SUDO_PASS:-}"
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                --config)
-                    shift
-                    config_path="$1"
-                    ;;
-                --sudo-pass)
-                    shift
-                    sudo_pass="$1"
-                    ;;
-            esac
-            shift || true
-        done
-        if [ -z "$config_path" ]; then
-            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
-        fi
-        if [ ! -f "$config_path" ]; then
-            fallback_config="$CLASHFOX_CONFIG_DIR/default.yaml"
-            if [ -f "$fallback_config" ]; then
-                config_path="$fallback_config"
-            else
-                print_err "config_not_found"
-                exit 1
-            fi
-        fi
-        export CLASHFOX_CONFIG_PATH="$config_path"
-        if ! ensure_sudo "$sudo_pass"; then
-            exit 1
-        fi
-        export CLASHFOX_SUDO_PASS="$sudo_pass"
-
-        if start_mihomo_kernel; then
-            if wait_for_kernel_running 25; then
-                unset CLASHFOX_SUDO_PASS
-                print_ok "{}"
-            else
-                unset CLASHFOX_SUDO_PASS
-                fail_details="$(extract_recent_start_failure_detail)"
-                if [ -n "$fail_details" ]; then
-                    print_err_with_details "start_failed" "$fail_details"
-                else
-                    print_err "start_failed"
-                fi
-                exit 1
-            fi
-        else
-            unset CLASHFOX_SUDO_PASS
-            fail_details="$(extract_recent_start_failure_detail)"
-            if [ -n "$fail_details" ]; then
-                print_err_with_details "start_failed" "$fail_details"
-            else
-                print_err "start_failed"
-            fi
-            exit 1
-        fi
+        handle_start "$@"
         ;;
     stop)
-        sudo_pass="${CLASHFOX_SUDO_PASS:-}"
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                --sudo-pass)
-                    shift
-                    sudo_pass="$1"
-                    ;;
-            esac
-            shift || true
-        done
-        if ! ensure_sudo "$sudo_pass"; then
-            exit 1
-        fi
-        export CLASHFOX_SUDO_PASS="$sudo_pass"
-
-        if kill_mihomo_kernel; then
-            if is_running; then
-                sleep 0.6
-            fi
-            if is_running; then
-                force_kill
-                sleep 0.6
-            fi
-        fi
-
-        if is_running; then
-            unset CLASHFOX_SUDO_PASS
-            print_err "stop_failed"
-            exit 1
-        else
-            unset CLASHFOX_SUDO_PASS
-            print_ok "{}"
-        fi
+        handle_stop "$@"
         ;;
     restart)
-        config_path=""
-        sudo_pass="${CLASHFOX_SUDO_PASS:-}"
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                --config)
-                    shift
-                    config_path="$1"
-                    ;;
-                --sudo-pass)
-                    shift
-                    sudo_pass="$1"
-                    ;;
-            esac
-            shift || true
-        done
-        if [ -z "$config_path" ]; then
-            config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
-        fi
-        if [ ! -f "$config_path" ]; then
-            fallback_config="$CLASHFOX_CONFIG_DIR/default.yaml"
-            if [ -f "$fallback_config" ]; then
-                config_path="$fallback_config"
-            else
-                print_err "config_not_found"
-                exit 1
-            fi
-        fi
-        export CLASHFOX_CONFIG_PATH="$config_path"
-        if ! ensure_sudo "$sudo_pass"; then
-            exit 1
-        fi
-        export CLASHFOX_SUDO_PASS="$sudo_pass"
-
-        if kill_mihomo_kernel; then
-            if is_running; then
-                force_kill
-            fi
-        fi
-        if is_running; then
-            unset CLASHFOX_SUDO_PASS
-            print_err "stop_failed"
-            exit 1
-        fi
-
-        if start_mihomo_kernel; then
-            if wait_for_kernel_running 25; then
-                unset CLASHFOX_SUDO_PASS
-                print_ok "{}"
-            else
-                unset CLASHFOX_SUDO_PASS
-                fail_details="$(extract_recent_start_failure_detail)"
-                if [ -n "$fail_details" ]; then
-                    print_err_with_details "start_failed" "$fail_details"
-                else
-                    print_err "start_failed"
-                fi
-                exit 1
-            fi
-        else
-            unset CLASHFOX_SUDO_PASS
-            fail_details="$(extract_recent_start_failure_detail)"
-            if [ -n "$fail_details" ]; then
-                print_err_with_details "restart_failed" "$fail_details"
-            else
-                print_err "restart_failed"
-            fi
-            exit 1
-        fi
+        handle_restart "$@"
         ;;
     switch)
-        index=""
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                --index)
-                    shift
-                    index="$1"
-                    ;;
-            esac
-            shift || true
-        done
-        if [ -z "$index" ]; then
-            print_err "missing_index"
-            exit 1
-        fi
-        if [ ! -d "$CLASHFOX_CORE_DIR" ]; then
-            print_err "core_dir_missing"
-            exit 1
-        fi
-
-        cd "$CLASHFOX_CORE_DIR" || {
-            print_err "core_dir_enter_fail"
-            exit 1
-        }
-
-        backup_files="$(get_backup_files_sorted)"
-        if [ -z "$backup_files" ]; then
-            print_err "no_backups"
-            exit 1
-        fi
-
-        target_backup="$(echo "$backup_files" | sed -n "${index}p")"
-        if [ -z "$target_backup" ]; then
-            print_err "backup_not_found"
-            exit 1
-        fi
-
-        tmp_core="${ACTIVE_CORE}.tmp"
-        if ! cp "$target_backup" "$tmp_core" 2>/dev/null; then
-            print_err "switch_copy_failed"
-            exit 1
-        fi
-        mv -f "$tmp_core" "$ACTIVE_CORE"
-        chmod +x "$ACTIVE_CORE"
-        print_ok "{}"
+        handle_switch "$@"
         ;;
     logs)
-        lines=200
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                --lines)
-                    shift
-                    lines="$1"
-                    ;;
-            esac
-            shift || true
-        done
-
-        log_path="$CLASHFOX_LOG_DIR/clashfox.log"
-        if [ ! -f "$log_path" ]; then
-            print_err "log_missing"
-            exit 1
-        fi
-
-        content="$(tail -n "$lines" "$log_path" 2>/dev/null)"
-        content_b64="$(printf '%s' "$content" | base64 | tr -d '\n')"
-        data=$(cat <<JSON
-{"path":"$(json_escape "$log_path")","lines":$lines,"contentBase64":"$content_b64","encoding":"base64"}
-JSON
-)
-        print_ok "$data"
+        handle_logs "$@"
         ;;
     clean)
-        mode=""
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                --mode)
-                    shift
-                    mode="$1"
-                    ;;
-            esac
-            shift || true
-        done
-
-        case "$mode" in
-            all)
-                rm -f "$CLASHFOX_LOG_DIR"/clashfox.log.*.log
-                rm -f "$CLASHFOX_LOG_DIR"/clashfox.log.*.gz
-                ;;
-            7d)
-                find "$CLASHFOX_LOG_DIR" -name "clashfox.log.*.log" -mtime +7 -delete
-                find "$CLASHFOX_LOG_DIR" -name "clashfox.log.*.gz" -mtime +7 -delete
-                ;;
-            30d)
-                find "$CLASHFOX_LOG_DIR" -name "clashfox.log.*.log" -mtime +30 -delete
-                find "$CLASHFOX_LOG_DIR" -name "clashfox.log.*.gz" -mtime +30 -delete
-                ;;
-            *)
-                print_err "invalid_mode"
-                exit 1
-                ;;
-        esac
-
-        print_ok "{}"
+        handle_clean "$@"
         ;;
     delete-backups)
-        sudo_pass="${CLASHFOX_SUDO_PASS:-}"
-        paths=()
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                --path)
-                    shift
-                    paths+=("$1")
-                    ;;
-                --sudo-pass)
-                    shift
-                    sudo_pass="$1"
-                    ;;
-            esac
-            shift || true
-        done
-        if [ "${#paths[@]}" -eq 0 ]; then
-            print_err "missing_paths"
-            exit 1
-        fi
-        if ! ensure_sudo "$sudo_pass"; then
-            exit 1
-        fi
-        for p in "${paths[@]}"; do
-            case "$p" in
-                "$CLASHFOX_BACKUP_DIR"/mihomo.backup.*)
-                    sudo rm -f "$p"
-                    ;;
-            esac
-        done
-        print_ok "{}"
+        handle_delete_backups "$@"
         ;;
     *)
         print_err "unknown_command"

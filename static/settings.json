@@ -1,7 +1,7 @@
 {
   "proxyMode": "rule",
-  "systemProxyEnabled": true,
-  "tunEnabled": true,
+  "systemProxyEnabled": false,
+  "tunEnabled": false,
   "tunStack": "Mixed",
   "appearance": {
     "lang": "auto",
@@ -9,13 +9,13 @@
     "debugMode": false,
     "acceptBeta": false,
     "githubUser": "vernesong",
-    "windowWidth": 997,
-    "windowHeight": 655,
+    "windowWidth": 1034,
+    "windowHeight": 640,
     "mainWindowClosed": false,
-    "generalPageSize": "10",
-    "logLines": 10,
+    "generalPageSize": "5",
+    "logLines": 18,
     "logAutoRefresh": false,
-    "logIntervalPreset": "3"
+    "logIntervalPreset": "5"
   },
   "userDataPaths": {
     "configFile": "/Users/hogwartsrow/Library/Application Support/ClashFox/config/default.yaml",
@@ -28,29 +28,31 @@
   "panelManager": {
     "externalController": "127.0.0.1:9090",
     "secret": "clashfox",
-    "panelChoice": "zashboard",
+    "panelChoice": "metacubexd",
     "externalUi": "ui",
     "authentication": [
       "mihomo:clashfox"
     ]
   },
   "kernel": {
-    "raw": "Mihomo Meta alpha-smart-748ee67 darwin amd64 with go1.25.7 Mon Feb  9 15:05:14 UTC 2026",
+    "raw": "Mihomo Meta v1.19.20 darwin amd64 with go1.25.7 Sun Feb  8 14:01:13 UTC 2026",
     "core": "mihomo",
     "type": "Meta",
-    "version": "alpha-smart-748ee67",
+    "version": "v1.19.20",
     "platform": "darwin",
     "arch": "amd64",
     "language": "go",
     "languageVersion": "go1.25.7",
-    "buildTime": "Mon Feb  9 15:05:14 UTC 2026",
-    "source": "migrate",
-    "updatedAt": "2026-02-28T02:52:12.409Z"
+    "buildTime": "Sun Feb  8 14:01:13 UTC 2026",
+    "source": "switch",
+    "updatedAt": "2026-02-28T13:49:02.144Z"
   },
   "device": {
     "user": "hogwartsrow",
+    "userRealName": "Lu Kuochiang",
+    "computerName": "MBP-QDM-1990",
     "os": "macOS",
-    "version": "26.4 25E5218f",
+    "version": "26.4",
     "build": "25E5218f",
     "source": "overview",
     "updatedAt": "2026-02-28T05:16:46.375Z"
@@ -62,12 +64,12 @@
     "binaryExists": true,
     "plistExists": true,
     "logPath": "/var/log/clashfox-helper.log",
-    "updatedAt": "2026-02-28T06:05:51.700Z"
+    "updatedAt": "2026-02-28T13:54:07.407Z"
   },
   "mihomoStatus": {
     "running": true,
     "source": "status",
-    "updatedAt": "2026-02-28T06:20:50.675Z"
+    "updatedAt": "2026-02-28T14:06:09.344Z"
   },
   "overviewOrder": [
     "quick-actions",

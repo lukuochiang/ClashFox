@@ -75,55 +75,19 @@ const RESTART_TRANSITION_MIN_MS = 450;
 const RESTART_TRANSITION_MAX_MS = 4000;
 const RESTART_TRANSITION_RATIO = 0.5;
 let trayCoreStartupEstimateMs = 1500;
-const PRIVILEGED_COMMANDS = new Set(['install', 'start', 'stop', 'restart', 'delete-backups', 'system-proxy-enable', 'system-proxy-disable']);
-const DEFAULT_HELPER_COMMAND_LIST = [
-  'ping',
-  'status',
+const PRIVILEGED_COMMANDS = new Set([
+  'install',
   'start',
   'stop',
   'restart',
-  'install',
+  'status',
+  'tun-status',
   'delete-backups',
-  'system-proxy-status',
   'system-proxy-enable',
   'system-proxy-disable',
-  'tun-status',
+  'system-proxy-status',
   'tun',
-];
-
-function loadHelperCommandList() {
-  const candidates = [
-    path.join(ROOT_DIR, 'helper', 'allowed-commands.json'),
-    path.join(process.resourcesPath || '', 'helper', 'allowed-commands.json'),
-  ];
-  for (const filePath of candidates) {
-    try {
-      if (!filePath || !fs.existsSync(filePath)) {
-        continue;
-      }
-      const raw = fs.readFileSync(filePath, 'utf8');
-      const parsed = JSON.parse(raw);
-      const list = Array.isArray(parsed)
-        ? parsed
-        : (parsed && Array.isArray(parsed.commands) ? parsed.commands : null);
-      if (!list || !list.length) {
-        continue;
-      }
-      const normalized = list
-        .map((item) => String(item || '').trim())
-        .filter(Boolean);
-      if (normalized.length) {
-        return normalized;
-      }
-    } catch {
-      // ignore and continue fallback
-    }
-  }
-  return DEFAULT_HELPER_COMMAND_LIST;
-}
-
-const HELPER_COMMANDS = new Set(loadHelperCommandList());
-const STRICT_HELPER_COMMANDS = new Set(['tun']);
+]);
 const HELPER_SOCKET_PATH = '/var/run/clashfox-helper.sock';
 const DEFAULT_HELPER_HTTP_PORT = 19999;
 const SYSTEM_AUTH_ERROR_PREFIX = '__CLASHFOX_SYSTEM_AUTH_ERROR__';
@@ -425,6 +389,53 @@ function resolveCurrentDeviceUser() {
   }
 }
 
+function resolveCurrentUserRealName() {
+  if (process.platform === 'darwin') {
+    try {
+      const idResult = spawnSync('/usr/bin/id', ['-F'], { encoding: 'utf8' });
+      const fromId = normalizeTextValue(idResult && idResult.stdout);
+      if (fromId) {
+        return fromId;
+      }
+    } catch {
+      // ignore and fallback
+    }
+    try {
+      const user = resolveCurrentDeviceUser();
+      if (user) {
+        const dsclResult = spawnSync('/usr/bin/dscl', ['.', '-read', `/Users/${user}`, 'RealName'], { encoding: 'utf8' });
+        const raw = normalizeTextValue(dsclResult && dsclResult.stdout);
+        if (raw) {
+          const lines = raw.split(/\r?\n/).map((line) => normalizeTextValue(line)).filter(Boolean);
+          const realNameLine = lines.find((line) => line.toLowerCase().startsWith('realname:')) || '';
+          const parsed = normalizeTextValue(realNameLine.replace(/^RealName:\s*/i, '')) || normalizeTextValue(lines[1]);
+          if (parsed) {
+            return parsed;
+          }
+        }
+      }
+    } catch {
+      // ignore and fallback
+    }
+  }
+  return resolveCurrentDeviceUser();
+}
+
+function resolveCurrentComputerName() {
+  if (process.platform === 'darwin') {
+    try {
+      const result = spawnSync('/usr/sbin/scutil', ['--get', 'ComputerName'], { encoding: 'utf8' });
+      const name = normalizeTextValue(result && result.stdout);
+      if (name) {
+        return name;
+      }
+    } catch {
+      // ignore and fallback
+    }
+  }
+  return normalizeTextValue(os.hostname());
+}
+
 function resolveDefaultDeviceVersion() {
   const release = normalizeTextValue(os.release());
   if (process.platform === 'darwin') {
@@ -591,23 +602,38 @@ function normalizeDeviceSettings(value = {}, overviewValue = {}) {
   const overviewOs = normalizeTextValue(overview.systemName);
   const overviewVersion = normalizeTextValue(overview.systemVersion);
   const overviewBuild = normalizeTextValue(overview.systemBuild);
-  const overviewVersionWithBuild = overviewVersion && overviewBuild
-    ? `${overviewVersion} ${overviewBuild}`
-    : (overviewVersion || overviewBuild);
-  const normalized = {
-    ...device,
-    user: normalizeTextValue(device.user) || resolveCurrentDeviceUser(),
-    os: normalizeTextValue(device.os) || overviewOs || resolveDefaultDeviceOsName(),
-    version: normalizeTextValue(device.version) || overviewVersionWithBuild || resolveDefaultDeviceVersion(),
-  };
-  if (
-    overviewVersionWithBuild
-    && /^Darwin\s+\d+/i.test(normalized.version || '')
-  ) {
-    normalized.version = overviewVersionWithBuild;
+  const user = normalizeTextValue(device.user) || resolveCurrentDeviceUser();
+  const userRealName = normalizeTextValue(device.userRealName) || resolveCurrentUserRealName();
+  const computerName = normalizeTextValue(device.computerName) || normalizeTextValue(device.displayName) || resolveCurrentComputerName();
+  const osName = normalizeTextValue(device.os) || overviewOs || resolveDefaultDeviceOsName();
+  let version = normalizeTextValue(device.version) || overviewVersion || resolveDefaultDeviceVersion();
+  let build = normalizeTextValue(device.build) || overviewBuild;
+  if (version) {
+    const combinedMatch = version.match(/^([0-9]+(?:\.[0-9]+)*(?:\.[0-9]+)?)\s+([0-9A-Za-z]+)$/);
+    if (combinedMatch) {
+      version = normalizeTextValue(combinedMatch[1]);
+      if (!build) {
+        build = normalizeTextValue(combinedMatch[2]);
+      }
+    }
   }
+  if (overviewVersion && /^Darwin\s+\d+/i.test(version || '')) {
+    version = overviewVersion;
+  }
+  const normalized = {
+    user,
+    userRealName,
+    computerName,
+    os: osName,
+    version,
+    build,
+    source: normalizeTextValue(device.source),
+    updatedAt: normalizeTextValue(device.updatedAt),
+  };
   const ordered = mapOrderedFields(normalized, [
     'user',
+    'userRealName',
+    'computerName',
     'os',
     'version',
     'build',
@@ -1242,6 +1268,108 @@ function resolveHelperUninstallScriptPath() {
   return path.join(ROOT_DIR, 'helper', 'uninstall-helper.sh');
 }
 
+function resolveHelperDoctorScriptPath() {
+  const baseDirs = [
+    path.join(ROOT_DIR, 'helper'),
+    path.join(ROOT_DIR, 'scripts'),
+    path.join(process.resourcesPath || '', 'helper'),
+    path.join(process.resourcesPath || '', 'scripts'),
+  ];
+  const candidates = baseDirs.map((baseDir) => path.join(baseDir, 'doctor-helper.sh'));
+  for (const candidate of candidates) {
+    if (candidate && fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return path.join(ROOT_DIR, 'helper', 'doctor-helper.sh');
+}
+
+function runHelperDoctor(options = {}) {
+  return new Promise((resolve) => {
+    const scriptPath = resolveHelperDoctorScriptPath();
+    if (!fs.existsSync(scriptPath)) {
+      resolve({ ok: false, error: 'doctor_script_missing', path: scriptPath });
+      return;
+    }
+    const repair = Boolean(options && options.repair);
+    const parseDoctorOutput = (text) => {
+      try {
+        return parseBridgeOutput(String(text || '').trim());
+      } catch {
+        return null;
+      }
+    };
+
+    if (!repair) {
+      execFile('/bin/bash', [scriptPath, '--json'], { timeout: 120 * 1000 }, (error, stdout, stderr) => {
+        const parsed = parseDoctorOutput(stdout) || parseDoctorOutput(stderr);
+        if (parsed) {
+          resolve(parsed);
+          return;
+        }
+        if (error) {
+          resolve({
+            ok: false,
+            error: 'doctor_failed',
+            details: error.message || String(error),
+            path: scriptPath,
+          });
+          return;
+        }
+        resolve({ ok: false, error: 'doctor_output_empty', path: scriptPath });
+      });
+      return;
+    }
+
+    const quote = (value) => `'${String(value || '').replace(/'/g, `'\\''`)}'`;
+    const command = `/bin/bash ${quote(scriptPath)} --json --repair`;
+    const script = [
+      'try',
+      `set out to do shell script ${JSON.stringify(command)} with administrator privileges`,
+      'return out',
+      'on error errMsg number errNum',
+      `return "${SYSTEM_AUTH_ERROR_PREFIX}:" & (errNum as text) & ":" & errMsg`,
+      'end try',
+    ].join('\n');
+    execFile('osascript', ['-e', script], { timeout: 180 * 1000 }, (error, stdout) => {
+      if (error) {
+        resolve({
+          ok: false,
+          error: 'system_auth_failed',
+          details: error.message || String(error),
+          path: scriptPath,
+        });
+        return;
+      }
+      const output = String(stdout || '').trim();
+      if (output.startsWith(`${SYSTEM_AUTH_ERROR_PREFIX}:`)) {
+        const payload = output.slice(SYSTEM_AUTH_ERROR_PREFIX.length + 1);
+        const firstColonIndex = payload.indexOf(':');
+        const errNumRaw = firstColonIndex >= 0 ? payload.slice(0, firstColonIndex) : payload;
+        const errMsg = firstColonIndex >= 0 ? payload.slice(firstColonIndex + 1).trim() : '';
+        const errNum = Number.parseInt(String(errNumRaw || '').trim(), 10);
+        if (errNum === -128) {
+          resolve({ ok: false, error: 'sudo_required', path: scriptPath });
+          return;
+        }
+        resolve({
+          ok: false,
+          error: 'system_auth_failed',
+          details: errMsg || 'system_authorization_failed',
+          path: scriptPath,
+        });
+        return;
+      }
+      const parsed = parseDoctorOutput(output);
+      if (parsed) {
+        resolve(parsed);
+      } else {
+        resolve({ ok: false, error: 'doctor_parse_failed', details: output, path: scriptPath });
+      }
+    });
+  });
+}
+
 function getHelperPaths() {
   return {
     binary: '/Library/PrivilegedHelperTools/com.clashfox.helper',
@@ -1729,11 +1857,7 @@ async function persistKernelVersionFromStatus(source = 'status-refresh') {
 
 function buildDeviceVersionFromOverview(systemVersion = '', systemBuild = '') {
   const version = normalizeTextValue(systemVersion);
-  const build = normalizeTextValue(systemBuild);
-  if (version && build) {
-    return `${version} ${build}`;
-  }
-  return version || build;
+  return version;
 }
 
 function persistOverviewSystemToSettings(overviewData = {}, source = 'overview') {
@@ -1750,6 +1874,8 @@ function persistOverviewSystemToSettings(overviewData = {}, source = 'overview')
 
     const nextDeviceCore = {
       user: normalizeTextValue(previousDevice.user) || resolveCurrentDeviceUser(),
+      userRealName: normalizeTextValue(previousDevice.userRealName) || resolveCurrentUserRealName(),
+      computerName: normalizeTextValue(previousDevice.computerName) || normalizeTextValue(previousDevice.displayName) || resolveCurrentComputerName(),
       os: systemName || normalizeTextValue(previousDevice.os) || resolveDefaultDeviceOsName(),
       version: buildDeviceVersionFromOverview(systemVersion, systemBuild)
         || normalizeTextValue(previousDevice.version)
@@ -1759,6 +1885,8 @@ function persistOverviewSystemToSettings(overviewData = {}, source = 'overview')
     };
     const previousDeviceSignature = [
       normalizeTextValue(previousDevice.user),
+      normalizeTextValue(previousDevice.userRealName),
+      normalizeTextValue(previousDevice.computerName) || normalizeTextValue(previousDevice.displayName),
       normalizeTextValue(previousDevice.os),
       normalizeTextValue(previousDevice.version),
       normalizeTextValue(previousDevice.build),
@@ -1766,6 +1894,8 @@ function persistOverviewSystemToSettings(overviewData = {}, source = 'overview')
     ].join('|');
     const nextDeviceSignature = [
       nextDeviceCore.user,
+      nextDeviceCore.userRealName,
+      nextDeviceCore.computerName,
       nextDeviceCore.os,
       nextDeviceCore.version,
       nextDeviceCore.build,
@@ -1782,6 +1912,9 @@ function persistOverviewSystemToSettings(overviewData = {}, source = 'overview')
         ...nextDeviceCore,
         updatedAt: new Date().toISOString(),
       };
+      if (Object.prototype.hasOwnProperty.call(parsed.device, 'displayName')) {
+        delete parsed.device.displayName;
+      }
     }
     if (Object.prototype.hasOwnProperty.call(parsed, 'overview')) {
       delete parsed.overview;
@@ -2220,7 +2353,7 @@ function sendHelperRequestViaHttp(payload, timeoutMs = 20000) {
 
 async function runBridgeViaHelper(bridgeArgs = []) {
   const commandType = bridgeArgs[0];
-  if (!commandType || !HELPER_COMMANDS.has(commandType) || process.platform !== 'darwin') {
+  if (!commandType || process.platform !== 'darwin') {
     return null;
   }
   const request = buildHelperRequest(commandType, bridgeArgs.slice(1));
@@ -3479,12 +3612,10 @@ function runBridge(args, options = {}) {
 
         const helperResult = await runBridgeViaHelper(bridgeArgs);
         if (helperResult) {
-          resolve(helperResult);
-          return;
-        }
-        if (commandType && STRICT_HELPER_COMMANDS.has(commandType) && process.platform === 'darwin') {
-          resolve({ ok: false, error: 'helper_unreachable' });
-          return;
+          if (!(helperResult && helperResult.ok === false && helperResult.error === 'unsupported_command')) {
+            resolve(helperResult);
+            return;
+          }
         }
 
         const startBridgeProcess = () => {
@@ -4275,6 +4406,8 @@ app.whenReady().then(() => {
           kernel: {},
           device: {
             user: resolveCurrentDeviceUser(),
+            userRealName: resolveCurrentUserRealName(),
+            computerName: resolveCurrentComputerName(),
             os: resolveDefaultDeviceOsName(),
             version: resolveDefaultDeviceVersion(),
             source: 'init',
@@ -4545,6 +4678,13 @@ app.whenReady().then(() => {
     const result = await getHelperStatus();
     persistHelperStatusToSettings(result);
     return result || { ok: false, error: 'status_unavailable' };
+  });
+
+  ipcMain.handle('clashfox:doctorHelper', async (_event, options = {}) => {
+    const result = await runHelperDoctor(options || {});
+    const status = await getHelperStatus();
+    persistHelperStatusToSettings(status);
+    return result || { ok: false, error: 'doctor_failed' };
   });
 
   ipcMain.handle('clashfox:openHelperLogs', async () => {

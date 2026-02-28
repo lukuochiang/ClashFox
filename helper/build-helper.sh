@@ -9,7 +9,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
 BIN_NAME="com.clashfox.helper"
-GO_MAIN="./cmd/clashfox-helper"
+GO_MAIN="./main.go"
 BUILD_DIR="$ROOT_DIR/.build/release"
 BUILD_OUTPUT="$BUILD_DIR/$BIN_NAME"
 ARM_OUTPUT="$BUILD_DIR/$BIN_NAME.arm64"

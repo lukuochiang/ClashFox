@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('clashfox', {
   getHelperInstallPath: () => ipcRenderer.invoke('clashfox:getHelperInstallPath'),
   pingHelper: () => ipcRenderer.invoke('clashfox:pingHelper'),
   getHelperStatus: () => ipcRenderer.invoke('clashfox:getHelperStatus'),
+  doctorHelper: (options = {}) => ipcRenderer.invoke('clashfox:doctorHelper', options),
   openHelperLogs: () => ipcRenderer.invoke('clashfox:openHelperLogs'),
   openPath: (targetPath) => ipcRenderer.invoke('clashfox:openPath', targetPath),
   // openAbout: () => ipcRenderer.invoke('clashfox:openAbout'),

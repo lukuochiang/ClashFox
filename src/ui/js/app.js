@@ -2814,7 +2814,20 @@ async function loadAppInfo() {
 function updateStatusUI(data) {
   const running = data.running;
   applyKernelRunningState(running, 'status');
-  state.coreVersionRaw = readKernelVersionFromSettings();
+  const statusVersionRaw = String((data && data.version) || '').trim();
+  if (statusVersionRaw) {
+    syncKernelVersionInState(statusVersionRaw);
+    state.coreVersionRaw = statusVersionRaw;
+  } else {
+    state.coreVersionRaw = readKernelVersionFromSettings();
+    if (!state.coreVersionRaw) {
+      const kernelPathRaw = String((data && data.kernelPath) || '').trim();
+      const kernelName = kernelPathRaw ? kernelPathRaw.split('/').pop() : '';
+      if (kernelName && kernelName !== '-') {
+        state.coreVersionRaw = kernelName;
+      }
+    }
+  }
   syncGithubSourceFromKernelVersion();
   state.configDefault = data.configDefault || '';
   const configValue = getCurrentConfigPath() || data.configDefault || '-';
@@ -3287,15 +3300,26 @@ function updateProxyTraffic(rxBytes, txBytes) {
 }
 
 function formatKernelDisplay(value) {
-  if (!value) {
+  const text = String(value || '').trim();
+  if (!text) {
     return '-';
   }
-  const match = String(value).match(/alpha(?:-smart)?-[0-9a-f]+/i);
+  const match = text.match(/alpha(?:-smart)?-[0-9a-f]+/i);
   if (match) {
     return match[0];
   }
-  const first = String(value).trim().split(/\s+/)[2];
-  return first || '-';
+  const semver = text.match(/\bv?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\b/);
+  if (semver) {
+    return semver[0];
+  }
+  const tokens = text.split(/\s+/).filter(Boolean);
+  if (tokens.length >= 3) {
+    return tokens[2] || '-';
+  }
+  if (tokens.length >= 1) {
+    return tokens[0] || '-';
+  }
+  return '-';
 }
 
 function parseConnectionCount(value) {
@@ -3392,6 +3416,11 @@ function updateRealtimeConnections(value) {
 function updateOverviewUI(data) {
   if (!data) {
     return;
+  }
+  const overviewKernelRaw = String(data.kernelVersion || '').trim();
+  if (overviewKernelRaw) {
+    syncKernelVersionInState(overviewKernelRaw);
+    state.coreVersionRaw = overviewKernelRaw;
   }
   state.overviewRunning = Boolean(data.running);
   state.overviewRunningUpdatedAt = Date.now();
@@ -5143,13 +5172,24 @@ async function repairHelperAndRetryTun() {
   if (!confirmed) {
     return false;
   }
-  if (!window.clashfox || typeof window.clashfox.installHelper !== 'function') {
+  if (!window.clashfox) {
     showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
     return false;
   }
-  const response = await window.clashfox.installHelper();
+  let response = null;
+  if (typeof window.clashfox.doctorHelper === 'function') {
+    response = await window.clashfox.doctorHelper({ repair: true });
+  } else if (typeof window.clashfox.installHelper === 'function') {
+    response = await window.clashfox.installHelper();
+  } else {
+    showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
+    return false;
+  }
   if (!response || !response.ok) {
-    showToast(ti('settings.helperInstallFailed', 'Helper install failed'), 'error');
+    const detail = response && (response.details || response.error)
+      ? `: ${String(response.details || response.error)}`
+      : '';
+    showToast(`${ti('settings.helperInstallFailed', 'Helper install failed')}${detail}`, 'error');
     return false;
   }
   showToast(ti('settings.helperInstallSuccess', 'Helper installed'), 'info');
@@ -5210,10 +5250,13 @@ if (helperInstallBtn) {
       if (response && response.path && helperInstallPath) {
         helperInstallPath.textContent = response.path;
       }
+      const detail = response && (response.details || response.error)
+        ? `: ${String(response.details || response.error)}`
+        : '';
       showToast(
-        isUninstall
+        `${isUninstall
           ? ti('settings.helperUninstallFailed', 'Helper uninstall failed')
-          : ti('settings.helperInstallFailed', 'Helper install failed'),
+          : ti('settings.helperInstallFailed', 'Helper install failed')}${detail}`,
         'error'
       );
     });
