@@ -1834,7 +1834,7 @@ body[data-theme="day"] .quick-group {
 }
 
 .quick-tun-row .toggle span {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--muted);
   text-transform: uppercase;
@@ -1861,6 +1861,8 @@ body[data-theme="day"] .quick-group {
 }
 
 .quick-stack-row .mode-label {
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.14em;
   margin-right: auto;
   line-height: 1;
@@ -1872,10 +1874,13 @@ body[data-theme="day"] .quick-group {
   min-width: 102px;
   margin-left: auto;
   padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
   border-radius: 12px;
-  border: none;
+  border: 1px solid var(--border);
   box-shadow: none;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .quick-stack-row .cf-select {
@@ -1887,10 +1892,13 @@ body[data-theme="day"] .quick-group {
 
 .quick-stack-row .cf-select-trigger {
   padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
   border-radius: 12px;
-  border: none;
+  border: 1px solid var(--border);
   box-shadow: none;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.05);
   min-height: 32px;
 }
 
@@ -1901,15 +1909,15 @@ body[data-theme="day"] .quick-group {
 }
 
 body[data-theme="day"] .quick-stack-row select {
-  border: none;
+  border: 1px solid var(--border);
   box-shadow: none;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.85);
 }
 
 body[data-theme="day"] .quick-stack-row .cf-select-trigger {
-  border: none;
+  border: 1px solid var(--border);
   box-shadow: none;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.85);
 }
 
 .mode-row {
