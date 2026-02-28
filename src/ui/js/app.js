@@ -246,11 +246,17 @@ let settingsWindowHeight = document.getElementById('settingsWindowHeight');
 let settingsAcceptBeta = document.getElementById('settingsAcceptBeta');
 
 let langButtons = Array.from(document.querySelectorAll('.lang-btn'));
+const customSelectRegistry = new WeakMap();
+let activeCustomSelectEntry = null;
+let customSelectGlobalBound = false;
 
 const I18N = window.CLASHFOX_I18N || {};
 ;
 
 const SETTINGS_KEY = 'clashfox-settings';
+const KERNEL_UPDATE_CACHE_KEY = 'clashfox-kernel-update-cache-v1';
+const OVERVIEW_NETWORK_CACHE_KEY = 'clashfox-overview-network-cache-v1';
+const OVERVIEW_TRAFFIC_CACHE_KEY = 'clashfox-overview-traffic-cache-v1';
 const MAIN_WINDOW_DEFAULT_WIDTH = 997;
 const MAIN_WINDOW_DEFAULT_HEIGHT = 655;
 const MAIN_WINDOW_MIN_WIDTH = 980;
@@ -350,6 +356,7 @@ const state = {
   panelInstallRequested: false,
   helperAuthFallbackHintShown: false,
   kernelUpdateInfo: null,
+  kernelUpdateCache: null,
   kernelUpdateChecking: false,
   kernelUpdatePendingRefresh: false,
   kernelUpdateCheckedAt: 0,
@@ -406,6 +413,235 @@ const state = {
 
 const CORE_STARTUP_ESTIMATE_MIN_MS = 900;
 const CORE_STARTUP_ESTIMATE_MAX_MS = 10000;
+
+function readKernelUpdateCacheStore() {
+  try {
+    const raw = localStorage.getItem(KERNEL_UPDATE_CACHE_KEY);
+    if (!raw) {
+      return {};
+    }
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeKernelUpdateCacheStore(store = {}) {
+  try {
+    localStorage.setItem(KERNEL_UPDATE_CACHE_KEY, JSON.stringify(store));
+  } catch {
+    // ignore cache write errors
+  }
+}
+
+function buildKernelUpdateCacheKey(source = '', currentVersion = '') {
+  return `${String(source || '').trim().toLowerCase()}::${String(currentVersion || '').trim()}`;
+}
+
+function getCachedKernelUpdateResult(source = '', currentVersion = '') {
+  const key = buildKernelUpdateCacheKey(source, currentVersion);
+  if (!key || key === '::') {
+    return null;
+  }
+  if (!state.kernelUpdateCache || typeof state.kernelUpdateCache !== 'object') {
+    state.kernelUpdateCache = readKernelUpdateCacheStore();
+  }
+  const cached = state.kernelUpdateCache[key];
+  if (!cached || typeof cached !== 'object' || !cached.result || typeof cached.result !== 'object') {
+    return null;
+  }
+  return cached.result;
+}
+
+function setCachedKernelUpdateResult(source = '', currentVersion = '', result = null) {
+  const key = buildKernelUpdateCacheKey(source, currentVersion);
+  if (
+    !key
+    || key === '::'
+    || !result
+    || typeof result !== 'object'
+    || !result.ok
+    || !String(result.latestVersion || '').trim()
+  ) {
+    return;
+  }
+  if (!state.kernelUpdateCache || typeof state.kernelUpdateCache !== 'object') {
+    state.kernelUpdateCache = readKernelUpdateCacheStore();
+  }
+  state.kernelUpdateCache[key] = {
+    result,
+    cachedAt: new Date().toISOString(),
+  };
+  writeKernelUpdateCacheStore(state.kernelUpdateCache);
+}
+
+function readOverviewNetworkCache() {
+  try {
+    const raw = localStorage.getItem(OVERVIEW_NETWORK_CACHE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeOverviewNetworkCache(payload = {}) {
+  try {
+    localStorage.setItem(OVERVIEW_NETWORK_CACHE_KEY, JSON.stringify({
+      ...(payload || {}),
+      updatedAt: new Date().toISOString(),
+    }));
+  } catch {
+    // ignore cache write errors
+  }
+}
+
+function cacheOverviewNetworkFromState() {
+  const snapshot = {
+    internet: overviewInternet ? String(overviewInternet.textContent || '').trim() : '',
+    dns: overviewDns ? String(overviewDns.textContent || '').trim() : '',
+    router: overviewRouter ? String(overviewRouter.textContent || '').trim() : '',
+    network: overviewNetwork ? String(overviewNetwork.textContent || '').trim() : '',
+    localIp: state.overviewIpRaw.local || '',
+    proxyIp: state.overviewIpRaw.proxy || '',
+    internetIp: state.overviewIpRaw.internet || '',
+  };
+  writeOverviewNetworkCache(snapshot);
+}
+
+function hydrateOverviewNetworkFromCache() {
+  const cached = readOverviewNetworkCache();
+  if (!cached) {
+    return;
+  }
+  const internet = String(cached.internet || '').trim();
+  const dns = String(cached.dns || '').trim();
+  const router = String(cached.router || '').trim();
+  const network = String(cached.network || '').trim();
+  const localIpRaw = String(cached.localIp || '').trim();
+  const proxyIpRaw = String(cached.proxyIp || '').trim();
+  const internetIpRaw = String(cached.internetIp || '').trim();
+
+  if (overviewInternet) {
+    overviewInternet.textContent = internet || '-';
+  }
+  if (overviewDns) {
+    overviewDns.textContent = dns || '-';
+  }
+  if (overviewRouter) {
+    overviewRouter.textContent = router || '-';
+  }
+  if (overviewNetwork) {
+    overviewNetwork.textContent = network || '-';
+  }
+
+  state.overviewIpRaw.local = localIpRaw;
+  state.overviewIpRaw.proxy = proxyIpRaw;
+  state.overviewIpRaw.internet = internetIpRaw;
+
+  if (overviewLocalIp) {
+    overviewLocalIp.textContent = localIpRaw || '-';
+    setOverviewCopyButtonVisible(overviewLocalIpCopy, Boolean(localIpRaw));
+  }
+  if (overviewProxyIp) {
+    overviewProxyIp.textContent = maskIpAddress(proxyIpRaw) || '-';
+    setOverviewCopyButtonVisible(overviewProxyIpCopy, Boolean(proxyIpRaw));
+  }
+  if (overviewInternetIp) {
+    overviewInternetIp.textContent = maskIpAddress(internetIpRaw) || '-';
+    setOverviewCopyButtonVisible(overviewInternetIpCopy, Boolean(internetIpRaw));
+  }
+}
+
+function readOverviewTrafficCache() {
+  try {
+    const raw = localStorage.getItem(OVERVIEW_TRAFFIC_CACHE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeOverviewTrafficCache(payload = {}) {
+  try {
+    localStorage.setItem(OVERVIEW_TRAFFIC_CACHE_KEY, JSON.stringify({
+      ...(payload || {}),
+      updatedAt: new Date().toISOString(),
+    }));
+  } catch {
+    // ignore cache write errors
+  }
+}
+
+function cacheOverviewTrafficFromState() {
+  writeOverviewTrafficCache({
+    downloadRate: trafficSystemDownloadRate ? String(trafficSystemDownloadRate.textContent || '').trim() : '',
+    uploadRate: trafficSystemUploadRate ? String(trafficSystemUploadRate.textContent || '').trim() : '',
+    downloadTotalLabel: trafficSystemDownloadTotal ? String(trafficSystemDownloadTotal.textContent || '').trim() : '',
+    uploadTotalLabel: trafficSystemUploadTotal ? String(trafficSystemUploadTotal.textContent || '').trim() : '',
+    downloadTotal: trafficTotalDownload ? String(trafficTotalDownload.textContent || '').trim() : '',
+    uploadTotal: trafficTotalUpload ? String(trafficTotalUpload.textContent || '').trim() : '',
+    historyRx: Array.isArray(state.trafficHistoryRx) ? state.trafficHistoryRx.slice(-TRAFFIC_HISTORY_POINTS) : [],
+    historyTx: Array.isArray(state.trafficHistoryTx) ? state.trafficHistoryTx.slice(-TRAFFIC_HISTORY_POINTS) : [],
+  });
+}
+
+function hydrateOverviewTrafficFromCache() {
+  const cached = readOverviewTrafficCache();
+  if (!cached) {
+    return;
+  }
+  const downloadRate = String(cached.downloadRate || '').trim();
+  const uploadRate = String(cached.uploadRate || '').trim();
+  const downloadTotalLabel = String(cached.downloadTotalLabel || '').trim();
+  const uploadTotalLabel = String(cached.uploadTotalLabel || '').trim();
+  const downloadTotal = String(cached.downloadTotal || '').trim();
+  const uploadTotal = String(cached.uploadTotal || '').trim();
+  const historyRx = Array.isArray(cached.historyRx)
+    ? cached.historyRx
+      .map((item) => Number.parseFloat(item))
+      .filter((item) => Number.isFinite(item) && item >= 0)
+      .slice(-TRAFFIC_HISTORY_POINTS)
+    : [];
+  const historyTx = Array.isArray(cached.historyTx)
+    ? cached.historyTx
+      .map((item) => Number.parseFloat(item))
+      .filter((item) => Number.isFinite(item) && item >= 0)
+      .slice(-TRAFFIC_HISTORY_POINTS)
+    : [];
+
+  if (trafficSystemDownloadRate) {
+    trafficSystemDownloadRate.textContent = downloadRate || '-';
+  }
+  if (trafficSystemUploadRate) {
+    trafficSystemUploadRate.textContent = uploadRate || '-';
+  }
+  if (trafficSystemDownloadTotal) {
+    trafficSystemDownloadTotal.textContent = downloadTotalLabel || '-';
+  }
+  if (trafficSystemUploadTotal) {
+    trafficSystemUploadTotal.textContent = uploadTotalLabel || '-';
+  }
+  if (trafficTotalDownload) {
+    trafficTotalDownload.textContent = downloadTotal || '-';
+  }
+  if (trafficTotalUpload) {
+    trafficTotalUpload.textContent = uploadTotal || '-';
+  }
+
+  state.trafficHistoryRx = historyRx;
+  state.trafficHistoryTx = historyTx;
+  renderTrafficChart(state.trafficHistoryTx, trafficUploadLine, trafficUploadArea, trafficUploadAxis);
+  renderTrafficChart(state.trafficHistoryRx, trafficDownloadLine, trafficDownloadArea, trafficDownloadAxis);
+}
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -497,6 +733,286 @@ function applyI18n() {
   updateThemeToggle();
   setInstallState(state.installState);
   renderConfigTable();
+  refreshCustomSelects();
+}
+
+function closeActiveCustomSelect() {
+  if (!activeCustomSelectEntry) {
+    return;
+  }
+  activeCustomSelectEntry.wrapper.classList.remove('is-open');
+  activeCustomSelectEntry.menu.hidden = true;
+  activeCustomSelectEntry.trigger.setAttribute('aria-expanded', 'false');
+  activeCustomSelectEntry = null;
+}
+
+function refreshCustomSelectEntry(entry) {
+  if (!entry || !entry.select || !entry.wrapper || !entry.menu || !entry.trigger || !entry.label) {
+    return;
+  }
+  const { select, menu, label, trigger, wrapper } = entry;
+  const options = Array.from(select.options || []);
+  const selectedValue = String(select.value ?? '');
+  const optionMap = new Map();
+  menu.innerHTML = '';
+  options.forEach((option) => {
+    const optionValue = String(option.value ?? '');
+    const optionText = String(option.textContent || '').trim();
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'cf-select-option';
+    item.dataset.value = optionValue;
+    item.setAttribute('role', 'option');
+    item.setAttribute('aria-selected', option.selected ? 'true' : 'false');
+    item.textContent = optionText;
+    if (option.disabled) {
+      item.disabled = true;
+    }
+    item.addEventListener('click', () => {
+      if (option.disabled) {
+        return;
+      }
+      if (String(select.value ?? '') !== optionValue) {
+        select.value = optionValue;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      closeActiveCustomSelect();
+      trigger.focus();
+    });
+    menu.appendChild(item);
+    optionMap.set(optionValue, item);
+  });
+  entry.optionMap = optionMap;
+  const selectedOption = options.find((option) => option.value === select.value)
+    || options.find((option) => option.selected)
+    || options[0]
+    || null;
+  const selectedText = selectedOption ? String(selectedOption.textContent || '').trim() : '';
+  label.textContent = selectedText || '';
+  trigger.disabled = Boolean(select.disabled);
+  wrapper.classList.toggle('is-disabled', Boolean(select.disabled));
+  optionMap.forEach((item, value) => {
+    const isSelected = String(value) === selectedValue;
+    item.classList.toggle('is-selected', isSelected);
+    item.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+  });
+}
+
+function refreshCustomSelects(root = document) {
+  const container = root && typeof root.querySelectorAll === 'function' ? root : document;
+  const selects = Array.from(container.querySelectorAll('select[data-custom-select="true"]'));
+  selects.forEach((select) => {
+    const entry = customSelectRegistry.get(select);
+    if (entry) {
+      refreshCustomSelectEntry(entry);
+    }
+  });
+}
+
+function initCustomSelects(root = document) {
+  const container = root && typeof root.querySelectorAll === 'function' ? root : document;
+  const selects = Array.from(container.querySelectorAll('select'))
+    .filter((select) => !select.multiple && select.size <= 1 && select.dataset.nativeSelect !== 'true');
+  if (!customSelectGlobalBound) {
+    customSelectGlobalBound = true;
+    document.addEventListener('pointerdown', (event) => {
+      if (!activeCustomSelectEntry) {
+        return;
+      }
+      const target = event.target instanceof Node ? event.target : null;
+      if (target && activeCustomSelectEntry.wrapper.contains(target)) {
+        return;
+      }
+      closeActiveCustomSelect();
+    }, true);
+    document.addEventListener('keydown', (event) => {
+      if (!activeCustomSelectEntry) {
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeActiveCustomSelect();
+      }
+    });
+    window.addEventListener('resize', () => {
+      closeActiveCustomSelect();
+    });
+  }
+
+  selects.forEach((select) => {
+    if (select.dataset.customSelect === 'true') {
+      const existingEntry = customSelectRegistry.get(select);
+      if (existingEntry) {
+        refreshCustomSelectEntry(existingEntry);
+      }
+      return;
+    }
+    const wrapper = document.createElement('div');
+    wrapper.className = 'cf-select';
+    if (select.id) {
+      wrapper.dataset.selectId = select.id;
+    }
+    select.classList.forEach((cls) => wrapper.classList.add(cls));
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'cf-select-trigger';
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.setAttribute('aria-label', select.getAttribute('aria-label') || select.id || 'Select');
+    const label = document.createElement('span');
+    label.className = 'cf-select-value';
+    const arrow = document.createElement('span');
+    arrow.className = 'cf-select-arrow';
+    arrow.setAttribute('aria-hidden', 'true');
+    trigger.appendChild(label);
+    trigger.appendChild(arrow);
+    const menu = document.createElement('div');
+    menu.className = 'cf-select-menu';
+    menu.hidden = true;
+    menu.setAttribute('role', 'listbox');
+    menu.tabIndex = -1;
+
+    const openMenu = () => {
+      if (select.disabled) {
+        return;
+      }
+      if (activeCustomSelectEntry && activeCustomSelectEntry !== entry) {
+        closeActiveCustomSelect();
+      }
+      activeCustomSelectEntry = entry;
+      wrapper.classList.add('is-open');
+      menu.hidden = false;
+      trigger.setAttribute('aria-expanded', 'true');
+      const selectedItem = menu.querySelector('.cf-select-option.is-selected:not(:disabled)')
+        || menu.querySelector('.cf-select-option:not(:disabled)');
+      if (selectedItem && typeof selectedItem.focus === 'function') {
+        selectedItem.focus();
+      }
+    };
+
+    const closeMenu = () => {
+      if (activeCustomSelectEntry === entry) {
+        closeActiveCustomSelect();
+      } else {
+        wrapper.classList.remove('is-open');
+        menu.hidden = true;
+        trigger.setAttribute('aria-expanded', 'false');
+      }
+    };
+
+    trigger.addEventListener('click', () => {
+      if (wrapper.classList.contains('is-open')) {
+        closeMenu();
+        return;
+      }
+      openMenu();
+    });
+
+    trigger.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        openMenu();
+      }
+    });
+
+    menu.addEventListener('keydown', (event) => {
+      const optionsInMenu = Array.from(menu.querySelectorAll('.cf-select-option:not(:disabled)'));
+      const currentIndex = optionsInMenu.indexOf(document.activeElement);
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        const nextIndex = currentIndex < 0 ? 0 : Math.min(currentIndex + 1, optionsInMenu.length - 1);
+        const target = optionsInMenu[nextIndex];
+        if (target) target.focus();
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        const prevIndex = currentIndex <= 0 ? 0 : currentIndex - 1;
+        const target = optionsInMenu[prevIndex];
+        if (target) target.focus();
+        return;
+      }
+      if (event.key === 'Tab') {
+        closeMenu();
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMenu();
+        trigger.focus();
+      }
+    });
+
+    select.addEventListener('change', () => {
+      const active = activeCustomSelectEntry && activeCustomSelectEntry.select === select;
+      refreshCustomSelectEntry(entry);
+      if (active) {
+        closeMenu();
+      }
+    });
+
+    const nativeProto = Object.getPrototypeOf(select);
+    const valueDescriptor = Object.getOwnPropertyDescriptor(nativeProto, 'value');
+    if (valueDescriptor && typeof valueDescriptor.set === 'function' && typeof valueDescriptor.get === 'function') {
+      Object.defineProperty(select, 'value', {
+        configurable: true,
+        enumerable: true,
+        get() {
+          return valueDescriptor.get.call(this);
+        },
+        set(nextValue) {
+          valueDescriptor.set.call(this, nextValue);
+          const linkedEntry = customSelectRegistry.get(this);
+          if (linkedEntry) {
+            refreshCustomSelectEntry(linkedEntry);
+          }
+        },
+      });
+    }
+    const disabledDescriptor = Object.getOwnPropertyDescriptor(nativeProto, 'disabled');
+    if (disabledDescriptor && typeof disabledDescriptor.set === 'function' && typeof disabledDescriptor.get === 'function') {
+      Object.defineProperty(select, 'disabled', {
+        configurable: true,
+        enumerable: true,
+        get() {
+          return disabledDescriptor.get.call(this);
+        },
+        set(nextValue) {
+          disabledDescriptor.set.call(this, nextValue);
+          const linkedEntry = customSelectRegistry.get(this);
+          if (linkedEntry) {
+            refreshCustomSelectEntry(linkedEntry);
+          }
+        },
+      });
+    }
+
+    const observer = new MutationObserver(() => {
+      refreshCustomSelectEntry(entry);
+    });
+    observer.observe(select, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ['disabled', 'label', 'selected', 'value'],
+    });
+
+    const entry = { select, wrapper, trigger, label, menu, observer, optionMap: new Map() };
+    customSelectRegistry.set(select, entry);
+    select.dataset.customSelect = 'true';
+    select.classList.add('cf-native-select');
+    select.tabIndex = -1;
+
+    const parent = select.parentNode;
+    if (parent) {
+      parent.insertBefore(wrapper, select);
+      wrapper.appendChild(select);
+      wrapper.appendChild(trigger);
+      wrapper.appendChild(menu);
+    }
+    refreshCustomSelectEntry(entry);
+  });
 }
 
 function applyCardIcons() {
@@ -1360,6 +1876,14 @@ function applySettings(settings) {
   if (settingsGithubUser) {
     settingsGithubUser.value = state.settings.githubUser;
   }
+  state.coreVersionRaw = readKernelVersionFromSettings();
+  if (installCurrentKernel) {
+    const kernelText = formatKernelDisplay(state.coreVersionRaw || '');
+    installCurrentKernel.textContent = kernelText && kernelText !== '-' ? kernelText : t('labels.notInstalled');
+  }
+  if (statusVersion) {
+    statusVersion.textContent = state.coreVersionRaw || t('labels.notInstalled');
+  }
   updateInstallVersionVisibility();
   if (configPathInput) {
     configPathInput.value = state.settings.configPath;
@@ -1371,6 +1895,8 @@ function applySettings(settings) {
     settingsConfigPath.value = state.settings.configPath;
   }
   hydrateOverviewIdentityFromSettings();
+  hydrateOverviewNetworkFromCache();
+  hydrateOverviewTrafficFromCache();
   applyOverviewOrders();
   if (externalControllerInput) {
     externalControllerInput.value = state.settings.externalController || '';
@@ -2007,6 +2533,12 @@ function hydrateOverviewIdentityFromSettings() {
   if (overviewStatus && persistedMihomoStatus && typeof persistedMihomoStatus.running === 'boolean') {
     overviewStatus.textContent = persistedMihomoStatus.running ? t('labels.running') : t('labels.stopped');
   }
+  state.overviewIpRaw.local = '';
+  state.overviewIpRaw.proxy = '';
+  state.overviewIpRaw.internet = '';
+  setOverviewCopyButtonVisible(overviewLocalIpCopy, false);
+  setOverviewCopyButtonVisible(overviewProxyIpCopy, false);
+  setOverviewCopyButtonVisible(overviewInternetIpCopy, false);
 }
 
 function syncKernelVersionInState(version = '') {
@@ -2107,11 +2639,28 @@ async function refreshKernelUpdateNotice(force = false) {
     || 'vernesong';
   const source = normalizeKernelSource(selectedSource)
     || resolveKernelUpdateSourceByVersion(state.coreVersionRaw || '', selectedSource);
+  const currentVersion = String(state.coreVersionRaw || '').trim();
+  const cachedResult = getCachedKernelUpdateResult(source, currentVersion);
+  if (cachedResult) {
+    state.kernelUpdateInfo = cachedResult;
+    state.kernelUpdateCheckedAt = Date.now();
+    if (
+      cachedResult.ok
+      && cachedResult.latestVersion
+      && String(source || '').toLowerCase() === 'metacubex'
+      && !cachedResult.prerelease
+      && installVersion
+    ) {
+      const latest = String(cachedResult.latestVersion || '').trim();
+      installVersion.value = latest;
+    }
+    applyKernelUpdateInstallHint();
+    return;
+  }
   const requestSeq = (state.kernelUpdateRequestSeq || 0) + 1;
   state.kernelUpdateRequestSeq = requestSeq;
   state.kernelUpdateInfo = { ok: false, status: 'checking', source };
   applyKernelUpdateInstallHint();
-  const currentVersion = String(state.coreVersionRaw || '').trim();
   state.kernelUpdateChecking = true;
   try {
     const result = await window.clashfox.checkKernelUpdates({
@@ -2123,6 +2672,9 @@ async function refreshKernelUpdateNotice(force = false) {
     }
     state.kernelUpdateInfo = result || null;
     state.kernelUpdateCheckedAt = Date.now();
+    if (result && typeof result === 'object') {
+      setCachedKernelUpdateResult(source, currentVersion, result);
+    }
     if (
       result
       && result.ok
@@ -2616,6 +3168,7 @@ function updateTrafficHistory(rxRate, txRate) {
   }
   renderTrafficChart(state.trafficHistoryTx, trafficUploadLine, trafficUploadArea, trafficUploadAxis);
   renderTrafficChart(state.trafficHistoryRx, trafficDownloadLine, trafficDownloadArea, trafficDownloadAxis);
+  cacheOverviewTrafficFromState();
 }
 
 function resetTrafficHistory() {
@@ -2623,6 +3176,7 @@ function resetTrafficHistory() {
   state.trafficHistoryTx = [];
   renderTrafficChart(state.trafficHistoryTx, trafficUploadLine, trafficUploadArea, trafficUploadAxis);
   renderTrafficChart(state.trafficHistoryRx, trafficDownloadLine, trafficDownloadArea, trafficDownloadAxis);
+  cacheOverviewTrafficFromState();
 }
 
 function parseAuthList(value) {
@@ -2693,6 +3247,7 @@ function updateSystemTraffic(rxBytes, txBytes) {
     if (trafficSystemUploadRate) {
       trafficSystemUploadRate.textContent = '-';
     }
+    cacheOverviewTrafficFromState();
     return;
   }
 
@@ -2913,23 +3468,24 @@ function updateOverviewUI(data) {
     state.overviewIpRaw.local = rawLocalIp;
     const text = rawLocalIp || '-';
     overviewLocalIp.textContent = text;
-    setOverviewCopyButtonVisible(overviewLocalIpCopy, Boolean(rawLocalIp));
+    setOverviewCopyButtonVisible(overviewLocalIpCopy, Boolean(text && text !== '-'));
   }
   if (overviewProxyIp) {
     const rawProxyIp = String(data.proxyIp || '').trim();
-    state.overviewIpRaw.proxy = rawProxyIp;
     const text = maskIpAddress(rawProxyIp) || '-';
+    state.overviewIpRaw.proxy = text !== '-' ? rawProxyIp : '';
     overviewProxyIp.textContent = text;
-    setOverviewCopyButtonVisible(overviewProxyIpCopy, Boolean(rawProxyIp));
+    setOverviewCopyButtonVisible(overviewProxyIpCopy, Boolean(text && text !== '-'));
   }
   if (overviewInternetIp) {
     const ipValue = data.internetIp4 || data.internetIp || '';
     const rawInternetIp = String(ipValue || '').trim();
-    state.overviewIpRaw.internet = rawInternetIp;
     const text = maskIpAddress(rawInternetIp) || '-';
+    state.overviewIpRaw.internet = text !== '-' ? rawInternetIp : '';
     overviewInternetIp.textContent = text;
-    setOverviewCopyButtonVisible(overviewInternetIpCopy, Boolean(rawInternetIp));
+    setOverviewCopyButtonVisible(overviewInternetIpCopy, Boolean(text && text !== '-'));
   }
+  cacheOverviewNetworkFromState();
   // Prefer /traffic realtime stream. If it stalls, fallback to /overview byte counters.
   if (!state.lastProxyTrafficAt || (Date.now() - state.lastProxyTrafficAt) > 1500) {
     updateSystemTraffic(data.rxBytes, data.txBytes);
@@ -3970,6 +4526,7 @@ function refreshPageRefs() {
   settingsWindowHeight = document.getElementById('settingsWindowHeight');
   settingsAcceptBeta = document.getElementById('settingsAcceptBeta');
   langButtons = Array.from(document.querySelectorAll('.lang-btn'));
+  initCustomSelects(document);
 }
 
 function bindNavButtons() {
@@ -4081,6 +4638,10 @@ async function navigatePage(targetPage, pushState = true) {
   if (!VALID_PAGES.has(normalized)) {
     return;
   }
+  if (currentPage === 'overview') {
+    cacheOverviewNetworkFromState();
+    cacheOverviewTrafficFromState();
+  }
   if (!normalized || normalized === currentPage) {
     return;
   }
@@ -4122,6 +4683,13 @@ async function navigatePage(targetPage, pushState = true) {
     history.pushState({ page: normalized }, '', `${normalized}.html`);
   }
 }
+
+window.addEventListener('beforeunload', () => {
+  if (currentPage === 'overview') {
+    cacheOverviewNetworkFromState();
+    cacheOverviewTrafficFromState();
+  }
+});
 
 function setLayoutReady() {
   // Compute scrollbar compensation before first paint to avoid topbar jitter.
@@ -4224,6 +4792,13 @@ async function loadLayoutParts() {
   if (tasks.length) {
     await Promise.all(tasks);
   }
+  // First paint should not wait for modal fragments.
+  refreshLayoutRefs();
+  refreshPageRefs();
+  bindNavButtons();
+  bindTopbarActions();
+  setLayoutReady();
+
   const sudoRoot = document.getElementById('sudoRoot');
   const confirmRoot = document.getElementById('confirmRoot');
   const fragmentTasks = [];
@@ -4260,13 +4835,17 @@ async function loadLayoutParts() {
     );
   }
   if (fragmentTasks.length) {
-    await Promise.all(fragmentTasks);
+    Promise.all(fragmentTasks)
+      .then(() => {
+        refreshLayoutRefs();
+        refreshPageRefs();
+        bindNavButtons();
+        bindTopbarActions();
+      })
+      .catch(() => {
+        // ignore fragment load errors
+      });
   }
-  refreshLayoutRefs();
-  refreshPageRefs();
-  bindNavButtons();
-  bindTopbarActions();
-  setLayoutReady();
 }
 
 function bindPageEvents() {

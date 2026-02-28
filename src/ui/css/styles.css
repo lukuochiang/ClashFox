@@ -811,6 +811,18 @@ h1 {
   /*margin-bottom: 10px;*/
 }
 
+.quick-actions-card .cf-select {
+  position: relative;
+  flex: 1;
+  min-width: 88px;
+}
+
+.quick-actions-card .quick-stack-row .cf-select-menu {
+  left: auto;
+  right: 0;
+  min-width: 88px;
+}
+
 .overview-grid {
   margin-bottom: 10px;
   grid-template-columns: 1fr;
@@ -1195,14 +1207,17 @@ body[data-page="settings"] .settings-top-column .form-row > label {
 
 body[data-page="settings"] .settings-top-column .form-row > input,
 body[data-page="settings"] .settings-top-column .form-row > select,
+body[data-page="settings"] .settings-top-column .form-row > .cf-select,
 body[data-page="settings"] .settings-top-column .form-row > .toggle {
   min-width: 0;
 }
 
 body[data-page="settings"] .settings-top-column .form-row > input,
 body[data-page="settings"] .settings-top-column .form-row > select,
+body[data-page="settings"] .settings-top-column .form-row > .cf-select,
 body[data-page="settings"] .settings-log-column .form-row > input,
-body[data-page="settings"] .settings-log-column .form-row > select {
+body[data-page="settings"] .settings-log-column .form-row > select,
+body[data-page="settings"] .settings-log-column .form-row > .cf-select {
   height: 40px;
   line-height: 20px;
   padding-top: 0;
@@ -1863,7 +1878,35 @@ body[data-theme="day"] .quick-group {
   background: transparent;
 }
 
+.quick-stack-row .cf-select {
+  flex: 0 0 auto;
+  width: 102px;
+  min-width: 102px;
+  margin-left: auto;
+}
+
+.quick-stack-row .cf-select-trigger {
+  padding: 7px 12px;
+  border-radius: 12px;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  min-height: 32px;
+}
+
+.quick-stack-row .cf-select-menu {
+  left: auto;
+  right: 0;
+  min-width: 120px;
+}
+
 body[data-theme="day"] .quick-stack-row select {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+body[data-theme="day"] .quick-stack-row .cf-select-trigger {
   border: none;
   box-shadow: none;
   background: transparent;
@@ -2520,6 +2563,7 @@ body[data-page="settings"] .field-inline label,
 body[data-page="settings"] .toggle span,
 body[data-page="settings"] input,
 body[data-page="settings"] select,
+body[data-page="settings"] .cf-select,
 body[data-page="settings"] .paths-label,
 body[data-page="settings"] .paths-value {
   font-size: 13px;
@@ -2535,13 +2579,146 @@ select {
   min-width: 150px;
 }
 
+.cf-select {
+  position: relative;
+  flex: 1;
+  min-width: 150px;
+}
+
+.cf-native-select {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cf-select-trigger {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  color: var(--ink);
+  padding: 10px 12px;
+  border-radius: 10px;
+  min-width: 0;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.cf-select-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cf-select-arrow {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  background-color: currentColor;
+  opacity: 0.75;
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='black' d='M6.7 9.3a1 1 0 0 1 1.4 0l3.9 3.9 3.9-3.9a1 1 0 1 1 1.4 1.4l-4.6 4.6a1 1 0 0 1-1.4 0L6.7 10.7a1 1 0 0 1 0-1.4Z'/></svg>");
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='black' d='M6.7 9.3a1 1 0 0 1 1.4 0l3.9 3.9 3.9-3.9a1 1 0 1 1 1.4 1.4l-4.6 4.6a1 1 0 0 1-1.4 0L6.7 10.7a1 1 0 0 1 0-1.4Z'/></svg>");
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  transition: transform 0.2s ease;
+}
+
+.cf-select.is-open .cf-select-arrow {
+  transform: rotate(180deg);
+}
+
+.cf-select.is-disabled .cf-select-trigger {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cf-select-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow: auto;
+  background: rgba(19, 23, 30, 0.98);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35);
+  z-index: 60;
+  padding: 4px;
+}
+
+.cf-select-option {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.cf-select-option:hover,
+.cf-select-option:focus-visible {
+  outline: none;
+  background: rgba(244, 179, 74, 0.14);
+}
+
+.cf-select-option.is-selected {
+  background: rgba(244, 179, 74, 0.2);
+  color: #ffd18d;
+}
+
+.cf-select-option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 body[data-theme="day"] input,
 body[data-theme="day"] select {
   background: rgba(255, 255, 255, 0.75);
   color: var(--ink);
 }
 
+body[data-theme="day"] .cf-select-trigger {
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--ink);
+}
+
+body[data-theme="day"] .cf-select-menu {
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 12px 24px rgba(24, 33, 44, 0.16);
+}
+
+body[data-theme="day"] .cf-select-option.is-selected {
+  background: rgba(255, 177, 91, 0.24);
+  color: #6b3b00;
+}
+
 select#logIntervalPreset {
+  flex: 0 0 90px;
+  min-width: 90px;
+}
+
+.cf-select[data-select-id="logIntervalPreset"] {
   flex: 0 0 90px;
   min-width: 90px;
 }
@@ -2966,6 +3143,11 @@ body[data-theme="day"] .icon-btn.list-action-icon-btn.danger-action-btn:hover:no
 }
 
 .page-size select {
+  min-width: 80px;
+  flex: 0 0 80px;
+}
+
+.page-size .cf-select {
   min-width: 80px;
   flex: 0 0 80px;
 }
