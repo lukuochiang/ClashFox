@@ -3,6 +3,7 @@
   "version": "0.4.1",
   "buildNumber": 1,
   "description": "ClashFox GUI for Mihomo",
+  "license": "GPL-3.0",
   "author": "Kuochiang Lu <lukuochiang@gmail.com> (https://github.com/lukuochiang/ClashFox)",
   "main": "src/main.js",
   "type": "commonjs",
