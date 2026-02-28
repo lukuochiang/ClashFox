@@ -1370,6 +1370,7 @@ function applySettings(settings) {
   if (settingsConfigPath) {
     settingsConfigPath.value = state.settings.configPath;
   }
+  hydrateOverviewIdentityFromSettings();
   applyOverviewOrders();
   if (externalControllerInput) {
     externalControllerInput.value = state.settings.externalController || '';
@@ -1967,6 +1968,45 @@ function readKernelVersionFromSettings() {
     state.fileSettings && state.fileSettings.kernel && (state.fileSettings.kernel.raw || state.fileSettings.kernel.version),
   ].find((item) => typeof item === 'string' && item.trim());
   return String(candidate || '').trim();
+}
+
+function readDeviceFromSettings() {
+  const candidate = [
+    state.settings && state.settings.device,
+    state.fileSettings && state.fileSettings.device,
+  ].find((item) => item && typeof item === 'object');
+  return candidate && typeof candidate === 'object' ? candidate : {};
+}
+
+function setOverviewCopyButtonVisible(button, visible) {
+  if (!button) {
+    return;
+  }
+  const show = Boolean(visible);
+  button.classList.toggle('is-hidden', !show);
+  button.disabled = !show;
+}
+
+function hydrateOverviewIdentityFromSettings() {
+  const persistedVersion = readKernelVersionFromSettings();
+  const kernelDisplay = formatKernelDisplay(persistedVersion);
+  if (overviewKernel) {
+    overviewKernel.textContent = kernelDisplay || '-';
+  }
+  setOverviewCopyButtonVisible(overviewKernelCopy, Boolean(kernelDisplay && kernelDisplay !== '-'));
+  const persistedDevice = readDeviceFromSettings();
+  if (overviewSystem) {
+    overviewSystem.textContent = persistedDevice.os || '-';
+  }
+  if (overviewVersion) {
+    overviewVersion.textContent = persistedDevice.version || '-';
+  }
+  const persistedMihomoStatus = (state.settings && state.settings.mihomoStatus)
+    || (state.fileSettings && state.fileSettings.mihomoStatus)
+    || null;
+  if (overviewStatus && persistedMihomoStatus && typeof persistedMihomoStatus.running === 'boolean') {
+    overviewStatus.textContent = persistedMihomoStatus.running ? t('labels.running') : t('labels.stopped');
+  }
 }
 
 function syncKernelVersionInState(version = '') {
@@ -2805,16 +2845,15 @@ function updateOverviewUI(data) {
     const persistedVersion = readKernelVersionFromSettings();
     const kernelDisplay = formatKernelDisplay(persistedVersion);
     overviewKernel.textContent = kernelDisplay;
-    if (overviewKernelCopy) {
-      overviewKernelCopy.disabled = !kernelDisplay || kernelDisplay === '-';
-    }
+    setOverviewCopyButtonVisible(overviewKernelCopy, Boolean(kernelDisplay && kernelDisplay !== '-'));
   }
+  const persistedDevice = readDeviceFromSettings();
   if (overviewSystem) {
-    overviewSystem.textContent = data.systemName || '-';
+    overviewSystem.textContent = persistedDevice.os || data.systemName || '-';
   }
   if (overviewVersion) {
-    const systemParts = [data.systemVersion, data.systemBuild].filter(Boolean);
-    overviewVersion.textContent = systemParts.length ? systemParts.join('\u00A0') : '-';
+    const fallbackParts = [data.systemVersion, data.systemBuild].filter(Boolean);
+    overviewVersion.textContent = persistedDevice.version || (fallbackParts.length ? fallbackParts.join('\u00A0') : '-');
   }
   
   const parsedUptime = Number.parseInt(data.uptimeSec, 10);
@@ -2874,18 +2913,14 @@ function updateOverviewUI(data) {
     state.overviewIpRaw.local = rawLocalIp;
     const text = rawLocalIp || '-';
     overviewLocalIp.textContent = text;
-    if (overviewLocalIpCopy) {
-      overviewLocalIpCopy.disabled = !rawLocalIp;
-    }
+    setOverviewCopyButtonVisible(overviewLocalIpCopy, Boolean(rawLocalIp));
   }
   if (overviewProxyIp) {
     const rawProxyIp = String(data.proxyIp || '').trim();
     state.overviewIpRaw.proxy = rawProxyIp;
     const text = maskIpAddress(rawProxyIp) || '-';
     overviewProxyIp.textContent = text;
-    if (overviewProxyIpCopy) {
-      overviewProxyIpCopy.disabled = !rawProxyIp;
-    }
+    setOverviewCopyButtonVisible(overviewProxyIpCopy, Boolean(rawProxyIp));
   }
   if (overviewInternetIp) {
     const ipValue = data.internetIp4 || data.internetIp || '';
@@ -2893,9 +2928,7 @@ function updateOverviewUI(data) {
     state.overviewIpRaw.internet = rawInternetIp;
     const text = maskIpAddress(rawInternetIp) || '-';
     overviewInternetIp.textContent = text;
-    if (overviewInternetIpCopy) {
-      overviewInternetIpCopy.disabled = !rawInternetIp;
-    }
+    setOverviewCopyButtonVisible(overviewInternetIpCopy, Boolean(rawInternetIp));
   }
   // Prefer /traffic realtime stream. If it stalls, fallback to /overview byte counters.
   if (!state.lastProxyTrafficAt || (Date.now() - state.lastProxyTrafficAt) > 1500) {

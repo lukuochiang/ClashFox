@@ -748,6 +748,7 @@ function normalizeSettingsForStorage(input = {}) {
     'device',
     'helperStatus',
     'mihomoStatus',
+    'overviewOrder',
   ];
   priority.forEach((key) => {
     if (Object.prototype.hasOwnProperty.call(parsed, key)) {
