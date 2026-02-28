@@ -1,0 +1,80 @@
+{
+  "proxyMode": "rule",
+  "systemProxyEnabled": true,
+  "tunEnabled": true,
+  "tunStack": "Mixed",
+  "appearance": {
+    "lang": "auto",
+    "themePreference": "auto",
+    "debugMode": false,
+    "acceptBeta": false,
+    "githubUser": "vernesong",
+    "windowWidth": 997,
+    "windowHeight": 655,
+    "mainWindowClosed": false,
+    "generalPageSize": "10",
+    "logLines": 10,
+    "logAutoRefresh": false,
+    "logIntervalPreset": "3"
+  },
+  "userDataPaths": {
+    "configFile": "/Users/hogwartsrow/Library/Application Support/ClashFox/config/default.yaml",
+    "configDir": "/Users/hogwartsrow/Library/Application Support/ClashFox/config",
+    "coreDir": "/Users/hogwartsrow/Library/Application Support/ClashFox/core",
+    "dataDir": "/Users/hogwartsrow/Library/Application Support/ClashFox/data",
+    "logDir": "/Users/hogwartsrow/Library/Application Support/ClashFox/logs",
+    "pidDir": "/Users/hogwartsrow/Library/Application Support/ClashFox/runtime"
+  },
+  "panelManager": {
+    "externalController": "127.0.0.1:9090",
+    "secret": "clashfox",
+    "panelChoice": "zashboard",
+    "externalUi": "ui",
+    "authentication": [
+      "mihomo:clashfox"
+    ]
+  },
+  "kernel": {
+    "raw": "Mihomo Meta alpha-smart-748ee67 darwin amd64 with go1.25.7 Mon Feb  9 15:05:14 UTC 2026",
+    "core": "mihomo",
+    "type": "Meta",
+    "version": "alpha-smart-748ee67",
+    "platform": "darwin",
+    "arch": "amd64",
+    "language": "go",
+    "languageVersion": "go1.25.7",
+    "buildTime": "Mon Feb  9 15:05:14 UTC 2026",
+    "source": "migrate",
+    "updatedAt": "2026-02-28T02:52:12.409Z"
+  },
+  "device": {
+    "user": "hogwartsrow",
+    "os": "macOS",
+    "version": "26.4 25E5218f",
+    "build": "25E5218f",
+    "source": "overview",
+    "updatedAt": "2026-02-28T05:16:46.375Z"
+  },
+  "helperStatus": {
+    "state": "running",
+    "installed": true,
+    "running": true,
+    "binaryExists": true,
+    "plistExists": true,
+    "logPath": "/var/log/clashfox-helper.log",
+    "updatedAt": "2026-02-28T06:05:51.700Z"
+  },
+  "mihomoStatus": {
+    "running": true,
+    "source": "status",
+    "updatedAt": "2026-02-28T06:20:50.675Z"
+  },
+  "overviewOrder": [
+    "quick-actions",
+    "outbound-mode",
+    "running",
+    "conn-live",
+    "network-history",
+    "network"
+  ]
+}

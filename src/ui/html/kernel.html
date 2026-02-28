@@ -39,7 +39,6 @@
                 </div>
                 <div class="install-header-meta">
                   <div class="install-status" id="installStatus" data-i18n="install.ready">Ready to install.</div>
-                  <div class="install-current-kernel" id="installCurrentKernel">-</div>
                 </div>
               </div>
               <div class="install-form">
@@ -53,6 +52,10 @@
                 <div class="form-row is-hidden" id="installVersionRow">
                   <label data-i18n="install.version">Version</label>
                   <input id="installVersion" type="text" data-i18n-placeholder="install.versionPlaceholder" placeholder="e.g. v1.19.0" />
+                </div>
+                <div class="form-row install-current-row">
+                  <label><span data-i18n="labels.current">Current</span> <span data-i18n="status.kernel">Kernel</span></label>
+                  <div class="install-current-kernel" id="installCurrentKernel">-</div>
                 </div>
               </div>
               <div class="action-row">

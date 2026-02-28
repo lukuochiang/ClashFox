@@ -26,6 +26,7 @@ let navButtons = Array.from(document.querySelectorAll('.nav-btn'));
 let panels = Array.from(document.querySelectorAll('.panel'));
 let noticePop = document.getElementById('noticePop');
 let noticePopBody = document.getElementById('noticePopBody');
+let noticePopClose = document.getElementById('noticePopClose');
 let contentRoot = document.getElementById('contentRoot');
 let currentPage = document.body ? document.body.dataset.page : '';
 const VALID_PAGES = new Set(['overview', 'kernel', 'config', 'logs', 'settings', 'help', 'dashboard']);
@@ -269,15 +270,21 @@ const DEFAULT_SETTINGS = {
   externalController: '127.0.0.1:9090',
   secret: 'clashfox',
   authentication: ['mihomo:clashfox'],
+  panelManager: {
+    panelChoice: 'zashboard',
+    externalUi: 'ui',
+    externalController: '127.0.0.1:9090',
+    secret: 'clashfox',
+    authentication: ['mihomo:clashfox'],
+  },
   proxyMode: 'rule',
   tunEnabled: false,
   tunStack: 'Mixed',
   overviewOrder: [],
-  overviewTopOrder: [],
   logLines: 10,
   logAutoRefresh: false,
   logIntervalPreset: '3',
-  kernelPageSize: '10',
+  generalPageSize: '10',
   switchPageSize: '10',
   backupsPageSize: '10',
   configPageSize: '10',
@@ -286,6 +293,22 @@ const DEFAULT_SETTINGS = {
   debugMode: false,
   windowWidth: MAIN_WINDOW_DEFAULT_WIDTH,
   windowHeight: MAIN_WINDOW_DEFAULT_HEIGHT,
+  mainWindowClosed: false,
+  appearance: {
+    lang: 'auto',
+    themePreference: 'auto',
+    debugMode: false,
+    acceptBeta: false,
+    githubUser: 'vernesong',
+    windowWidth: MAIN_WINDOW_DEFAULT_WIDTH,
+    windowHeight: MAIN_WINDOW_DEFAULT_HEIGHT,
+    mainWindowClosed: false,
+    generalPageSize: '10',
+    logLines: 10,
+    logAutoRefresh: false,
+    logIntervalPreset: '3',
+  },
+  kernel: {},
   mihomoStatus: {
     running: false,
     source: 'init',
@@ -566,34 +589,321 @@ function setLanguage(lang, persist = true, refreshStatus = true) {
 
 function normalizeSettingsForUi(settings) {
   const normalized = { ...(settings || {}) };
+  const appearance = normalized.appearance && typeof normalized.appearance === 'object'
+    ? normalized.appearance
+    : {};
+  const readAppearanceString = (key, fallback = '') => {
+    const top = normalized[key];
+    if (typeof top === 'string' && top.trim()) {
+      return top.trim();
+    }
+    const inner = appearance[key];
+    if (typeof inner === 'string' && inner.trim()) {
+      return inner.trim();
+    }
+    return fallback;
+  };
+  const readAppearanceBool = (key, fallback = false) => {
+    if (Object.prototype.hasOwnProperty.call(normalized, key)) {
+      return Boolean(normalized[key]);
+    }
+    if (Object.prototype.hasOwnProperty.call(appearance, key)) {
+      return Boolean(appearance[key]);
+    }
+    return fallback;
+  };
+  const readAppearanceNum = (key, fallback = 0) => {
+    const top = Object.prototype.hasOwnProperty.call(normalized, key) ? normalized[key] : undefined;
+    const inner = Object.prototype.hasOwnProperty.call(appearance, key) ? appearance[key] : undefined;
+    const candidate = top !== undefined ? top : inner;
+    const parsed = Number.parseInt(String(candidate ?? ''), 10);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  normalized.lang = readAppearanceString('lang', 'auto');
+  normalized.themePreference = readAppearanceString('themePreference', 'auto');
+  normalized.debugMode = readAppearanceBool('debugMode', false);
+  normalized.acceptBeta = readAppearanceBool('acceptBeta', false);
+  normalized.githubUser = readAppearanceString('githubUser', 'vernesong');
+  normalized.windowWidth = readAppearanceNum('windowWidth', MAIN_WINDOW_DEFAULT_WIDTH);
+  normalized.windowHeight = readAppearanceNum('windowHeight', MAIN_WINDOW_DEFAULT_HEIGHT);
+  normalized.mainWindowClosed = readAppearanceBool('mainWindowClosed', false);
+  normalized.logLines = readAppearanceNum('logLines', 10);
+  normalized.logAutoRefresh = readAppearanceBool('logAutoRefresh', false);
+  normalized.logIntervalPreset = readAppearanceString('logIntervalPreset', '3');
+
+  const legacyGeneralPageSize = normalized.generalPageSize || normalized.backupsPageSize || normalized.kernelPageSize || '10';
+  const unifiedPageSize = readAppearanceString('generalPageSize', String(legacyGeneralPageSize || '10')) || '10';
+  normalized.generalPageSize = unifiedPageSize;
+  normalized.appearance = {
+    ...appearance,
+    lang: normalized.lang,
+    themePreference: normalized.themePreference,
+    debugMode: normalized.debugMode,
+    acceptBeta: normalized.acceptBeta,
+    githubUser: normalized.githubUser,
+    windowWidth: normalized.windowWidth,
+    windowHeight: normalized.windowHeight,
+    mainWindowClosed: normalized.mainWindowClosed,
+    generalPageSize: normalized.generalPageSize,
+    logLines: normalized.logLines,
+    logAutoRefresh: normalized.logAutoRefresh,
+    logIntervalPreset: normalized.logIntervalPreset,
+  };
+
+  const panelManager = normalized.panelManager && typeof normalized.panelManager === 'object'
+    ? normalized.panelManager
+    : {};
+  const normalizeAuthList = (value) => {
+    const source = Array.isArray(value)
+      ? value
+      : (typeof value === 'string' ? [value] : []);
+    return source.map((item) => String(item || '').trim()).filter(Boolean);
+  };
+  const authList = normalizeAuthList(
+    Array.isArray(normalized.authentication) && normalized.authentication.length
+      ? normalized.authentication
+      : panelManager.authentication,
+  );
+  normalized.panelManager = {
+    ...panelManager,
+    panelChoice: (normalized.panelChoice || panelManager.panelChoice || 'zashboard'),
+    externalUi: (normalized.externalUi || panelManager.externalUi || 'ui'),
+    externalController: (normalized.externalController || panelManager.externalController || '127.0.0.1:9090'),
+    secret: (normalized.secret || panelManager.secret || 'clashfox'),
+    authentication: authList.length ? authList : ['mihomo:clashfox'],
+  };
+  if (!normalized.panelChoice) {
+    normalized.panelChoice = normalized.panelManager.panelChoice;
+  }
+  if (!normalized.externalUi) {
+    normalized.externalUi = normalized.panelManager.externalUi;
+  }
+  if (!normalized.externalController) {
+    normalized.externalController = normalized.panelManager.externalController;
+  }
+  if (!normalized.secret) {
+    normalized.secret = normalized.panelManager.secret;
+  }
+  normalized.authentication = normalized.panelManager.authentication;
+
+  const userDataPaths = normalized.userDataPaths && typeof normalized.userDataPaths === 'object'
+    ? normalized.userDataPaths
+    : {};
+  if (!normalized.configFile && typeof userDataPaths.configFile === 'string') {
+    normalized.configFile = userDataPaths.configFile;
+  }
+  if (!normalized.configDir && typeof userDataPaths.configDir === 'string') {
+    normalized.configDir = userDataPaths.configDir;
+  }
+  if (!normalized.coreDir && typeof userDataPaths.coreDir === 'string') {
+    normalized.coreDir = userDataPaths.coreDir;
+  }
+  if (!normalized.dataDir && typeof userDataPaths.dataDir === 'string') {
+    normalized.dataDir = userDataPaths.dataDir;
+  }
+  if (!normalized.logDir && typeof userDataPaths.logDir === 'string') {
+    normalized.logDir = userDataPaths.logDir;
+  }
+  if (!normalized.pidDir && typeof userDataPaths.pidDir === 'string') {
+    normalized.pidDir = userDataPaths.pidDir;
+  }
+  if (!normalized.kernel || typeof normalized.kernel !== 'object') {
+    normalized.kernel = {};
+  }
   if (!normalized.configPath && typeof normalized.configFile === 'string') {
     normalized.configPath = normalized.configFile;
   }
-  if ((!normalized.backupsPageSize || String(normalized.backupsPageSize).trim() === '') && normalized.kernelPageSize) {
-    normalized.backupsPageSize = normalized.kernelPageSize;
-  }
-  if (!normalized.switchPageSize || String(normalized.switchPageSize).trim() === '') {
-    normalized.switchPageSize = normalized.backupsPageSize || normalized.kernelPageSize || '10';
-  }
-  if (!normalized.configPageSize || String(normalized.configPageSize).trim() === '') {
-    normalized.configPageSize = normalized.backupsPageSize || normalized.kernelPageSize || '10';
-  }
-  if (!normalized.recommendPageSize || String(normalized.recommendPageSize).trim() === '') {
-    normalized.recommendPageSize = normalized.backupsPageSize || normalized.kernelPageSize || '10';
-  }
+  normalized.backupsPageSize = unifiedPageSize;
+  normalized.switchPageSize = unifiedPageSize;
+  normalized.configPageSize = unifiedPageSize;
+  normalized.recommendPageSize = unifiedPageSize;
   if (Object.prototype.hasOwnProperty.call(normalized, 'configFile')) {
     delete normalized.configFile;
   }
   return normalized;
 }
 
+function getGeneralPageSizeValue() {
+  const raw = String(
+    (state.settings && state.settings.generalPageSize)
+    || (state.fileSettings && state.fileSettings.generalPageSize)
+    || '10',
+  ).trim();
+  return raw || '10';
+}
+
 function mapSettingsForFile(settings) {
   const mapped = { ...(settings || {}) };
+  const existingAppearance = mapped.appearance && typeof mapped.appearance === 'object'
+    ? mapped.appearance
+    : {};
+  mapped.appearance = {
+    ...existingAppearance,
+    lang: String(mapped.lang || existingAppearance.lang || 'auto'),
+    themePreference: String(mapped.themePreference || existingAppearance.themePreference || 'auto'),
+    debugMode: Object.prototype.hasOwnProperty.call(mapped, 'debugMode')
+      ? Boolean(mapped.debugMode)
+      : Boolean(existingAppearance.debugMode),
+    acceptBeta: Object.prototype.hasOwnProperty.call(mapped, 'acceptBeta')
+      ? Boolean(mapped.acceptBeta)
+      : Boolean(existingAppearance.acceptBeta),
+    githubUser: String(mapped.githubUser || existingAppearance.githubUser || 'vernesong'),
+    windowWidth: Number.parseInt(String(mapped.windowWidth ?? existingAppearance.windowWidth ?? MAIN_WINDOW_DEFAULT_WIDTH), 10) || MAIN_WINDOW_DEFAULT_WIDTH,
+    windowHeight: Number.parseInt(String(mapped.windowHeight ?? existingAppearance.windowHeight ?? MAIN_WINDOW_DEFAULT_HEIGHT), 10) || MAIN_WINDOW_DEFAULT_HEIGHT,
+    mainWindowClosed: Object.prototype.hasOwnProperty.call(mapped, 'mainWindowClosed')
+      ? Boolean(mapped.mainWindowClosed)
+      : Boolean(existingAppearance.mainWindowClosed),
+    generalPageSize: String(
+      mapped.generalPageSize
+      || existingAppearance.generalPageSize
+      || mapped.backupsPageSize
+      || mapped.kernelPageSize
+      || '10'
+    ).trim() || '10',
+    logLines: Number.parseInt(String(mapped.logLines ?? existingAppearance.logLines ?? 10), 10) || 10,
+    logAutoRefresh: Object.prototype.hasOwnProperty.call(mapped, 'logAutoRefresh')
+      ? Boolean(mapped.logAutoRefresh)
+      : Boolean(existingAppearance.logAutoRefresh),
+    logIntervalPreset: String(mapped.logIntervalPreset || existingAppearance.logIntervalPreset || '3'),
+  };
+  const existingPanelManager = mapped.panelManager && typeof mapped.panelManager === 'object'
+    ? mapped.panelManager
+    : {};
+  const normalizeAuthList = (value) => {
+    const source = Array.isArray(value)
+      ? value
+      : (typeof value === 'string' ? [value] : []);
+    return source.map((item) => String(item || '').trim()).filter(Boolean);
+  };
+  mapped.panelManager = {
+    ...existingPanelManager,
+    panelChoice: String(mapped.panelChoice || existingPanelManager.panelChoice || 'zashboard'),
+    externalUi: String(mapped.externalUi || existingPanelManager.externalUi || 'ui'),
+    externalController: String(mapped.externalController || existingPanelManager.externalController || '127.0.0.1:9090'),
+    secret: String(mapped.secret || existingPanelManager.secret || 'clashfox'),
+    authentication: (() => {
+      const auth = normalizeAuthList(
+        Array.isArray(mapped.authentication) && mapped.authentication.length
+          ? mapped.authentication
+          : existingPanelManager.authentication,
+      );
+      return auth.length ? auth : ['mihomo:clashfox'];
+    })(),
+  };
+  const existingPaths = mapped.userDataPaths && typeof mapped.userDataPaths === 'object'
+    ? mapped.userDataPaths
+    : {};
+  mapped.userDataPaths = {
+    ...existingPaths,
+    ...(mapped.configFile ? { configFile: String(mapped.configFile) } : {}),
+    ...(mapped.configDir ? { configDir: String(mapped.configDir) } : {}),
+    ...(mapped.coreDir ? { coreDir: String(mapped.coreDir) } : {}),
+    ...(mapped.dataDir ? { dataDir: String(mapped.dataDir) } : {}),
+    ...(mapped.logDir ? { logDir: String(mapped.logDir) } : {}),
+    ...(mapped.pidDir ? { pidDir: String(mapped.pidDir) } : {}),
+  };
   if (typeof mapped.configPath === 'string') {
-    mapped.configFile = mapped.configPath;
+    mapped.userDataPaths.configFile = mapped.configPath;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'switchPageSize')) {
+    delete mapped.switchPageSize;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'kernelPageSize')) {
+    delete mapped.kernelPageSize;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'backupsPageSize')) {
+    delete mapped.backupsPageSize;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'configPageSize')) {
+    delete mapped.configPageSize;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'recommendPageSize')) {
+    delete mapped.recommendPageSize;
+  }
+  // Kernel identity is maintained by main process command results.
+  if (Object.prototype.hasOwnProperty.call(mapped, 'kernelVersion')) {
+    delete mapped.kernelVersion;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'kernelVersionMeta')) {
+    delete mapped.kernelVersionMeta;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'kernel')) {
+    delete mapped.kernel;
   }
   if (Object.prototype.hasOwnProperty.call(mapped, 'configPath')) {
     delete mapped.configPath;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'configFile')) {
+    delete mapped.configFile;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'configDir')) {
+    delete mapped.configDir;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'coreDir')) {
+    delete mapped.coreDir;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'dataDir')) {
+    delete mapped.dataDir;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'logDir')) {
+    delete mapped.logDir;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'pidDir')) {
+    delete mapped.pidDir;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'panelChoice')) {
+    delete mapped.panelChoice;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'externalUi')) {
+    delete mapped.externalUi;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'externalController')) {
+    delete mapped.externalController;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'secret')) {
+    delete mapped.secret;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'authentication')) {
+    delete mapped.authentication;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'lang')) {
+    delete mapped.lang;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'themePreference')) {
+    delete mapped.themePreference;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'debugMode')) {
+    delete mapped.debugMode;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'acceptBeta')) {
+    delete mapped.acceptBeta;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'githubUser')) {
+    delete mapped.githubUser;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'windowWidth')) {
+    delete mapped.windowWidth;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'windowHeight')) {
+    delete mapped.windowHeight;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'mainWindowClosed')) {
+    delete mapped.mainWindowClosed;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'generalPageSize')) {
+    delete mapped.generalPageSize;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'logLines')) {
+    delete mapped.logLines;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'logAutoRefresh')) {
+    delete mapped.logAutoRefresh;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'logIntervalPreset')) {
+    delete mapped.logIntervalPreset;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'overviewTopOrder')) {
+    delete mapped.overviewTopOrder;
   }
   return mapped;
 }
@@ -663,8 +973,62 @@ async function syncSettingsFromFile() {
 }
 
 function saveSettings(patch) {
-  state.settings = { ...state.settings, ...patch };
-  state.fileSettings = { ...state.fileSettings, ...patch };
+  const nextPatch = { ...(patch || {}) };
+  const nextAppearance = {
+    ...((state.settings && state.settings.appearance) || {}),
+    ...((state.fileSettings && state.fileSettings.appearance) || {}),
+    ...((nextPatch.appearance && typeof nextPatch.appearance === 'object') ? nextPatch.appearance : {}),
+  };
+  const appearanceKeys = [
+    'lang',
+    'themePreference',
+    'debugMode',
+    'acceptBeta',
+    'githubUser',
+    'windowWidth',
+    'windowHeight',
+    'mainWindowClosed',
+    'generalPageSize',
+    'logLines',
+    'logAutoRefresh',
+    'logIntervalPreset',
+  ];
+  appearanceKeys.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(nextPatch, key)) {
+      nextAppearance[key] = nextPatch[key];
+    }
+  });
+  if (Object.keys(nextAppearance).length) {
+    nextPatch.appearance = nextAppearance;
+  }
+
+  const nextPanelManager = {
+    ...((state.settings && state.settings.panelManager) || {}),
+    ...((state.fileSettings && state.fileSettings.panelManager) || {}),
+    ...((nextPatch.panelManager && typeof nextPatch.panelManager === 'object') ? nextPatch.panelManager : {}),
+  };
+  if (Object.prototype.hasOwnProperty.call(nextPatch, 'panelChoice')) {
+    nextPanelManager.panelChoice = nextPatch.panelChoice;
+  }
+  if (Object.prototype.hasOwnProperty.call(nextPatch, 'externalUi')) {
+    nextPanelManager.externalUi = nextPatch.externalUi;
+  }
+  if (Object.prototype.hasOwnProperty.call(nextPatch, 'externalController')) {
+    nextPanelManager.externalController = nextPatch.externalController;
+  }
+  if (Object.prototype.hasOwnProperty.call(nextPatch, 'secret')) {
+    nextPanelManager.secret = nextPatch.secret;
+  }
+  if (Object.prototype.hasOwnProperty.call(nextPatch, 'authentication')) {
+    nextPanelManager.authentication = Array.isArray(nextPatch.authentication)
+      ? nextPatch.authentication
+      : [];
+  }
+  if (Object.keys(nextPanelManager).length) {
+    nextPatch.panelManager = nextPanelManager;
+  }
+  state.settings = { ...state.settings, ...nextPatch };
+  state.fileSettings = { ...state.fileSettings, ...nextPatch };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
   if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
     const { externalUiUrl, externalUiName, ...restSettings } = state.settings;
@@ -705,15 +1069,6 @@ function applyOverviewOrder(grid) {
   let order = Array.isArray(state.settings && state.settings[orderKey])
     ? state.settings[orderKey]
     : [];
-  if (orderKey === 'overviewOrder') {
-    const topOrder = Array.isArray(state.settings && state.settings.overviewTopOrder)
-      ? state.settings.overviewTopOrder
-      : [];
-    if (topOrder.length && !order.some((item) => topOrder.includes(item))) {
-      const merged = [...topOrder, ...order];
-      order = merged.filter((item, index) => merged.indexOf(item) === index);
-    }
-  }
   if (order.length === 0) {
     return;
   }
@@ -1064,12 +1419,12 @@ function applySettings(settings) {
   }
   updateExternalUiUrlField();
   updateDashboardFrameSrc();
-  const unifiedPageSize = state.settings.backupsPageSize || state.settings.kernelPageSize || '10';
-  state.kernelPageSizeLocal = state.settings.kernelPageSize || unifiedPageSize;
-  state.switchPageSizeLocal = state.settings.switchPageSize || unifiedPageSize;
-  state.backupsPageSizeLocal = state.settings.backupsPageSize || unifiedPageSize;
-  state.configPageSizeLocal = state.settings.configPageSize || unifiedPageSize;
-  state.recommendPageSizeLocal = state.settings.recommendPageSize || unifiedPageSize;
+  const unifiedPageSize = state.settings.generalPageSize || state.settings.backupsPageSize || state.settings.kernelPageSize || '10';
+  state.kernelPageSizeLocal = unifiedPageSize;
+  state.switchPageSizeLocal = unifiedPageSize;
+  state.backupsPageSizeLocal = unifiedPageSize;
+  state.configPageSizeLocal = unifiedPageSize;
+  state.recommendPageSizeLocal = unifiedPageSize;
   if (kernelPageSize) {
     kernelPageSize.value = state.kernelPageSizeLocal;
   }
@@ -1086,7 +1441,7 @@ function applySettings(settings) {
     configPageSize.value = state.configPageSizeLocal;
   }
   if (settingsBackupsPageSize) {
-    settingsBackupsPageSize.value = state.settings.backupsPageSize;
+    settingsBackupsPageSize.value = state.settings.generalPageSize || unifiedPageSize;
   }
   applyPersistedMihomoStatus();
   renderRecommendTable();
@@ -1446,6 +1801,17 @@ function showToast(message, type = 'info') {
   showNoticePop(message, type);
 }
 
+function hideNoticePop() {
+  if (!noticePop) {
+    return;
+  }
+  noticePop.classList.remove('show');
+  if (noticePopTimer) {
+    clearTimeout(noticePopTimer);
+    noticePopTimer = null;
+  }
+}
+
 function showNoticePop(message, type = 'info') {
   if (!message || !noticePop || !noticePopBody) {
     return;
@@ -1457,8 +1823,7 @@ function showNoticePop(message, type = 'info') {
     clearTimeout(noticePopTimer);
   }
   noticePopTimer = setTimeout(() => {
-    noticePop.classList.remove('show');
-    noticePopTimer = null;
+    hideNoticePop();
   }, 3200);
 }
 
@@ -1582,6 +1947,49 @@ function normalizeKernelSource(source = '') {
   return '';
 }
 
+function formatKernelVersionForDisplay(version = '', source = '', prerelease = false) {
+  const raw = String(version || '').trim();
+  if (!raw) {
+    return '';
+  }
+  const normalizedSource = String(source || '').toLowerCase();
+  const normalized = raw.replace(/^v/i, '');
+  const isStableSemver = /^\d+\.\d+\.\d+$/.test(normalized);
+  if (normalizedSource === 'metacubex' && !prerelease && isStableSemver) {
+    return `v${normalized}`;
+  }
+  return raw;
+}
+
+function readKernelVersionFromSettings() {
+  const candidate = [
+    state.settings && state.settings.kernel && (state.settings.kernel.raw || state.settings.kernel.version),
+    state.fileSettings && state.fileSettings.kernel && (state.fileSettings.kernel.raw || state.fileSettings.kernel.version),
+  ].find((item) => typeof item === 'string' && item.trim());
+  return String(candidate || '').trim();
+}
+
+function syncKernelVersionInState(version = '') {
+  const normalized = String(version || '').trim();
+  if (!normalized) {
+    return;
+  }
+  if (!state.settings) {
+    state.settings = { ...DEFAULT_SETTINGS };
+  }
+  if (!state.fileSettings) {
+    state.fileSettings = {};
+  }
+  if (!state.settings.kernel || typeof state.settings.kernel !== 'object') {
+    state.settings.kernel = {};
+  }
+  if (!state.fileSettings.kernel || typeof state.fileSettings.kernel !== 'object') {
+    state.fileSettings.kernel = {};
+  }
+  state.settings.kernel.raw = normalized;
+  state.fileSettings.kernel.raw = normalized;
+}
+
 function syncGithubSourceFromKernelVersion() {
   if (!githubUser) {
     return;
@@ -1619,7 +2027,8 @@ function applyKernelUpdateInstallHint() {
     return;
   }
   if (info && info.ok && info.status === 'update_available' && info.latestVersion) {
-    installStatus.textContent = ti('install.kernelUpdateAvailable', `Kernel update available: v${info.latestVersion}`);
+    const latestDisplay = formatKernelVersionForDisplay(info.latestVersion, info.source, Boolean(info.prerelease));
+    installStatus.textContent = ti('install.kernelUpdateAvailable', `Kernel update available: ${latestDisplay}`);
     installStatus.dataset.state = 'warn';
     return;
   }
@@ -1629,7 +2038,8 @@ function applyKernelUpdateInstallHint() {
     && info.latestVersion
     && String(info.source || '').toLowerCase() === 'vernesong'
   ) {
-    installStatus.textContent = ti('install.kernelLatestVersion', `Latest version: v${info.latestVersion}`);
+    const latestDisplay = formatKernelVersionForDisplay(info.latestVersion, info.source, Boolean(info.prerelease));
+    installStatus.textContent = ti('install.kernelLatestVersion', `Latest version: ${latestDisplay}`);
     installStatus.dataset.state = 'ready';
     return;
   }
@@ -1678,10 +2088,11 @@ async function refreshKernelUpdateNotice(force = false) {
       && result.ok
       && result.latestVersion
       && String(source || '').toLowerCase() === 'metacubex'
+      && !result.prerelease
       && installVersion
     ) {
       const latest = String(result.latestVersion || '').trim();
-      installVersion.value = latest ? (latest.startsWith('v') ? latest : `v${latest}`) : '';
+      installVersion.value = latest;
     }
     if (
       result
@@ -1691,8 +2102,9 @@ async function refreshKernelUpdateNotice(force = false) {
       && state.kernelUpdateNotifiedVersion !== result.latestVersion
     ) {
       state.kernelUpdateNotifiedVersion = result.latestVersion;
+      const latestDisplay = formatKernelVersionForDisplay(result.latestVersion, source, Boolean(result.prerelease));
       showNoticePop(
-        ti('install.kernelUpdateAvailable', `Kernel update available: v${result.latestVersion}`),
+        ti('install.kernelUpdateAvailable', `Kernel update available: ${latestDisplay}`),
         'info',
       );
     }
@@ -1810,7 +2222,7 @@ async function loadAppInfo() {
 function updateStatusUI(data) {
   const running = data.running;
   applyKernelRunningState(running, 'status');
-  state.coreVersionRaw = data.version || '';
+  state.coreVersionRaw = readKernelVersionFromSettings();
   syncGithubSourceFromKernelVersion();
   state.configDefault = data.configDefault || '';
   const configValue = getCurrentConfigPath() || data.configDefault || '-';
@@ -1823,10 +2235,10 @@ function updateStatusUI(data) {
     overviewStatus.textContent = running ? t('labels.running') : t('labels.stopped');
   }
   if (statusVersion) {
-    statusVersion.textContent = data.version || t('labels.notInstalled');
+    statusVersion.textContent = state.coreVersionRaw || t('labels.notInstalled');
   }
   if (installCurrentKernel) {
-    const kernelText = formatKernelDisplay(data.version || '');
+    const kernelText = formatKernelDisplay(state.coreVersionRaw || '');
     installCurrentKernel.textContent = kernelText && kernelText !== '-' ? kernelText : t('labels.notInstalled');
   }
   syncQuickActionButtons();
@@ -2390,7 +2802,8 @@ function updateOverviewUI(data) {
   state.overviewRunningUpdatedAt = Date.now();
   // Keep overview runtime data independent; running indicator is driven by status probe.
   if (overviewKernel) {
-    const kernelDisplay = formatKernelDisplay(data.kernelVersion);
+    const persistedVersion = readKernelVersionFromSettings();
+    const kernelDisplay = formatKernelDisplay(persistedVersion);
     overviewKernel.textContent = kernelDisplay;
     if (overviewKernelCopy) {
       overviewKernelCopy.disabled = !kernelDisplay || kernelDisplay === '-';
@@ -2755,6 +3168,54 @@ function paginate(items, page, pageSize) {
   };
 }
 
+function estimateTableRowHeight(table, fallback = 42) {
+  const rows = Array.from(table.querySelectorAll('tbody tr:not(.placeholder)'));
+  for (const row of rows) {
+    if (row.querySelector('.empty-cell')) {
+      continue;
+    }
+    const measured = row.getBoundingClientRect().height;
+    if (Number.isFinite(measured) && measured > 0) {
+      return measured;
+    }
+  }
+  const cell = table.querySelector('tbody td, thead th');
+  if (!cell) {
+    return fallback;
+  }
+  const computed = window.getComputedStyle(cell);
+  const lineHeight = Number.parseFloat(computed.lineHeight) || 16;
+  const paddingTop = Number.parseFloat(computed.paddingTop) || 0;
+  const paddingBottom = Number.parseFloat(computed.paddingBottom) || 0;
+  const borderTop = Number.parseFloat(computed.borderTopWidth) || 0;
+  const borderBottom = Number.parseFloat(computed.borderBottomWidth) || 0;
+  const estimated = lineHeight + paddingTop + paddingBottom + borderTop + borderBottom;
+  return Number.isFinite(estimated) && estimated > 0 ? estimated : fallback;
+}
+
+function applyPagedTableMinHeight(hostEl, pageSize, totalItems = 0) {
+  if (!hostEl) {
+    return;
+  }
+  const table = hostEl.querySelector('table.app-table');
+  if (!table) {
+    hostEl.style.removeProperty('min-height');
+    return;
+  }
+  const safePageSize = Math.max(1, Number.parseInt(String(pageSize || ''), 10) || 1);
+  const safeTotalItems = Math.max(0, Number.parseInt(String(totalItems || ''), 10) || 0);
+  if (safeTotalItems <= safePageSize) {
+    hostEl.style.removeProperty('min-height');
+    return;
+  }
+  const theadRow = table.querySelector('thead tr');
+  const headerHeight = theadRow ? theadRow.getBoundingClientRect().height : 0;
+  const rowHeight = estimateTableRowHeight(table, Number.parseFloat(hostEl.dataset.tableRowHeight) || 42);
+  hostEl.dataset.tableRowHeight = String(rowHeight);
+  const minHeight = Math.ceil(headerHeight + (rowHeight * safePageSize));
+  hostEl.style.minHeight = `${minHeight}px`;
+}
+
 function renderBackups(targetEl, withRadio, pageInfo, pageSize, multiSelect) {
   const items = state.lastBackups;
   const pageData = paginate(items, pageInfo, pageSize);
@@ -2762,7 +3223,7 @@ function renderBackups(targetEl, withRadio, pageInfo, pageSize, multiSelect) {
     const totalCount = state.lastBackups.length;
     const allChecked = totalCount > 0 && state.selectedBackupPaths.size === totalCount;
     const checkedAttr = allChecked ? 'checked' : '';
-    let html = '<table class="backup-table" aria-label="Backups">';
+    let html = '<table class="app-table" aria-label="Backups">';
     html += '<thead><tr>';
     html += `<th class="check-col"><input type="checkbox" id="backupsHeaderSelect" ${checkedAttr} /></th>`;
     html += `<th class="version-col">${t('table.version')}</th>`;
@@ -2783,18 +3244,10 @@ function renderBackups(targetEl, withRadio, pageInfo, pageSize, multiSelect) {
 
     if (items.length === 0) {
       html += `<tr><td class="empty-cell" colspan="3">${t('labels.noBackups')}</td></tr>`;
-    } else if (pageData.items.length < pageSize) {
-      const fillCount = pageSize - pageData.items.length;
-      for (let i = 0; i < fillCount; i += 1) {
-        html += '<tr class="placeholder" aria-hidden="true">';
-        html += '<td class="check-col">&nbsp;</td>';
-        html += '<td class="version-col">&nbsp;</td>';
-        html += '<td class="time-col">&nbsp;</td>';
-        html += '</tr>';
-      }
     }
     html += '</tbody></table>';
     targetEl.innerHTML = html;
+    applyPagedTableMinHeight(targetEl, pageSize, items.length);
     return pageData;
   }
 
@@ -2817,16 +3270,10 @@ function renderBackups(targetEl, withRadio, pageInfo, pageSize, multiSelect) {
 
   if (items.length === 0) {
     html += `<div class="table-row empty"><div class="empty-cell">${t('labels.noBackups')}</div></div>`;
-  } else if (pageData.items.length < pageSize) {
-    const fillCount = pageSize - pageData.items.length;
-    for (let i = 0; i < fillCount; i += 1) {
-      html += '<div class="table-row backup placeholder" aria-hidden="true">';
-      html += withRadio ? '<div class="pick-cell">&nbsp;</div>' : '<div class="index-cell">&nbsp;</div>';
-      html += '<div class="version-cell">&nbsp;</div><div class="time-cell">&nbsp;</div></div>';
-    }
   }
 
   targetEl.innerHTML = html;
+  targetEl.style.removeProperty('min-height');
   return pageData;
 }
 
@@ -2907,14 +3354,17 @@ function renderConfigTable() {
     return;
   }
   const items = state.configs || [];
-  const size = Number.parseInt(state.configPageSizeLocal || configPageSize.value || '10', 10) || 10;
+  const size = Number.parseInt(
+    state.configPageSizeLocal || configPageSize.value || getGeneralPageSizeValue(),
+    10,
+  ) || 10;
   const pageData = paginate(items, state.configPage, size);
   state.configPage = pageData.page;
   configPageInfo.textContent = `${pageData.page} / ${pageData.totalPages} · ${items.length}`;
   configPrev.disabled = pageData.page <= 1;
   configNext.disabled = pageData.page >= pageData.totalPages;
   const currentPath = getCurrentConfigPath();
-  let html = '<table class="backup-table config-table" aria-label="Configs">';
+  let html = '<table class="app-table config-table" aria-label="Configs">';
   html += '<thead><tr>';
   html += '<th class="check-col"></th>';
   html += `<th class="name-col">${t('table.name')}</th>`;
@@ -2933,7 +3383,7 @@ function renderConfigTable() {
     html += `<td class="modified-col">${item.modified || '-'}</td>`;
     html += '<td class="action-col">';
     if (!isCurrent) {
-      html += `<button class="icon-btn ghost small table-icon-btn list-action-icon-btn config-delete-btn" type="button" data-action="delete-config" data-path="${item.path || ''}" data-name="${item.name || ''}" data-tip-key="actions.delete" data-tip="${ti('actions.delete', 'Delete')}" data-position="top" data-native-title="false" aria-label="${ti('actions.delete', 'Delete')}"><svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 6h2v9h-2V9Zm4 0h2v9h-2V9ZM7 9h2v9H7V9Z"></path></svg></button>`;
+      html += `<button class="icon-btn ghost small table-icon-btn list-action-icon-btn config-delete-btn danger-action-btn" type="button" data-action="delete-config" data-path="${item.path || ''}" data-name="${item.name || ''}" data-tip-key="actions.delete" data-tip="${ti('actions.delete', 'Delete')}" data-position="top" data-native-title="false" aria-label="${ti('actions.delete', 'Delete')}"><svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 6h2v9h-2V9Zm4 0h2v9h-2V9ZM7 9h2v9H7V9Z"></path></svg></button>`;
     } else {
       html += '-';
     }
@@ -2943,19 +3393,10 @@ function renderConfigTable() {
   });
   if (items.length === 0) {
     html += `<tr><td class="empty-cell" colspan="4">${t('labels.configsEmpty')}</td></tr>`;
-  } else if (pageData.items.length < size) {
-    const fillCount = size - pageData.items.length;
-    for (let i = 0; i < fillCount; i += 1) {
-      html += '<tr class="placeholder" aria-hidden="true">';
-      html += '<td class="check-col">&nbsp;</td>';
-      html += '<td class="name-col">&nbsp;</td>';
-      html += '<td class="modified-col">&nbsp;</td>';
-      html += '<td class="action-col">&nbsp;</td>';
-      html += '</tr>';
-    }
   }
   html += '</tbody></table>';
   configTable.innerHTML = html;
+  applyPagedTableMinHeight(configTable, size, items.length);
 }
 
 function renderKernelTable() {
@@ -2991,8 +3432,7 @@ function renderKernelTable() {
 
   const pageSizeRaw = state.kernelPageSizeLocal
     || (kernelPageSize && kernelPageSize.value)
-    || state.settings.kernelPageSize
-    || '10';
+    || getGeneralPageSizeValue();
   const size = Number.parseInt(pageSizeRaw, 10) || 10;
   const pageData = paginate(backupItems, state.kernelsPage, size);
   state.kernelsPage = pageData.page;
@@ -3023,12 +3463,13 @@ function renderKernelTable() {
     kernelCurrentTable.innerHTML = currentHtml;
   }
 
-  let html = '<div class="table-row header kernel">';
-  // show index column for backups
-  html += `<div class="index-head">${t('table.index')}</div>`;
-  html += `<div class="version-head">${t('table.version')}</div>`;
-  html += `<div class="time-head">${t('table.time')}</div>`;
-  html += `<div class="action-head">${ti('table.action', 'Action')}</div></div>`;
+  let html = '<table class="app-table kernel-table" aria-label="Kernel List">';
+  html += '<thead><tr>';
+  html += `<th class="index-col">${t('table.index')}</th>`;
+  html += `<th class="version-col">${t('table.version')}</th>`;
+  html += `<th class="time-col">${t('table.time')}</th>`;
+  html += `<th class="action-col">${ti('table.action', 'Action')}</th>`;
+  html += '</tr></thead><tbody>';
 
   const pageOffset = ((pageData.page || 1) - 1) * size;
   pageData.items.forEach((item, idx) => {
@@ -3065,32 +3506,23 @@ function renderKernelTable() {
     const backupPathAttr = backupPath ? ` data-delete-path="${backupPath}"` : '';
     const backupNameAttr = backupName ? ` data-delete-name="${backupName}"` : '';
     const deleteDisabledAttr = backupPath ? '' : ' disabled';
-    // add selectable class for hover styling
-    html += '<div class="table-row kernel selectable">';
-    html += `<div class="index-cell">${pageOffset + idx + 1}</div>`;
-    html += `<div class="version-cell"><span class="kernel-name">${displayName || '-'}</span>${tags.length ? ` <span class="tag-group">${tags.join('')}</span>` : ''}</div>`;
-    html += `<div class="time-cell">${timestamp}</div>`;
-    html += '<div class="action-cell"><div class="kernel-action-group">';
+    html += '<tr class="selectable">';
+    html += `<td class="index-col">${pageOffset + idx + 1}</td>`;
+    html += `<td class="version-col"><span class="kernel-name">${displayName || '-'}</span>${tags.length ? ` <span class="tag-group">${tags.join('')}</span>` : ''}</td>`;
+    html += `<td class="time-col">${timestamp}</td>`;
+    html += '<td class="action-col"><div class="kernel-action-group">';
     html += `<button class="icon-btn ghost small table-icon-btn list-action-icon-btn kernel-switch-action" data-switch-index="${pageOffset + idx + 1}" data-tip-key="confirm.switchConfirm" data-tip="${ti('confirm.switchConfirm', 'Switch')}" data-position="top" data-native-title="false" aria-label="${ti('confirm.switchConfirm', 'Switch')}"><svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M4 7h8V4l6 5-6 5v-3H4V7Zm16 10h-8v3l-6-5 6-5v3h8v4Z"></path></svg></button>`;
-    html += `<button class="icon-btn ghost small table-icon-btn list-action-icon-btn kernel-delete-action"${backupPathAttr}${backupNameAttr}${deleteDisabledAttr} data-tip-key="actions.delete" data-tip="${ti('actions.delete', 'Delete')}" data-position="top" data-native-title="false" aria-label="${ti('actions.delete', 'Delete')}"><svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 6h2v9h-2V9Zm4 0h2v9h-2V9ZM7 9h2v9H7V9Z"></path></svg></button>`;
-    html += '</div></div></div>';
+    html += `<button class="icon-btn ghost small table-icon-btn list-action-icon-btn kernel-delete-action danger-action-btn"${backupPathAttr}${backupNameAttr}${deleteDisabledAttr} data-tip-key="actions.delete" data-tip="${ti('actions.delete', 'Delete')}" data-position="top" data-native-title="false" aria-label="${ti('actions.delete', 'Delete')}"><svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 6h2v9h-2V9Zm4 0h2v9h-2V9ZM7 9h2v9H7V9Z"></path></svg></button>`;
+    html += '</div></td></tr>';
   });
 
   if (backupItems.length === 0) {
-    html += `<div class="table-row kernel empty"><div class="empty-cell">${t('labels.noBackups')}</div></div>`;
-  } else if (pageData.items.length < size) {
-    const fillCount = size - pageData.items.length;
-    for (let i = 0; i < fillCount; i += 1) {
-      html += '<div class="table-row kernel placeholder" aria-hidden="true">';
-      html += '<div class="index-cell">&nbsp;</div>';
-      html += '<div class="version-cell">&nbsp;</div>';
-      html += '<div class="time-cell">&nbsp;</div>';
-      html += '<div class="action-cell">&nbsp;</div>';
-      html += '</div>';
-    }
+    html += `<tr><td class="empty-cell" colspan="4">${t('labels.noBackups')}</td></tr>`;
   }
 
+  html += '</tbody></table>';
   kernelTable.innerHTML = html;
+  applyPagedTableMinHeight(kernelTable, size, backupItems.length);
 }
 
 async function switchKernelByIndex(index) {
@@ -3195,7 +3627,7 @@ function renderSwitchTable() {
   }
   const pageSizeRaw = state.switchPageSizeLocal
     || (switchPageSize && switchPageSize.value)
-    || state.settings.switchPageSize
+    || state.settings.generalPageSize
     || '10';
   const size = Number.parseInt(pageSizeRaw, 10) || 10;
   const pageData = renderBackups(backupTable, true, state.switchPage, size, false);
@@ -3211,7 +3643,7 @@ function renderBackupsTable() {
   }
   const pageSizeRaw = state.backupsPageSizeLocal
     || (backupsPageSize && backupsPageSize.value)
-    || state.settings.backupsPageSize
+    || state.settings.generalPageSize
     || '10';
   const size = Number.parseInt(pageSizeRaw, 10) || 10;
   const pageData = renderBackups(backupTableFull, false, state.backupsPage, size, true);
@@ -3225,7 +3657,10 @@ function renderRecommendTable() {
   if (!recommendTableBody || !recommendPageSize || !recommendPageInfo || !recommendPrev || !recommendNext) {
     return;
   }
-  const size = Number.parseInt(state.recommendPageSizeLocal || recommendPageSize.value || '10', 10) || 10;
+  const size = Number.parseInt(
+    state.recommendPageSizeLocal || recommendPageSize.value || getGeneralPageSizeValue(),
+    10,
+  ) || 10;
   const pageData = paginate(RECOMMENDED_CONFIGS, state.recommendPage, size);
   state.recommendPage = pageData.page;
   recommendPageInfo.textContent = `${pageData.page} / ${pageData.totalPages} · ${RECOMMENDED_CONFIGS.length}`;
@@ -3248,19 +3683,10 @@ function renderRecommendTable() {
   });
   if (pageData.items.length === 0) {
     html = `<tr><td class="empty-cell" colspan="5">${t('labels.configsEmpty')}</td></tr>`;
-  } else if (pageData.items.length < size) {
-    const fillCount = size - pageData.items.length;
-    for (let i = 0; i < fillCount; i += 1) {
-      html += '<tr class="placeholder" aria-hidden="true">';
-      html += '<td class="index-col">&nbsp;</td>';
-      html += '<td class="name-col">&nbsp;</td>';
-      html += '<td class="github-col">&nbsp;</td>';
-      html += '<td class="dir-col">&nbsp;</td>';
-      html += '<td class="rating-col">&nbsp;</td>';
-      html += '</tr>';
-    }
   }
   recommendTableBody.innerHTML = html;
+  const recommendTableWrap = recommendTableBody.closest('.table');
+  applyPagedTableMinHeight(recommendTableWrap, size, RECOMMENDED_CONFIGS.length);
 }
 
 async function loadLogs() {
@@ -3338,6 +3764,7 @@ function refreshPageRefs() {
   panels = Array.from(document.querySelectorAll('.panel'));
   noticePop = document.getElementById('noticePop');
   noticePopBody = document.getElementById('noticePopBody');
+  noticePopClose = document.getElementById('noticePopClose');
   contentRoot = document.getElementById('contentRoot');
 
   statusRunning = document.getElementById('statusRunning');
@@ -3585,7 +4012,6 @@ function refreshPageView() {
   }
   if (currentPage === 'kernel') {
     loadBackups();
-    refreshKernelUpdateNotice(true);
   }
   if (currentPage === 'overview') {
     Promise.all([
@@ -3811,6 +4237,10 @@ async function loadLayoutParts() {
 }
 
 function bindPageEvents() {
+if (noticePopClose && noticePopClose.dataset.bound !== 'true') {
+  noticePopClose.dataset.bound = 'true';
+  noticePopClose.addEventListener('click', hideNoticePop);
+}
 const externalLinks = Array.from(document.querySelectorAll('[data-open-external="true"]'));
 externalLinks.forEach((link) => {
   if (link.dataset.bound === 'true') {
@@ -4540,7 +4970,6 @@ if (kernelPageSize) {
     state.kernelPageSizeLocal = kernelPageSize.value;
     state.kernelsPage = 1;
     renderKernelTable();
-    saveSettings({ kernelPageSize: kernelPageSize.value });
   });
 }
 if (switchPageSize) {
@@ -4548,7 +4977,6 @@ if (switchPageSize) {
     state.switchPageSizeLocal = switchPageSize.value;
     state.switchPage = 1;
     renderSwitchTable();
-    saveSettings({ switchPageSize: switchPageSize.value });
   });
 }
 
@@ -4935,7 +5363,6 @@ if (configPageSize) {
   configPageSize.addEventListener('change', () => {
     state.configPage = 1;
     state.configPageSizeLocal = configPageSize.value;
-    saveSettings({ configPageSize: configPageSize.value });
     renderConfigTable();
   });
 }
@@ -5026,9 +5453,27 @@ if (settingsBackupsPageSize) {
       backupsPageSize.value = settingsBackupsPageSize.value;
     }
     state.backupsPageSizeLocal = settingsBackupsPageSize.value;
+    state.switchPageSizeLocal = settingsBackupsPageSize.value;
+    state.configPageSizeLocal = settingsBackupsPageSize.value;
+    state.recommendPageSizeLocal = settingsBackupsPageSize.value;
     state.backupsPage = 1;
+    state.switchPage = 1;
+    state.configPage = 1;
+    state.recommendPage = 1;
+    if (switchPageSize) {
+      switchPageSize.value = settingsBackupsPageSize.value;
+    }
+    if (configPageSize) {
+      configPageSize.value = settingsBackupsPageSize.value;
+    }
+    if (recommendPageSize) {
+      recommendPageSize.value = settingsBackupsPageSize.value;
+    }
     renderBackupsTable();
-    saveSettings({ backupsPageSize: settingsBackupsPageSize.value });
+    renderSwitchTable();
+    renderConfigTable();
+    renderRecommendTable();
+    saveSettings({ generalPageSize: settingsBackupsPageSize.value });
   });
 }
 if (backupsPrev) {
@@ -5046,9 +5491,30 @@ if (backupsNext) {
 if (backupsPageSize) {
   backupsPageSize.addEventListener('change', () => {
     state.backupsPageSizeLocal = backupsPageSize.value;
+    state.switchPageSizeLocal = backupsPageSize.value;
+    state.configPageSizeLocal = backupsPageSize.value;
+    state.recommendPageSizeLocal = backupsPageSize.value;
     state.backupsPage = 1;
+    state.switchPage = 1;
+    state.configPage = 1;
+    state.recommendPage = 1;
+    if (settingsBackupsPageSize) {
+      settingsBackupsPageSize.value = backupsPageSize.value;
+    }
+    if (switchPageSize) {
+      switchPageSize.value = backupsPageSize.value;
+    }
+    if (configPageSize) {
+      configPageSize.value = backupsPageSize.value;
+    }
+    if (recommendPageSize) {
+      recommendPageSize.value = backupsPageSize.value;
+    }
     renderBackupsTable();
-    saveSettings({ backupsPageSize: backupsPageSize.value });
+    renderSwitchTable();
+    renderConfigTable();
+    renderRecommendTable();
+    saveSettings({ generalPageSize: backupsPageSize.value });
   });
 }
 
@@ -5068,7 +5534,6 @@ if (recommendPageSize) {
   recommendPageSize.addEventListener('change', () => {
     state.recommendPage = 1;
     state.recommendPageSizeLocal = recommendPageSize.value;
-    saveSettings({ recommendPageSize: recommendPageSize.value });
     renderRecommendTable();
   });
 }

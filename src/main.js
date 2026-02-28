@@ -5,7 +5,7 @@ const net = require('net');
 const http = require('http');
 const https = require('https');
 const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme, shell, Tray, session, clipboard, screen } = require('electron');
-const { spawn, execFileSync, execFile } = require('child_process');
+const { spawn, spawnSync, execFile } = require('child_process');
 
 const isDev = !app.isPackaged;
 const ROOT_DIR = isDev ? path.join(__dirname, '..') : process.resourcesPath;
@@ -167,7 +167,9 @@ function resolveTrayLang() {
     if (fs.existsSync(settingsPath)) {
       const raw = fs.readFileSync(settingsPath, 'utf8');
       const parsed = JSON.parse(raw);
-      const lang = parsed && parsed.lang ? String(parsed.lang) : '';
+      const lang = parsed && typeof parsed === 'object'
+        ? (normalizeTextValue(parsed.lang) || normalizeTextValue(parsed.appearance && parsed.appearance.lang))
+        : '';
       if (lang && lang !== 'auto') {
         return I18N[lang] ? lang : 'en';
       }
@@ -388,10 +390,377 @@ function readAppSettings() {
     }
     const raw = fs.readFileSync(settingsPath, 'utf8');
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    if (!parsed || typeof parsed !== 'object') {
+      return {};
+    }
+    return mergeAppearanceAliases(mergePanelManagerAliases(mergeUserDataPathAliases(normalizeSettingsForStorage(parsed))));
   } catch {
     return {};
   }
+}
+
+function normalizeTextValue(value) {
+  return String(value || '').trim();
+}
+
+function resolveDefaultDeviceOsName() {
+  if (process.platform === 'darwin') {
+    return 'macOS';
+  }
+  if (process.platform === 'win32') {
+    return 'Windows';
+  }
+  if (process.platform === 'linux') {
+    return 'Linux';
+  }
+  return normalizeTextValue(os.type()) || process.platform;
+}
+
+function resolveCurrentDeviceUser() {
+  try {
+    const info = os.userInfo();
+    return normalizeTextValue(info && (info.username || info.user));
+  } catch {
+    return '';
+  }
+}
+
+function resolveDefaultDeviceVersion() {
+  const release = normalizeTextValue(os.release());
+  if (process.platform === 'darwin') {
+    return release ? `Darwin ${release}` : '';
+  }
+  return release;
+}
+
+function mapOrderedFields(source = {}, orderedKeys = []) {
+  const mapped = {};
+  orderedKeys.forEach((key) => {
+    if (!Object.prototype.hasOwnProperty.call(source, key)) {
+      return;
+    }
+    const value = source[key];
+    if (value === undefined) {
+      return;
+    }
+    if (typeof value === 'string') {
+      const text = normalizeTextValue(value);
+      if (!text) {
+        return;
+      }
+      mapped[key] = text;
+      return;
+    }
+    if (value !== null) {
+      mapped[key] = value;
+    }
+  });
+  Object.keys(source).forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(mapped, key)) {
+      return;
+    }
+    const value = source[key];
+    if (value === undefined) {
+      return;
+    }
+    mapped[key] = value;
+  });
+  return mapped;
+}
+
+function buildDefaultDirectorySettings() {
+  const configDir = path.join(APP_DATA_DIR, 'config');
+  return {
+    configDir,
+    coreDir: path.join(APP_DATA_DIR, 'core'),
+    dataDir: path.join(APP_DATA_DIR, 'data'),
+    logDir: path.join(APP_DATA_DIR, 'logs'),
+    pidDir: path.join(APP_DATA_DIR, 'runtime'),
+    configFile: path.join(configDir, 'default.yaml'),
+  };
+}
+
+function mergeUserDataPathAliases(settings = {}) {
+  const source = settings && typeof settings === 'object' ? settings : {};
+  const paths = source.userDataPaths && typeof source.userDataPaths === 'object'
+    ? source.userDataPaths
+    : {};
+  return {
+    ...source,
+    configFile: normalizeTextValue(paths.configFile) || normalizeTextValue(source.configFile),
+    configDir: normalizeTextValue(paths.configDir) || normalizeTextValue(source.configDir),
+    coreDir: normalizeTextValue(paths.coreDir) || normalizeTextValue(source.coreDir),
+    dataDir: normalizeTextValue(paths.dataDir) || normalizeTextValue(source.dataDir),
+    logDir: normalizeTextValue(paths.logDir) || normalizeTextValue(source.logDir),
+    pidDir: normalizeTextValue(paths.pidDir) || normalizeTextValue(source.pidDir),
+  };
+}
+
+function normalizeAuthenticationValue(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => normalizeTextValue(item))
+      .filter(Boolean);
+  }
+  const single = normalizeTextValue(value);
+  return single ? [single] : [];
+}
+
+function mergePanelManagerAliases(settings = {}) {
+  const source = settings && typeof settings === 'object' ? settings : {};
+  const panel = source.panelManager && typeof source.panelManager === 'object'
+    ? source.panelManager
+    : {};
+  return {
+    ...source,
+    externalController: normalizeTextValue(panel.externalController) || normalizeTextValue(source.externalController),
+    secret: normalizeTextValue(panel.secret) || normalizeTextValue(source.secret),
+    panelChoice: normalizeTextValue(panel.panelChoice) || normalizeTextValue(source.panelChoice),
+    externalUi: normalizeTextValue(panel.externalUi) || normalizeTextValue(source.externalUi),
+    authentication: normalizeAuthenticationValue(
+      Array.isArray(panel.authentication) && panel.authentication.length
+        ? panel.authentication
+        : source.authentication,
+    ),
+  };
+}
+
+function mergeAppearanceAliases(settings = {}) {
+  const source = settings && typeof settings === 'object' ? settings : {};
+  const appearance = source.appearance && typeof source.appearance === 'object'
+    ? source.appearance
+    : {};
+  const readString = (key, fallback = '') => normalizeTextValue(appearance[key]) || normalizeTextValue(source[key]) || fallback;
+  const readBoolean = (key, fallback = false) => {
+    if (Object.prototype.hasOwnProperty.call(appearance, key)) {
+      return Boolean(appearance[key]);
+    }
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      return Boolean(source[key]);
+    }
+    return fallback;
+  };
+  const readNumber = (key, fallback = 0) => {
+    const sourceValue = Object.prototype.hasOwnProperty.call(source, key) ? source[key] : undefined;
+    const appearanceValue = Object.prototype.hasOwnProperty.call(appearance, key) ? appearance[key] : undefined;
+    const candidate = appearanceValue !== undefined ? appearanceValue : sourceValue;
+    const parsed = Number.parseInt(String(candidate ?? ''), 10);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  return {
+    ...source,
+    lang: readString('lang', 'auto'),
+    themePreference: readString('themePreference', 'auto'),
+    debugMode: readBoolean('debugMode', false),
+    acceptBeta: readBoolean('acceptBeta', false),
+    githubUser: readString('githubUser', 'vernesong'),
+    windowWidth: readNumber('windowWidth', DEFAULT_MAIN_WINDOW_WIDTH),
+    windowHeight: readNumber('windowHeight', DEFAULT_MAIN_WINDOW_HEIGHT),
+    mainWindowClosed: readBoolean('mainWindowClosed', false),
+    generalPageSize: readString('generalPageSize', '10'),
+    logLines: readNumber('logLines', 10),
+    logAutoRefresh: readBoolean('logAutoRefresh', false),
+    logIntervalPreset: readString('logIntervalPreset', '3'),
+  };
+}
+
+function normalizeKernelSettings(value = {}) {
+  const kernel = value && typeof value === 'object' ? value : {};
+  const ordered = mapOrderedFields(kernel, [
+    'raw',
+    'core',
+    'type',
+    'version',
+    'platform',
+    'arch',
+    'language',
+    'languageVersion',
+    'buildTime',
+    'source',
+    'updatedAt',
+  ]);
+  if (!Object.keys(ordered).length) {
+    return {};
+  }
+  return ordered;
+}
+
+function normalizeDeviceSettings(value = {}, overviewValue = {}) {
+  const device = value && typeof value === 'object' ? value : {};
+  const overview = overviewValue && typeof overviewValue === 'object' ? overviewValue : {};
+  const overviewOs = normalizeTextValue(overview.systemName);
+  const overviewVersion = normalizeTextValue(overview.systemVersion);
+  const overviewBuild = normalizeTextValue(overview.systemBuild);
+  const overviewVersionWithBuild = overviewVersion && overviewBuild
+    ? `${overviewVersion} ${overviewBuild}`
+    : (overviewVersion || overviewBuild);
+  const normalized = {
+    ...device,
+    user: normalizeTextValue(device.user) || resolveCurrentDeviceUser(),
+    os: normalizeTextValue(device.os) || overviewOs || resolveDefaultDeviceOsName(),
+    version: normalizeTextValue(device.version) || overviewVersionWithBuild || resolveDefaultDeviceVersion(),
+  };
+  if (
+    overviewVersionWithBuild
+    && /^Darwin\s+\d+/i.test(normalized.version || '')
+  ) {
+    normalized.version = overviewVersionWithBuild;
+  }
+  const ordered = mapOrderedFields(normalized, [
+    'user',
+    'os',
+    'version',
+    'build',
+    'source',
+    'updatedAt',
+  ]);
+  if (!Object.keys(ordered).length) {
+    return {};
+  }
+  return ordered;
+}
+
+function normalizeSettingsForStorage(input = {}) {
+  const parsed = mergeAppearanceAliases(mergePanelManagerAliases(mergeUserDataPathAliases(input)));
+  const defaultDirs = buildDefaultDirectorySettings();
+
+  const configPathFromLegacy = typeof parsed.configPath === 'string' ? normalizeTextValue(parsed.configPath) : '';
+  const configuredConfigDir = normalizeTextValue(parsed.configDir) || defaultDirs.configDir;
+  const configuredCoreDir = normalizeTextValue(parsed.coreDir) || defaultDirs.coreDir;
+  const configuredDataDir = normalizeTextValue(parsed.dataDir) || defaultDirs.dataDir;
+  const configuredLogDir = normalizeTextValue(parsed.logDir) || defaultDirs.logDir;
+  const configuredPidDir = normalizeTextValue(parsed.pidDir) || defaultDirs.pidDir;
+  const configuredConfigFile = normalizeTextValue(parsed.configFile) || configPathFromLegacy;
+  parsed.userDataPaths = {
+    configFile: configuredConfigFile || path.join(configuredConfigDir, 'default.yaml'),
+    configDir: configuredConfigDir,
+    coreDir: configuredCoreDir,
+    dataDir: configuredDataDir,
+    logDir: configuredLogDir,
+    pidDir: configuredPidDir,
+  };
+  delete parsed.configFile;
+  delete parsed.configDir;
+  delete parsed.coreDir;
+  delete parsed.dataDir;
+  delete parsed.logDir;
+  delete parsed.pidDir;
+  delete parsed.configPath;
+
+  const panelManager = parsed.panelManager && typeof parsed.panelManager === 'object'
+    ? parsed.panelManager
+    : {};
+  const authList = normalizeAuthenticationValue(
+    Array.isArray(parsed.authentication) && parsed.authentication.length
+      ? parsed.authentication
+      : panelManager.authentication,
+  );
+  parsed.panelManager = {
+    externalController: normalizeTextValue(parsed.externalController)
+      || normalizeTextValue(panelManager.externalController)
+      || '127.0.0.1:9090',
+    secret: normalizeTextValue(parsed.secret)
+      || normalizeTextValue(panelManager.secret)
+      || 'clashfox',
+    panelChoice: normalizeTextValue(parsed.panelChoice)
+      || normalizeTextValue(panelManager.panelChoice)
+      || 'zashboard',
+    externalUi: normalizeTextValue(parsed.externalUi)
+      || normalizeTextValue(panelManager.externalUi)
+      || 'ui',
+    authentication: authList.length ? authList : ['mihomo:clashfox'],
+  };
+  delete parsed.externalController;
+  delete parsed.secret;
+  delete parsed.panelChoice;
+  delete parsed.externalUi;
+  delete parsed.authentication;
+
+  const generalPageSize = String(parsed.generalPageSize || parsed.backupsPageSize || parsed.kernelPageSize || '10').trim() || '10';
+  delete parsed.backupsPageSize;
+  delete parsed.kernelPageSize;
+  delete parsed.switchPageSize;
+  delete parsed.configPageSize;
+  delete parsed.recommendPageSize;
+
+  parsed.appearance = {
+    lang: normalizeTextValue(parsed.lang) || 'auto',
+    themePreference: normalizeTextValue(parsed.themePreference) || 'auto',
+    debugMode: Boolean(parsed.debugMode),
+    acceptBeta: Boolean(parsed.acceptBeta),
+    githubUser: normalizeTextValue(parsed.githubUser) || 'vernesong',
+    windowWidth: Number.parseInt(String(parsed.windowWidth ?? ''), 10) || DEFAULT_MAIN_WINDOW_WIDTH,
+    windowHeight: Number.parseInt(String(parsed.windowHeight ?? ''), 10) || DEFAULT_MAIN_WINDOW_HEIGHT,
+    mainWindowClosed: Boolean(parsed.mainWindowClosed),
+    generalPageSize,
+    logLines: Number.parseInt(String(parsed.logLines ?? ''), 10) || 10,
+    logAutoRefresh: Boolean(parsed.logAutoRefresh),
+    logIntervalPreset: normalizeTextValue(parsed.logIntervalPreset) || '3',
+  };
+  delete parsed.lang;
+  delete parsed.themePreference;
+  delete parsed.debugMode;
+  delete parsed.acceptBeta;
+  delete parsed.githubUser;
+  delete parsed.windowWidth;
+  delete parsed.windowHeight;
+  delete parsed.mainWindowClosed;
+  delete parsed.generalPageSize;
+  delete parsed.logLines;
+  delete parsed.logAutoRefresh;
+  delete parsed.logIntervalPreset;
+  delete parsed.overviewTopOrder;
+
+  const legacyKernelVersion = normalizeKernelVersionValue(parsed.kernelVersion);
+  const kernelCandidate = normalizeKernelVersionValue(
+    (parsed.kernel && typeof parsed.kernel === 'object' && (parsed.kernel.raw || parsed.kernel.version))
+    || legacyKernelVersion,
+  );
+  if (kernelCandidate) {
+    const parsedKernel = parseKernelVersionDetails(kernelCandidate) || {};
+    const mergedKernel = {
+      ...(parsed.kernel && typeof parsed.kernel === 'object' ? parsed.kernel : {}),
+      ...parsedKernel,
+    };
+    if (!normalizeTextValue(mergedKernel.raw)) {
+      mergedKernel.raw = kernelCandidate;
+    }
+    parsed.kernel = normalizeKernelSettings(mergedKernel);
+  } else {
+    parsed.kernel = normalizeKernelSettings(parsed.kernel);
+  }
+  delete parsed.kernelVersion;
+  delete parsed.kernelVersionMeta;
+
+  parsed.device = normalizeDeviceSettings(parsed.device, {});
+  delete parsed.overview;
+
+  const ordered = {};
+  const priority = [
+    'proxyMode',
+    'systemProxyEnabled',
+    'tunEnabled',
+    'tunStack',
+    'appearance',
+    'userDataPaths',
+    'panelManager',
+    'kernel',
+    'device',
+    'helperStatus',
+    'mihomoStatus',
+  ];
+  priority.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(parsed, key)) {
+      ordered[key] = parsed[key];
+    }
+  });
+  Object.keys(parsed).forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(ordered, key)) {
+      return;
+    }
+    ordered[key] = parsed[key];
+  });
+  return ordered;
 }
 
 function resolveCheckUpdateUrlFromSettings() {
@@ -585,12 +954,29 @@ function pickLatestKernelRelease(releases = [], acceptBeta = false) {
   if (!Array.isArray(releases)) {
     return null;
   }
+  const betaLikePattern = /(alpha|beta|rc|pre(?:release)?|preview|nightly|canary|dev|smart)/i;
+  const isBetaLikeRelease = (release) => {
+    if (!release || release.draft) {
+      return false;
+    }
+    if (release.prerelease) {
+      return true;
+    }
+    const tagOrName = String(release.tag_name || release.name || '').trim();
+    return betaLikePattern.test(tagOrName);
+  };
   let fallback = null;
   for (const release of releases) {
     if (!release || release.draft) {
       continue;
     }
     if (!acceptBeta && release.prerelease) {
+      continue;
+    }
+    if (acceptBeta && !isBetaLikeRelease(release)) {
+      if (!fallback) {
+        fallback = release;
+      }
       continue;
     }
     if (!fallback) {
@@ -614,22 +1000,33 @@ function extractKernelSemver(raw = '') {
   return match ? normalizeVersionTag(match[0]) : '';
 }
 
+function isStableKernelVersion(raw = '') {
+  const normalizedRaw = String(raw || '').toLowerCase();
+  const prereleaseMarkerPattern = /(^|[^a-z0-9])(alpha-smart|alpha|beta|rc|pre(?:release)?|preview|nightly|canary|dev|smart)([^a-z0-9]|$)/i;
+  if (prereleaseMarkerPattern.test(normalizedRaw)) {
+    return false;
+  }
+  const semver = extractKernelSemver(raw);
+  if (!semver) {
+    return false;
+  }
+  const parsed = parseVersion(semver);
+  return Boolean(parsed && (!Array.isArray(parsed.prerelease) || parsed.prerelease.length === 0));
+}
+
 async function checkKernelUpdates({ source = 'vernesong', currentVersion = '', acceptBeta } = {}) {
   const sourceKey = Object.prototype.hasOwnProperty.call(KERNEL_RELEASE_API, source) ? source : 'vernesong';
   const currentRaw = String(currentVersion || '').trim();
   const current = extractKernelSemver(currentRaw);
-  // Kernel update channel follows the currently running kernel:
-  // prerelease core -> prerelease channel, stable core -> stable channel.
+  // Kernel update channel policy:
+  // - vernesong always checks prerelease channel.
+  // - MetaCubeX checks stable channel only when current kernel is a clear stable semver.
+  //   All other/unknown tags (e.g. alpha-smart-xxxx) use prerelease channel.
   // Explicit acceptBeta (if provided) takes precedence.
-  const parsedCurrent = parseVersion(current);
-  const inferredAllowBeta = Boolean(
-    parsedCurrent
-    && Array.isArray(parsedCurrent.prerelease)
-    && parsedCurrent.prerelease.length > 0,
-  );
+  const currentIsStable = isStableKernelVersion(currentRaw);
   const allowBeta = typeof acceptBeta === 'boolean'
     ? acceptBeta
-    : (sourceKey === 'vernesong' ? true : inferredAllowBeta);
+    : (sourceKey === 'vernesong' ? true : !currentIsStable);
   try {
     if (allowBeta && KERNEL_BETA_VERSION_TXT_URL[sourceKey]) {
       try {
@@ -765,7 +1162,8 @@ async function checkForUpdates({ manual = false } = {}) {
 function writeAppSettings(settings = {}) {
   ensureAppDirs();
   const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
-  fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
+  const normalized = normalizeSettingsForStorage(settings);
+  fs.writeFileSync(settingsPath, `${JSON.stringify(normalized, null, 2)}\n`);
 }
 
 function sanitizeMainWindowDimension(value, fallback, min, max) {
@@ -1089,10 +1487,9 @@ function readMainWindowClosedFromSettings() {
 function persistMainWindowClosedToSettings(closed) {
   try {
     ensureAppDirs();
-    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
     const parsed = readAppSettings();
     parsed.mainWindowClosed = Boolean(closed);
-    fs.writeFileSync(settingsPath, `${JSON.stringify(parsed, null, 2)}\n`);
+    writeAppSettings(parsed);
     return true;
   } catch {
     return false;
@@ -1102,7 +1499,6 @@ function persistMainWindowClosedToSettings(closed) {
 function persistMainWindowSizeToSettings(width, height) {
   try {
     ensureAppDirs();
-    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
     const parsed = readAppSettings();
     const nextWidth = sanitizeMainWindowDimension(
       width,
@@ -1121,7 +1517,7 @@ function persistMainWindowSizeToSettings(width, height) {
     }
     parsed.windowWidth = nextWidth;
     parsed.windowHeight = nextHeight;
-    fs.writeFileSync(settingsPath, `${JSON.stringify(parsed, null, 2)}\n`);
+    writeAppSettings(parsed);
     return true;
   } catch {
     return false;
@@ -1143,10 +1539,9 @@ function persistOutboundModeToSettings(mode) {
   }
   try {
     ensureAppDirs();
-    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
     const parsed = readAppSettings();
     parsed.proxyMode = mode;
-    fs.writeFileSync(settingsPath, `${JSON.stringify(parsed, null, 2)}\n`);
+    writeAppSettings(parsed);
     return true;
   } catch {
     return false;
@@ -1156,10 +1551,9 @@ function persistOutboundModeToSettings(mode) {
 function persistTunEnabledToSettings(enabled) {
   try {
     ensureAppDirs();
-    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
     const parsed = readAppSettings();
     parsed.tunEnabled = Boolean(enabled);
-    fs.writeFileSync(settingsPath, `${JSON.stringify(parsed, null, 2)}\n`);
+    writeAppSettings(parsed);
     return true;
   } catch {
     return false;
@@ -1169,10 +1563,9 @@ function persistTunEnabledToSettings(enabled) {
 function persistSystemProxyEnabledToSettings(enabled) {
   try {
     ensureAppDirs();
-    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
     const parsed = readAppSettings() || {};
     parsed.systemProxyEnabled = Boolean(enabled);
-    fs.writeFileSync(settingsPath, `${JSON.stringify(parsed, null, 2)}\n`);
+    writeAppSettings(parsed);
     return true;
   } catch {
     return false;
@@ -1182,10 +1575,9 @@ function persistSystemProxyEnabledToSettings(enabled) {
 function persistSystemProxyEnabledToAppSettings(enabled) {
   try {
     ensureAppDirs();
-    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
     const parsed = readAppSettings() || {};
     parsed.systemProxyEnabled = Boolean(enabled);
-    fs.writeFileSync(settingsPath, `${JSON.stringify(parsed, null, 2)}\n`);
+    writeAppSettings(parsed);
     return parsed;
   } catch {
     return null;
@@ -1213,7 +1605,6 @@ function persistMihomoStatusToSettings(runningValue, source = 'unknown') {
   }
   try {
     ensureAppDirs();
-    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
     const parsed = readAppSettings() || {};
     const previous = parsed && parsed.mihomoStatus && typeof parsed.mihomoStatus === 'object'
       ? parsed.mihomoStatus
@@ -1229,7 +1620,172 @@ function persistMihomoStatusToSettings(runningValue, source = 'unknown') {
       source: String(source || 'unknown'),
       updatedAt: new Date().toISOString(),
     };
-    fs.writeFileSync(settingsPath, `${JSON.stringify(parsed, null, 2)}\n`);
+    writeAppSettings(parsed);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function normalizeKernelVersionValue(value) {
+  const text = String(value || '').trim();
+  return text || '';
+}
+
+function parseKernelVersionDetails(rawVersion = '') {
+  const raw = normalizeKernelVersionValue(rawVersion);
+  if (!raw) {
+    return null;
+  }
+  const tokens = raw.split(/\s+/).filter(Boolean);
+  const core = tokens[0] ? String(tokens[0]).toLowerCase() : '';
+  const versionMatch = raw.match(/(?:^|\s)((?:alpha-smart|alpha|beta|rc)-[0-9a-z]+|v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)/i);
+  const platformMatch = raw.match(/\b(darwin|linux|windows|freebsd|android)\b/i);
+  const archMatch = raw.match(/\b(amd64|arm64|386|armv7|armv6|s390x|ppc64le|riscv64)\b/i);
+  const goMatch = raw.match(/\b(go\d+\.\d+(?:\.\d+)?)\b/i);
+  const typeCandidate = tokens[1] || '';
+  const typeBlocked = /^(with|go\d+\.\d+|darwin|linux|windows|freebsd|android|amd64|arm64|386|armv7|armv6|s390x|ppc64le|riscv64)$/i;
+  const type = typeCandidate && !typeBlocked.test(typeCandidate)
+    ? typeCandidate
+    : '';
+  let buildTime = '';
+  if (goMatch) {
+    const goToken = String(goMatch[1] || '').trim();
+    const idx = raw.toLowerCase().indexOf(goToken.toLowerCase());
+    if (idx >= 0) {
+      buildTime = raw.slice(idx + goToken.length).trim();
+    }
+  }
+  return {
+    raw,
+    core,
+    type,
+    version: versionMatch ? String(versionMatch[1] || '').trim() : '',
+    platform: platformMatch ? String(platformMatch[1] || '').toLowerCase() : '',
+    arch: archMatch ? String(archMatch[1] || '').toLowerCase() : '',
+    language: goMatch ? 'go' : '',
+    languageVersion: goMatch ? String(goMatch[1] || '').trim() : '',
+    buildTime,
+  };
+}
+
+function persistKernelVersionToSettings(versionValue, source = 'unknown') {
+  const kernelVersion = normalizeKernelVersionValue(versionValue);
+  if (!kernelVersion) {
+    return false;
+  }
+  try {
+    ensureAppDirs();
+    const parsed = readAppSettings() || {};
+    const existingKernel = parsed.kernel && typeof parsed.kernel === 'object' ? parsed.kernel : null;
+    const existingKernelRaw = existingKernel
+      ? normalizeKernelVersionValue(existingKernel.raw || existingKernel.version)
+      : '';
+    const hasStructuredKernel = Boolean(
+      existingKernel
+      && existingKernelRaw
+      && existingKernel.core
+      && existingKernel.arch
+      && existingKernel.languageVersion,
+    );
+    if (existingKernelRaw === kernelVersion && hasStructuredKernel) {
+      return false;
+    }
+    const parsedKernel = parseKernelVersionDetails(kernelVersion);
+    parsed.kernel = {
+      ...(parsedKernel || {}),
+      source: String(source || 'unknown'),
+      updatedAt: new Date().toISOString(),
+    };
+    if (Object.prototype.hasOwnProperty.call(parsed, 'kernelVersion')) {
+      delete parsed.kernelVersion;
+    }
+    if (Object.prototype.hasOwnProperty.call(parsed, 'kernelVersionMeta')) {
+      delete parsed.kernelVersionMeta;
+    }
+    writeAppSettings(parsed);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function persistKernelVersionFromStatus(source = 'status-refresh') {
+  try {
+    const statusResult = await runBridge(['status']);
+    if (!statusResult || !statusResult.ok || !statusResult.data) {
+      return false;
+    }
+    const version = normalizeKernelVersionValue(statusResult.data.version);
+    if (!version) {
+      return false;
+    }
+    return persistKernelVersionToSettings(version, source);
+  } catch {
+    return false;
+  }
+}
+
+function buildDeviceVersionFromOverview(systemVersion = '', systemBuild = '') {
+  const version = normalizeTextValue(systemVersion);
+  const build = normalizeTextValue(systemBuild);
+  if (version && build) {
+    return `${version} ${build}`;
+  }
+  return version || build;
+}
+
+function persistOverviewSystemToSettings(overviewData = {}, source = 'overview') {
+  const payload = overviewData && typeof overviewData === 'object' ? overviewData : {};
+  const systemName = normalizeTextValue(payload.systemName);
+  const systemVersion = normalizeTextValue(payload.systemVersion);
+  const systemBuild = normalizeTextValue(payload.systemBuild);
+  if (!systemName && !systemVersion && !systemBuild) {
+    return false;
+  }
+  try {
+    const parsed = readAppSettings() || {};
+    const previousDevice = parsed.device && typeof parsed.device === 'object' ? parsed.device : {};
+
+    const nextDeviceCore = {
+      user: normalizeTextValue(previousDevice.user) || resolveCurrentDeviceUser(),
+      os: systemName || normalizeTextValue(previousDevice.os) || resolveDefaultDeviceOsName(),
+      version: buildDeviceVersionFromOverview(systemVersion, systemBuild)
+        || normalizeTextValue(previousDevice.version)
+        || resolveDefaultDeviceVersion(),
+      build: systemBuild || normalizeTextValue(previousDevice.build),
+      source: String(source || 'overview'),
+    };
+    const previousDeviceSignature = [
+      normalizeTextValue(previousDevice.user),
+      normalizeTextValue(previousDevice.os),
+      normalizeTextValue(previousDevice.version),
+      normalizeTextValue(previousDevice.build),
+      normalizeTextValue(previousDevice.source),
+    ].join('|');
+    const nextDeviceSignature = [
+      nextDeviceCore.user,
+      nextDeviceCore.os,
+      nextDeviceCore.version,
+      nextDeviceCore.build,
+      nextDeviceCore.source,
+    ].join('|');
+    const deviceChanged = previousDeviceSignature !== nextDeviceSignature;
+
+    if (!deviceChanged) {
+      return false;
+    }
+
+    if (deviceChanged) {
+      parsed.device = {
+        ...nextDeviceCore,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    if (Object.prototype.hasOwnProperty.call(parsed, 'overview')) {
+      delete parsed.overview;
+    }
+    writeAppSettings(parsed);
     return true;
   } catch {
     return false;
@@ -1756,11 +2312,27 @@ async function runBridgeWithAutoAuth(command, args = [], options = {}) {
         ? result.data.running
         : null;
       persistMihomoStatusToSettings(runningValue, 'status');
-    } else if (cmdLower === 'start' || cmdLower === 'stop' || cmdLower === 'restart') {
+      const versionValue = result.data && Object.prototype.hasOwnProperty.call(result.data, 'version')
+        ? result.data.version
+        : '';
+      persistKernelVersionToSettings(versionValue, 'status');
+    } else if (cmdLower === 'overview') {
+      persistOverviewSystemToSettings(result.data || {}, 'overview');
+    } else if (cmdLower === 'start' || cmdLower === 'stop' || cmdLower === 'restart' || cmdLower === 'switch') {
       const runningValue = result.data && Object.prototype.hasOwnProperty.call(result.data, 'running')
         ? result.data.running
         : normalizeMihomoRunningValue(null, cmdLower);
       persistMihomoStatusToSettings(runningValue, cmdLower);
+      if (cmdLower === 'start' || cmdLower === 'restart' || cmdLower === 'switch') {
+        const versionValue = result.data && Object.prototype.hasOwnProperty.call(result.data, 'version')
+          ? result.data.version
+          : '';
+        if (normalizeKernelVersionValue(versionValue)) {
+          persistKernelVersionToSettings(versionValue, cmdLower);
+        } else {
+          await persistKernelVersionFromStatus(cmdLower);
+        }
+      }
     }
   }
   return result;
@@ -1976,12 +2548,7 @@ function openMainPage(page) {
 
 function openDashboardPanel() {
   try {
-    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
-    let settings = {};
-    if (fs.existsSync(settingsPath)) {
-      const raw = fs.readFileSync(settingsPath, 'utf8');
-      settings = JSON.parse(raw);
-    }
+    const settings = readAppSettings();
     const panel = (settings && settings.panelChoice) ? String(settings.panelChoice) : 'zashboard';
     let controller = (settings && settings.externalController) ? String(settings.externalController).trim() : '127.0.0.1:9090';
     const secret = (settings && settings.secret) ? String(settings.secret).trim() : 'clashfox';
@@ -3163,7 +3730,7 @@ function createWindow(showOnCreate = false) {
       try {
         if (fs.existsSync(settingsPath)) {
           const raw = fs.readFileSync(settingsPath, 'utf8');
-          const parsed = JSON.parse(raw);
+          const parsed = mergePanelManagerAliases(JSON.parse(raw));
           if (parsed && typeof parsed.secret === 'string') {
             secret = parsed.secret.trim();
           }
@@ -3317,7 +3884,20 @@ function loadDockIconFromIcns(iconPath) {
   try {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clashfox-dock-'));
     const iconsetDir = path.join(tmpDir, 'icon.iconset');
-    execFileSync('iconutil', ['-c', 'iconset', iconPath, '-o', iconsetDir]);
+    const iconutilResult = spawnSync(
+      'iconutil',
+      ['-c', 'iconset', iconPath, '-o', iconsetDir],
+      { stdio: 'ignore' },
+    );
+    if (iconutilResult.error || iconutilResult.status !== 0) {
+      console.warn('[dock-icon] iconutil conversion failed', {
+        iconPath,
+        code: iconutilResult.error?.code ?? null,
+        status: iconutilResult.status,
+      });
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      return null;
+    }
     const pngPath = path.join(iconsetDir, 'icon_512x512@2x.png');
     if (fs.existsSync(pngPath)) {
       const iconFromPng = nativeImage.createFromPath(pngPath);
@@ -3690,6 +4270,15 @@ app.whenReady().then(() => {
       if (!fs.existsSync(settingsPath)) {
         const defaults = {
           configFile: defaultConfigPath,
+          generalPageSize: '10',
+          kernel: {},
+          device: {
+            user: resolveCurrentDeviceUser(),
+            os: resolveDefaultDeviceOsName(),
+            version: resolveDefaultDeviceVersion(),
+            source: 'init',
+            updatedAt: new Date().toISOString(),
+          },
           mihomoStatus: {
             running: false,
             source: 'init',
@@ -3698,11 +4287,17 @@ app.whenReady().then(() => {
         };
         const status = await getHelperStatus();
         defaults.helperStatus = normalizeHelperStatusPayload(status);
-        fs.writeFileSync(settingsPath, `${JSON.stringify(defaults, null, 2)}\n`);
-        return { ok: true, data: defaults };
+        writeAppSettings(defaults);
+        return {
+          ok: true,
+          data: mergeAppearanceAliases(mergePanelManagerAliases(mergeUserDataPathAliases(normalizeSettingsForStorage(defaults)))),
+        };
       }
       const raw = fs.readFileSync(settingsPath, 'utf8');
       const parsed = JSON.parse(raw) || {};
+      const parsedPaths = parsed.userDataPaths && typeof parsed.userDataPaths === 'object'
+        ? parsed.userDataPaths
+        : {};
       let changed = false;
       if (!parsed.configFile && typeof parsed.configPath === 'string') {
         parsed.configFile = parsed.configPath;
@@ -3712,8 +4307,67 @@ app.whenReady().then(() => {
         delete parsed.configPath;
         changed = true;
       }
-      if (!parsed.configFile) {
+      if (!parsed.configFile && !(parsedPaths && parsedPaths.configFile)) {
         parsed.configFile = defaultConfigPath;
+        changed = true;
+      }
+      const appearanceGeneralPageSize = parsed.appearance && typeof parsed.appearance === 'object'
+        ? String(parsed.appearance.generalPageSize || '').trim()
+        : '';
+      const legacyGeneralPageSize = String(
+        parsed.generalPageSize
+        || appearanceGeneralPageSize
+        || parsed.backupsPageSize
+        || parsed.kernelPageSize
+        || '10',
+      ).trim() || '10';
+      if ((!parsed.generalPageSize && !appearanceGeneralPageSize) || (parsed.generalPageSize && parsed.generalPageSize !== legacyGeneralPageSize)) {
+        parsed.generalPageSize = legacyGeneralPageSize;
+        changed = true;
+      }
+      if (Object.prototype.hasOwnProperty.call(parsed, 'backupsPageSize')) {
+        delete parsed.backupsPageSize;
+        changed = true;
+      }
+      if (Object.prototype.hasOwnProperty.call(parsed, 'kernelPageSize')) {
+        delete parsed.kernelPageSize;
+        changed = true;
+      }
+      if (Object.prototype.hasOwnProperty.call(parsed, 'switchPageSize')) {
+        delete parsed.switchPageSize;
+        changed = true;
+      }
+      if (Object.prototype.hasOwnProperty.call(parsed, 'configPageSize')) {
+        delete parsed.configPageSize;
+        changed = true;
+      }
+      if (Object.prototype.hasOwnProperty.call(parsed, 'recommendPageSize')) {
+        delete parsed.recommendPageSize;
+        changed = true;
+      }
+      if (!parsed.kernel || typeof parsed.kernel !== 'object') {
+        parsed.kernel = {};
+        changed = true;
+      }
+      const existingKernel = parsed.kernel && typeof parsed.kernel === 'object' ? parsed.kernel : {};
+      const legacyKernelVersion = normalizeKernelVersionValue(parsed.kernelVersion);
+      const kernelRawCandidate = normalizeKernelVersionValue(existingKernel.raw || existingKernel.version || legacyKernelVersion);
+      const missingCoreFields = !existingKernel.core || !existingKernel.arch || !existingKernel.languageVersion;
+      if (kernelRawCandidate && (!normalizeKernelVersionValue(existingKernel.raw) || missingCoreFields)) {
+        const parsedKernel = parseKernelVersionDetails(kernelRawCandidate) || {};
+        parsed.kernel = {
+          ...parsedKernel,
+          source: existingKernel.source || 'migrate',
+          updatedAt: existingKernel.updatedAt || new Date().toISOString(),
+        };
+        changed = true;
+      }
+      if (Object.prototype.hasOwnProperty.call(parsed, 'kernelVersion')) {
+        delete parsed.kernelVersion;
+        changed = true;
+      }
+      if (Object.prototype.hasOwnProperty.call(parsed, 'kernelVersionMeta')) {
+        delete parsed.kernelVersionMeta;
         changed = true;
       }
       if (!parsed.helperStatus || typeof parsed.helperStatus !== 'object') {
@@ -3729,10 +4383,17 @@ app.whenReady().then(() => {
         };
         changed = true;
       }
-      if (changed) {
-        fs.writeFileSync(settingsPath, `${JSON.stringify(parsed, null, 2)}\n`);
+      const normalized = normalizeSettingsForStorage(parsed);
+      if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
+        changed = true;
       }
-      return { ok: true, data: parsed };
+      if (changed) {
+        writeAppSettings(normalized);
+      }
+      return {
+        ok: true,
+        data: mergeAppearanceAliases(mergePanelManagerAliases(mergeUserDataPathAliases(normalized))),
+      };
     } catch (err) {
       return { ok: false, error: err.message };
     }
@@ -3741,7 +4402,6 @@ app.whenReady().then(() => {
   ipcMain.handle('clashfox:writeSettings', async (_event, data) => {
     try {
       ensureAppDirs();
-      const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
       const payload = data && typeof data === 'object' ? { ...data } : {};
       const existing = readAppSettings();
       const merged = { ...existing, ...payload };
@@ -3750,6 +4410,28 @@ app.whenReady().then(() => {
       }
       if (Object.prototype.hasOwnProperty.call(merged, 'configPath')) {
         delete merged.configPath;
+      }
+      const legacyGeneralPageSize = String(
+        merged.generalPageSize
+        || merged.backupsPageSize
+        || merged.kernelPageSize
+        || '10',
+      ).trim() || '10';
+      merged.generalPageSize = legacyGeneralPageSize;
+      if (Object.prototype.hasOwnProperty.call(merged, 'backupsPageSize')) {
+        delete merged.backupsPageSize;
+      }
+      if (Object.prototype.hasOwnProperty.call(merged, 'kernelPageSize')) {
+        delete merged.kernelPageSize;
+      }
+      if (Object.prototype.hasOwnProperty.call(merged, 'switchPageSize')) {
+        delete merged.switchPageSize;
+      }
+      if (Object.prototype.hasOwnProperty.call(merged, 'configPageSize')) {
+        delete merged.configPageSize;
+      }
+      if (Object.prototype.hasOwnProperty.call(merged, 'recommendPageSize')) {
+        delete merged.recommendPageSize;
       }
       merged.windowWidth = sanitizeMainWindowDimension(
         merged.windowWidth,
@@ -3763,10 +4445,11 @@ app.whenReady().then(() => {
         MIN_MAIN_WINDOW_HEIGHT,
         MAX_MAIN_WINDOW_HEIGHT,
       );
-      const json = JSON.stringify(merged, null, 2);
-      fs.writeFileSync(settingsPath, `${json}\n`);
+      const normalized = normalizeSettingsForStorage(merged);
+      writeAppSettings(normalized);
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.setSize(merged.windowWidth, merged.windowHeight);
+        const normalizedWithAliases = mergeAppearanceAliases(normalized);
+        mainWindow.setSize(normalizedWithAliases.windowWidth, normalizedWithAliases.windowHeight);
       }
       refreshTrayMenuLabelsOnly();
       createTrayMenu().catch(() => {});
