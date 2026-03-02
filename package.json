@@ -1,7 +1,7 @@
 {
   "name": "ClashFox",
   "version": "0.4.1",
-  "buildNumber": 4,
+  "buildNumber": 7,
   "description": "ClashFox GUI for Mihomo",
   "license": "GPL-3.0",
   "author": "Kuochiang Lu <lukuochiang@gmail.com> (https://github.com/lukuochiang/ClashFox)",
@@ -10,7 +10,6 @@
   "scripts": {
     "start": "electron .",
     "dev": "node scripts/bump-version.js && node -e 'const p=require(\"./package.json\"); console.log(`> ClashFox@${p.version} dev (buildNumber: ${p.buildNumber})`)' && CLASHFOX_DEV=1 electron .",
-    "build:helper": "bash helper/build-helper.sh && cp -f helper/.build/release/com.clashfox.helper helper/com.clashfox.helper && chmod +x helper/com.clashfox.helper && test -f helper/com.clashfox.helper && rm -rf helper/.build",
     "build:mac": "node scripts/build-mac.js",
     "build:mac:helper": "node scripts/build-mac.js --with-helper",
     "clean:mac": "node scripts/clean-dist-mac.js"
@@ -35,7 +34,7 @@
       "package.json",
       "!helper/.build/**",
       "!helper/cmd/**",
-      "!helper/go.mod",
+      "!helper/*.go",
       "!helper/.DS_Store",
       "!**/dist/**",
       "!**/node_modules/**",
@@ -54,9 +53,8 @@
         "to": "helper",
         "filter": [
           "*.sh",
-          "com.clashfox.helper.plist",
-          "allowed-commands.json",
-          "com.clashfox.helper"
+          "com.clashfox.helper",
+          "com.clashfox.helper.plist"
         ]
       },
       {

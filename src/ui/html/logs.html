@@ -31,7 +31,9 @@
           <section id="logs" class="panel active">
           <div class="panel-grid">
             <div class="card card-full">
-              <h3 data-i18n="logs.title">Kernel Logs</h3>
+              <div class="card-header-row">
+                <h3 data-i18n="logs.title">Kernel Logs</h3>
+              </div>
               <div class="form-row">
                 <div class="field-inline">
                   <label data-i18n="logs.lines">Lines</label>
@@ -59,7 +61,9 @@
               <pre class="log-view" id="logContent"></pre>
             </div>
             <div class="card card-full">
-              <h3 data-i18n="clean.title">Clean Logs</h3>
+              <div class="card-header-row">
+                <h3 data-i18n="clean.title">Clean Logs</h3>
+              </div>
               <div class="radio-group">
                 <label><input type="radio" name="cleanMode" value="all" checked /> <span data-i18n="clean.all">Delete all backups</span></label>
                 <label><input type="radio" name="cleanMode" value="7d" /> <span data-i18n="clean.7d">Keep last 7 days</span></label>

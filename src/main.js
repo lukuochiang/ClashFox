@@ -1,7 +1,6 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const net = require('net');
 const http = require('http');
 const https = require('https');
 const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme, shell, Tray, session, clipboard, screen } = require('electron');
@@ -88,8 +87,8 @@ const PRIVILEGED_COMMANDS = new Set([
   'system-proxy-status',
   'tun',
 ]);
-const HELPER_SOCKET_PATH = '/var/run/clashfox-helper.sock';
-const DEFAULT_HELPER_HTTP_PORT = 19999;
+const HELPER_V2_SOCKET_PATH = '/var/run/com.clashfox.helper.sock';
+const HELPER_V2_TOKEN_PATH = '/Library/Application Support/ClashFox/helper/token';
 const SYSTEM_AUTH_ERROR_PREFIX = '__CLASHFOX_SYSTEM_AUTH_ERROR__';
 const OUTBOUND_MODE_BADGE = {
   rule: 'R',
@@ -1218,24 +1217,6 @@ function resolveMainWindowSizeFromSettings() {
   return { width, height };
 }
 
-function readHelperConfigFromSettings() {
-  const settings = readAppSettings();
-  const helperHttpEnabled = settings && Object.prototype.hasOwnProperty.call(settings, 'helperHttpEnabled')
-    ? Boolean(settings.helperHttpEnabled)
-    : true;
-  const helperHttpPort = settings && Number.isFinite(Number(settings.helperHttpPort))
-    ? Number(settings.helperHttpPort)
-    : DEFAULT_HELPER_HTTP_PORT;
-  const helperHttpHost = settings && typeof settings.helperHttpHost === 'string'
-    ? settings.helperHttpHost
-    : '127.0.0.1';
-  return {
-    helperHttpEnabled,
-    helperHttpPort,
-    helperHttpHost,
-  };
-}
-
 function resolveHelperInstallScriptPath() {
   const baseDirs = [
     path.join(ROOT_DIR, 'helper'),
@@ -1381,18 +1362,29 @@ function getHelperPaths() {
   };
 }
 
+function isHelperLaunchdLoaded(label = 'com.clashfox.helper') {
+  return new Promise((resolve) => {
+    execFile('/bin/launchctl', ['print', `system/${label}`], { timeout: 4000 }, (error) => {
+      resolve(!error);
+    });
+  });
+}
+
 async function getHelperStatus() {
   const paths = getHelperPaths();
   const binaryExists = fs.existsSync(paths.binary);
   const plistExists = fs.existsSync(paths.plist);
   const installed = binaryExists && plistExists;
   const ping = await pingHelper();
+  const launchdLoaded = await isHelperLaunchdLoaded();
   const running = Boolean(ping && ping.ok);
-  let state = 'stopped';
+  let state = 'installed_unreachable';
   if (running) {
     state = 'running';
   } else if (!installed) {
     state = 'not_installed';
+  } else if (!launchdLoaded) {
+    state = 'stopped';
   }
   const logPath = paths.logs.find((p) => fs.existsSync(p)) || paths.logs[0];
   return {
@@ -1403,6 +1395,7 @@ async function getHelperStatus() {
       installed,
       binaryExists,
       plistExists,
+      launchdLoaded,
       logPath,
       ping: ping || { ok: false, error: 'helper_unreachable' },
     },
@@ -1418,6 +1411,7 @@ function normalizeHelperStatusPayload(result) {
     running: Boolean(data.running),
     binaryExists: Boolean(data.binaryExists),
     plistExists: Boolean(data.plistExists),
+    launchdLoaded: Boolean(data.launchdLoaded),
     logPath: String(data.logPath || '/var/log/clashfox-helper.log'),
     updatedAt: new Date().toISOString(),
   };
@@ -2260,77 +2254,108 @@ function normalizeBridgeArgs(args = [], options = {}) {
   };
 }
 
-function buildHelperRequest(command, args = []) {
-  const requestId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  return {
-    id: requestId,
-    cmd: command,
-    args,
-    bridgePath: getBridgePath(),
-    cwd: app.isPackaged ? APP_DATA_DIR : ROOT_DIR,
-  };
+function readHelperV2Token() {
+  try {
+    if (!fs.existsSync(HELPER_V2_TOKEN_PATH)) {
+      return '';
+    }
+    return String(fs.readFileSync(HELPER_V2_TOKEN_PATH, 'utf8') || '').trim();
+  } catch {
+    return '';
+  }
 }
 
-function sendHelperRequestViaSocket(payload, timeoutMs = 20000) {
+function readBridgeArgValue(args = [], name = '', fallback = '') {
+  const list = Array.isArray(args) ? args : [];
+  for (let index = 0; index < list.length; index += 1) {
+    if (list[index] !== name) {
+      continue;
+    }
+    const next = list[index + 1];
+    if (typeof next === 'string' && next.trim()) {
+      return next.trim();
+    }
+  }
+  return fallback;
+}
+
+function readProxyPortFromConfigPath(configPath = '') {
+  try {
+    if (!configPath || !fs.existsSync(configPath)) {
+      return '';
+    }
+    const raw = String(fs.readFileSync(configPath, 'utf8') || '');
+    const patterns = [
+      /^[ \t]*mixed-port:[ \t]*([0-9]+)[ \t]*$/m,
+      /^[ \t]*port:[ \t]*([0-9]+)[ \t]*$/m,
+      /^[ \t]*socks-port:[ \t]*([0-9]+)[ \t]*$/m,
+    ];
+    for (const pattern of patterns) {
+      const match = raw.match(pattern);
+      if (match && match[1]) {
+        return String(match[1]).trim();
+      }
+    }
+    return '';
+  } catch {
+    return '';
+  }
+}
+
+async function resolveActiveNetworkServiceName() {
+  const runCommand = (bin, args = []) => new Promise((resolve) => {
+    execFile(bin, args, { timeout: 2500 }, (err, stdout) => {
+      if (err) {
+        resolve('');
+        return;
+      }
+      resolve(String(stdout || '').trim());
+    });
+  });
+  const iface = await runCommand('/bin/sh', [
+    '-c',
+    'route get default 2>/dev/null | awk \'/interface:/{print $2; exit}\'',
+  ]);
+  if (iface) {
+    const service = await runCommand('/bin/sh', [
+      '-c',
+      `networksetup -listnetworkserviceorder 2>/dev/null | awk -v iface='${iface.replace(/'/g, "'\\''")}' '$0 ~ "\\\\(" iface "\\\\)" {print prev; exit} {prev=$0}' | sed -E 's/^\\([0-9]+\\) //'`,
+    ]);
+    if (service && !service.includes('denotes that a network service is disabled')) {
+      return service;
+    }
+  }
+  const fallback = await runCommand('/bin/sh', [
+    '-c',
+    "networksetup -listallnetworkservices 2>/dev/null | sed '1d' | sed '/^\\*/d' | awk 'NF{print; exit}'",
+  ]);
+  return fallback || '';
+}
+
+function sendHelperV2Request(pathname, method = 'GET', payload = null, timeoutMs = 20000) {
   return new Promise((resolve, reject) => {
-    if (!fs.existsSync(HELPER_SOCKET_PATH)) {
+    if (!fs.existsSync(HELPER_V2_SOCKET_PATH)) {
       reject(new Error('socket_missing'));
       return;
     }
-    const client = net.createConnection({ path: HELPER_SOCKET_PATH });
-    let resolved = false;
-    let response = '';
-    const timer = setTimeout(() => {
-      if (resolved) return;
-      resolved = true;
-      client.destroy();
-      reject(new Error('timeout'));
-    }, timeoutMs);
-
-    const finish = (err) => {
-      if (resolved) return;
-      resolved = true;
-      clearTimeout(timer);
-      if (err) {
-        reject(err);
-      } else {
-        resolve(response);
-      }
-    };
-
-    client.on('connect', () => {
-      try {
-        client.write(JSON.stringify(payload));
-        client.end();
-      } catch (err) {
-        finish(err);
-      }
-    });
-    client.on('data', (chunk) => {
-      response += chunk.toString();
-    });
-    client.on('end', () => finish());
-    client.on('error', (err) => finish(err));
-  });
-}
-
-function sendHelperRequestViaHttp(payload, timeoutMs = 20000) {
-  return new Promise((resolve, reject) => {
-    const { helperHttpEnabled, helperHttpHost, helperHttpPort } = readHelperConfigFromSettings();
-    if (!helperHttpEnabled) {
-      reject(new Error('http_disabled'));
+    const token = readHelperV2Token();
+    if (!token) {
+      reject(new Error('token_missing'));
       return;
     }
-    const body = JSON.stringify(payload);
+    const hasBody = payload !== null && payload !== undefined;
+    const body = hasBody ? JSON.stringify(payload) : '';
     const request = http.request({
-      host: helperHttpHost,
-      port: helperHttpPort,
-      method: 'POST',
-      path: '/command',
+      socketPath: HELPER_V2_SOCKET_PATH,
+      method,
+      path: pathname,
       timeout: timeoutMs,
       headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(body),
+        'X-Helper-Token': token,
+        ...(hasBody ? {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        } : {}),
       },
     }, (res) => {
       let data = '';
@@ -2338,7 +2363,10 @@ function sendHelperRequestViaHttp(payload, timeoutMs = 20000) {
         data += chunk.toString();
       });
       res.on('end', () => {
-        resolve(data);
+        resolve({
+          statusCode: Number(res.statusCode || 0),
+          body: data,
+        });
       });
     });
     request.on('error', (err) => reject(err));
@@ -2346,9 +2374,111 @@ function sendHelperRequestViaHttp(payload, timeoutMs = 20000) {
       request.destroy();
       reject(new Error('timeout'));
     });
-    request.write(body);
+    if (hasBody) {
+      request.write(body);
+    }
     request.end();
   });
+}
+
+async function runBridgeViaHelperV2(bridgeArgs = []) {
+  const commandType = String((bridgeArgs && bridgeArgs[0]) || '').trim();
+  const commandArgs = Array.isArray(bridgeArgs) ? bridgeArgs.slice(1) : [];
+  if (!commandType || process.platform !== 'darwin') {
+    return null;
+  }
+
+  const respondFromV2 = async (pathname, method = 'GET', payload = null) => {
+    const response = await sendHelperV2Request(pathname, method, payload);
+    if (!response || !response.body) {
+      return { ok: false, error: 'helper_unreachable' };
+    }
+    try {
+      return parseBridgeOutput(response.body);
+    } catch {
+      return { ok: false, error: 'parse_error', details: String(response.body || '').trim() };
+    }
+  };
+
+  try {
+    switch (commandType) {
+      case 'ping': {
+        const result = await respondFromV2('/health', 'GET');
+        if (result && result.ok) {
+          return {
+            ok: true,
+            data: {
+              status: 'ok',
+              source: 'helper_v2',
+            },
+          };
+        }
+        return result;
+      }
+      case 'status': {
+        const result = await respondFromV2('/v1/core/status', 'GET');
+        if (result && result.ok) {
+          const running = Boolean(result.running);
+          return {
+            ok: true,
+            data: {
+              running,
+              pid: Number(result.pid || 0),
+              path: String(result.binary || ''),
+              source: 'helper_v2',
+            },
+          };
+        }
+        return result;
+      }
+      case 'start':
+        return respondFromV2('/v1/core/start', 'POST', {});
+      case 'stop':
+        return respondFromV2('/v1/core/stop', 'POST', {});
+      case 'restart':
+        return respondFromV2('/v1/core/restart', 'POST', {});
+      case 'tun-status':
+        return { ok: false, error: 'unsupported_command' };
+      case 'tun': {
+        const enableValue = readBridgeArgValue(commandArgs, '--enable', '').toLowerCase();
+        if (enableValue === 'true' || enableValue === '1' || enableValue === 'on') {
+          return respondFromV2('/v1/tun/enable', 'POST', { enableIPForward: true, enablePF: true });
+        }
+        if (enableValue === 'false' || enableValue === '0' || enableValue === 'off') {
+          return respondFromV2('/v1/tun/disable', 'POST', {});
+        }
+        return { ok: false, error: 'unsupported_command' };
+      }
+      case 'system-proxy-enable': {
+        const configPath = readBridgeArgValue(commandArgs, '--config', getConfigPathFromSettings());
+        const port = readProxyPortFromConfigPath(configPath);
+        const parsedPort = Number.parseInt(String(port || '').trim(), 10);
+        if (!Number.isFinite(parsedPort) || parsedPort <= 0 || parsedPort > 65535) {
+          return { ok: false, error: 'unsupported_command' };
+        }
+        const service = await resolveActiveNetworkServiceName();
+        if (!service) {
+          return { ok: false, error: 'unsupported_command' };
+        }
+        return respondFromV2('/v1/proxy/global', 'POST', {
+          service,
+          host: '127.0.0.1',
+          port: parsedPort,
+        });
+      }
+      case 'system-proxy-disable': {
+        const service = await resolveActiveNetworkServiceName();
+        if (!service) {
+          return { ok: false, error: 'unsupported_command' };
+        }
+        return respondFromV2('/v1/proxy/off', 'POST', { service });
+      }
+      default:
+        return { ok: false, error: 'unsupported_command' };
+    }
+  } catch {
+    return null;
+  }
 }
 
 async function runBridgeViaHelper(bridgeArgs = []) {
@@ -2356,61 +2486,22 @@ async function runBridgeViaHelper(bridgeArgs = []) {
   if (!commandType || process.platform !== 'darwin') {
     return null;
   }
-  const request = buildHelperRequest(commandType, bridgeArgs.slice(1));
-  let responseText = '';
-  try {
-    responseText = await sendHelperRequestViaSocket(request);
-  } catch {
-    responseText = '';
+  const v2Result = await runBridgeViaHelperV2(bridgeArgs);
+  if (v2Result && !(v2Result && v2Result.ok === false && v2Result.error === 'unsupported_command')) {
+    return v2Result;
   }
-  if (!responseText) {
-    try {
-      responseText = await sendHelperRequestViaHttp(request);
-    } catch {
-      responseText = '';
-    }
-  }
-  if (!responseText) {
-    return null;
-  }
-  try {
-    return parseBridgeOutput(responseText);
-  } catch (err) {
-    return {
-      ok: false,
-      error: 'parse_error',
-      details: String(responseText || '').trim(),
-    };
-  }
+  return null;
 }
 
 async function pingHelper() {
   if (process.platform !== 'darwin') {
     return { ok: false, error: 'unsupported_os' };
   }
-  const request = buildHelperRequest('ping', []);
-  let responseText = '';
-  try {
-    responseText = await sendHelperRequestViaSocket(request, 6000);
-  } catch {
-    responseText = '';
+  const v2Result = await runBridgeViaHelperV2(['ping']);
+  if (v2Result && v2Result.ok) {
+    return v2Result;
   }
-  if (!responseText) {
-    try {
-      responseText = await sendHelperRequestViaHttp(request, 6000);
-    } catch {
-      responseText = '';
-    }
-  }
-  if (!responseText) {
-    return { ok: false, error: 'helper_unreachable' };
-  }
-  try {
-    const parsed = parseBridgeOutput(responseText);
-    return parsed;
-  } catch {
-    return { ok: false, error: 'parse_error', details: responseText };
-  }
+  return { ok: false, error: 'helper_unreachable' };
 }
 
 async function checkHelperOnStartup() {

@@ -1,37 +1,50 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "======================================"
-echo "  ClashFox Helper Uninstall Script"
-echo "======================================"
+LABEL="com.clashfox.helper"
+BIN_DST="/Library/PrivilegedHelperTools/${LABEL}"
+PLIST_DST="/Library/LaunchDaemons/${LABEL}.plist"
+SOCKET="/var/run/${LABEL}.sock"
+TOKEN="/Library/Application Support/ClashFox/helper/token"
+BACKUP_DIR="/Library/Application Support/ClashFox/helper/uninstall-backup-$(date +%Y%m%d-%H%M%S)"
+VERSION_META="/Library/Application Support/ClashFox/helper/version.json"
 
-if [ "$EUID" -ne 0 ]; then
-  echo "Error: Please run with sudo: sudo ./uninstall-helper.sh"
+if [[ "$(id -u)" -ne 0 ]]; then
+  echo "run as root: sudo $0"
   exit 1
 fi
 
-PLIST_PATH="/Library/LaunchDaemons/com.clashfox.helper.plist"
-HELPER_PATH="/Library/PrivilegedHelperTools/com.clashfox.helper"
-SOCKET_PATH="/var/run/clashfox-helper.sock"
-LOG_PATH="/var/log/clashfox-helper.log"
-
-launchctl unload "$PLIST_PATH" 2>/dev/null || true
-rm -f "$PLIST_PATH"
-rm -f "$HELPER_PATH"
-rm -f "$SOCKET_PATH"
-rm -f "$LOG_PATH"
-
-HELPER_LOG_DIR="$HOME/Library/Application Support/ClashFox/logs"
-if [ -d "$HELPER_LOG_DIR" ]; then
-  rm -f "$HELPER_LOG_DIR/helper.log" "$HELPER_LOG_DIR/helper.log.old"
-  echo "Helper logs cleared"
+# Best effort: restore baseline before uninstall to avoid network residue.
+if [[ -S "${SOCKET}" && -f "${TOKEN}" && -x /usr/bin/curl ]]; then
+  H_TOKEN="$(cat "${TOKEN}" 2>/dev/null || true)"
+  if [[ -n "${H_TOKEN}" ]]; then
+    /usr/bin/curl --max-time 5 --silent --show-error \
+      --unix-socket "${SOCKET}" \
+      -H "X-Helper-Token: ${H_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -X POST http://localhost/v1/state/restore >/dev/null || true
+  fi
 fi
 
-KERNEL_SOCKET="/tmp/clashfox.sock"
-if [ -S "$KERNEL_SOCKET" ]; then
-  rm -f "$KERNEL_SOCKET"
+if launchctl print "system/${LABEL}" >/dev/null 2>&1; then
+  launchctl bootout system "${PLIST_DST}" || true
 fi
 
-pkill -f "mihomo" || true
+mkdir -p "${BACKUP_DIR}"
 
-echo "Helper uninstalled"
+if [[ -f "${PLIST_DST}" ]]; then
+  mv "${PLIST_DST}" "${BACKUP_DIR}/"
+fi
+if [[ -f "${BIN_DST}" ]]; then
+  mv "${BIN_DST}" "${BACKUP_DIR}/"
+fi
+if [[ -f "${SOCKET}" ]]; then
+  rm -f "${SOCKET}"
+fi
+
+echo "uninstalled: ${LABEL}"
+echo "backup saved at: ${BACKUP_DIR}"
+if [[ -f "${VERSION_META}" ]]; then
+  echo "last installed version meta:"
+  cat "${VERSION_META}"
+fi

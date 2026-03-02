@@ -1,119 +1,158 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
-CURRENT_STEP="init"
-
-fail() {
-  local code="$1"
-  local message="$2"
-  echo "helper_install_failed:${code}:${message}" >&2
-  exit 1
-}
-
-on_err() {
-  local exit_code=$?
-  echo "helper_install_failed:step_error:${CURRENT_STEP}:exit=${exit_code}" >&2
-  exit "$exit_code"
-}
-trap on_err ERR
-
-echo "======================================"
-echo "  ClashFox Helper Install Script"
-echo "======================================"
-
-if [ "${EUID:-$(id -u)}" -ne 0 ]; then
-  fail "sudo_required" "Please run with sudo: sudo ./install-helper.sh"
-fi
-
+LABEL="com.clashfox.helper"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-HELPER_BINARY=""
+DEFAULT_BIN_SRC="${SCRIPT_DIR}/com.clashfox.helper"
+BIN_SRC="${1:-${DEFAULT_BIN_SRC}}"
+VERSION_IN="${2:-}"
+BIN_DST="/Library/PrivilegedHelperTools/${LABEL}"
+PLIST_SRC="${SCRIPT_DIR}/${LABEL}.plist"
+PLIST_DST="/Library/LaunchDaemons/${LABEL}.plist"
+TOKEN_DIR="/Library/Application Support/ClashFox/helper"
+RELEASE_DIR="${TOKEN_DIR}/releases"
+VERSION_META="${TOKEN_DIR}/version.json"
+HISTORY_LOG="${TOKEN_DIR}/version-history.log"
 
-if [ -f "$SCRIPT_DIR/com.clashfox.helper" ]; then
-  HELPER_BINARY="$SCRIPT_DIR/com.clashfox.helper"
-elif [ -f "$SCRIPT_DIR/.build/release/com.clashfox.helper" ]; then
-  HELPER_BINARY="$SCRIPT_DIR/.build/release/com.clashfox.helper"
-elif [ -f "$SCRIPT_DIR/../ClashFoxHelper/com.clashfox.helper" ]; then
-  HELPER_BINARY="$SCRIPT_DIR/../ClashFoxHelper/com.clashfox.helper"
-fi
+SUCCESS=0
+BIN_BAK=""
+PLIST_BAK=""
 
-if [ -f "$SCRIPT_DIR/com.clashfox.helper.plist" ]; then
-  PLIST_SOURCE="$SCRIPT_DIR/com.clashfox.helper.plist"
-else
-  PLIST_SOURCE="$SCRIPT_DIR/../scripts/com.clashfox.helper.plist"
-fi
+rollback() {
+  if [[ "${SUCCESS}" -eq 1 ]]; then
+    return
+  fi
 
-INSTALL_PATH="/Library/PrivilegedHelperTools/com.clashfox.helper"
-PLIST_INSTALL="/Library/LaunchDaemons/com.clashfox.helper.plist"
+  echo "install failed, rolling back..."
 
-echo "Script directory: $SCRIPT_DIR"
-echo "Helper source: $HELPER_BINARY"
-echo ""
-
-if [ ! -f "$HELPER_BINARY" ]; then
-  CURRENT_STEP="build_helper"
-  echo "[Info] Helper binary not found, trying local build..."
-  if [ -x "$SCRIPT_DIR/build-helper.sh" ]; then
-    bash "$SCRIPT_DIR/build-helper.sh"
+  if [[ -n "${BIN_BAK}" && -f "${BIN_BAK}" ]]; then
+    cp -f "${BIN_BAK}" "${BIN_DST}"
+    chown root:wheel "${BIN_DST}"
+    chmod 755 "${BIN_DST}"
   else
-    chmod +x "$SCRIPT_DIR/build-helper.sh" 2>/dev/null || true
-    bash "$SCRIPT_DIR/build-helper.sh"
+    rm -f "${BIN_DST}"
   fi
-  if [ -f "$SCRIPT_DIR/.build/release/com.clashfox.helper" ]; then
-    HELPER_BINARY="$SCRIPT_DIR/.build/release/com.clashfox.helper"
+
+  if [[ -n "${PLIST_BAK}" && -f "${PLIST_BAK}" ]]; then
+    cp -f "${PLIST_BAK}" "${PLIST_DST}"
+    chown root:wheel "${PLIST_DST}"
+    chmod 644 "${PLIST_DST}"
+  else
+    rm -f "${PLIST_DST}"
   fi
-fi
 
-if [ ! -f "$PLIST_SOURCE" ]; then
-  fail "plist_missing" "Plist not found: $PLIST_SOURCE"
-fi
-
-if [ ! -f "$HELPER_BINARY" ]; then
-  fail "helper_missing" "Helper not found: $SCRIPT_DIR/com.clashfox.helper or $SCRIPT_DIR/.build/release/com.clashfox.helper"
-fi
-
-CURRENT_STEP="stop_existing_service"
-if [ -f "$PLIST_INSTALL" ]; then
-  launchctl bootout system "$PLIST_INSTALL" 2>/dev/null || launchctl unload "$PLIST_INSTALL" 2>/dev/null || true
-  rm -f "$PLIST_INSTALL"
-  rm -f "$INSTALL_PATH"
-  rm -f /var/run/clashfox-helper.sock
-fi
-
-HELPER_LOG_DIR="/Users/Shared/clashfox/logs"
-if [ -d "$HELPER_LOG_DIR" ]; then
-  rm -f "$HELPER_LOG_DIR/helper.log" "$HELPER_LOG_DIR/helper.log.old"
-  echo "Old helper logs cleared"
-fi
-
-CURRENT_STEP="install_binary"
-mkdir -p /Library/PrivilegedHelperTools/
-cp "$HELPER_BINARY" "$INSTALL_PATH"
-chmod 755 "$INSTALL_PATH"
-chown root:wheel "$INSTALL_PATH"
-xattr -dr com.apple.quarantine "$INSTALL_PATH" 2>/dev/null || true
-
-CURRENT_STEP="install_plist"
-cp "$PLIST_SOURCE" "$PLIST_INSTALL"
-chmod 644 "$PLIST_INSTALL"
-chown root:wheel "$PLIST_INSTALL"
-plutil -lint "$PLIST_INSTALL" >/dev/null 2>&1 || fail "plist_invalid" "$PLIST_INSTALL"
-
-CURRENT_STEP="launchd_bootstrap"
-if ! launchctl bootstrap system "$PLIST_INSTALL" 2>/tmp/clashfox-helper-bootstrap.err; then
-  if ! launchctl load -w "$PLIST_INSTALL" 2>/tmp/clashfox-helper-load.err; then
-    BOOTSTRAP_ERR="$(cat /tmp/clashfox-helper-bootstrap.err 2>/dev/null || true)"
-    LOAD_ERR="$(cat /tmp/clashfox-helper-load.err 2>/dev/null || true)"
-    fail "launchctl_load_failed" "${BOOTSTRAP_ERR:-}${LOAD_ERR:+; }${LOAD_ERR:-}"
+  if [[ -f "${PLIST_DST}" ]]; then
+    launchctl bootstrap system "${PLIST_DST}" || true
+    launchctl enable "system/${LABEL}" || true
+    launchctl kickstart -k "system/${LABEL}" || true
   fi
-fi
-launchctl enable system/com.clashfox.helper 2>/dev/null || true
-launchctl kickstart -k system/com.clashfox.helper 2>/dev/null || true
-sleep 1
+}
+trap rollback EXIT
 
-CURRENT_STEP="verify_service"
-if launchctl print system/com.clashfox.helper >/tmp/clashfox-helper-print.out 2>/tmp/clashfox-helper-print.err; then
-  echo "Helper installed and running"
+show_diag() {
+  echo "diag: plist lint"
+  plutil -lint "${PLIST_DST}" || true
+  echo "diag: file info"
+  ls -lO@ "${BIN_DST}" "${PLIST_DST}" 2>/dev/null || true
+  echo "diag: xattr"
+  xattr -l "${BIN_DST}" 2>/dev/null || true
+  echo "diag: launchd recent logs"
+  log show --last 3m --style compact --predicate "(process == \"launchd\") AND (eventMessage CONTAINS \"${LABEL}\")" 2>/dev/null | tail -n 80 || true
+}
+
+if [[ "$(id -u)" -ne 0 ]]; then
+  echo "run as root: sudo $0 [binary-path]"
+  exit 1
+fi
+
+if [[ ! -f "${BIN_SRC}" ]]; then
+  echo "binary not found: ${BIN_SRC}"
+  exit 1
+fi
+if [[ ! -f "${PLIST_SRC}" ]]; then
+  echo "plist not found: ${PLIST_SRC}"
+  exit 1
+fi
+
+if [[ -n "${VERSION_IN}" ]]; then
+  VERSION="${VERSION_IN}"
+elif [[ -f "${SCRIPT_DIR}/VERSION" ]]; then
+  VERSION="$(tr -d '[:space:]' < "${SCRIPT_DIR}/VERSION")"
+elif [[ -f "./VERSION" ]]; then
+  VERSION="$(tr -d '[:space:]' < "./VERSION")"
 else
-  PRINT_ERR="$(cat /tmp/clashfox-helper-print.err 2>/dev/null || true)"
-  fail "launchd_not_running" "${PRINT_ERR:-launchctl print failed}"
+  VERSION_FROM_BIN="$("${BIN_SRC}" --version 2>/dev/null || true)"
+  VERSION="$(printf '%s' "${VERSION_FROM_BIN}" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p' | head -n 1)"
+  if [[ -z "${VERSION}" ]]; then
+    VERSION="unknown"
+  fi
 fi
+
+mkdir -p "/Library/PrivilegedHelperTools" "/Library/LaunchDaemons" "${TOKEN_DIR}" "${RELEASE_DIR}"
+chmod 755 "${TOKEN_DIR}"
+
+if [[ -f "${BIN_DST}" ]]; then
+  BIN_BAK="$(mktemp /tmp/${LABEL}.bin.bak.XXXXXX)"
+  cp -f "${BIN_DST}" "${BIN_BAK}"
+  TS="$(date +%Y%m%d-%H%M%S)"
+  cp -f "${BIN_DST}" "${RELEASE_DIR}/${TS}-prev-${LABEL}" || true
+fi
+if [[ -f "${PLIST_DST}" ]]; then
+  PLIST_BAK="$(mktemp /tmp/${LABEL}.plist.bak.XXXXXX)"
+  cp -f "${PLIST_DST}" "${PLIST_BAK}"
+fi
+
+BIN_TMP="${BIN_DST}.new.$$"
+PLIST_TMP="${PLIST_DST}.new.$$"
+cp -f "${BIN_SRC}" "${BIN_TMP}"
+cp -f "${PLIST_SRC}" "${PLIST_TMP}"
+chown root:wheel "${BIN_TMP}" "${PLIST_TMP}"
+chmod 755 "${BIN_TMP}"
+chmod 644 "${PLIST_TMP}"
+# Remove quarantine/xattrs that can cause launchd bootstrap to fail on downloaded artifacts.
+xattr -rc "${BIN_TMP}" "${PLIST_TMP}" 2>/dev/null || true
+
+if launchctl print "system/${LABEL}" >/dev/null 2>&1; then
+  launchctl bootout "system/${LABEL}" || true
+fi
+
+mv -f "${BIN_TMP}" "${BIN_DST}"
+mv -f "${PLIST_TMP}" "${PLIST_DST}"
+
+if [[ -f "/var/run/${LABEL}.sock" ]]; then
+  rm -f "/var/run/${LABEL}.sock"
+fi
+
+if ! launchctl bootstrap system "${PLIST_DST}"; then
+  echo "bootstrap failed for ${LABEL}"
+  show_diag
+  exit 1
+fi
+launchctl enable "system/${LABEL}"
+launchctl kickstart -k "system/${LABEL}"
+# Keep token readable for the GUI process if helper created it as root-only.
+if [[ -f "${TOKEN_DIR}/token" ]]; then
+  chmod 644 "${TOKEN_DIR}/token" || true
+fi
+
+BIN_SHA="$(shasum -a 256 "${BIN_DST}" | awk '{print $1}')"
+INSTALLED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+cat > "${VERSION_META}" <<EOF
+{
+  "label": "${LABEL}",
+  "version": "${VERSION}",
+  "installedAt": "${INSTALLED_AT}",
+  "binaryPath": "${BIN_DST}",
+  "binarySha256": "${BIN_SHA}"
+}
+EOF
+chmod 600 "${VERSION_META}"
+echo "${INSTALLED_AT} version=${VERSION} sha256=${BIN_SHA}" >> "${HISTORY_LOG}"
+
+# Keep only the newest 10 binary backups.
+ls -1t "${RELEASE_DIR}" 2>/dev/null | sed -n '11,$p' | while IFS= read -r old; do
+  rm -f "${RELEASE_DIR}/${old}"
+done
+
+SUCCESS=1
+echo "installed and started: ${LABEL} version=${VERSION}"

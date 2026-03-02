@@ -300,7 +300,10 @@ const I18N = {
       "helperInstallFailed": "Helper install failed",
       "helperInstallTerminalLaunched": "Opened Terminal",
       "helperLogsOpenFailed": "Unable to open helper logs",
-      "helperInstallUnavailable": "Helper installer unavailable"
+      "helperInstallUnavailable": "Helper installer unavailable",
+      "helperRepairAction": "Repair",
+      "helperRepairSuccess": "Helper repaired",
+      "helperRepairFailed": "Helper repair failed"
     },
     "tray": {
       "showMain": "Show Main Window",
@@ -661,7 +664,10 @@ const I18N = {
       "helperInstallFailed": "Helper 安装失败",
       "helperInstallTerminalLaunched": "已打开终端",
       "helperLogsOpenFailed": "无法打开 Helper 日志",
-      "helperInstallUnavailable": "Helper 安装器不可用"
+      "helperInstallUnavailable": "Helper 安装器不可用",
+      "helperRepairAction": "修复",
+      "helperRepairSuccess": "Helper 修复成功",
+      "helperRepairFailed": "Helper 修复失败"
     },
     "tray": {
       "showMain": "显示主窗口",
@@ -1022,7 +1028,10 @@ const I18N = {
       "helperInstallFailed": "Helper install failed",
       "helperInstallTerminalLaunched": "Opened Terminal",
       "helperLogsOpenFailed": "Unable to open helper logs",
-      "helperInstallUnavailable": "Helper installer unavailable"
+      "helperInstallUnavailable": "Helper installer unavailable",
+      "helperRepairAction": "修復",
+      "helperRepairSuccess": "Helperの修復に成功",
+      "helperRepairFailed": "Helperの修復に失敗"
     },
     "tray": {
       "showMain": "メインウィンドウを表示",
@@ -1377,7 +1386,10 @@ const I18N = {
       "helperInstallFailed": "Helper install failed",
       "helperInstallTerminalLaunched": "Opened Terminal",
       "helperLogsOpenFailed": "Unable to open helper logs",
-      "helperInstallUnavailable": "Helper installer unavailable"
+      "helperInstallUnavailable": "Helper installer unavailable",
+      "helperRepairAction": "복구",
+      "helperRepairSuccess": "Helper 복구 성공",
+      "helperRepairFailed": "Helper 복구 실패"
     },
     "tray": {
       "showMain": "메인 창 표시",
@@ -1732,7 +1744,10 @@ const I18N = {
       "helperInstallFailed": "Helper install failed",
       "helperInstallTerminalLaunched": "Opened Terminal",
       "helperLogsOpenFailed": "Unable to open helper logs",
-      "helperInstallUnavailable": "Helper installer unavailable"
+      "helperInstallUnavailable": "Helper installer unavailable",
+      "helperRepairAction": "Réparer",
+      "helperRepairSuccess": "Réparation du helper réussie",
+      "helperRepairFailed": "Échec de la réparation du helper"
     },
     "tray": {
       "showMain": "Afficher la fenêtre principale",
@@ -2087,7 +2102,10 @@ const I18N = {
       "helperInstallFailed": "Helper install failed",
       "helperInstallTerminalLaunched": "Opened Terminal",
       "helperLogsOpenFailed": "Unable to open helper logs",
-      "helperInstallUnavailable": "Helper installer unavailable"
+      "helperInstallUnavailable": "Helper installer unavailable",
+      "helperRepairAction": "Reparieren",
+      "helperRepairSuccess": "Helper repariert",
+      "helperRepairFailed": "Reparatur des Helpers fehlgeschlagen"
     },
     "tray": {
       "showMain": "Hauptfenster anzeigen",
@@ -2442,7 +2460,10 @@ const I18N = {
       "helperInstallFailed": "Helper install failed",
       "helperInstallTerminalLaunched": "Opened Terminal",
       "helperLogsOpenFailed": "Unable to open helper logs",
-      "helperInstallUnavailable": "Helper installer unavailable"
+      "helperInstallUnavailable": "Helper installer unavailable",
+      "helperRepairAction": "Восстановить",
+      "helperRepairSuccess": "Helper восстановлен",
+      "helperRepairFailed": "Не удалось восстановить helper"
     },
     "tray": {
       "showMain": "Показать главное окно",

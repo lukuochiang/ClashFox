@@ -5051,12 +5051,20 @@ function setHelperStatus(state, text) {
   }
 }
 
-function setHelperPrimaryAction(installed) {
-  helperPrimaryAction = installed ? 'uninstall' : 'install';
+function setHelperPrimaryAction(snapshot = {}) {
+  const stateValue = snapshot && snapshot.state ? String(snapshot.state) : '';
+  const installed = Boolean(snapshot && snapshot.installed);
+  if (stateValue === 'installed_unreachable' && installed) {
+    helperPrimaryAction = 'repair';
+  } else {
+    helperPrimaryAction = installed ? 'uninstall' : 'install';
+  }
   if (!helperInstallBtn) {
     return;
   }
-  if (installed) {
+  if (helperPrimaryAction === 'repair') {
+    helperInstallBtn.textContent = ti('settings.helperRepairAction', 'Repair');
+  } else if (helperPrimaryAction === 'uninstall') {
     helperInstallBtn.textContent = ti('settings.helperUninstall', 'Uninstall');
   } else {
     helperInstallBtn.textContent = ti('settings.helperInstall', 'Install');
@@ -5098,13 +5106,15 @@ function applyHelperStatusSnapshot(snapshot) {
   if (!snapshot || typeof snapshot !== 'object') {
     return;
   }
-  setHelperPrimaryAction(Boolean(snapshot.installed));
+  setHelperPrimaryAction(snapshot);
   const logPath = snapshot.logPath || '/var/log/clashfox-helper.log';
   if (helperLogsPath) {
     helperLogsPath.textContent = logPath;
   }
   if (snapshot.state === 'running') {
     setHelperStatus('running', ti('settings.helperStatusRunning', 'Running'));
+  } else if (snapshot.state === 'installed_unreachable') {
+    setHelperStatus('warning', ti('settings.helperStatusUnreachable', 'Installed (Unreachable)'));
   } else if (snapshot.state === 'not_installed') {
     setHelperStatus('stopped', ti('settings.helperStatusStopped', 'Not Installed'));
   } else if (snapshot.state === 'stopped') {
@@ -5119,9 +5129,6 @@ async function refreshHelperStatus(force = false) {
   const cached = getCachedHelperStatus();
   if (cached) {
     applyHelperStatusSnapshot(cached);
-    if (!force) {
-      return;
-    }
   }
 
   try {
@@ -5134,6 +5141,7 @@ async function refreshHelperStatus(force = false) {
           running: Boolean(response.data.running),
           binaryExists: Boolean(response.data.binaryExists),
           plistExists: Boolean(response.data.plistExists),
+          launchdLoaded: Boolean(response.data.launchdLoaded),
           logPath: String(response.data.logPath || '/var/log/clashfox-helper.log'),
           updatedAt: new Date().toISOString(),
         };
@@ -5229,17 +5237,38 @@ if (helperInstallBtn) {
     helperInstallBtn.dataset.bound = 'true';
     helperInstallBtn.addEventListener('click', async () => {
       const isUninstall = helperPrimaryAction === 'uninstall';
-      const actionFn = isUninstall ? 'uninstallHelper' : 'installHelper';
-      if (!window.clashfox || typeof window.clashfox[actionFn] !== 'function') {
+      const isRepair = helperPrimaryAction === 'repair';
+      if (!window.clashfox) {
         showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
         return;
       }
       helperInstallBtn.disabled = true;
-      const response = await window.clashfox[actionFn]();
+      let response = null;
+      if (isRepair) {
+        if (typeof window.clashfox.doctorHelper === 'function') {
+          response = await window.clashfox.doctorHelper({ repair: true });
+        } else if (typeof window.clashfox.installHelper === 'function') {
+          response = await window.clashfox.installHelper();
+        } else {
+          helperInstallBtn.disabled = false;
+          showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
+          return;
+        }
+      } else {
+        const actionFn = isUninstall ? 'uninstallHelper' : 'installHelper';
+        if (typeof window.clashfox[actionFn] !== 'function') {
+          helperInstallBtn.disabled = false;
+          showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
+          return;
+        }
+        response = await window.clashfox[actionFn]();
+      }
       helperInstallBtn.disabled = false;
       if (response && response.ok) {
         showToast(
-          isUninstall
+          isRepair
+            ? ti('settings.helperRepairSuccess', 'Helper repaired')
+            : isUninstall
             ? ti('settings.helperUninstallSuccess', 'Helper uninstalled')
             : ti('settings.helperInstallSuccess', 'Helper installed'),
           'info'
@@ -5254,7 +5283,9 @@ if (helperInstallBtn) {
         ? `: ${String(response.details || response.error)}`
         : '';
       showToast(
-        `${isUninstall
+        `${isRepair
+          ? ti('settings.helperRepairFailed', 'Helper repair failed')
+          : isUninstall
           ? ti('settings.helperUninstallFailed', 'Helper uninstall failed')
           : ti('settings.helperInstallFailed', 'Helper install failed')}${detail}`,
         'error'

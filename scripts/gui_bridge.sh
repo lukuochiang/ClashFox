@@ -956,34 +956,42 @@ handle_traffic() {
 
     local traffic_resp up_val down_val parsed_traffic
     if [ -n "$secret" ]; then
-        traffic_resp="$(curl -s --max-time 1 -H "Authorization: Bearer $secret" "$controller/traffic" 2>/dev/null)"
+        traffic_resp="$(curl -sS --connect-timeout 1 --max-time 2 -H "Authorization: Bearer $secret" "$controller/traffic" 2>/dev/null || true)"
+        if [ -z "$traffic_resp" ]; then
+            traffic_resp="$(curl -sS --connect-timeout 1 --max-time 4 -H "Authorization: Bearer $secret" "$controller/traffic" 2>/dev/null || true)"
+        fi
     else
-        traffic_resp="$(curl -s --max-time 1 "$controller/traffic" 2>/dev/null)"
+        traffic_resp="$(curl -sS --connect-timeout 1 --max-time 2 "$controller/traffic" 2>/dev/null || true)"
+        if [ -z "$traffic_resp" ]; then
+            traffic_resp="$(curl -sS --connect-timeout 1 --max-time 4 "$controller/traffic" 2>/dev/null || true)"
+        fi
     fi
 
     up_val=""
     down_val=""
     if [ -n "$traffic_resp" ] && command -v python3 >/dev/null 2>&1; then
         parsed_traffic="$(CLASHFOX_TRAFFIC_RESP="$traffic_resp" python3 - <<'PY'
-import json, os
+import os, re
 raw = os.environ.get("CLASHFOX_TRAFFIC_RESP", "")
 if not raw:
     print("|")
     raise SystemExit
-try:
-    data = json.loads(raw)
-except Exception:
-    print("|")
-    raise SystemExit
-def as_num(v):
+up_matches = re.findall(r'"up"\s*:\s*([0-9]+(?:\.[0-9]+)?)', raw)
+down_matches = re.findall(r'"down"\s*:\s*([0-9]+(?:\.[0-9]+)?)', raw)
+up = up_matches[-1] if up_matches else ""
+down = down_matches[-1] if down_matches else ""
+def norm_num(text):
+    if not text:
+        return ""
     try:
-        return float(v)
+        n = float(text)
+        if n < 0:
+            return ""
+        return str(int(n))
     except Exception:
-        return None
-up = as_num(data.get("up"))
-down = as_num(data.get("down"))
-up_s = str(int(up)) if up is not None and up >= 0 else ""
-down_s = str(int(down)) if down is not None and down >= 0 else ""
+        return ""
+up_s = norm_num(up)
+down_s = norm_num(down)
 print(f"{up_s}|{down_s}")
 PY
 )"

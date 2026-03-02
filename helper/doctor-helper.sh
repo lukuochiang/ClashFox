@@ -16,25 +16,41 @@ for arg in "$@"; do
 done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+EXTERNAL_HELPER_DIR="${CLASHFOX_HELPER_DIR:-$SCRIPT_DIR}"
 LABEL="com.clashfox.helper"
 INSTALL_BIN="/Library/PrivilegedHelperTools/com.clashfox.helper"
 INSTALL_PLIST="/Library/LaunchDaemons/com.clashfox.helper.plist"
-SOCKET_PATH="/var/run/clashfox-helper.sock"
-HTTP_URL="http://127.0.0.1:19999/command"
+V2_SOCKET_PATH="/var/run/com.clashfox.helper.sock"
+V2_TOKEN_PATH="/Library/Application Support/ClashFox/helper/token"
+SOCKET_PATH="$V2_SOCKET_PATH"
 LOG_PATH="/var/log/clashfox-helper.log"
 
 SOURCE_BIN=""
 SOURCE_PLIST=""
-if [ -f "$SCRIPT_DIR/com.clashfox.helper" ]; then
-  SOURCE_BIN="$SCRIPT_DIR/com.clashfox.helper"
-elif [ -f "$SCRIPT_DIR/.build/release/com.clashfox.helper" ]; then
-  SOURCE_BIN="$SCRIPT_DIR/.build/release/com.clashfox.helper"
-fi
-if [ -f "$SCRIPT_DIR/com.clashfox.helper.plist" ]; then
-  SOURCE_PLIST="$SCRIPT_DIR/com.clashfox.helper.plist"
-elif [ -f "$SCRIPT_DIR/../scripts/com.clashfox.helper.plist" ]; then
-  SOURCE_PLIST="$SCRIPT_DIR/../scripts/com.clashfox.helper.plist"
-fi
+for candidate in \
+  "$SCRIPT_DIR/com.clashfox.helper" \
+  "$EXTERNAL_HELPER_DIR/build/com.clashfox.helper" \
+  "$EXTERNAL_HELPER_DIR/release/stage-universal/com.clashfox.helper" \
+  "$EXTERNAL_HELPER_DIR/release/stage-arm64/com.clashfox.helper" \
+  "$EXTERNAL_HELPER_DIR/release/stage-x86_64/com.clashfox.helper"
+do
+  if [ -f "$candidate" ]; then
+    SOURCE_BIN="$candidate"
+    break
+  fi
+done
+for candidate in \
+  "$SCRIPT_DIR/com.clashfox.helper.plist" \
+  "$EXTERNAL_HELPER_DIR/deploy/com.clashfox.helper.plist" \
+  "$EXTERNAL_HELPER_DIR/release/stage-universal/com.clashfox.helper.plist" \
+  "$EXTERNAL_HELPER_DIR/release/stage-arm64/com.clashfox.helper.plist" \
+  "$EXTERNAL_HELPER_DIR/release/stage-x86_64/com.clashfox.helper.plist"
+do
+  if [ -f "$candidate" ]; then
+    SOURCE_PLIST="$candidate"
+    break
+  fi
+done
 
 json_escape() {
   local s="${1-}"
@@ -127,21 +143,20 @@ run_checks() {
   else
     CHECK_LAUNCHD_ERROR="$(cat /tmp/clashfox-helper-launchd.err 2>/dev/null || true)"
   fi
-  if [ -S "$SOCKET_PATH" ]; then
+  if [ -S "$V2_SOCKET_PATH" ]; then
     CHECK_SOCKET_EXISTS=true
-    if command -v nc >/dev/null 2>&1; then
-      SOCKET_RESP="$(printf '%s' '{"id":"doctor","cmd":"ping","args":[]}' | nc -U "$SOCKET_PATH" 2>/dev/null || true)"
-      if echo "$SOCKET_RESP" | grep -q '"ok"[[:space:]]*:[[:space:]]*true'; then
-        CHECK_SOCKET_PING_OK=true
+    SOCKET_PATH="$V2_SOCKET_PATH"
+    if command -v curl >/dev/null 2>&1 && [ -f "$V2_TOKEN_PATH" ]; then
+      V2_TOKEN="$(cat "$V2_TOKEN_PATH" 2>/dev/null || true)"
+      if [ -n "$V2_TOKEN" ]; then
+        V2_RESP="$(curl -sS --unix-socket "$V2_SOCKET_PATH" -H "X-Helper-Token: $V2_TOKEN" -X GET "http://localhost/health" --max-time 3 2>/dev/null || true)"
+        if echo "$V2_RESP" | grep -q '"ok"[[:space:]]*:[[:space:]]*true'; then
+          CHECK_SOCKET_PING_OK=true
+        fi
       fi
     fi
   fi
-  if command -v curl >/dev/null 2>&1; then
-    HTTP_RESP="$(curl -sS -X POST "$HTTP_URL" -H 'Content-Type: application/json' -d '{"id":"doctor-http","cmd":"ping","args":[]}' --max-time 3 2>/dev/null || true)"
-    if echo "$HTTP_RESP" | grep -q '"ok"[[:space:]]*:[[:space:]]*true'; then
-      CHECK_HTTP_PING_OK=true
-    fi
-  fi
+  CHECK_HTTP_PING_OK=false
 }
 
 repair_helper() {
@@ -155,7 +170,7 @@ repair_helper() {
   fi
 
   launchctl bootout system "$INSTALL_PLIST" >/dev/null 2>&1 || launchctl unload "$INSTALL_PLIST" >/dev/null 2>&1 || true
-  rm -f "$INSTALL_PLIST" "$INSTALL_BIN" "$SOCKET_PATH"
+  rm -f "$INSTALL_PLIST" "$INSTALL_BIN" "$V2_SOCKET_PATH"
 
   mkdir -p /Library/PrivilegedHelperTools || {
     REPAIR_ERROR="mkdir_failed"
@@ -199,6 +214,11 @@ repair_helper() {
   launchctl enable system/"$LABEL" >/dev/null 2>&1 || true
   launchctl kickstart -k system/"$LABEL" >/dev/null 2>&1 || true
   sleep 1
+  # Ensure GUI process can read helper token produced by root daemon.
+  chmod 755 "/Library/Application Support/ClashFox/helper" >/dev/null 2>&1 || true
+  if [ -f "$V2_TOKEN_PATH" ]; then
+    chmod 644 "$V2_TOKEN_PATH" >/dev/null 2>&1 || true
+  fi
   return 0
 }
 
