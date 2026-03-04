@@ -1720,17 +1720,42 @@ body[data-theme="day"] .history-axis {
   color: var(--muted);
 }
 
+.helper-card-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.helper-check-update-btn {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0;
+  border-radius: 999px;
+}
+
+.helper-check-update-btn svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
+
+.helper-check-update-btn:disabled {
+  opacity: 0.7;
+}
+
 .helper-card-meta[data-update-available="true"] {
   color: var(--muted);
   font-weight: 500;
 }
 
 .helper-card-meta .helper-version-current {
-  color: #7fc5ff;
+  color: #26d07c;
 }
 
 .helper-card-meta .helper-version-target {
-  color: #26d07c;
+  color: #d02659;
 }
 
 .helper-card-path {

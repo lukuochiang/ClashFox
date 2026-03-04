@@ -82,6 +82,7 @@ const PRIVILEGED_COMMANDS = new Set([
   'tun',
 ]);
 const HELPER_SOCKET_PATH = '/var/run/com.clashfox.helper.sock';
+const HELPER_APP_BUNDLE_DIR = '/Applications/ClashFox.app/Contents/Resources/helper';
 const HELPER_USER_DIR = path.join(APP_DATA_DIR, 'helper');
 const HELPER_LEGACY_DIR = '/Library/Application Support/ClashFox/helper';
 const HELPER_TOKEN_PATH = path.join(HELPER_USER_DIR, 'token');
@@ -96,6 +97,7 @@ const CONNECTIVITY_REFRESH_MS = 1500;
 const CHECK_UPDATE_API_URL = 'https://api.github.com/repos/lukuochiang/ClashFox/releases?per_page=30';
 const CHECK_UPDATE_STABLE_URL = 'https://github.com/lukuochiang/ClashFox/releases/latest';
 const CHECK_UPDATE_BETA_URL = 'https://github.com/lukuochiang/ClashFox/releases';
+const HELPER_RELEASE_LATEST_URL = 'https://github.com/lukuochiang/ClashFox-Helper/releases/latest';
 const KERNEL_RELEASE_API = {
   vernesong: 'https://api.github.com/repos/vernesong/mihomo/releases?per_page=50',
   MetaCubeX: 'https://api.github.com/repos/MetaCubeX/mihomo/releases?per_page=50',
@@ -117,6 +119,12 @@ let connectivityQualityCache = {
   updatedAt: 0,
 };
 let connectivityQualityFetchPromise = null;
+const HELPER_UPDATE_CACHE_TTL_MS = 3 * 60 * 1000;
+let helperUpdateCache = {
+  checkedAt: 0,
+  acceptBeta: null,
+  result: null,
+};
 
 const I18N = require(path.join(APP_PATH, 'static', 'locales', 'i18n.js'));
 ;
@@ -998,6 +1006,658 @@ function fetchText(url, timeoutMs = 6000) {
   });
 }
 
+function fetchTextViaCurl(url, timeoutMs = 9000) {
+  return new Promise((resolve, reject) => {
+    const maxTimeSec = Math.max(3, Math.ceil(Number(timeoutMs || 9000) / 1000));
+    const args = [
+      '--silent',
+      '--show-error',
+      '--location',
+      '--max-time',
+      String(maxTimeSec),
+      '-H',
+      'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      '-H',
+      'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      String(url || ''),
+    ];
+    execFile('/usr/bin/curl', args, { timeout: timeoutMs + 1000 }, (error, stdout = '', stderr = '') => {
+      if (error) {
+        reject(new Error(String(stderr || error.message || 'curl_fetch_failed').trim() || 'curl_fetch_failed'));
+        return;
+      }
+      const text = String(stdout || '');
+      if (!text.trim()) {
+        reject(new Error('curl_empty_response'));
+        return;
+      }
+      resolve(text);
+    });
+  });
+}
+
+function fetchLatestReleaseTagViaCurlHead(url, timeoutMs = 7000) {
+  return new Promise((resolve, reject) => {
+    const maxTimeSec = Math.max(3, Math.ceil(Number(timeoutMs || 7000) / 1000));
+    const args = [
+      '--silent',
+      '--show-error',
+      '--head',
+      '--max-time',
+      String(maxTimeSec),
+      '-H',
+      'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      String(url || ''),
+    ];
+    execFile('/usr/bin/curl', args, { timeout: timeoutMs + 1000 }, (error, stdout = '', stderr = '') => {
+      if (error) {
+        reject(new Error(String(stderr || error.message || 'curl_head_failed').trim() || 'curl_head_failed'));
+        return;
+      }
+      const text = String(stdout || '');
+      const locationMatch = text.match(/^\s*location:\s*(.+)$/im);
+      if (!locationMatch || !locationMatch[1]) {
+        reject(new Error('head_location_missing'));
+        return;
+      }
+      const location = String(locationMatch[1]).trim();
+      const tagMatch = location.match(/\/releases\/tag\/([^/?#\s]+)/i);
+      if (!tagMatch || !tagMatch[1]) {
+        reject(new Error('head_tag_missing'));
+        return;
+      }
+      resolve(tagMatch[1]);
+    });
+  });
+}
+
+function downloadFile(url, targetPath, timeoutMs = 20000, redirectCount = 0) {
+  return new Promise((resolve, reject) => {
+    if (redirectCount > 6) {
+      reject(new Error('TOO_MANY_REDIRECTS'));
+      return;
+    }
+    const req = https.get(url, {
+      headers: {
+        'User-Agent': `ClashFox/${app.getVersion() || '0.0.0'}`,
+        Accept: '*/*',
+      },
+    }, (res) => {
+      const statusCode = Number(res.statusCode || 0);
+      if (statusCode >= 300 && statusCode < 400 && res.headers.location) {
+        res.resume();
+        downloadFile(res.headers.location, targetPath, timeoutMs, redirectCount + 1).then(resolve).catch(reject);
+        return;
+      }
+      if (statusCode < 200 || statusCode >= 300) {
+        res.resume();
+        reject(new Error(`HTTP_${statusCode}`));
+        return;
+      }
+      const file = fs.createWriteStream(targetPath);
+      file.on('error', (err) => {
+        try {
+          file.close();
+        } catch {
+          // ignore
+        }
+        reject(err);
+      });
+      res.on('error', (err) => {
+        try {
+          file.close();
+        } catch {
+          // ignore
+        }
+        reject(err);
+      });
+      file.on('finish', () => {
+        file.close((err) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          resolve(targetPath);
+        });
+      });
+      res.pipe(file);
+    });
+    req.on('error', reject);
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error('TIMEOUT'));
+    });
+  });
+}
+
+function extractSemverFromText(raw = '') {
+  const source = String(raw || '').trim();
+  if (!source) {
+    return '';
+  }
+  const fullMatch = source.match(/v?\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?/);
+  if (!fullMatch || !fullMatch[0]) {
+    return '';
+  }
+  const candidate = normalizeVersionTag(fullMatch[0]);
+  const baseMatch = candidate.match(/^\d+\.\d+\.\d+/);
+  const base = baseMatch ? baseMatch[0] : '';
+  if (!base) {
+    return candidate;
+  }
+  const suffix = candidate.startsWith(`${base}-`) ? candidate.slice(base.length + 1) : '';
+  if (!suffix) {
+    return base;
+  }
+  if (/(darwin|linux|windows|macos|mac|arm64|aarch64|amd64|x64|x86|universal|tar|zip|gz|pkg|dmg)/i.test(suffix)) {
+    return base;
+  }
+  return candidate;
+}
+
+function scoreHelperAsset(asset = {}, arch = process.arch) {
+  const name = String(asset && asset.name ? asset.name : '').trim();
+  if (!name) {
+    return -1;
+  }
+  const lower = name.toLowerCase();
+  if (!lower.includes('helper')) {
+    return -1;
+  }
+  const extOk = lower.endsWith('.tar.gz')
+    || lower.endsWith('.tgz')
+    || lower.endsWith('.zip')
+    || lower.endsWith('.gz')
+    || lower === 'com.clashfox.helper'
+    || lower.endsWith('/com.clashfox.helper');
+  if (!extOk) {
+    return -1;
+  }
+  let score = 0;
+  if (lower.includes('darwin') || lower.includes('macos') || lower.includes('mac')) {
+    score += 30;
+  }
+  if (arch === 'arm64') {
+    if (lower.includes('arm64') || lower.includes('aarch64')) {
+      score += 25;
+    } else if (lower.includes('universal')) {
+      score += 20;
+    } else if (lower.includes('amd64') || lower.includes('x64')) {
+      score -= 20;
+    }
+  } else if (arch === 'x64') {
+    if (lower.includes('x64') || lower.includes('amd64')) {
+      score += 25;
+    } else if (lower.includes('universal')) {
+      score += 20;
+    } else if (lower.includes('arm64') || lower.includes('aarch64')) {
+      score -= 20;
+    }
+  }
+  if (lower.endsWith('.tar.gz') || lower.endsWith('.tgz')) {
+    score += 8;
+  } else if (lower.endsWith('.zip')) {
+    score += 6;
+  } else if (lower === 'com.clashfox.helper') {
+    score += 4;
+  }
+  return score;
+}
+
+function pickHelperAssetFromRelease(release = {}, arch = process.arch) {
+  const assets = Array.isArray(release && release.assets) ? release.assets : [];
+  let best = null;
+  let bestScore = -1;
+  for (const asset of assets) {
+    const score = scoreHelperAsset(asset, arch);
+    if (score > bestScore) {
+      bestScore = score;
+      best = asset;
+    }
+  }
+  if (!best || bestScore < 0) {
+    return null;
+  }
+  return best;
+}
+
+async function fetchLatestHelperReleaseFallback() {
+  let html = '';
+  let fetchError = '';
+  try {
+    const headTag = await fetchLatestReleaseTagViaCurlHead(HELPER_RELEASE_LATEST_URL, 7000);
+    const headVersion = extractSemverFromText(headTag);
+    if (headVersion) {
+      const normalizedTag = String(headTag || `v${headVersion}`).replace(/^\/+/, '');
+      const releaseUrl = `https://github.com/lukuochiang/ClashFox-Helper/releases/tag/${normalizedTag}`;
+      return {
+        ok: true,
+        version: headVersion,
+        releaseTag: normalizedTag,
+        releaseName: normalizedTag || `v${headVersion}`,
+        releaseUrl,
+        prerelease: false,
+        assetName: '',
+        assetUrl: '',
+        source: 'latest_head_fallback',
+      };
+    }
+  } catch {
+    // continue with HTML-based parsing fallback
+  }
+  try {
+    html = await fetchText(HELPER_RELEASE_LATEST_URL, 9000);
+  } catch (error) {
+    fetchError = String((error && error.message) || 'latest_fetch_failed');
+    try {
+      html = await fetchTextViaCurl(HELPER_RELEASE_LATEST_URL, 10000);
+    } catch (curlError) {
+      const curlDetail = String((curlError && curlError.message) || 'curl_fetch_failed');
+      return { ok: false, error: `${fetchError}|${curlDetail}` };
+    }
+  }
+  try {
+    const patterns = [
+      /releases\/tag\/([^"'#<\s]+)/i,
+      /"tag_name"\s*:\s*"([^"]+)"/i,
+      /<title>\s*Release\s+([^<]+?)\s*[·-]/i,
+    ];
+    let tag = '';
+    for (const pattern of patterns) {
+      const match = String(html || '').match(pattern);
+      if (match && match[1]) {
+        tag = String(match[1]).trim();
+        break;
+      }
+    }
+    const version = extractSemverFromText(tag || html);
+    if (!version) {
+      return { ok: false, error: 'FALLBACK_NO_VERSION' };
+    }
+    const normalizedTag = String(tag || `v${version}`).replace(/^\/+/, '');
+    const releaseUrl = normalizedTag
+      ? `https://github.com/lukuochiang/ClashFox-Helper/releases/tag/${normalizedTag}`
+      : HELPER_RELEASE_LATEST_URL;
+    const assetHrefRegex = /href="([^"]*\/releases\/download\/[^"]+)"/ig;
+    let matchedAssetUrl = '';
+    let matchedAssetName = '';
+    let bestScore = -1;
+    let match = assetHrefRegex.exec(String(html || ''));
+    while (match) {
+      const rawHref = String(match[1] || '').trim();
+      const decodedHref = rawHref.replace(/&amp;/g, '&');
+      const fullUrl = decodedHref.startsWith('http')
+        ? decodedHref
+        : `https://github.com${decodedHref.startsWith('/') ? decodedHref : `/${decodedHref}`}`;
+      const name = path.basename(fullUrl.split('?')[0] || '').trim();
+      const score = scoreHelperAsset({ name }, process.arch);
+      if (score > bestScore) {
+        bestScore = score;
+        matchedAssetUrl = fullUrl;
+        matchedAssetName = name;
+      }
+      match = assetHrefRegex.exec(String(html || ''));
+    }
+    return {
+      ok: true,
+      version,
+      releaseTag: normalizedTag,
+      releaseName: normalizedTag || `v${version}`,
+      releaseUrl,
+      prerelease: false,
+      assetName: matchedAssetName,
+      assetUrl: matchedAssetUrl,
+      source: 'latest_page_fallback',
+    };
+  } catch (error) {
+    return { ok: false, error: String((error && error.message) || 'FALLBACK_FAILED') };
+  }
+}
+
+function buildHelperAssetFallbackUrls({ releaseTag = '', version = '' } = {}) {
+  const tag = String(releaseTag || '').trim().replace(/^\/+/, '') || (version ? `v${version}` : '');
+  const ver = String(version || '').trim();
+  if (!tag && !ver) {
+    return [];
+  }
+  const arch = process.arch === 'arm64' ? 'arm64' : 'amd64';
+  const names = [
+    `clashfox-helper-v${ver}-darwin-universal.tar.gz`,
+    `clashfox-helper-v${ver}-darwin-${arch}.tar.gz`,
+    `clashfox-helper-${ver}-darwin-universal.tar.gz`,
+    `clashfox-helper-${ver}-darwin-${arch}.tar.gz`,
+    'com.clashfox.helper',
+  ].filter((item) => item && !item.includes('vv'));
+  const unique = new Set();
+  const urls = [];
+  for (const name of names) {
+    const url = `https://github.com/lukuochiang/ClashFox-Helper/releases/download/${tag}/${name}`;
+    if (!unique.has(url)) {
+      unique.add(url);
+      urls.push(url);
+    }
+  }
+  return urls;
+}
+
+async function getLatestHelperReleaseInfo({ acceptBeta = false, force = false } = {}) {
+  const now = Date.now();
+  if (!force && helperUpdateCache.result && helperUpdateCache.acceptBeta === Boolean(acceptBeta) && (now - helperUpdateCache.checkedAt) < HELPER_UPDATE_CACHE_TTL_MS) {
+    return helperUpdateCache.result;
+  }
+  const latestPageInfo = await fetchLatestHelperReleaseFallback();
+  if (latestPageInfo && latestPageInfo.ok) {
+    const result = { ...latestPageInfo };
+    result.assetFallbackUrls = buildHelperAssetFallbackUrls({
+      releaseTag: result.releaseTag,
+      version: result.version,
+    });
+    helperUpdateCache = { checkedAt: now, acceptBeta: Boolean(acceptBeta), result };
+    return result;
+  }
+  const result = {
+    ok: false,
+    error: latestPageInfo && latestPageInfo.error
+      ? String(latestPageInfo.error)
+      : 'CHECK_HELPER_UPDATE_FAILED',
+  };
+  helperUpdateCache = { checkedAt: now, acceptBeta: Boolean(acceptBeta), result };
+  return result;
+}
+
+function findHelperBinaryInDirectory(searchDir = '') {
+  const root = String(searchDir || '').trim();
+  if (!root || !fs.existsSync(root)) {
+    return '';
+  }
+  const queue = [root];
+  while (queue.length) {
+    const current = queue.shift();
+    let entries = [];
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        queue.push(fullPath);
+        continue;
+      }
+      if (!entry.isFile()) {
+        continue;
+      }
+      if (entry.name === 'com.clashfox.helper') {
+        return fullPath;
+      }
+    }
+  }
+  return '';
+}
+
+function resolveHelperWorkspaceDir() {
+  const helperDir = HELPER_APP_BUNDLE_DIR;
+  try {
+    fs.mkdirSync(helperDir, { recursive: true });
+  } catch {
+    // Keep returning the required path and let callers surface permission errors.
+  }
+  return helperDir;
+}
+
+function installHelperBinaryWithSystemAuth(binaryPath = '', version = '') {
+  const targetBinary = String(binaryPath || '').trim();
+  if (!targetBinary || !fs.existsSync(targetBinary)) {
+    return Promise.resolve({ ok: false, error: 'helper_binary_missing', path: targetBinary });
+  }
+  return new Promise((resolve) => {
+    const scriptPath = resolveHelperInstallScriptPath();
+    if (!fs.existsSync(scriptPath)) {
+      resolve({ ok: false, error: 'install_script_missing', path: scriptPath });
+      return;
+    }
+    const quote = (value) => `'${String(value || '').replace(/'/g, `'\\''`)}'`;
+    const commandParts = [
+      '/bin/bash',
+      quote(scriptPath),
+      quote(targetBinary),
+      quote(String(version || '').trim()),
+      quote(HELPER_APP_BUNDLE_DIR),
+    ];
+    const command = commandParts.join(' ');
+    const script = [
+      'try',
+      `set out to do shell script ${JSON.stringify(command)} with administrator privileges`,
+      'return out',
+      'on error errMsg number errNum',
+      `return "${SYSTEM_AUTH_ERROR_PREFIX}:" & (errNum as text) & ":" & errMsg`,
+      'end try',
+    ].join('\n');
+    execFile('osascript', ['-e', script], { timeout: 180 * 1000 }, (error, stdout) => {
+      if (error) {
+        resolve({
+          ok: false,
+          error: 'system_auth_failed',
+          details: error.message || String(error),
+          path: scriptPath,
+        });
+        return;
+      }
+      const output = String(stdout || '').trim();
+      if (output.startsWith(`${SYSTEM_AUTH_ERROR_PREFIX}:`)) {
+        const payload = output.slice(SYSTEM_AUTH_ERROR_PREFIX.length + 1);
+        const firstColonIndex = payload.indexOf(':');
+        const errNumRaw = firstColonIndex >= 0 ? payload.slice(0, firstColonIndex) : payload;
+        const errMsg = firstColonIndex >= 0 ? payload.slice(firstColonIndex + 1).trim() : '';
+        const errNum = Number.parseInt(String(errNumRaw || '').trim(), 10);
+        if (errNum === -128) {
+          resolve({ ok: false, error: 'sudo_required', path: scriptPath });
+          return;
+        }
+        resolve({
+          ok: false,
+          error: 'system_auth_failed',
+          details: errMsg || 'system_authorization_failed',
+          path: scriptPath,
+        });
+        return;
+      }
+      resolve({ ok: true, output, path: scriptPath });
+    });
+  });
+}
+
+async function installLatestHelperFromOnline() {
+  const settings = readAppSettings();
+  const acceptBeta = Boolean(settings && settings.acceptBeta);
+  const latest = await getLatestHelperReleaseInfo({ acceptBeta, force: true });
+  if (!latest || !latest.ok) {
+    return { ok: false, error: (latest && latest.error) || 'helper_update_unavailable' };
+  }
+  const bundleHelperDir = resolveHelperWorkspaceDir();
+  const packageDir = path.join(bundleHelperDir, 'package');
+  let archivePath = '';
+  let extractTempDir = '';
+  try {
+    fs.mkdirSync(packageDir, { recursive: true });
+    let resolvedAssetUrl = String(latest.assetUrl || '').trim();
+    let resolvedAssetName = String(latest.assetName || '').trim();
+    const candidateAssetUrls = [];
+    if (resolvedAssetUrl) {
+      candidateAssetUrls.push(resolvedAssetUrl);
+    }
+    const fallbackUrls = Array.isArray(latest.assetFallbackUrls) ? latest.assetFallbackUrls : [];
+    for (const candidate of fallbackUrls) {
+      const normalized = String(candidate || '').trim();
+      if (normalized && !candidateAssetUrls.includes(normalized)) {
+        candidateAssetUrls.push(normalized);
+      }
+    }
+    if (candidateAssetUrls.length === 0) {
+      return { ok: false, error: 'helper_asset_not_found' };
+    }
+    let downloadError = '';
+    let downloaded = false;
+    for (const candidateUrl of candidateAssetUrls) {
+      const candidateName = path.basename(String(candidateUrl).split('?')[0] || '').trim();
+      if (!candidateName) {
+        continue;
+      }
+      const candidatePath = path.join(packageDir, candidateName);
+      if (fs.existsSync(candidatePath)) {
+        try {
+          const stat = fs.statSync(candidatePath);
+          if (stat && stat.isFile() && stat.size > 0) {
+            resolvedAssetUrl = candidateUrl;
+            resolvedAssetName = candidateName;
+            archivePath = candidatePath;
+            downloaded = true;
+            break;
+          }
+        } catch {
+          // ignore broken local asset and continue to download
+        }
+      }
+      try {
+        await downloadFile(candidateUrl, candidatePath, 25000);
+        resolvedAssetUrl = candidateUrl;
+        resolvedAssetName = candidateName;
+        archivePath = candidatePath;
+        downloaded = true;
+        break;
+      } catch (error) {
+        downloadError = String((error && error.message) || error || 'download_failed');
+      }
+    }
+    if (!downloaded) {
+      return { ok: false, error: downloadError || 'helper_download_failed' };
+    }
+    extractTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clashfox-helper-extract-'));
+    let binaryPath = '';
+    const lowerName = String(resolvedAssetName || path.basename(archivePath)).toLowerCase();
+    if (lowerName.endsWith('.tar.gz') || lowerName.endsWith('.tgz')) {
+      const tarResult = spawnSync('/usr/bin/tar', ['-xzf', archivePath, '-C', extractTempDir], { encoding: 'utf8' });
+      if (tarResult.error || tarResult.status !== 0) {
+        return { ok: false, error: 'helper_extract_failed', details: String((tarResult && tarResult.stderr) || '').trim() };
+      }
+      binaryPath = findHelperBinaryInDirectory(extractTempDir);
+    } else if (lowerName.endsWith('.gz')) {
+      const decompressedPath = path.join(extractTempDir, path.basename(archivePath, '.gz'));
+      const gunzipResult = spawnSync('/usr/bin/gunzip', ['-c', archivePath], { encoding: null });
+      if (gunzipResult.error || gunzipResult.status !== 0 || !gunzipResult.stdout) {
+        return { ok: false, error: 'helper_extract_failed', details: String((gunzipResult && gunzipResult.stderr) || '').trim() };
+      }
+      fs.writeFileSync(decompressedPath, gunzipResult.stdout);
+      try {
+        fs.chmodSync(decompressedPath, 0o755);
+      } catch {
+        // ignore chmod errors; installer will validate binary later
+      }
+      binaryPath = fs.existsSync(decompressedPath) ? decompressedPath : '';
+    } else if (lowerName.endsWith('.zip')) {
+      const unzipResult = spawnSync('/usr/bin/ditto', ['-x', '-k', archivePath, extractTempDir], { encoding: 'utf8' });
+      if (unzipResult.error || unzipResult.status !== 0) {
+        return { ok: false, error: 'helper_extract_failed', details: String((unzipResult && unzipResult.stderr) || '').trim() };
+      }
+      binaryPath = findHelperBinaryInDirectory(extractTempDir);
+    } else {
+      binaryPath = archivePath;
+    }
+    if (!binaryPath || !fs.existsSync(binaryPath)) {
+      return { ok: false, error: 'helper_binary_missing' };
+    }
+    const installResult = await installHelperBinaryWithSystemAuth(binaryPath, latest.version || '');
+    if (!installResult || !installResult.ok) {
+      return {
+        ...(installResult || { ok: false, error: 'helper_install_failed' }),
+        diagnostics: {
+          archivePath,
+          extractedBinaryPath: binaryPath,
+          packageDir,
+          bundleHelperDir,
+          extractTempDir,
+          expectedBackupPath: path.join(bundleHelperDir, 'install-backup', 'com.clashfox.helper'),
+        },
+      };
+    }
+    helperUpdateCache.checkedAt = 0;
+    helperUpdateCache.result = null;
+    return {
+      ok: true,
+      version: latest.version || '',
+      releaseUrl: latest.releaseUrl || '',
+      assetName: latest.assetName || '',
+      assetUrl: resolvedAssetUrl,
+      output: installResult.output || '',
+      diagnostics: {
+        archivePath,
+        extractedBinaryPath: binaryPath,
+        packageDir,
+        bundleHelperDir,
+        extractTempDir,
+        expectedBackupPath: path.join(bundleHelperDir, 'install-backup', 'com.clashfox.helper'),
+      },
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: String((err && err.message) || 'helper_update_failed'),
+      diagnostics: {
+        archivePath,
+        packageDir,
+        bundleHelperDir,
+        extractTempDir,
+        expectedBackupPath: path.join(bundleHelperDir, 'install-backup', 'com.clashfox.helper'),
+      },
+    };
+  } finally {
+    if (extractTempDir) {
+      try {
+        fs.rmSync(extractTempDir, { recursive: true, force: true });
+      } catch {
+        // ignore temp cleanup errors
+      }
+    }
+  }
+}
+
+async function checkHelperUpdates({ force = true } = {}) {
+  const settings = readAppSettings();
+  const acceptBeta = Boolean(settings && settings.acceptBeta);
+  const latest = await getLatestHelperReleaseInfo({ acceptBeta, force: Boolean(force) });
+  if (!latest || !latest.ok) {
+    return {
+      ok: false,
+      status: 'error',
+      error: (latest && latest.error) || 'helper_update_unavailable',
+    };
+  }
+  const installedVersion = readInstalledHelperVersion();
+  const bundledVersion = readBundledHelperVersion();
+  const onlineVersion = String(latest.version || '').trim();
+  let targetVersion = onlineVersion || bundledVersion || '';
+  if (onlineVersion && bundledVersion) {
+    targetVersion = compareVersions(onlineVersion, bundledVersion) >= 0 ? onlineVersion : bundledVersion;
+  }
+  const updateAvailable = Boolean(
+    installedVersion
+    && targetVersion
+    && compareVersions(targetVersion, installedVersion) > 0
+  );
+  return {
+    ok: true,
+    status: updateAvailable ? 'update_available' : 'up_to_date',
+    installedVersion,
+    onlineVersion,
+    bundledVersion,
+    targetVersion,
+    updateAvailable,
+    updateSource: targetVersion === bundledVersion ? 'bundled' : 'online',
+    releaseUrl: String(latest.releaseUrl || '').trim(),
+    assetName: String(latest.assetName || '').trim(),
+  };
+}
+
 function pickLatestRelease(releases = [], acceptBeta = false) {
   if (!Array.isArray(releases)) {
     return null;
@@ -1256,51 +1916,45 @@ function resolveMainWindowSizeFromSettings() {
 }
 
 function resolveHelperInstallScriptPath() {
-  const baseDirs = [
-    path.join(ROOT_DIR, 'helper'),
-    path.join(ROOT_DIR, 'scripts'),
-    path.join(process.resourcesPath || '', 'helper'),
-    path.join(process.resourcesPath || '', 'scripts'),
+  const candidates = [
+    path.join(HELPER_APP_BUNDLE_DIR, 'install-helper.sh'),
+    path.join(process.resourcesPath || '', 'helper', 'install-helper.sh'),
+    path.join(APP_PATH, 'helper', 'install-helper.sh'),
   ];
-  const candidates = baseDirs.map((baseDir) => path.join(baseDir, 'install-helper.sh'));
   for (const candidate of candidates) {
     if (candidate && fs.existsSync(candidate)) {
       return candidate;
     }
   }
-  return path.join(ROOT_DIR, 'helper', 'install-helper.sh');
+  return path.join(HELPER_APP_BUNDLE_DIR, 'install-helper.sh');
 }
 
 function resolveHelperUninstallScriptPath() {
-  const baseDirs = [
-    path.join(ROOT_DIR, 'helper'),
-    path.join(ROOT_DIR, 'scripts'),
-    path.join(process.resourcesPath || '', 'helper'),
-    path.join(process.resourcesPath || '', 'scripts'),
+  const candidates = [
+    path.join(HELPER_APP_BUNDLE_DIR, 'uninstall-helper.sh'),
+    path.join(process.resourcesPath || '', 'helper', 'uninstall-helper.sh'),
+    path.join(APP_PATH, 'helper', 'uninstall-helper.sh'),
   ];
-  const candidates = baseDirs.map((baseDir) => path.join(baseDir, 'uninstall-helper.sh'));
   for (const candidate of candidates) {
     if (candidate && fs.existsSync(candidate)) {
       return candidate;
     }
   }
-  return path.join(ROOT_DIR, 'helper', 'uninstall-helper.sh');
+  return path.join(HELPER_APP_BUNDLE_DIR, 'uninstall-helper.sh');
 }
 
 function resolveHelperDoctorScriptPath() {
-  const baseDirs = [
-    path.join(ROOT_DIR, 'helper'),
-    path.join(ROOT_DIR, 'scripts'),
-    path.join(process.resourcesPath || '', 'helper'),
-    path.join(process.resourcesPath || '', 'scripts'),
+  const candidates = [
+    path.join(HELPER_APP_BUNDLE_DIR, 'doctor-helper.sh'),
+    path.join(process.resourcesPath || '', 'helper', 'doctor-helper.sh'),
+    path.join(APP_PATH, 'helper', 'doctor-helper.sh'),
   ];
-  const candidates = baseDirs.map((baseDir) => path.join(baseDir, 'doctor-helper.sh'));
   for (const candidate of candidates) {
     if (candidate && fs.existsSync(candidate)) {
       return candidate;
     }
   }
-  return path.join(ROOT_DIR, 'helper', 'doctor-helper.sh');
+  return path.join(HELPER_APP_BUNDLE_DIR, 'doctor-helper.sh');
 }
 
 function runHelperDoctor(options = {}) {
@@ -1419,6 +2073,10 @@ function normalizeHelperVersion(raw = '') {
   if (match && match[1]) {
     return String(match[1]).trim();
   }
+  const semver = extractSemverFromText(text);
+  if (semver) {
+    return semver;
+  }
   return '';
 }
 
@@ -1460,7 +2118,6 @@ function readInstalledHelperVersion(paths = getHelperPaths()) {
 
 function readBundledHelperVersion() {
   const candidates = [
-    path.join(ROOT_DIR, 'helper', 'com.clashfox.helper'),
     path.join(process.resourcesPath || '', 'helper', 'com.clashfox.helper'),
     path.join(APP_PATH, 'helper', 'com.clashfox.helper'),
   ];
@@ -1659,12 +2316,23 @@ async function getHelperStatus() {
     || normalizeHelperVersion(ping && ping.data && ping.data.version)
     || normalizeHelperVersion(statusProbe && statusProbe.data && statusProbe.data.version)
     || '';
-  const helperTargetVersion = readBundledHelperVersion();
+  const bundledTargetVersion = readBundledHelperVersion();
+  const settings = readAppSettings();
+  const acceptBeta = Boolean(settings && settings.acceptBeta);
+  const onlineLatest = await getLatestHelperReleaseInfo({ acceptBeta, force: false }).catch(() => null);
+  const onlineVersion = onlineLatest && onlineLatest.ok ? String(onlineLatest.version || '').trim() : '';
+  let helperTargetVersion = onlineVersion || bundledTargetVersion;
+  if (onlineVersion && bundledTargetVersion) {
+    helperTargetVersion = compareVersions(onlineVersion, bundledTargetVersion) >= 0
+      ? onlineVersion
+      : bundledTargetVersion;
+  }
   const helperUpdateAvailable = Boolean(
     helperVersion
     && helperTargetVersion
     && compareVersions(helperTargetVersion, helperVersion) > 0,
   );
+  const helperUpdateSource = helperTargetVersion === bundledTargetVersion ? 'bundled' : 'online';
   let state = 'installed_unreachable';
   if (running) {
     state = 'running';
@@ -1687,8 +2355,14 @@ async function getHelperStatus() {
       socketPingOk,
       httpPingOk,
       helperVersion,
+      helperBundledVersion: bundledTargetVersion,
+      helperOnlineVersion: onlineVersion,
       helperTargetVersion,
       helperUpdateAvailable,
+      helperUpdateSource,
+      helperOnlineReleaseUrl: onlineLatest && onlineLatest.ok ? String(onlineLatest.releaseUrl || '').trim() : '',
+      helperOnlineAssetName: onlineLatest && onlineLatest.ok ? String(onlineLatest.assetName || '').trim() : '',
+      helperOnlineError: onlineLatest && !onlineLatest.ok ? String(onlineLatest.error || '') : '',
       logPath,
       ping: ping || { ok: false, error: 'helper_unreachable' },
       statusProbe: statusProbe || null,
@@ -1711,8 +2385,14 @@ function normalizeHelperStatusPayload(result) {
     socketPingOk: Boolean(data.socketPingOk),
     httpPingOk: Boolean(data.httpPingOk),
     helperVersion: String(data.helperVersion || ''),
+    helperBundledVersion: String(data.helperBundledVersion || ''),
+    helperOnlineVersion: String(data.helperOnlineVersion || ''),
     helperTargetVersion: String(data.helperTargetVersion || ''),
     helperUpdateAvailable: Boolean(data.helperUpdateAvailable),
+    helperUpdateSource: String(data.helperUpdateSource || ''),
+    helperOnlineReleaseUrl: String(data.helperOnlineReleaseUrl || ''),
+    helperOnlineAssetName: String(data.helperOnlineAssetName || ''),
+    helperOnlineError: String(data.helperOnlineError || ''),
     logPath: String(data.logPath || '/var/log/clashfox-helper.log'),
     updatedAt: new Date().toISOString(),
   };
@@ -5522,18 +6202,38 @@ app.whenReady().then(() => {
     return checkKernelUpdates(options || {});
   });
 
+  ipcMain.handle('clashfox:checkHelperUpdates', async (_event, options = {}) => {
+    return checkHelperUpdates(options || {});
+  });
+
   ipcMain.handle('clashfox:installHelper', async () => {
-    const result = await installHelperWithSystemAuth();
-    const status = await getHelperStatus();
-    persistHelperStatusToSettings(status);
-    return result || { ok: false, error: 'install_failed' };
+    try {
+      const result = await installLatestHelperFromOnline();
+      helperUpdateCache.checkedAt = 0;
+      helperUpdateCache.result = null;
+      const status = await getHelperStatus();
+      persistHelperStatusToSettings(status);
+      refreshTrayMenuLabelsOnly();
+      createTrayMenu().catch(() => {});
+      return result || { ok: false, error: 'install_failed' };
+    } catch (err) {
+      return { ok: false, error: String((err && err.message) || 'install_failed') };
+    }
   });
 
   ipcMain.handle('clashfox:uninstallHelper', async () => {
-    const result = await uninstallHelperWithSystemAuth();
-    const status = await getHelperStatus();
-    persistHelperStatusToSettings(status);
-    return result || { ok: false, error: 'uninstall_failed' };
+    try {
+      const result = await uninstallHelperWithSystemAuth();
+      helperUpdateCache.checkedAt = 0;
+      helperUpdateCache.result = null;
+      const status = await getHelperStatus();
+      persistHelperStatusToSettings(status);
+      refreshTrayMenuLabelsOnly();
+      createTrayMenu().catch(() => {});
+      return result || { ok: false, error: 'uninstall_failed' };
+    } catch (err) {
+      return { ok: false, error: String((err && err.message) || 'uninstall_failed') };
+    }
   });
 
   ipcMain.handle('clashfox:runHelperInstallInTerminal', async () => {
@@ -5552,16 +6252,30 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('clashfox:getHelperStatus', async () => {
-    const result = await getHelperStatus();
-    persistHelperStatusToSettings(result);
-    return result || { ok: false, error: 'status_unavailable' };
+    try {
+      const result = await getHelperStatus();
+      persistHelperStatusToSettings(result);
+      refreshTrayMenuLabelsOnly();
+      createTrayMenu().catch(() => {});
+      return result || { ok: false, error: 'status_unavailable' };
+    } catch (err) {
+      return { ok: false, error: String((err && err.message) || 'status_unavailable') };
+    }
   });
 
   ipcMain.handle('clashfox:doctorHelper', async (_event, options = {}) => {
-    const result = await runHelperDoctor(options || {});
-    const status = await getHelperStatus();
-    persistHelperStatusToSettings(status);
-    return result || { ok: false, error: 'doctor_failed' };
+    try {
+      const result = await runHelperDoctor(options || {});
+      helperUpdateCache.checkedAt = 0;
+      helperUpdateCache.result = null;
+      const status = await getHelperStatus();
+      persistHelperStatusToSettings(status);
+      refreshTrayMenuLabelsOnly();
+      createTrayMenu().catch(() => {});
+      return result || { ok: false, error: 'doctor_failed' };
+    } catch (err) {
+      return { ok: false, error: String((err && err.message) || 'doctor_failed') };
+    }
   });
 
   ipcMain.handle('clashfox:openHelperLogs', async () => {

@@ -172,18 +172,27 @@
                 </div>
                 <div class="helper-card-side">
                   <span class="helper-install-status" id="helperStatusText">-</span>
-                  <button class="icon-btn ghost small helper-refresh-btn" id="helperRefreshBtn" type="button" aria-label="Refresh helper status">
-                    <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-                      <path d="M17.64 6.36A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.76-4.24L14 10h6V4l-2.36 2.36Z"></path>
-                    </svg>
-                  </button>
                 </div>
               </div>
               <p class="helper-card-desc" data-i18n="settings.helperDesc">The privileged helper enables advanced features like Enhanced Mode (TUN). It runs as a system service and requires administrator privileges to install.</p>
-              <p class="helper-card-meta" id="helperVersionText">Version: -</p>
+              <div class="helper-card-meta-row">
+                <p class="helper-card-meta" id="helperVersionText">Version: -</p>
+                <button
+                  class="icon-btn ghost small helper-check-update-btn"
+                  id="helperCheckUpdateBtn"
+                  type="button"
+                  data-tip-key="settings.helperCheckUpdate"
+                  aria-label="Check Update"
+                >
+                  <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                    <path d="M17.64 6.36A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.76-4.24L14 10h6V4l-2.36 2.36Z"></path>
+                  </svg>
+                </button>
+              </div>
               <div class="helper-card-actions">
                 <button class="btn primary" id="helperInstallBtn" data-i18n="settings.helperInstall">Install</button>
                 <button class="btn ghost is-hidden" id="helperRepairBtn" data-i18n="settings.helperRepairAction">Repair</button>
+                <button class="btn ghost" id="helperRefreshBtn" type="button" data-i18n="actions.refresh">Refresh</button>
                 <button class="btn ghost" id="helperLogsOpenBtn" data-i18n="settings.helperLogsOpen">View Helper Logs</button>
               </div>
               <button class="is-hidden" id="helperInstallTerminalBtn" type="button"></button>

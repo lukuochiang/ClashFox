@@ -1,7 +1,7 @@
 {
   "name": "ClashFox",
   "version": "0.4.2",
-  "buildNumber": 1,
+  "buildNumber": 3,
   "description": "ClashFox GUI for Mihomo",
   "license": "GPL-3.0",
   "author": "Kuochiang Lu <lukuochiang@gmail.com> (https://github.com/lukuochiang/ClashFox)",
@@ -28,14 +28,9 @@
     "files": [
       "src/**/*",
       "scripts/**/*",
-      "helper/**/*",
       "assets/**/*",
       "static/**/*",
       "package.json",
-      "!helper/.build/**",
-      "!helper/cmd/**",
-      "!helper/*.go",
-      "!helper/.DS_Store",
       "!**/dist/**",
       "!**/node_modules/**",
       "!**/.DS_Store"
@@ -47,15 +42,6 @@
         "filter": [
           "*.sh",
           "lib/*.sh"
-        ]
-      },
-      {
-        "from": "helper",
-        "to": "helper",
-        "filter": [
-          "*.sh",
-          "com.clashfox.helper",
-          "com.clashfox.helper.plist"
         ]
       },
       {

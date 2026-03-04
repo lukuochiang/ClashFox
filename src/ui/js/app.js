@@ -315,6 +315,7 @@ let helperInstallPath = document.getElementById('helperInstallPath');
 let helperStatusText = document.getElementById('helperStatusText');
 let helperStatusDot = document.querySelector('.helper-status-dot');
 let helperRefreshBtn = document.getElementById('helperRefreshBtn');
+let helperCheckUpdateBtn = document.getElementById('helperCheckUpdateBtn');
 let helperLogsOpenBtn = document.getElementById('helperLogsOpenBtn');
 let helperLogsRevealBtn = document.getElementById('helperLogsRevealBtn');
 let helperLogsPath = document.getElementById('helperLogsPath');
@@ -780,6 +781,15 @@ function t(path) {
 function ti(path, fallback = '') {
   const value = t(path);
   return value && String(value).trim() !== '' ? value : fallback;
+}
+
+function normalizeVersionForDisplay(raw = '') {
+  const text = String(raw || '').trim();
+  if (!text) {
+    return '';
+  }
+  const match = text.match(/v?\d+\.\d+\.\d+/);
+  return match ? String(match[0]).replace(/^v/i, '') : text;
 }
 
 function getAutoLanguage() {
@@ -2452,6 +2462,11 @@ function formatCoreActionError(action, response) {
   const genericErrors = new Set(['start_failed', 'restart_failed', 'stop_failed']);
   const errorCode = response?.error || '';
   const details = response?.details || response?.message || '';
+  const helperState = ((state.settings && state.settings.helperStatus) || (state.fileSettings && state.fileSettings.helperStatus) || {}).state || '';
+  const helperMissing = String(helperState || '').trim() === 'not_installed';
+  if (helperMissing && new Set(['unexpected_error', 'helper_unreachable', 'socket_missing']).has(String(errorCode || '').trim())) {
+    return ti('labels.helperNotInstalledHint', 'Privileged Helper is not installed. Please install it in Settings first.');
+  }
   const fallback = (details && genericErrors.has(errorCode))
     ? details
     : (response?.error || response?.details || response?.message
@@ -3776,8 +3791,9 @@ async function applyTunSettingsAfterStart() {
   if (!response || !response.ok) {
     return response || { ok: false, error: 'tun_update_failed' };
   }
-  const statusResponse = await loadTunStatus(false);
-  if (!statusResponse || !statusResponse.ok || !statusResponse.data) {
+  const waitResult = await waitForTunState(enabled, 3000, 350);
+  const statusResponse = waitResult && waitResult.status ? waitResult.status : await loadTunStatus(false);
+  if (!waitResult || !waitResult.ok || !statusResponse || !statusResponse.ok || !statusResponse.data) {
     return { ok: false, error: (statusResponse && statusResponse.error) || 'tun_status_failed' };
   }
   return { ok: true, data: statusResponse.data };
@@ -3868,8 +3884,35 @@ async function loadTunStatus(showToastOnSuccess = false) {
   return response;
 }
 
+async function waitForTunState(targetEnabled, timeoutMs = 3000, intervalMs = 350) {
+  const expected = Boolean(targetEnabled);
+  const deadline = Date.now() + Math.max(500, Number(timeoutMs) || 3000);
+  let lastStatus = null;
+  while (Date.now() <= deadline) {
+    const statusResponse = await loadTunStatus(false);
+    lastStatus = statusResponse;
+    if (statusResponse && statusResponse.ok && statusResponse.data
+      && typeof statusResponse.data.enabled === 'boolean') {
+      const actual = Boolean(statusResponse.data.enabled);
+      if (actual === expected) {
+        return { ok: true, status: statusResponse };
+      }
+      if (expected && actual === false) {
+        return { ok: false, error: 'tun_enable_not_effective', status: statusResponse };
+      }
+    }
+    await sleep(Math.max(120, Number(intervalMs) || 350));
+  }
+  return { ok: false, error: 'tun_status_timeout', status: lastStatus };
+}
+
 function formatTunUpdateError(response, statusResponse, fallbackLabel) {
   const mergedError = (response && response.error) || (statusResponse && statusResponse.error) || '';
+  const helperState = ((state.settings && state.settings.helperStatus) || (state.fileSettings && state.fileSettings.helperStatus) || {}).state || '';
+  const helperMissing = String(helperState || '').trim() === 'not_installed';
+  if (helperMissing && new Set(['unexpected_error', 'helper_unreachable', 'socket_missing']).has(String(mergedError || '').trim())) {
+    return ti('labels.helperNotInstalledHint', 'Privileged Helper is not installed. Please install it in Settings first.');
+  }
   if (mergedError === 'controller_missing') {
     return t('labels.controllerMissing');
   }
@@ -4723,6 +4766,7 @@ function refreshPageRefs() {
   helperStatusText = document.getElementById('helperStatusText');
   helperStatusDot = document.querySelector('.helper-status-dot');
   helperRefreshBtn = document.getElementById('helperRefreshBtn');
+  helperCheckUpdateBtn = document.getElementById('helperCheckUpdateBtn');
   helperLogsOpenBtn = document.getElementById('helperLogsOpenBtn');
   helperLogsRevealBtn = document.getElementById('helperLogsRevealBtn');
   helperLogsPath = document.getElementById('helperLogsPath');
@@ -5298,6 +5342,15 @@ function setHelperPrimaryAction(snapshot = {}) {
   } else {
     helperInstallBtn.textContent = ti('settings.helperInstall', 'Install');
   }
+  if (helperCheckUpdateBtn) {
+    // Only show "Check updates" after helper is installed.
+    helperCheckUpdateBtn.classList.toggle('is-hidden', !installed);
+  }
+  if (helperRefreshBtn) {
+    // When primary action is uninstall, hide manual refresh button.
+    const hideRefresh = helperPrimaryAction === 'uninstall';
+    helperRefreshBtn.classList.toggle('is-hidden', hideRefresh);
+  }
   if (helperRepairBtn) {
     const showRepair = installed && stateValue === 'installed_unreachable';
     helperRepairBtn.classList.toggle('is-hidden', !showRepair);
@@ -5341,8 +5394,8 @@ function applyHelperStatusSnapshot(snapshot) {
   }
   setHelperPrimaryAction(snapshot);
   if (helperVersionText) {
-    const version = String(snapshot.helperVersion || '').trim();
-    const targetVersion = String(snapshot.helperTargetVersion || '').trim();
+    const version = normalizeVersionForDisplay(snapshot.helperVersion || '');
+    const targetVersion = normalizeVersionForDisplay(snapshot.helperTargetVersion || '');
     const updateAvailable = Boolean(snapshot.helperUpdateAvailable && version && targetVersion);
     helperVersionText.dataset.updateAvailable = updateAvailable ? 'true' : 'false';
     if (updateAvailable) {
@@ -5528,6 +5581,15 @@ if (helperInstallBtn) {
             : ti('settings.helperInstallFailed', 'Helper install failed'))}${detail}`,
         'error'
       );
+      if (response && response.rollback && typeof response.rollback === 'object') {
+        const restored = Boolean(response.rollback.restored);
+        showToast(
+          restored
+            ? ti('settings.helperRollbackOk', 'Helper rollback completed')
+            : ti('settings.helperRollbackFailed', 'Helper rollback failed'),
+          restored ? 'info' : 'error'
+        );
+      }
     });
   }
 }
@@ -5605,6 +5667,50 @@ if (helperRefreshBtn) {
     await refreshHelperPanel(true);
     helperRefreshBtn.disabled = false;
   });
+}
+
+if (helperCheckUpdateBtn) {
+  if (helperCheckUpdateBtn.dataset.bound !== 'true') {
+    helperCheckUpdateBtn.dataset.bound = 'true';
+    helperCheckUpdateBtn.addEventListener('click', async () => {
+      if (!window.clashfox || typeof window.clashfox.checkHelperUpdates !== 'function') {
+        showToast(ti('settings.helperUpdateCheckFailed', 'Failed to check helper updates'), 'error');
+        return;
+      }
+      helperCheckUpdateBtn.disabled = true;
+      try {
+        const result = await window.clashfox.checkHelperUpdates({ force: true });
+        if (!result || !result.ok) {
+          const detail = result && result.error ? `: ${String(result.error)}` : '';
+          showToast(`${ti('settings.helperUpdateCheckFailed', 'Failed to check helper updates')}${detail}`, 'error');
+        } else if (result.updateAvailable) {
+          const targetVersion = normalizeVersionForDisplay(result.targetVersion || result.onlineVersion || '');
+          showToast(
+            targetVersion
+              ? `${ti('settings.helperUpdateFound', 'Helper update available')}: v${targetVersion}`
+              : ti('settings.helperUpdateFound', 'Helper update available'),
+            'info'
+          );
+        } else if (String(result.targetVersion || '').trim()) {
+          const installedVersion = normalizeVersionForDisplay(result.installedVersion || '');
+          const targetVersion = normalizeVersionForDisplay(result.targetVersion || '');
+          if (installedVersion) {
+            showToast(ti('settings.helperAlreadyLatest', 'Helper is up to date.'), 'info');
+          } else {
+            showToast(`${ti('settings.helperLatestVersion', 'Latest helper version')}: v${targetVersion}`, 'info');
+          }
+        } else {
+          showToast(ti('settings.helperAlreadyLatest', 'Helper is up to date.'), 'info');
+        }
+      } catch (err) {
+        const detail = err && err.message ? `: ${String(err.message)}` : '';
+        showToast(`${ti('settings.helperUpdateCheckFailed', 'Failed to check helper updates')}${detail}`, 'error');
+      } finally {
+        await refreshHelperPanel(true);
+        helperCheckUpdateBtn.disabled = false;
+      }
+    });
+  }
 }
 
 if (helperLogsOpenBtn) {
@@ -6048,6 +6154,13 @@ if (settingsBrowseConfig) {
 async function handleCoreAction(action, button) {
   // Keep quick actions always responsive.
   setCoreActionState(false);
+  const helperStateSnapshot = () => {
+    const snapshot = (state.settings && state.settings.helperStatus)
+      || (state.fileSettings && state.fileSettings.helperStatus)
+      || {};
+    return String((snapshot && snapshot.state) || '').trim();
+  };
+  const helperNotInstalled = () => helperStateSnapshot() === 'not_installed';
   
   try {
     // Always refresh status before making action decisions to avoid stale state.
@@ -6105,7 +6218,9 @@ async function handleCoreAction(action, button) {
           state.coreRunningGuardUntil = 0;
           await loadStatusSilently();
           syncQuickActionButtons();
-          showToast(ti('labels.startFailed', 'Start failed'), 'error');
+          if (!helperNotInstalled()) {
+            showToast(ti('labels.startFailed', 'Start failed'), 'error');
+          }
         }
       } else if (action === 'restart') {
         const running = await waitForKernelState(true, 15000, 400);
@@ -6124,7 +6239,9 @@ async function handleCoreAction(action, button) {
           state.coreRunningGuardUntil = 0;
           await loadStatusSilently();
           syncQuickActionButtons();
-          showToast(ti('labels.restartFailed', 'Restart failed'), 'error');
+          if (!helperNotInstalled()) {
+            showToast(ti('labels.restartFailed', 'Restart failed'), 'error');
+          }
         }
       } else {
         const stopped = await waitForKernelState(false, 10000, 300);
@@ -6144,7 +6261,10 @@ async function handleCoreAction(action, button) {
       state.coreRunningGuardUntil = 0;
       await loadStatusSilently();
       syncQuickActionButtons();
-      showToast(formatCoreActionError(action, response), 'error');
+      const message = formatCoreActionError(action, response);
+      const helperState = ((state.settings && state.settings.helperStatus) || (state.fileSettings && state.fileSettings.helperStatus) || {}).state || '';
+      const helperMissing = String(helperState || '').trim() === 'not_installed';
+      showToast(message, helperMissing ? 'info' : 'error');
     }
     
   } catch (error) {
@@ -6223,10 +6343,12 @@ if (tunToggle) {
         response = await runCommand('tun', args);
       }
     }
-    // Always re-sync from kernel to avoid divergence
-    const statusResponse = await loadTunStatus(false);
+    // /configs patch may return OK first, while runtime TUN can fail shortly after.
+    // Wait a short window and validate final TUN state before showing success.
+    const waitResult = await waitForTunState(enabled, 3000, 350);
+    const statusResponse = waitResult && waitResult.status ? waitResult.status : await loadTunStatus(false);
     const actual = tunToggle.checked;
-    const statusOk = statusResponse && statusResponse.ok && statusResponse.data;
+    const statusOk = waitResult && waitResult.ok && statusResponse && statusResponse.ok && statusResponse.data;
     if (!response.ok || !statusOk || actual !== enabled) {
       const nextChecked = statusOk ? actual : previous;
       tunToggle.checked = nextChecked;
@@ -6244,7 +6366,9 @@ if (tunToggle) {
           'TUN update failed. Turn off TUN mode in other proxy apps, then try again.',
         )
         : message;
-      showToast(finalMessage, 'error');
+      const helperState = ((state.settings && state.settings.helperStatus) || (state.fileSettings && state.fileSettings.helperStatus) || {}).state || '';
+      const helperMissing = String(helperState || '').trim() === 'not_installed';
+      showToast(finalMessage, helperMissing ? 'info' : 'error');
       return;
     }
     saveSettings({ tun: actual });
@@ -6289,7 +6413,9 @@ if (tunStackSelect) {
           ? ti('labels.tunStatusFailed', 'TUN status unavailable')
           : ti('labels.tunStackUpdateFailed', 'TUN stack update failed'),
       );
-      showToast(message, 'error');
+      const helperState = ((state.settings && state.settings.helperStatus) || (state.fileSettings && state.fileSettings.helperStatus) || {}).state || '';
+      const helperMissing = String(helperState || '').trim() === 'not_installed';
+      showToast(message, helperMissing ? 'info' : 'error');
       return;
     }
     saveSettings({ stack: actual });
