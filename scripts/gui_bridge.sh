@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SCRIPT_PATH="$ROOT_DIR/scripts/clashfox_mihomo_toolkit.sh"
+SCRIPT_PATH="$ROOT_DIR/scripts/lib/clashfox_mihomo_toolkit.sh"
 COMMON_LIB="$ROOT_DIR/scripts/lib/clashfox_script_common.sh"
 
 if [ "$(uname -s)" != "Darwin" ]; then
@@ -471,6 +471,51 @@ force_kill() {
     if [ -f "$pid_file" ]; then
         rm -f "$pid_file"
     fi
+}
+
+start_mihomo_kernel_user() {
+    local config_path="${1:-}"
+    if [ -z "$config_path" ]; then
+        config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+    fi
+    local kernel_path="$CLASHFOX_CORE_DIR/$ACTIVE_CORE"
+    local pid_file="$CLASHFOX_PID_DIR/clashfox.pid"
+    local log_file="$CLASHFOX_LOG_DIR/clashfox.log"
+
+    if [ ! -x "$kernel_path" ]; then
+        return 1
+    fi
+    mkdir -p "$CLASHFOX_LOG_DIR" "$CLASHFOX_PID_DIR" "$CLASHFOX_DATA_DIR" >/dev/null 2>&1 || true
+    if is_running; then
+        return 0
+    fi
+
+    "$kernel_path" -f "$config_path" -d "$CLASHFOX_DATA_DIR" >> "$log_file" 2>&1 < /dev/null &
+    local spawned_pid=$!
+    if [ -n "$spawned_pid" ]; then
+        printf '%s' "$spawned_pid" > "$pid_file"
+    fi
+    return 0
+}
+
+kill_mihomo_kernel_user() {
+    local pid_file="$CLASHFOX_PID_DIR/clashfox.pid"
+    local pid=""
+    if [ -f "$pid_file" ]; then
+        pid="$(cat "$pid_file" 2>/dev/null || true)"
+    fi
+    if [ -n "$pid" ] && kill -0 "$pid" >/dev/null 2>&1; then
+        kill "$pid" >/dev/null 2>&1 || true
+        sleep 0.3
+        if kill -0 "$pid" >/dev/null 2>&1; then
+            kill -9 "$pid" >/dev/null 2>&1 || true
+        fi
+    fi
+    pkill -x "$ACTIVE_CORE" >/dev/null 2>&1 || true
+    if [ -f "$pid_file" ]; then
+        rm -f "$pid_file"
+    fi
+    return 0
 }
 
 ensure_sudo() {
@@ -1032,16 +1077,75 @@ handle_tun_status() {
         auth_args=(-H "Authorization: Bearer $MIHOMO_SECRET")
     fi
     local json enabled stack
-    json="$(curl -s --max-time 2 "${auth_args[@]}" "$MIHOMO_CONTROLLER/configs" 2>/dev/null | tr '\n' ' ')"
+    json="$(curl -s --max-time 2 "${auth_args[@]}" "$MIHOMO_CONTROLLER/configs" 2>/dev/null)"
     if [ -z "$json" ]; then
         print_err "request_failed"
         return 1
     fi
-    enabled="$(printf '%s' "$json" | sed -nE 's/.*\"tun\"[[:space:]]*:[[:space:]]*\\{[^}]*\"(enable|enabled)\"[[:space:]]*:[[:space:]]*([^,}\\ ]+).*/\\2/p')"
-    if [ -z "$enabled" ]; then
-        enabled="$(printf '%s' "$json" | sed -nE 's/.*\"tun\"[[:space:]]*:[[:space:]]*(true|false).*/\\1/p')"
+
+    local parsed=""
+    if command -v python3 >/dev/null 2>&1; then
+        parsed="$(CLASHFOX_TUN_STATUS_JSON="$json" python3 - <<'PY'
+import json, os
+
+raw = os.environ.get("CLASHFOX_TUN_STATUS_JSON", "")
+if not raw:
+    raise SystemExit
+
+try:
+    data = json.loads(raw)
+except Exception:
+    raise SystemExit
+
+tun = data.get("tun") if isinstance(data, dict) else None
+enabled = None
+stack = ""
+
+def to_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in ("true", "1", "yes", "on"):
+            return True
+        if lowered in ("false", "0", "no", "off"):
+            return False
+    return None
+
+if isinstance(tun, bool):
+    enabled = tun
+elif isinstance(tun, dict):
+    enabled = to_bool(tun.get("enable"))
+    if enabled is None:
+        enabled = to_bool(tun.get("enabled"))
+    stack_val = tun.get("stack")
+    if isinstance(stack_val, str) and stack_val.strip():
+        stack = stack_val.strip()
+
+if enabled is None:
+    raise SystemExit
+if not stack:
+    stack = "mixed"
+print(("true" if enabled else "false") + "|" + stack)
+PY
+)"
     fi
-    stack="$(printf '%s' "$json" | sed -nE 's/.*\"tun\"[[:space:]]*:[[:space:]]*\\{[^}]*\"stack\"[[:space:]]*:[[:space:]]*\"([^\"]+)\".*/\\1/p')"
+
+    if [ -n "$parsed" ]; then
+        enabled="${parsed%%|*}"
+        stack="${parsed#*|}"
+    else
+        local compact_json
+        compact_json="$(printf '%s' "$json" | tr '\n' ' ')"
+        enabled="$(printf '%s' "$compact_json" | sed -nE 's/.*\"tun\"[[:space:]]*:[[:space:]]*\\{[^}]*\"(enable|enabled)\"[[:space:]]*:[[:space:]]*([^,}\\ ]+).*/\\2/p')"
+        if [ -z "$enabled" ]; then
+            enabled="$(printf '%s' "$compact_json" | sed -nE 's/.*\"tun\"[[:space:]]*:[[:space:]]*(true|false).*/\\1/p')"
+        fi
+        stack="$(printf '%s' "$compact_json" | sed -nE 's/.*\"tun\"[[:space:]]*:[[:space:]]*\\{[^}]*\"stack\"[[:space:]]*:[[:space:]]*\"([^\"]+)\".*/\\1/p')"
+    fi
+
     if [ -z "$enabled" ]; then
         print_err "tun_parse_failed"
         return 1
@@ -1099,12 +1203,14 @@ handle_tun() {
     fi
 
     local payload=""
+    local payload_fallback=""
     if [ -n "$enable_value" ]; then
         case "$enable_value" in
             true|false) ;;
             *) print_err "invalid_tun"; return 1 ;;
         esac
-        payload="{\"tun\":{\"enable\":$enable_value}}"
+        payload="{\"tun\":{\"enabled\":$enable_value}}"
+        payload_fallback="{\"tun\":{\"enable\":$enable_value}}"
     fi
     if [ -n "$stack_value" ]; then
         case "$stack_value" in
@@ -1118,9 +1224,11 @@ handle_tun() {
             *) print_err "invalid_tun"; return 1 ;;
         esac
         if [ -n "$payload" ]; then
-            payload="{\"tun\":{\"enable\":${enable_value:-false},\"stack\":\"$stack_value\"}}"
+            payload="{\"tun\":{\"enabled\":${enable_value:-false},\"stack\":\"$stack_value\"}}"
+            payload_fallback="{\"tun\":{\"enable\":${enable_value:-false},\"stack\":\"$stack_value\"}}"
         else
             payload="{\"tun\":{\"stack\":\"$stack_value\"}}"
+            payload_fallback=""
         fi
     fi
     if [ -z "$payload" ]; then
@@ -1132,14 +1240,50 @@ handle_tun() {
     if [ -n "$MIHOMO_SECRET" ]; then
         auth_args=(-H "Authorization: Bearer $MIHOMO_SECRET")
     fi
-    local code
-    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 -X PATCH "${auth_args[@]}" -H "Content-Type: application/json" -d "$payload" "$MIHOMO_CONTROLLER/configs" 2>/dev/null)"
+    local resp_file code body
+    resp_file="$(mktemp 2>/dev/null || true)"
+    code="$(curl -s --max-time 3 -o "${resp_file:-/dev/null}" -w '%{http_code}' -X PATCH "${auth_args[@]}" -H "Content-Type: application/json" -d "$payload" "$MIHOMO_CONTROLLER/configs" 2>/dev/null)"
     if echo "$code" | grep -qE '^(200|204)$'; then
+        [ -n "$resp_file" ] && rm -f "$resp_file" >/dev/null 2>&1 || true
         print_ok "{}"
-    else
-        print_err "request_failed"
-        return 1
+        return 0
     fi
+
+    if [ -n "$payload_fallback" ]; then
+        code="$(curl -s --max-time 3 -o "${resp_file:-/dev/null}" -w '%{http_code}' -X PATCH "${auth_args[@]}" -H "Content-Type: application/json" -d "$payload_fallback" "$MIHOMO_CONTROLLER/configs" 2>/dev/null)"
+        if echo "$code" | grep -qE '^(200|204)$'; then
+            [ -n "$resp_file" ] && rm -f "$resp_file" >/dev/null 2>&1 || true
+            print_ok "{}"
+            return 0
+        fi
+    fi
+
+    code="$(curl -s --max-time 3 -o "${resp_file:-/dev/null}" -w '%{http_code}' -X PUT "${auth_args[@]}" -H "Content-Type: application/json" -d "$payload" "$MIHOMO_CONTROLLER/configs" 2>/dev/null)"
+    if echo "$code" | grep -qE '^(200|204)$'; then
+        [ -n "$resp_file" ] && rm -f "$resp_file" >/dev/null 2>&1 || true
+        print_ok "{}"
+        return 0
+    fi
+    if [ -n "$payload_fallback" ]; then
+        code="$(curl -s --max-time 3 -o "${resp_file:-/dev/null}" -w '%{http_code}' -X PUT "${auth_args[@]}" -H "Content-Type: application/json" -d "$payload_fallback" "$MIHOMO_CONTROLLER/configs" 2>/dev/null)"
+        if echo "$code" | grep -qE '^(200|204)$'; then
+            [ -n "$resp_file" ] && rm -f "$resp_file" >/dev/null 2>&1 || true
+            print_ok "{}"
+            return 0
+        fi
+    fi
+
+    body=""
+    if [ -n "$resp_file" ] && [ -f "$resp_file" ]; then
+        body="$(cat "$resp_file" 2>/dev/null | tr '\n' ' ')"
+    fi
+    [ -n "$resp_file" ] && rm -f "$resp_file" >/dev/null 2>&1 || true
+    if [ -n "$body" ]; then
+        print_err_with_details "request_failed" "$body"
+    else
+        print_err_with_details "request_failed" "http_status=$code"
+    fi
+    return 1
 }
 
 handle_configs() {
@@ -1674,16 +1818,11 @@ handle_install() {
 
 handle_start() {
     local config_path=""
-    local sudo_pass="${CLASHFOX_SUDO_PASS:-}"
     while [ $# -gt 0 ]; do
         case "$1" in
             --config)
                 shift || true
                 config_path="${1:-}"
-                ;;
-            --sudo-pass)
-                shift || true
-                sudo_pass="${1:-}"
                 ;;
         esac
         shift || true
@@ -1692,20 +1831,14 @@ handle_start() {
     local effective_config_path
     effective_config_path="$(resolve_effective_config_path "$config_path")" || return 1
     export CLASHFOX_CONFIG_PATH="$effective_config_path"
-    if ! ensure_sudo "$sudo_pass"; then
-        return 1
-    fi
-    export CLASHFOX_SUDO_PASS="$sudo_pass"
 
-    if start_mihomo_kernel; then
+    if start_mihomo_kernel_user "$effective_config_path"; then
         if wait_for_kernel_running 25; then
-            unset CLASHFOX_SUDO_PASS
             print_ok "{}"
             return
         fi
     fi
 
-    unset CLASHFOX_SUDO_PASS
     local fail_details
     fail_details="$(extract_recent_start_failure_detail)"
     if [ -n "$fail_details" ]; then
@@ -1717,33 +1850,12 @@ handle_start() {
 }
 
 handle_stop() {
-    local sudo_pass="${CLASHFOX_SUDO_PASS:-}"
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            --sudo-pass)
-                shift || true
-                sudo_pass="${1:-}"
-                ;;
-        esac
-        shift || true
-    done
-
-    if ! ensure_sudo "$sudo_pass"; then
-        return 1
-    fi
-    export CLASHFOX_SUDO_PASS="$sudo_pass"
-
-    if kill_mihomo_kernel; then
+    if kill_mihomo_kernel_user; then
         if is_running; then
-            sleep 0.6
-        fi
-        if is_running; then
-            force_kill
             sleep 0.6
         fi
     fi
 
-    unset CLASHFOX_SUDO_PASS
     if is_running; then
         print_err "stop_failed"
         return 1
@@ -1753,16 +1865,11 @@ handle_stop() {
 
 handle_restart() {
     local config_path=""
-    local sudo_pass="${CLASHFOX_SUDO_PASS:-}"
     while [ $# -gt 0 ]; do
         case "$1" in
             --config)
                 shift || true
                 config_path="${1:-}"
-                ;;
-            --sudo-pass)
-                shift || true
-                sudo_pass="${1:-}"
                 ;;
         esac
         shift || true
@@ -1771,29 +1878,18 @@ handle_restart() {
     local effective_config_path
     effective_config_path="$(resolve_effective_config_path "$config_path")" || return 1
     export CLASHFOX_CONFIG_PATH="$effective_config_path"
-    if ! ensure_sudo "$sudo_pass"; then
-        return 1
-    fi
-    export CLASHFOX_SUDO_PASS="$sudo_pass"
 
-    if kill_mihomo_kernel; then
-        if is_running; then
-            force_kill
-        fi
-    fi
+    kill_mihomo_kernel_user || true
     if is_running; then
-        unset CLASHFOX_SUDO_PASS
         print_err "stop_failed"
         return 1
     fi
 
-    if start_mihomo_kernel; then
+    if start_mihomo_kernel_user "$effective_config_path"; then
         if wait_for_kernel_running 25; then
-            unset CLASHFOX_SUDO_PASS
             print_ok "{}"
             return
         fi
-        unset CLASHFOX_SUDO_PASS
         local start_fail_details
         start_fail_details="$(extract_recent_start_failure_detail)"
         if [ -n "$start_fail_details" ]; then
@@ -1804,7 +1900,6 @@ handle_restart() {
         return 1
     fi
 
-    unset CLASHFOX_SUDO_PASS
     local restart_fail_details
     restart_fail_details="$(extract_recent_start_failure_detail)"
     if [ -n "$restart_fail_details" ]; then

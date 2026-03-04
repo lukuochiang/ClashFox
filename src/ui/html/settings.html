@@ -101,13 +101,37 @@
                   </div>
                 </div>
               </div>
-<!--              <div class="form-row">-->
-<!--                <label data-i18n="settings.configPath">Config Path</label>-->
-<!--                <div class="input-group">-->
-<!--                  <input id="settingsConfigPath" type="text" placeholder="/Applications/ClashFox.app/config/default.yaml" />-->
-<!--                  <button class="btn" id="settingsBrowseConfig" data-i18n="control.browse">Browse</button>-->
-<!--                </div>-->
-<!--              </div>-->
+            </div>
+
+            <div class="card card-full">
+              <div class="card-header-row">
+                <h3 data-i18n="settings.proxyConfigTitle">Proxy Config</h3>
+              </div>
+              <div class="settings-log-columns proxy-config-columns">
+                <div class="settings-log-column">
+                  <div class="form-row">
+                    <label for="settingsProxyMixedPort" data-i18n="settings.proxyMixedPort">Mixed Port</label>
+                    <input id="settingsProxyMixedPort" type="number" min="1" max="65535" step="1" />
+                  </div>
+                  <div class="form-row">
+                    <label for="settingsProxySocksPort" data-i18n="settings.proxySocksPort">Socks Port</label>
+                    <input id="settingsProxySocksPort" type="number" min="1" max="65535" step="1" />
+                  </div>
+                </div>
+                <div class="settings-log-column settings-log-column-right">
+                  <div class="form-row">
+                    <label for="settingsProxyPort" data-i18n="settings.proxyPort">HTTP Port</label>
+                    <input id="settingsProxyPort" type="number" min="1" max="65535" step="1" />
+                  </div>
+                  <div class="form-row">
+                    <label for="settingsProxyAllowLan" data-i18n="settings.proxyAllowLan">Allow LAN</label>
+                    <label class="toggle">
+                      <input id="settingsProxyAllowLan" type="checkbox" />
+                      <span class="toggle-pill"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div class="card card-full">
@@ -136,11 +160,6 @@
                   </div>
                 </div>
               </div>
-<!--              <label class="toggle">-->
-<!--                <input id="settingsLogAutoRefresh" type="checkbox" />-->
-<!--                <span class="toggle-pill"></span>-->
-<!--                <span data-i18n="logs.auto">Auto refresh</span>-->
-<!--              </label>-->
             </div>
 
             <div class="card card-full helper-card">
@@ -161,8 +180,10 @@
                 </div>
               </div>
               <p class="helper-card-desc" data-i18n="settings.helperDesc">The privileged helper enables advanced features like Enhanced Mode (TUN). It runs as a system service and requires administrator privileges to install.</p>
+              <p class="helper-card-meta" id="helperVersionText">Version: -</p>
               <div class="helper-card-actions">
                 <button class="btn primary" id="helperInstallBtn" data-i18n="settings.helperInstall">Install</button>
+                <button class="btn ghost is-hidden" id="helperRepairBtn" data-i18n="settings.helperRepairAction">Repair</button>
                 <button class="btn ghost" id="helperLogsOpenBtn" data-i18n="settings.helperLogsOpen">View Helper Logs</button>
               </div>
               <button class="is-hidden" id="helperInstallTerminalBtn" type="button"></button>

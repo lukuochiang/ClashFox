@@ -82,11 +82,11 @@ let tunSynced = false;
 
 async function fetchTunFromController() {
   try {
-    const controller = (state.settings && state.settings.externalController)
-      || (state.fileSettings && state.fileSettings.externalController)
+    const controller = (state.fileSettings && state.fileSettings.externalController)
+      || (state.settings && state.settings.externalController)
       || '127.0.0.1:9090';
-    const secret = (state.settings && state.settings.secret)
-      || (state.fileSettings && state.fileSettings.secret)
+    const secret = (state.fileSettings && state.fileSettings.secret)
+      || (state.settings && state.settings.secret)
       || 'clashfox';
     const url = controller.match(/^https?:\/\//) ? controller : `http://${controller}`;
     const resp = await fetch(`${url.replace(/\/+$/, '')}/configs`, {
@@ -94,13 +94,95 @@ async function fetchTunFromController() {
     });
     if (!resp.ok) return null;
     const json = await resp.json();
-    if (!json || !json.tun) return null;
+    if (!json || !Object.prototype.hasOwnProperty.call(json, 'tun')) return null;
+    const tun = json.tun;
+    let enabled;
+    let stack;
+    if (typeof tun === 'boolean') {
+      enabled = tun;
+    } else if (tun && typeof tun === 'object') {
+      if (typeof tun.enable === 'boolean') {
+        enabled = tun.enable;
+      } else if (typeof tun.enabled === 'boolean') {
+        enabled = tun.enabled;
+      }
+      if (typeof tun.stack === 'string' && tun.stack.trim()) {
+        stack = tun.stack.trim();
+      }
+    }
     return {
-      enabled: typeof json.tun.enable === 'boolean' ? json.tun.enable : undefined,
-      stack: json.tun.stack || undefined,
+      enabled,
+      stack,
     };
   } catch {
     return null;
+  }
+}
+
+function resolveControllerAccess() {
+  const controller = (state.fileSettings && state.fileSettings.externalController)
+    || (state.settings && state.settings.externalController)
+    || '127.0.0.1:9090';
+  const secret = (state.fileSettings && state.fileSettings.secret)
+    || (state.settings && state.settings.secret)
+    || 'clashfox';
+  const baseUrl = controller.match(/^https?:\/\//) ? controller : `http://${controller}`;
+  return {
+    baseUrl: String(baseUrl || '').replace(/\/+$/, ''),
+    secret: String(secret || '').trim(),
+  };
+}
+
+async function updateTunViaController(partialTun = {}) {
+  try {
+    const { baseUrl, secret } = resolveControllerAccess();
+    if (!baseUrl) {
+      return { ok: false, error: 'controller_missing' };
+    }
+    const headers = { 'Content-Type': 'application/json' };
+    if (secret) {
+      headers.Authorization = `Bearer ${secret}`;
+    }
+
+    const tunBody = {};
+    if (Object.prototype.hasOwnProperty.call(partialTun, 'enable')) {
+      tunBody.enable = Boolean(partialTun.enable);
+    }
+    if (Object.prototype.hasOwnProperty.call(partialTun, 'stack') && partialTun.stack) {
+      tunBody.stack = String(partialTun.stack);
+    }
+    if (Object.keys(tunBody).length === 0) {
+      return { ok: false, error: 'invalid_tun' };
+    }
+
+    const candidates = [
+      { method: 'PATCH', payload: { tun: tunBody } },
+      { method: 'PUT', payload: { tun: tunBody } },
+    ];
+    if (Object.prototype.hasOwnProperty.call(tunBody, 'enable')) {
+      const enabledBody = { ...tunBody };
+      enabledBody.enabled = enabledBody.enable;
+      delete enabledBody.enable;
+      candidates.push({ method: 'PATCH', payload: { tun: enabledBody } });
+      candidates.push({ method: 'PUT', payload: { tun: enabledBody } });
+    }
+
+    let lastError = { ok: false, error: 'request_failed' };
+    for (const candidate of candidates) {
+      const resp = await fetch(`${baseUrl}/configs`, {
+        method: candidate.method,
+        headers,
+        body: JSON.stringify(candidate.payload),
+      });
+      if (resp.ok) {
+        return { ok: true };
+      }
+      const details = (await resp.text().catch(() => '')) || `http_status=${resp.status}`;
+      lastError = { ok: false, error: 'request_failed', details };
+    }
+    return lastError;
+  } catch (error) {
+    return { ok: false, error: 'request_failed', details: String(error && error.message ? error.message : error) };
   }
 }
 let quickHintNodes = [];
@@ -226,6 +308,7 @@ let settingsConfigDirReveal = document.getElementById('settingsConfigDirReveal')
 let settingsCoreDirReveal = document.getElementById('settingsCoreDirReveal');
 let settingsDataDirReveal = document.getElementById('settingsDataDirReveal');
 let helperInstallBtn = document.getElementById('helperInstallBtn');
+let helperRepairBtn = document.getElementById('helperRepairBtn');
 let helperInstallTerminalBtn = document.getElementById('helperInstallTerminalBtn');
 let helperInstallPathBtn = document.getElementById('helperInstallPathBtn');
 let helperInstallPath = document.getElementById('helperInstallPath');
@@ -235,6 +318,7 @@ let helperRefreshBtn = document.getElementById('helperRefreshBtn');
 let helperLogsOpenBtn = document.getElementById('helperLogsOpenBtn');
 let helperLogsRevealBtn = document.getElementById('helperLogsRevealBtn');
 let helperLogsPath = document.getElementById('helperLogsPath');
+let helperVersionText = document.getElementById('helperVersionText');
 let helperPrimaryAction = 'install';
 let settingsLogLines = document.getElementById('settingsLogLines');
 let settingsLogAutoRefresh = document.getElementById('settingsLogAutoRefresh');
@@ -244,6 +328,10 @@ let settingsDebugMode = document.getElementById('settingsDebugMode');
 let settingsWindowWidth = document.getElementById('settingsWindowWidth');
 let settingsWindowHeight = document.getElementById('settingsWindowHeight');
 let settingsAcceptBeta = document.getElementById('settingsAcceptBeta');
+let settingsProxyMixedPort = document.getElementById('settingsProxyMixedPort');
+let settingsProxyPort = document.getElementById('settingsProxyPort');
+let settingsProxySocksPort = document.getElementById('settingsProxySocksPort');
+let settingsProxyAllowLan = document.getElementById('settingsProxyAllowLan');
 
 let langButtons = Array.from(document.querySelectorAll('.lang-btn'));
 const customSelectRegistry = new WeakMap();
@@ -265,6 +353,7 @@ const MAIN_WINDOW_MAX_WIDTH = 4096;
 const MAIN_WINDOW_MAX_HEIGHT = 2160;
 const DEFAULT_SETTINGS = {
   lang: 'auto',
+  theme: 'auto',
   themePreference: 'auto',
   githubUser: 'vernesong',
   configPath: '',
@@ -283,9 +372,14 @@ const DEFAULT_SETTINGS = {
     secret: 'clashfox',
     authentication: ['mihomo:clashfox'],
   },
-  proxyMode: 'rule',
-  tunEnabled: false,
-  tunStack: 'Mixed',
+  proxy: 'rule',
+  systemProxy: false,
+  tun: false,
+  stack: 'Mixed',
+  mixedPort: 7893,
+  port: 7890,
+  socksPort: 7891,
+  allowLan: true,
   overviewOrder: [],
   logLines: 10,
   logAutoRefresh: false,
@@ -302,6 +396,7 @@ const DEFAULT_SETTINGS = {
   mainWindowClosed: false,
   appearance: {
     lang: 'auto',
+    theme: 'auto',
     themePreference: 'auto',
     debugMode: false,
     acceptBeta: false,
@@ -1022,6 +1117,7 @@ function applyCardIcons() {
     if (key === 'status.proxyMode') return 'var(--icon-outbound)';
     if (key === 'status.connLiveTitle') return 'var(--icon-connections)';
     if (key === 'status.trafficTitle') return 'var(--icon-clock)';
+    if (key === 'settings.proxyConfigTitle') return 'var(--icon-slider-h)';
     return '';
   };
 
@@ -1136,7 +1232,8 @@ function normalizeSettingsForUi(settings) {
     return Number.isFinite(parsed) ? parsed : fallback;
   };
   normalized.lang = readAppearanceString('lang', 'auto');
-  normalized.themePreference = readAppearanceString('themePreference', 'auto');
+  normalized.theme = readAppearanceString('theme', readAppearanceString('themePreference', 'auto'));
+  normalized.themePreference = normalized.theme;
   normalized.debugMode = readAppearanceBool('debugMode', false);
   normalized.acceptBeta = readAppearanceBool('acceptBeta', false);
   normalized.githubUser = readAppearanceString('githubUser', 'vernesong');
@@ -1153,7 +1250,8 @@ function normalizeSettingsForUi(settings) {
   normalized.appearance = {
     ...appearance,
     lang: normalized.lang,
-    themePreference: normalized.themePreference,
+    theme: normalized.theme,
+    themePreference: normalized.theme,
     debugMode: normalized.debugMode,
     acceptBeta: normalized.acceptBeta,
     githubUser: normalized.githubUser,
@@ -1201,6 +1299,25 @@ function normalizeSettingsForUi(settings) {
     normalized.secret = normalized.panelManager.secret;
   }
   normalized.authentication = normalized.panelManager.authentication;
+  normalized.proxy = normalizeProxyMode(normalized.proxy || normalized.proxyMode || 'rule');
+  normalized.proxyMode = normalized.proxy;
+  normalized.systemProxy = Object.prototype.hasOwnProperty.call(normalized, 'systemProxy')
+    ? Boolean(normalized.systemProxy)
+    : Boolean(normalized.systemProxyEnabled);
+  normalized.systemProxyEnabled = normalized.systemProxy;
+  normalized.tun = Object.prototype.hasOwnProperty.call(normalized, 'tun')
+    ? Boolean(normalized.tun)
+    : Boolean(normalized.tunEnabled);
+  normalized.tunEnabled = normalized.tun;
+  normalized.stack = normalizeTunStack(normalized.stack || normalized.tunStack || 'Mixed');
+  normalized.tunStack = normalized.stack;
+  normalized.mixedPort = Number.parseInt(String(normalized.mixedPort ?? ''), 10) || 7893;
+  normalized.port = Number.parseInt(String(normalized.port ?? normalized.httpPort ?? ''), 10) || 7890;
+  normalized.httpPort = normalized.port;
+  normalized.socksPort = Number.parseInt(String(normalized.socksPort ?? ''), 10) || 7891;
+  normalized.allowLan = Object.prototype.hasOwnProperty.call(normalized, 'allowLan')
+    ? Boolean(normalized.allowLan)
+    : true;
 
   const userDataPaths = normalized.userDataPaths && typeof normalized.userDataPaths === 'object'
     ? normalized.userDataPaths
@@ -1253,10 +1370,24 @@ function mapSettingsForFile(settings) {
   const existingAppearance = mapped.appearance && typeof mapped.appearance === 'object'
     ? mapped.appearance
     : {};
+  mapped.proxy = normalizeProxyMode(mapped.proxy || mapped.proxyMode || 'rule');
+  mapped.systemProxy = Object.prototype.hasOwnProperty.call(mapped, 'systemProxy')
+    ? Boolean(mapped.systemProxy)
+    : Boolean(mapped.systemProxyEnabled);
+  mapped.tun = Object.prototype.hasOwnProperty.call(mapped, 'tun')
+    ? Boolean(mapped.tun)
+    : Boolean(mapped.tunEnabled);
+  mapped.stack = normalizeTunStack(mapped.stack || mapped.tunStack || 'Mixed');
+  mapped.mixedPort = Number.parseInt(String(mapped.mixedPort ?? ''), 10) || 7893;
+  mapped.port = Number.parseInt(String(mapped.port ?? mapped.httpPort ?? ''), 10) || 7890;
+  mapped.socksPort = Number.parseInt(String(mapped.socksPort ?? ''), 10) || 7891;
+  mapped.allowLan = Object.prototype.hasOwnProperty.call(mapped, 'allowLan')
+    ? Boolean(mapped.allowLan)
+    : true;
   mapped.appearance = {
     ...existingAppearance,
     lang: String(mapped.lang || existingAppearance.lang || 'auto'),
-    themePreference: String(mapped.themePreference || existingAppearance.themePreference || 'auto'),
+    theme: String(mapped.theme || mapped.themePreference || existingAppearance.theme || existingAppearance.themePreference || 'auto'),
     debugMode: Object.prototype.hasOwnProperty.call(mapped, 'debugMode')
       ? Boolean(mapped.debugMode)
       : Boolean(existingAppearance.debugMode),
@@ -1282,6 +1413,9 @@ function mapSettingsForFile(settings) {
       : Boolean(existingAppearance.logAutoRefresh),
     logIntervalPreset: String(mapped.logIntervalPreset || existingAppearance.logIntervalPreset || '3'),
   };
+  if (Object.prototype.hasOwnProperty.call(mapped.appearance, 'themePreference')) {
+    delete mapped.appearance.themePreference;
+  }
   const existingPanelManager = mapped.panelManager && typeof mapped.panelManager === 'object'
     ? mapped.panelManager
     : {};
@@ -1388,6 +1522,9 @@ function mapSettingsForFile(settings) {
   if (Object.prototype.hasOwnProperty.call(mapped, 'themePreference')) {
     delete mapped.themePreference;
   }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'theme')) {
+    delete mapped.theme;
+  }
   if (Object.prototype.hasOwnProperty.call(mapped, 'debugMode')) {
     delete mapped.debugMode;
   }
@@ -1420,6 +1557,36 @@ function mapSettingsForFile(settings) {
   }
   if (Object.prototype.hasOwnProperty.call(mapped, 'overviewTopOrder')) {
     delete mapped.overviewTopOrder;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'proxyMode')) {
+    delete mapped.proxyMode;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'systemProxyEnabled')) {
+    delete mapped.systemProxyEnabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'tunEnabled')) {
+    delete mapped.tunEnabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'tunStack')) {
+    delete mapped.tunStack;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'httpPort')) {
+    delete mapped.httpPort;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'captureMixedPort')) {
+    delete mapped.captureMixedPort;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'captureHttpPort')) {
+    delete mapped.captureHttpPort;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'captureSocksPort')) {
+    delete mapped.captureSocksPort;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'captureTunMode')) {
+    delete mapped.captureTunMode;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'captureAllowLan')) {
+    delete mapped.captureAllowLan;
   }
   return mapped;
 }
@@ -1497,6 +1664,7 @@ function saveSettings(patch) {
   };
   const appearanceKeys = [
     'lang',
+    'theme',
     'themePreference',
     'debugMode',
     'acceptBeta',
@@ -1514,6 +1682,14 @@ function saveSettings(patch) {
       nextAppearance[key] = nextPatch[key];
     }
   });
+  if (Object.prototype.hasOwnProperty.call(nextPatch, 'theme') && !Object.prototype.hasOwnProperty.call(nextPatch, 'themePreference')) {
+    nextPatch.themePreference = nextPatch.theme;
+    nextAppearance.themePreference = nextPatch.theme;
+  }
+  if (Object.prototype.hasOwnProperty.call(nextPatch, 'themePreference') && !Object.prototype.hasOwnProperty.call(nextPatch, 'theme')) {
+    nextPatch.theme = nextPatch.themePreference;
+    nextAppearance.theme = nextPatch.themePreference;
+  }
   if (Object.keys(nextAppearance).length) {
     nextPatch.appearance = nextAppearance;
   }
@@ -1812,7 +1988,7 @@ function applyThemePreference(preference, persist = true) {
   syncThemeSource(preference);
   sendDashboardTheme();
   if (persist) {
-    saveSettings({ themePreference: preference });
+    saveSettings({ theme: preference });
   }
   updateThemeToggle();
 }
@@ -1856,6 +2032,18 @@ function applySettings(settings) {
   }
   if (settingsAcceptBeta) {
     settingsAcceptBeta.checked = Boolean(state.settings.acceptBeta);
+  }
+  if (settingsProxyMixedPort) {
+    settingsProxyMixedPort.value = Number.parseInt(String(state.settings.mixedPort ?? 7893), 10) || 7893;
+  }
+  if (settingsProxyPort) {
+    settingsProxyPort.value = Number.parseInt(String(state.settings.port ?? state.settings.httpPort ?? 7890), 10) || 7890;
+  }
+  if (settingsProxySocksPort) {
+    settingsProxySocksPort.value = Number.parseInt(String(state.settings.socksPort ?? 7891), 10) || 7891;
+  }
+  if (settingsProxyAllowLan) {
+    settingsProxyAllowLan.checked = Boolean(state.settings.allowLan);
   }
   if (settingsConfigDir) {
     settingsConfigDir.value = state.settings.configDir;
@@ -1929,16 +2117,20 @@ function applySettings(settings) {
   }
   setLogAutoRefresh(state.settings.logAutoRefresh);
   if (proxyModeSelect) {
-    setProxyModeValue(state.settings.proxyMode || 'rule');
+    setProxyModeValue(state.settings.proxy || state.settings.proxyMode || 'rule');
   }
   if (tunToggle) {
-    tunToggle.checked = Boolean(state.settings.tunEnabled);
+    tunToggle.checked = Boolean(
+      Object.prototype.hasOwnProperty.call(state.settings, 'tun')
+        ? state.settings.tun
+        : state.settings.tunEnabled,
+    );
   }
   if (tunStackSelect) {
-    const stack = normalizeTunStack(state.settings.tunStack);
+    const stack = normalizeTunStack(state.settings.stack || state.settings.tunStack);
     tunStackSelect.value = stack;
-    if (state.settings.tunStack !== stack) {
-      saveSettings({ tunStack: stack });
+    if ((state.settings.stack || state.settings.tunStack) !== stack) {
+      saveSettings({ stack });
     }
   }
   if (panelSelect) {
@@ -2240,11 +2432,11 @@ async function syncProxyModeFromFile() {
     return;
   }
   const nextMode = normalizeProxyMode(response.data.proxyMode);
-  const currentMode = normalizeProxyMode(state.settings && state.settings.proxyMode);
+  const currentMode = normalizeProxyMode(state.settings && (state.settings.proxy || state.settings.proxyMode));
   if (nextMode === currentMode) {
     return;
   }
-  saveSettings({ proxyMode: nextMode });
+  saveSettings({ proxy: nextMode });
   setProxyModeValue(nextMode);
 }
 
@@ -3436,8 +3628,13 @@ function updateOverviewUI(data) {
     overviewSystem.textContent = persistedDevice.os || data.systemName || '-';
   }
   if (overviewVersion) {
-    const fallbackParts = [data.systemVersion, data.systemBuild].filter(Boolean);
-    overviewVersion.textContent = persistedDevice.version || (fallbackParts.length ? fallbackParts.join('\u00A0') : '-');
+    const versionRaw = String(data.systemVersion || persistedDevice.version || '').trim();
+    const buildRaw = String(data.systemBuild || persistedDevice.build || '').trim();
+    if (versionRaw) {
+      overviewVersion.textContent = buildRaw ? `${versionRaw} (${buildRaw})` : versionRaw;
+    } else {
+      overviewVersion.textContent = '-';
+    }
   }
   
   const parsedUptime = Number.parseInt(data.uptimeSec, 10);
@@ -3617,6 +3814,28 @@ async function waitForKernelState(expectedRunning, timeoutMs = 12000, intervalMs
   return Boolean(state.coreRunning) === expected;
 }
 
+async function applyTunSettingsAfterStart() {
+  const enabled = Boolean(state.settings && (Object.prototype.hasOwnProperty.call(state.settings, 'tun')
+    ? state.settings.tun
+    : state.settings.tunEnabled));
+  const stack = normalizeTunStack(state.settings && (state.settings.stack || state.settings.tunStack));
+  let response = await updateTunViaController({ enable: enabled, stack });
+  if (!response || !response.ok) {
+    const configPath = getCurrentConfigPath();
+    const args = configPath ? ['--config', configPath] : [];
+    args.push('--enable', enabled ? 'true' : 'false', '--stack', stack);
+    response = await runCommand('tun', args);
+  }
+  if (!response || !response.ok) {
+    return response || { ok: false, error: 'tun_update_failed' };
+  }
+  const statusResponse = await loadTunStatus(false);
+  if (!statusResponse || !statusResponse.ok || !statusResponse.data) {
+    return { ok: false, error: (statusResponse && statusResponse.error) || 'tun_status_failed' };
+  }
+  return { ok: true, data: statusResponse.data };
+}
+
 async function loadOverview(showToastOnSuccess = false) {
   if (state.overviewLoading) {
     return false;
@@ -3658,14 +3877,13 @@ async function loadTunStatus(showToastOnSuccess = false) {
   }
   const configPath = getCurrentConfigPath();
   const args = configPath ? ['--config', configPath] : [];
-  args.push(...getControllerArgs());
   const response = await runCommand('tun-status', args);
   if (!response.ok || !response.data) {
     const statusResp = await runCommand('status');
     const running = statusResp && statusResp.ok && statusResp.data && statusResp.data.running;
     if (!running) {
       if (tunToggle) tunToggle.checked = false;
-      saveSettings({ tunEnabled: false });
+      saveSettings({ tun: false });
       tunSynced = true;
       return { ok: true, data: { enabled: false }, error: response.error };
     }
@@ -3675,8 +3893,8 @@ async function loadTunStatus(showToastOnSuccess = false) {
       const fetchedStack = normalizeTunStack(fetched.stack);
       if (tunStackSelect) tunStackSelect.value = fetchedStack;
       saveSettings({
-        tunEnabled: fetched.enabled,
-        tunStack: fetchedStack,
+        tun: fetched.enabled,
+        stack: fetchedStack,
       });
       tunSynced = true;
       return { ok: true, data: { enabled: fetched.enabled, stack: fetchedStack }, error: response.error };
@@ -3685,15 +3903,15 @@ async function loadTunStatus(showToastOnSuccess = false) {
   }
   if (tunToggle && typeof response.data.enabled === 'boolean') {
     tunToggle.checked = response.data.enabled;
-    if (state.settings.tunEnabled !== response.data.enabled) {
-      saveSettings({ tunEnabled: response.data.enabled });
+    if ((Object.prototype.hasOwnProperty.call(state.settings, 'tun') ? state.settings.tun : state.settings.tunEnabled) !== response.data.enabled) {
+      saveSettings({ tun: response.data.enabled });
     }
   }
   if (tunStackSelect && typeof response.data.stack === 'string') {
     const stack = normalizeTunStack(response.data.stack);
     tunStackSelect.value = stack;
-    if (state.settings.tunStack !== stack) {
-      saveSettings({ tunStack: stack });
+    if ((state.settings.stack || state.settings.tunStack) !== stack) {
+      saveSettings({ stack });
     }
   }
   if (showToastOnSuccess) {
@@ -3701,6 +3919,20 @@ async function loadTunStatus(showToastOnSuccess = false) {
   }
   tunSynced = true;
   return response;
+}
+
+function formatTunUpdateError(response, statusResponse, fallbackLabel) {
+  const mergedError = (response && response.error) || (statusResponse && statusResponse.error) || '';
+  if (mergedError === 'controller_missing') {
+    return t('labels.controllerMissing');
+  }
+  const details = (response && response.details)
+    || (statusResponse && statusResponse.details)
+    || '';
+  if (mergedError === 'request_failed' && details) {
+    return `request_failed: ${String(details).slice(0, 220)}`;
+  }
+  return mergedError || fallbackLabel;
 }
 
 async function loadOverviewLite() {
@@ -4537,6 +4769,7 @@ function refreshPageRefs() {
   settingsCoreDirReveal = document.getElementById('settingsCoreDirReveal');
   settingsDataDirReveal = document.getElementById('settingsDataDirReveal');
   helperInstallBtn = document.getElementById('helperInstallBtn');
+  helperRepairBtn = document.getElementById('helperRepairBtn');
   helperInstallTerminalBtn = document.getElementById('helperInstallTerminalBtn');
   helperInstallPathBtn = document.getElementById('helperInstallPathBtn');
   helperInstallPath = document.getElementById('helperInstallPath');
@@ -4546,6 +4779,7 @@ function refreshPageRefs() {
   helperLogsOpenBtn = document.getElementById('helperLogsOpenBtn');
   helperLogsRevealBtn = document.getElementById('helperLogsRevealBtn');
   helperLogsPath = document.getElementById('helperLogsPath');
+  helperVersionText = document.getElementById('helperVersionText');
   settingsLogLines = document.getElementById('settingsLogLines');
   settingsLogAutoRefresh = document.getElementById('settingsLogAutoRefresh');
   settingsLogIntervalPreset = document.getElementById('settingsLogIntervalPreset');
@@ -4554,6 +4788,10 @@ function refreshPageRefs() {
   settingsWindowWidth = document.getElementById('settingsWindowWidth');
   settingsWindowHeight = document.getElementById('settingsWindowHeight');
   settingsAcceptBeta = document.getElementById('settingsAcceptBeta');
+  settingsProxyMixedPort = document.getElementById('settingsProxyMixedPort');
+  settingsProxyPort = document.getElementById('settingsProxyPort');
+  settingsProxySocksPort = document.getElementById('settingsProxySocksPort');
+  settingsProxyAllowLan = document.getElementById('settingsProxyAllowLan');
   langButtons = Array.from(document.querySelectorAll('.lang-btn'));
   initCustomSelects(document);
 }
@@ -5009,6 +5247,47 @@ if (settingsAcceptBeta) {
   });
 }
 
+const normalizeProxyPortSetting = (input, fallback) => {
+  const parsed = Number.parseInt(String(input ?? ''), 10);
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > 65535) {
+    return fallback;
+  }
+  return parsed;
+};
+
+if (settingsProxyMixedPort) {
+  settingsProxyMixedPort.addEventListener('change', (event) => {
+    const fallback = Number.parseInt(String(state.settings.mixedPort ?? 7893), 10) || 7893;
+    const next = normalizeProxyPortSetting(event.target.value, fallback);
+    event.target.value = next;
+    saveSettings({ mixedPort: next });
+  });
+}
+
+if (settingsProxyPort) {
+  settingsProxyPort.addEventListener('change', (event) => {
+    const fallback = Number.parseInt(String(state.settings.port ?? state.settings.httpPort ?? 7890), 10) || 7890;
+    const next = normalizeProxyPortSetting(event.target.value, fallback);
+    event.target.value = next;
+    saveSettings({ port: next });
+  });
+}
+
+if (settingsProxySocksPort) {
+  settingsProxySocksPort.addEventListener('change', (event) => {
+    const fallback = Number.parseInt(String(state.settings.socksPort ?? 7891), 10) || 7891;
+    const next = normalizeProxyPortSetting(event.target.value, fallback);
+    event.target.value = next;
+    saveSettings({ socksPort: next });
+  });
+}
+
+if (settingsProxyAllowLan) {
+  settingsProxyAllowLan.addEventListener('change', (event) => {
+    saveSettings({ allowLan: Boolean(event.target.checked) });
+  });
+}
+
 const getRevealPath = (inputEl) => {
   if (!inputEl) {
     return '';
@@ -5054,20 +5333,27 @@ function setHelperStatus(state, text) {
 function setHelperPrimaryAction(snapshot = {}) {
   const stateValue = snapshot && snapshot.state ? String(snapshot.state) : '';
   const installed = Boolean(snapshot && snapshot.installed);
-  if (stateValue === 'installed_unreachable' && installed) {
-    helperPrimaryAction = 'repair';
+  const updateAvailable = Boolean(snapshot && snapshot.helperUpdateAvailable);
+  if (!installed) {
+    helperPrimaryAction = 'install';
+  } else if (updateAvailable) {
+    helperPrimaryAction = 'update';
   } else {
-    helperPrimaryAction = installed ? 'uninstall' : 'install';
+    helperPrimaryAction = 'uninstall';
   }
   if (!helperInstallBtn) {
     return;
   }
-  if (helperPrimaryAction === 'repair') {
-    helperInstallBtn.textContent = ti('settings.helperRepairAction', 'Repair');
-  } else if (helperPrimaryAction === 'uninstall') {
+  if (helperPrimaryAction === 'uninstall') {
     helperInstallBtn.textContent = ti('settings.helperUninstall', 'Uninstall');
+  } else if (helperPrimaryAction === 'update') {
+    helperInstallBtn.textContent = ti('settings.helperUpdate', 'Update');
   } else {
     helperInstallBtn.textContent = ti('settings.helperInstall', 'Install');
+  }
+  if (helperRepairBtn) {
+    const showRepair = installed && stateValue === 'installed_unreachable';
+    helperRepairBtn.classList.toggle('is-hidden', !showRepair);
   }
 }
 
@@ -5107,6 +5393,17 @@ function applyHelperStatusSnapshot(snapshot) {
     return;
   }
   setHelperPrimaryAction(snapshot);
+  if (helperVersionText) {
+    const version = String(snapshot.helperVersion || '').trim();
+    const targetVersion = String(snapshot.helperTargetVersion || '').trim();
+    const updateAvailable = Boolean(snapshot.helperUpdateAvailable && version && targetVersion);
+    helperVersionText.dataset.updateAvailable = updateAvailable ? 'true' : 'false';
+    if (updateAvailable) {
+      helperVersionText.innerHTML = `Version: <span class="helper-version-current">${version}</span> -> <span class="helper-version-target">${targetVersion}</span>`;
+    } else {
+      helperVersionText.textContent = `Version: ${version || '-'}`;
+    }
+  }
   const logPath = snapshot.logPath || '/var/log/clashfox-helper.log';
   if (helperLogsPath) {
     helperLogsPath.textContent = logPath;
@@ -5142,6 +5439,12 @@ async function refreshHelperStatus(force = false) {
           binaryExists: Boolean(response.data.binaryExists),
           plistExists: Boolean(response.data.plistExists),
           launchdLoaded: Boolean(response.data.launchdLoaded),
+          socketExists: Boolean(response.data.socketExists),
+          socketPingOk: Boolean(response.data.socketPingOk),
+          httpPingOk: Boolean(response.data.httpPingOk),
+          helperVersion: String(response.data.helperVersion || ''),
+          helperTargetVersion: String(response.data.helperTargetVersion || ''),
+          helperUpdateAvailable: Boolean(response.data.helperUpdateAvailable),
           logPath: String(response.data.logPath || '/var/log/clashfox-helper.log'),
           updatedAt: new Date().toISOString(),
         };
@@ -5237,40 +5540,28 @@ if (helperInstallBtn) {
     helperInstallBtn.dataset.bound = 'true';
     helperInstallBtn.addEventListener('click', async () => {
       const isUninstall = helperPrimaryAction === 'uninstall';
-      const isRepair = helperPrimaryAction === 'repair';
+      const isUpdate = helperPrimaryAction === 'update';
       if (!window.clashfox) {
         showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
         return;
       }
       helperInstallBtn.disabled = true;
       let response = null;
-      if (isRepair) {
-        if (typeof window.clashfox.doctorHelper === 'function') {
-          response = await window.clashfox.doctorHelper({ repair: true });
-        } else if (typeof window.clashfox.installHelper === 'function') {
-          response = await window.clashfox.installHelper();
-        } else {
-          helperInstallBtn.disabled = false;
-          showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
-          return;
-        }
-      } else {
-        const actionFn = isUninstall ? 'uninstallHelper' : 'installHelper';
-        if (typeof window.clashfox[actionFn] !== 'function') {
-          helperInstallBtn.disabled = false;
-          showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
-          return;
-        }
-        response = await window.clashfox[actionFn]();
+      const actionFn = isUninstall ? 'uninstallHelper' : 'installHelper';
+      if (typeof window.clashfox[actionFn] !== 'function') {
+        helperInstallBtn.disabled = false;
+        showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
+        return;
       }
+      response = await window.clashfox[actionFn]();
       helperInstallBtn.disabled = false;
       if (response && response.ok) {
         showToast(
-          isRepair
-            ? ti('settings.helperRepairSuccess', 'Helper repaired')
-            : isUninstall
+          isUninstall
             ? ti('settings.helperUninstallSuccess', 'Helper uninstalled')
-            : ti('settings.helperInstallSuccess', 'Helper installed'),
+            : (isUpdate
+              ? ti('settings.helperUpdateSuccess', 'Helper updated')
+              : ti('settings.helperInstallSuccess', 'Helper installed')),
           'info'
         );
         await refreshHelperPanel(true);
@@ -5283,13 +5574,46 @@ if (helperInstallBtn) {
         ? `: ${String(response.details || response.error)}`
         : '';
       showToast(
-        `${isRepair
-          ? ti('settings.helperRepairFailed', 'Helper repair failed')
-          : isUninstall
+        `${isUninstall
           ? ti('settings.helperUninstallFailed', 'Helper uninstall failed')
-          : ti('settings.helperInstallFailed', 'Helper install failed')}${detail}`,
+          : (isUpdate
+            ? ti('settings.helperUpdateFailed', 'Helper update failed')
+            : ti('settings.helperInstallFailed', 'Helper install failed'))}${detail}`,
         'error'
       );
+    });
+  }
+}
+
+if (helperRepairBtn) {
+  if (helperRepairBtn.dataset.bound !== 'true') {
+    helperRepairBtn.dataset.bound = 'true';
+    helperRepairBtn.addEventListener('click', async () => {
+      if (!window.clashfox) {
+        showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
+        return;
+      }
+      helperRepairBtn.disabled = true;
+      let response = null;
+      if (typeof window.clashfox.doctorHelper === 'function') {
+        response = await window.clashfox.doctorHelper({ repair: true });
+      } else if (typeof window.clashfox.installHelper === 'function') {
+        response = await window.clashfox.installHelper();
+      } else {
+        helperRepairBtn.disabled = false;
+        showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
+        return;
+      }
+      helperRepairBtn.disabled = false;
+      if (response && response.ok) {
+        showToast(ti('settings.helperRepairSuccess', 'Helper repaired'), 'info');
+        await refreshHelperPanel(true);
+        return;
+      }
+      const detail = response && (response.details || response.error)
+        ? `: ${String(response.details || response.error)}`
+        : '';
+      showToast(`${ti('settings.helperRepairFailed', 'Helper repair failed')}${detail}`, 'error');
     });
   }
 }
@@ -5820,11 +6144,16 @@ async function handleCoreAction(action, button) {
       if (action === 'start') {
         const running = await waitForKernelState(true, 12000, 350);
         if (running) {
+          const tunApply = await applyTunSettingsAfterStart();
           state.coreRunningGuardUntil = Date.now() + 10000;
           setQuickActionRunningState(true);
           const startupElapsedMs = Date.now() - commandStartedAt;
           updateCoreStartupEstimate(startupElapsedMs);
           showToast(t('labels.startSuccess'));
+          if (!tunApply || !tunApply.ok) {
+            const message = (tunApply && tunApply.error) || ti('labels.tunUpdateFailed', 'TUN update failed');
+            showToast(message, 'warn');
+          }
         } else {
           state.coreRunningGuardUntil = 0;
           await loadStatusSilently();
@@ -5834,11 +6163,16 @@ async function handleCoreAction(action, button) {
       } else if (action === 'restart') {
         const running = await waitForKernelState(true, 15000, 400);
         if (running) {
+          const tunApply = await applyTunSettingsAfterStart();
           state.coreRunningGuardUntil = Date.now() + 10000;
           setQuickActionRunningState(true);
           const startupElapsedMs = Date.now() - commandStartedAt;
           updateCoreStartupEstimate(startupElapsedMs);
           showToast(t('labels.restartSuccess'));
+          if (!tunApply || !tunApply.ok) {
+            const message = (tunApply && tunApply.error) || ti('labels.tunUpdateFailed', 'TUN update failed');
+            showToast(message, 'warn');
+          }
         } else {
           state.coreRunningGuardUntil = 0;
           await loadStatusSilently();
@@ -5903,15 +6237,15 @@ if (proxyModeSelect) {
         return;
       }
       const value = getProxyModeValue();
-      const previous = (state.settings && state.settings.proxyMode) || 'rule';
-      saveSettings({ proxyMode: value });
+      const previous = (state.settings && (state.settings.proxy || state.settings.proxyMode)) || 'rule';
+      saveSettings({ proxy: value });
       const response = await runCommand('mode', ['--mode', value, ...getControllerArgs()]);
       if (response.ok) {
         showToast(t('labels.proxyModeUpdated'));
         return;
       }
       setProxyModeValue(previous);
-      saveSettings({ proxyMode: previous });
+      saveSettings({ proxy: previous });
       const message = response.error === 'controller_missing'
         ? t('labels.controllerMissing')
         : (response.error || ti('labels.modeUpdateFailed', 'Mode update failed'));
@@ -5924,11 +6258,22 @@ if (tunToggle) {
   tunToggle.addEventListener('change', async () => {
     const enabled = Boolean(tunToggle.checked);
     const previous = !enabled;
-    let response = await runCommand('tun', ['--enable', enabled ? 'true' : 'false', ...getControllerArgs()]);
+    if (!state.coreRunning) {
+      saveSettings({ tun: enabled });
+      showToast(ti('labels.tunApplyOnStart', 'TUN setting saved, it will be applied on next start.'));
+      return;
+    }
+    const configPath = getCurrentConfigPath();
+    const args = configPath ? ['--config', configPath] : [];
+    args.push('--enable', enabled ? 'true' : 'false');
+    let response = await updateTunViaController({ enable: enabled });
+    if (!response || !response.ok) {
+      response = await runCommand('tun', args);
+    }
     if (response && !response.ok && response.error === 'helper_unreachable') {
       const repaired = await repairHelperAndRetryTun();
       if (repaired) {
-        response = await runCommand('tun', ['--enable', enabled ? 'true' : 'false', ...getControllerArgs()]);
+        response = await runCommand('tun', args);
       }
     }
     // Always re-sync from kernel to avoid divergence
@@ -5938,30 +6283,49 @@ if (tunToggle) {
     if (!response.ok || !statusOk || actual !== enabled) {
       const nextChecked = statusOk ? actual : previous;
       tunToggle.checked = nextChecked;
-      saveSettings({ tunEnabled: nextChecked });
-      const mergedError = response.error || statusResponse?.error;
-      const message = mergedError === 'controller_missing'
-        ? t('labels.controllerMissing')
-        : (mergedError || (!statusOk
+      saveSettings({ tun: nextChecked });
+      const message = formatTunUpdateError(
+        response,
+        statusResponse,
+        !statusOk
           ? ti('labels.tunStatusFailed', 'TUN status unavailable')
-          : ti('labels.tunUpdateFailed', 'TUN update failed')));
-      showToast(message, 'error');
+          : ti('labels.tunUpdateFailed', 'TUN update failed'),
+      );
+      const finalMessage = enabled
+        ? ti(
+          'labels.tunEnableFailedConflictHint',
+          'TUN update failed. Turn off TUN mode in other proxy apps, then try again.',
+        )
+        : message;
+      showToast(finalMessage, 'error');
       return;
     }
-    saveSettings({ tunEnabled: actual });
+    saveSettings({ tun: actual });
+    showToast(actual ? t('labels.tunEnabled') : t('labels.tunDisabled'));
   });
 }
 
 if (tunStackSelect) {
   tunStackSelect.addEventListener('change', async () => {
-    const previous = normalizeTunStack(state.settings && state.settings.tunStack);
+    const previous = normalizeTunStack(state.settings && (state.settings.stack || state.settings.tunStack));
     const value = normalizeTunStack(tunStackSelect.value);
     tunStackSelect.value = value;
-    let response = await runCommand('tun', ['--stack', value, ...getControllerArgs()]);
+    if (!state.coreRunning) {
+      saveSettings({ stack: value });
+      showToast(ti('labels.tunApplyOnStart', 'TUN setting saved, it will be applied on next start.'));
+      return;
+    }
+    const configPath = getCurrentConfigPath();
+    const args = configPath ? ['--config', configPath] : [];
+    args.push('--stack', value);
+    let response = await updateTunViaController({ stack: value });
+    if (!response || !response.ok) {
+      response = await runCommand('tun', args);
+    }
     if (response && !response.ok && response.error === 'helper_unreachable') {
       const repaired = await repairHelperAndRetryTun();
       if (repaired) {
-        response = await runCommand('tun', ['--stack', value, ...getControllerArgs()]);
+        response = await runCommand('tun', args);
       }
     }
     const statusResponse = await loadTunStatus(false);
@@ -5970,17 +6334,18 @@ if (tunStackSelect) {
     if (!response.ok || !statusOk || actual !== value) {
       const nextValue = statusOk ? actual : previous;
       tunStackSelect.value = nextValue;
-      saveSettings({ tunStack: nextValue });
-      const mergedError = response.error || statusResponse?.error;
-      const message = mergedError === 'controller_missing'
-        ? t('labels.controllerMissing')
-        : (mergedError || (!statusOk
+      saveSettings({ stack: nextValue });
+      const message = formatTunUpdateError(
+        response,
+        statusResponse,
+        !statusOk
           ? ti('labels.tunStatusFailed', 'TUN status unavailable')
-          : ti('labels.tunStackUpdateFailed', 'TUN stack update failed')));
+          : ti('labels.tunStackUpdateFailed', 'TUN stack update failed'),
+      );
       showToast(message, 'error');
       return;
     }
-    saveSettings({ tunStack: actual });
+    saveSettings({ stack: actual });
   });
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "ClashFox",
   "version": "0.4.1",
-  "buildNumber": 7,
+  "buildNumber": 12,
   "description": "ClashFox GUI for Mihomo",
   "license": "GPL-3.0",
   "author": "Kuochiang Lu <lukuochiang@gmail.com> (https://github.com/lukuochiang/ClashFox)",
@@ -45,7 +45,8 @@
         "from": "scripts",
         "to": "scripts",
         "filter": [
-          "*.sh"
+          "*.sh",
+          "lib/*.sh"
         ]
       },
       {

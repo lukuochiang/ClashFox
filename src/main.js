@@ -1,7 +1,6 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const http = require('http');
 const https = require('https');
 const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme, shell, Tray, session, clipboard, screen } = require('electron');
 const { spawn, spawnSync, execFile } = require('child_process');
@@ -76,19 +75,17 @@ const RESTART_TRANSITION_RATIO = 0.5;
 let trayCoreStartupEstimateMs = 1500;
 const PRIVILEGED_COMMANDS = new Set([
   'install',
-  'start',
-  'stop',
-  'restart',
-  'status',
-  'tun-status',
   'delete-backups',
   'system-proxy-enable',
   'system-proxy-disable',
   'system-proxy-status',
   'tun',
 ]);
-const HELPER_V2_SOCKET_PATH = '/var/run/com.clashfox.helper.sock';
-const HELPER_V2_TOKEN_PATH = '/Library/Application Support/ClashFox/helper/token';
+const HELPER_SOCKET_PATH = '/var/run/com.clashfox.helper.sock';
+const HELPER_USER_DIR = path.join(APP_DATA_DIR, 'helper');
+const HELPER_LEGACY_DIR = '/Library/Application Support/ClashFox/helper';
+const HELPER_TOKEN_PATH = path.join(HELPER_USER_DIR, 'token');
+const HELPER_TOKEN_LEGACY_PATH = `${HELPER_LEGACY_DIR}/token`;
 const SYSTEM_AUTH_ERROR_PREFIX = '__CLASHFOX_SYSTEM_AUTH_ERROR__';
 const OUTBOUND_MODE_BADGE = {
   rule: 'R',
@@ -560,7 +557,8 @@ function mergeAppearanceAliases(settings = {}) {
   return {
     ...source,
     lang: readString('lang', 'auto'),
-    themePreference: readString('themePreference', 'auto'),
+    theme: readString('theme', readString('themePreference', 'auto')),
+    themePreference: readString('theme', readString('themePreference', 'auto')),
     debugMode: readBoolean('debugMode', false),
     acceptBeta: readBoolean('acceptBeta', false),
     githubUser: readString('githubUser', 'vernesong'),
@@ -648,6 +646,29 @@ function normalizeDeviceSettings(value = {}, overviewValue = {}) {
 function normalizeSettingsForStorage(input = {}) {
   const parsed = mergeAppearanceAliases(mergePanelManagerAliases(mergeUserDataPathAliases(input)));
   const defaultDirs = buildDefaultDirectorySettings();
+  const normalizePort = (value, fallback) => {
+    const parsedPort = Number.parseInt(String(value ?? ''), 10);
+    if (!Number.isFinite(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
+      return fallback;
+    }
+    return parsedPort;
+  };
+  const normalizeBool = (value, fallback = false) => {
+    if (value === undefined || value === null || value === '') {
+      return fallback;
+    }
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    const text = String(value).trim().toLowerCase();
+    if (['true', '1', 'yes', 'on'].includes(text)) {
+      return true;
+    }
+    if (['false', '0', 'no', 'off'].includes(text)) {
+      return false;
+    }
+    return fallback;
+  };
 
   const configPathFromLegacy = typeof parsed.configPath === 'string' ? normalizeTextValue(parsed.configPath) : '';
   const configuredConfigDir = normalizeTextValue(parsed.configDir) || defaultDirs.configDir;
@@ -710,7 +731,7 @@ function normalizeSettingsForStorage(input = {}) {
 
   parsed.appearance = {
     lang: normalizeTextValue(parsed.lang) || 'auto',
-    themePreference: normalizeTextValue(parsed.themePreference) || 'auto',
+    theme: normalizeTextValue(parsed.theme) || normalizeTextValue(parsed.themePreference) || 'auto',
     debugMode: Boolean(parsed.debugMode),
     acceptBeta: Boolean(parsed.acceptBeta),
     githubUser: normalizeTextValue(parsed.githubUser) || 'vernesong',
@@ -722,7 +743,11 @@ function normalizeSettingsForStorage(input = {}) {
     logAutoRefresh: Boolean(parsed.logAutoRefresh),
     logIntervalPreset: normalizeTextValue(parsed.logIntervalPreset) || '3',
   };
+  if (Object.prototype.hasOwnProperty.call(parsed.appearance, 'themePreference')) {
+    delete parsed.appearance.themePreference;
+  }
   delete parsed.lang;
+  delete parsed.theme;
   delete parsed.themePreference;
   delete parsed.debugMode;
   delete parsed.acceptBeta;
@@ -735,6 +760,35 @@ function normalizeSettingsForStorage(input = {}) {
   delete parsed.logAutoRefresh;
   delete parsed.logIntervalPreset;
   delete parsed.overviewTopOrder;
+
+  const legacyProxy = normalizeTextValue(parsed.proxyMode);
+  const legacySystemProxy = Object.prototype.hasOwnProperty.call(parsed, 'systemProxyEnabled')
+    ? parsed.systemProxyEnabled
+    : undefined;
+  const legacyTun = Object.prototype.hasOwnProperty.call(parsed, 'tunEnabled')
+    ? parsed.tunEnabled
+    : undefined;
+  const legacyStack = normalizeTextValue(parsed.tunStack);
+  const legacyPort = parsed.httpPort;
+
+  parsed.proxy = normalizeTextValue(parsed.proxy) || legacyProxy || 'rule';
+  parsed.systemProxy = normalizeBool(parsed.systemProxy, normalizeBool(legacySystemProxy, false));
+  parsed.tun = normalizeBool(parsed.tun, normalizeBool(legacyTun, false));
+  parsed.stack = normalizeTextValue(parsed.stack) || legacyStack || 'Mixed';
+  parsed.mixedPort = normalizePort(parsed.mixedPort, 7893);
+  parsed.port = normalizePort(parsed.port !== undefined ? parsed.port : legacyPort, 7890);
+  parsed.socksPort = normalizePort(parsed.socksPort, 7891);
+  parsed.allowLan = normalizeBool(parsed.allowLan, true);
+  delete parsed.proxyMode;
+  delete parsed.systemProxyEnabled;
+  delete parsed.tunEnabled;
+  delete parsed.tunStack;
+  delete parsed.httpPort;
+  delete parsed.captureMixedPort;
+  delete parsed.captureHttpPort;
+  delete parsed.captureSocksPort;
+  delete parsed.captureTunMode;
+  delete parsed.captureAllowLan;
 
   const legacyKernelVersion = normalizeKernelVersionValue(parsed.kernelVersion);
   const kernelCandidate = normalizeKernelVersionValue(
@@ -762,10 +816,14 @@ function normalizeSettingsForStorage(input = {}) {
 
   const ordered = {};
   const priority = [
-    'proxyMode',
-    'systemProxyEnabled',
-    'tunEnabled',
-    'tunStack',
+    'proxy',
+    'systemProxy',
+    'tun',
+    'stack',
+    'mixedPort',
+    'port',
+    'socksPort',
+    'allowLan',
     'appearance',
     'userDataPaths',
     'panelManager',
@@ -1355,11 +1413,197 @@ function getHelperPaths() {
   return {
     binary: '/Library/PrivilegedHelperTools/com.clashfox.helper',
     plist: '/Library/LaunchDaemons/com.clashfox.helper.plist',
+    versionMeta: path.join(HELPER_USER_DIR, 'version.json'),
+    versionMetaLegacy: `${HELPER_LEGACY_DIR}/version.json`,
     logs: [
       '/var/log/clashfox-helper.log',
       '/var/log/com.clashfox.helper.log',
     ],
   };
+}
+
+function normalizeHelperVersion(raw = '') {
+  const text = String(raw || '').trim();
+  if (!text) {
+    return '';
+  }
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed.version === 'string' && parsed.version.trim()) {
+      return parsed.version.trim();
+    }
+  } catch {
+    // ignore non-json format
+  }
+  const match = text.match(/"version"\s*:\s*"([^"]+)"/i);
+  if (match && match[1]) {
+    return String(match[1]).trim();
+  }
+  return '';
+}
+
+function readInstalledHelperVersion(paths = getHelperPaths()) {
+  const metaPaths = [
+    String((paths && paths.versionMeta) || '').trim(),
+    String((paths && paths.versionMetaLegacy) || '').trim(),
+  ].filter(Boolean);
+  for (const metaPath of metaPaths) {
+    if (!fs.existsSync(metaPath)) {
+      continue;
+    }
+    try {
+      const raw = fs.readFileSync(metaPath, 'utf8');
+      const parsed = JSON.parse(raw);
+      const version = parsed && typeof parsed.version === 'string' ? parsed.version.trim() : '';
+      if (version) {
+        return version;
+      }
+    } catch {
+      // continue probing other candidates
+    }
+  }
+  const binaryPath = String((paths && paths.binary) || '').trim();
+  if (binaryPath && fs.existsSync(binaryPath)) {
+    try {
+      const result = spawnSync(binaryPath, ['--version'], { encoding: 'utf8', timeout: 1500 });
+      const raw = String((result && result.stdout) || '').trim();
+      const version = normalizeHelperVersion(raw);
+      if (version) {
+        return version;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return '';
+}
+
+function readBundledHelperVersion() {
+  const candidates = [
+    path.join(ROOT_DIR, 'helper', 'com.clashfox.helper'),
+    path.join(process.resourcesPath || '', 'helper', 'com.clashfox.helper'),
+    path.join(APP_PATH, 'helper', 'com.clashfox.helper'),
+  ];
+  for (const candidate of candidates) {
+    if (!candidate || !fs.existsSync(candidate)) {
+      continue;
+    }
+    try {
+      const result = spawnSync(candidate, ['--version'], { encoding: 'utf8', timeout: 1500 });
+      const raw = String((result && result.stdout) || '').trim();
+      const version = normalizeHelperVersion(raw);
+      if (version) {
+        return version;
+      }
+    } catch {
+      // continue probing other candidates
+    }
+  }
+  return '';
+}
+
+function readProxyPortsFromConfigPath(configPath = '') {
+  try {
+    if (!configPath || !fs.existsSync(configPath)) {
+      return { port: '', socksPort: '' };
+    }
+    const raw = String(fs.readFileSync(configPath, 'utf8') || '');
+    const targetKeys = new Set(['mixed-port', 'port', 'http-port', 'socks-port']);
+    const values = {};
+    const lines = raw.split(/\r?\n/);
+    for (const line of lines) {
+      const trimmed = String(line || '').trim();
+      if (!trimmed || trimmed.startsWith('#')) {
+        continue;
+      }
+      const separatorIndex = trimmed.indexOf(':');
+      if (separatorIndex <= 0) {
+        continue;
+      }
+      const key = trimmed.slice(0, separatorIndex).trim();
+      if (!targetKeys.has(key)) {
+        continue;
+      }
+      let value = trimmed.slice(separatorIndex + 1).trim();
+      const commentIndex = value.indexOf('#');
+      if (commentIndex >= 0) {
+        value = value.slice(0, commentIndex).trim();
+      }
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith('\'') && value.endsWith('\''))) {
+        value = value.slice(1, -1).trim();
+      }
+      const numeric = value.match(/^([0-9]{1,5})$/);
+      if (numeric && numeric[1]) {
+        values[key] = numeric[1];
+      }
+    }
+    const port = String(values['mixed-port'] || values.port || values['http-port'] || values['socks-port'] || '').trim();
+    const socksPort = String(values['socks-port'] || values['mixed-port'] || values.port || values['http-port'] || '').trim();
+    return { port, socksPort };
+  } catch {
+    return { port: '', socksPort: '' };
+  }
+}
+
+function readArgValueFromArgv(name = '') {
+  if (!name) {
+    return '';
+  }
+  const argv = Array.isArray(process.argv) ? process.argv : [];
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] !== name) {
+      continue;
+    }
+    const value = argv[index + 1];
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+  return '';
+}
+
+function resolveConfigPathFromSettingsOrArgs(settings = null) {
+  const fromSettingsUserData = settings
+    && settings.userDataPaths
+    && typeof settings.userDataPaths.configFile === 'string'
+    ? settings.userDataPaths.configFile.trim()
+    : '';
+  const fromSettingsLegacy = settings && typeof settings.configFile === 'string'
+    ? settings.configFile.trim()
+    : '';
+  const fromArgs = readArgValueFromArgv('--config');
+  return (fromSettingsUserData || fromSettingsLegacy || fromArgs || '').trim();
+}
+
+async function resolveActiveNetworkServiceName() {
+  const runCommand = (bin, args = []) => new Promise((resolve) => {
+    execFile(bin, args, { timeout: 2500 }, (err, stdout) => {
+      if (err) {
+        resolve('');
+        return;
+      }
+      resolve(String(stdout || '').trim());
+    });
+  });
+  const iface = await runCommand('/bin/sh', [
+    '-c',
+    'route get default 2>/dev/null | awk \'/interface:/{print $2; exit}\'',
+  ]);
+  if (iface) {
+    const escapedIface = iface.replace(/'/g, "'\\''");
+    const service = await runCommand('/bin/sh', [
+      '-c',
+      `networksetup -listnetworkserviceorder 2>/dev/null | awk -v iface='${escapedIface}' '$0 ~ "\\\\(" iface "\\\\)" {print prev; exit} {prev=$0}' | sed -E 's/^\\([0-9]+\\) //'`,
+    ]);
+    if (service && !service.includes('denotes that a network service is disabled')) {
+      return service;
+    }
+  }
+  const fallback = await runCommand('/bin/sh', [
+    '-c',
+    "networksetup -listallnetworkservices 2>/dev/null | sed '1d' | sed '/^\\*/d' | awk 'NF{print; exit}'",
+  ]);
+  return fallback || '';
 }
 
 function isHelperLaunchdLoaded(label = 'com.clashfox.helper') {
@@ -1372,12 +1616,42 @@ function isHelperLaunchdLoaded(label = 'com.clashfox.helper') {
 
 async function getHelperStatus() {
   const paths = getHelperPaths();
-  const binaryExists = fs.existsSync(paths.binary);
-  const plistExists = fs.existsSync(paths.plist);
+  const doctor = await runHelperDoctor({ repair: false }).catch(() => null);
+  const doctorData = doctor && doctor.data && typeof doctor.data === 'object' ? doctor.data : {};
+  const binaryExists = Object.prototype.hasOwnProperty.call(doctorData, 'binaryExists')
+    ? Boolean(doctorData.binaryExists)
+    : fs.existsSync(paths.binary);
+  const plistExists = Object.prototype.hasOwnProperty.call(doctorData, 'plistExists')
+    ? Boolean(doctorData.plistExists)
+    : fs.existsSync(paths.plist);
   const installed = binaryExists && plistExists;
   const ping = await pingHelper();
-  const launchdLoaded = await isHelperLaunchdLoaded();
-  const running = Boolean(ping && ping.ok);
+  const statusProbe = (!ping || !ping.ok) ? await runBridgeViaHelperApi(['status']) : null;
+  const statusProbeOk = Boolean(statusProbe && statusProbe.ok);
+  const launchdLoaded = Object.prototype.hasOwnProperty.call(doctorData, 'launchdLoaded')
+    ? Boolean(doctorData.launchdLoaded)
+    : await isHelperLaunchdLoaded();
+  const socketExists = Object.prototype.hasOwnProperty.call(doctorData, 'socketExists')
+    ? Boolean(doctorData.socketExists)
+    : fs.existsSync(HELPER_SOCKET_PATH);
+  const socketPingOk = Object.prototype.hasOwnProperty.call(doctorData, 'socketPingOk')
+    ? Boolean(doctorData.socketPingOk)
+    : Boolean(ping && ping.ok);
+  const httpPingOk = Object.prototype.hasOwnProperty.call(doctorData, 'httpPingOk')
+    ? Boolean(doctorData.httpPingOk)
+    : statusProbeOk;
+  const running = Boolean(socketPingOk || httpPingOk || (ping && ping.ok) || statusProbeOk);
+  const helperVersion = readInstalledHelperVersion(paths)
+    || normalizeHelperVersion(doctorData.helperVersion)
+    || normalizeHelperVersion(ping && ping.data && ping.data.version)
+    || normalizeHelperVersion(statusProbe && statusProbe.data && statusProbe.data.version)
+    || '';
+  const helperTargetVersion = readBundledHelperVersion();
+  const helperUpdateAvailable = Boolean(
+    helperVersion
+    && helperTargetVersion
+    && compareVersions(helperTargetVersion, helperVersion) > 0,
+  );
   let state = 'installed_unreachable';
   if (running) {
     state = 'running';
@@ -1396,8 +1670,16 @@ async function getHelperStatus() {
       binaryExists,
       plistExists,
       launchdLoaded,
+      socketExists,
+      socketPingOk,
+      httpPingOk,
+      helperVersion,
+      helperTargetVersion,
+      helperUpdateAvailable,
       logPath,
       ping: ping || { ok: false, error: 'helper_unreachable' },
+      statusProbe: statusProbe || null,
+      doctor: doctor || null,
     },
   };
 }
@@ -1412,6 +1694,12 @@ function normalizeHelperStatusPayload(result) {
     binaryExists: Boolean(data.binaryExists),
     plistExists: Boolean(data.plistExists),
     launchdLoaded: Boolean(data.launchdLoaded),
+    socketExists: Boolean(data.socketExists),
+    socketPingOk: Boolean(data.socketPingOk),
+    httpPingOk: Boolean(data.httpPingOk),
+    helperVersion: String(data.helperVersion || ''),
+    helperTargetVersion: String(data.helperTargetVersion || ''),
+    helperUpdateAvailable: Boolean(data.helperUpdateAvailable),
     logPath: String(data.logPath || '/var/log/clashfox-helper.log'),
     updatedAt: new Date().toISOString(),
   };
@@ -1649,7 +1937,9 @@ function persistMainWindowSizeToSettings(width, height) {
 
 function resolveOutboundModeFromSettings() {
   const parsed = readAppSettings();
-  const mode = parsed && typeof parsed.proxyMode === 'string' ? parsed.proxyMode.trim().toLowerCase() : '';
+  const mode = parsed && typeof parsed.proxy === 'string'
+    ? parsed.proxy.trim().toLowerCase()
+    : (parsed && typeof parsed.proxyMode === 'string' ? parsed.proxyMode.trim().toLowerCase() : '');
   if (OUTBOUND_MODE_BADGE[mode]) {
     return mode;
   }
@@ -1663,7 +1953,10 @@ function persistOutboundModeToSettings(mode) {
   try {
     ensureAppDirs();
     const parsed = readAppSettings();
-    parsed.proxyMode = mode;
+    parsed.proxy = mode;
+    if (Object.prototype.hasOwnProperty.call(parsed, 'proxyMode')) {
+      delete parsed.proxyMode;
+    }
     writeAppSettings(parsed);
     return true;
   } catch {
@@ -1675,7 +1968,10 @@ function persistTunEnabledToSettings(enabled) {
   try {
     ensureAppDirs();
     const parsed = readAppSettings();
-    parsed.tunEnabled = Boolean(enabled);
+    parsed.tun = Boolean(enabled);
+    if (Object.prototype.hasOwnProperty.call(parsed, 'tunEnabled')) {
+      delete parsed.tunEnabled;
+    }
     writeAppSettings(parsed);
     return true;
   } catch {
@@ -1687,7 +1983,10 @@ function persistSystemProxyEnabledToSettings(enabled) {
   try {
     ensureAppDirs();
     const parsed = readAppSettings() || {};
-    parsed.systemProxyEnabled = Boolean(enabled);
+    parsed.systemProxy = Boolean(enabled);
+    if (Object.prototype.hasOwnProperty.call(parsed, 'systemProxyEnabled')) {
+      delete parsed.systemProxyEnabled;
+    }
     writeAppSettings(parsed);
     return true;
   } catch {
@@ -1699,7 +1998,10 @@ function persistSystemProxyEnabledToAppSettings(enabled) {
   try {
     ensureAppDirs();
     const parsed = readAppSettings() || {};
-    parsed.systemProxyEnabled = Boolean(enabled);
+    parsed.systemProxy = Boolean(enabled);
+    if (Object.prototype.hasOwnProperty.call(parsed, 'systemProxyEnabled')) {
+      delete parsed.systemProxyEnabled;
+    }
     writeAppSettings(parsed);
     return parsed;
   } catch {
@@ -1920,10 +2222,12 @@ function persistOverviewSystemToSettings(overviewData = {}, source = 'overview')
   }
 }
 
-function buildShellExportCommand(portValue) {
-  const port = String(portValue || '').trim();
-  const safePort = /^[0-9]+$/.test(port) ? port : '7890';
-  return `export http_proxy="http://127.0.0.1:${safePort}" https_proxy="http://127.0.0.1:${safePort}" all_proxy="socks5://127.0.0.1:${safePort}" no_proxy="localhost,127.0.0.1,::1"`;
+function buildShellExportCommand(httpPortValue, socksPortValue) {
+  const httpPort = String(httpPortValue || '').trim();
+  const socksPort = String(socksPortValue || '').trim();
+  const safeHttpPort = /^[0-9]+$/.test(httpPort) ? httpPort : '7890';
+  const safeSocksPort = /^[0-9]+$/.test(socksPort) ? socksPort : '7891';
+  return `export http_proxy="http://127.0.0.1:${safeHttpPort}" https_proxy="http://127.0.0.1:${safeHttpPort}" all_proxy="socks5://127.0.0.1:${safeSocksPort}" no_proxy="localhost,127.0.0.1,::1"`;
 }
 
 function resolveConnectivityToneByLatency(rawLatency) {
@@ -2233,12 +2537,13 @@ function runBridgeWithSystemAuth(bridgeArgs = []) {
 }
 
 function normalizeBridgeArgs(args = [], options = {}) {
+  const inputArgs = Array.isArray(args) ? args : [];
   const normalized = [];
   let extractedSudoPass = '';
-  for (let index = 0; index < args.length; index += 1) {
-    const value = args[index];
+  for (let index = 0; index < inputArgs.length; index += 1) {
+    const value = inputArgs[index];
     if (value === '--sudo-pass') {
-      const nextValue = args[index + 1];
+      const nextValue = inputArgs[index + 1];
       if (!extractedSudoPass && typeof nextValue === 'string') {
         extractedSudoPass = nextValue;
       }
@@ -2254,241 +2559,423 @@ function normalizeBridgeArgs(args = [], options = {}) {
   };
 }
 
-function readHelperV2Token() {
+function readHelperTokens() {
+  const candidates = [HELPER_TOKEN_LEGACY_PATH, HELPER_TOKEN_PATH];
+  const tokens = [];
   try {
-    if (!fs.existsSync(HELPER_V2_TOKEN_PATH)) {
-      return '';
-    }
-    return String(fs.readFileSync(HELPER_V2_TOKEN_PATH, 'utf8') || '').trim();
-  } catch {
-    return '';
-  }
-}
-
-function readBridgeArgValue(args = [], name = '', fallback = '') {
-  const list = Array.isArray(args) ? args : [];
-  for (let index = 0; index < list.length; index += 1) {
-    if (list[index] !== name) {
-      continue;
-    }
-    const next = list[index + 1];
-    if (typeof next === 'string' && next.trim()) {
-      return next.trim();
-    }
-  }
-  return fallback;
-}
-
-function readProxyPortFromConfigPath(configPath = '') {
-  try {
-    if (!configPath || !fs.existsSync(configPath)) {
-      return '';
-    }
-    const raw = String(fs.readFileSync(configPath, 'utf8') || '');
-    const patterns = [
-      /^[ \t]*mixed-port:[ \t]*([0-9]+)[ \t]*$/m,
-      /^[ \t]*port:[ \t]*([0-9]+)[ \t]*$/m,
-      /^[ \t]*socks-port:[ \t]*([0-9]+)[ \t]*$/m,
-    ];
-    for (const pattern of patterns) {
-      const match = raw.match(pattern);
-      if (match && match[1]) {
-        return String(match[1]).trim();
+    for (const candidate of candidates) {
+      if (!fs.existsSync(candidate)) {
+        continue;
+      }
+      const token = String(fs.readFileSync(candidate, 'utf8') || '').trim();
+      if (!token) {
+        continue;
+      }
+      if (!tokens.includes(token)) {
+        tokens.push(token);
       }
     }
-    return '';
+    return tokens;
   } catch {
-    return '';
+    return tokens;
   }
 }
 
-async function resolveActiveNetworkServiceName() {
-  const runCommand = (bin, args = []) => new Promise((resolve) => {
-    execFile(bin, args, { timeout: 2500 }, (err, stdout) => {
-      if (err) {
-        resolve('');
-        return;
-      }
-      resolve(String(stdout || '').trim());
-    });
-  });
-  const iface = await runCommand('/bin/sh', [
-    '-c',
-    'route get default 2>/dev/null | awk \'/interface:/{print $2; exit}\'',
-  ]);
-  if (iface) {
-    const service = await runCommand('/bin/sh', [
-      '-c',
-      `networksetup -listnetworkserviceorder 2>/dev/null | awk -v iface='${iface.replace(/'/g, "'\\''")}' '$0 ~ "\\\\(" iface "\\\\)" {print prev; exit} {prev=$0}' | sed -E 's/^\\([0-9]+\\) //'`,
-    ]);
-    if (service && !service.includes('denotes that a network service is disabled')) {
-      return service;
-    }
-  }
-  const fallback = await runCommand('/bin/sh', [
-    '-c',
-    "networksetup -listallnetworkservices 2>/dev/null | sed '1d' | sed '/^\\*/d' | awk 'NF{print; exit}'",
-  ]);
-  return fallback || '';
-}
-
-function sendHelperV2Request(pathname, method = 'GET', payload = null, timeoutMs = 20000) {
+function sendHelperRequest(pathname, method = 'GET', payload = null, timeoutMs = 20000) {
   return new Promise((resolve, reject) => {
-    if (!fs.existsSync(HELPER_V2_SOCKET_PATH)) {
+    if (!fs.existsSync(HELPER_SOCKET_PATH)) {
       reject(new Error('socket_missing'));
       return;
     }
-    const token = readHelperV2Token();
-    if (!token) {
+    const tokens = readHelperTokens();
+    if (!tokens.length) {
       reject(new Error('token_missing'));
       return;
     }
     const hasBody = payload !== null && payload !== undefined;
     const body = hasBody ? JSON.stringify(payload) : '';
-    const request = http.request({
-      socketPath: HELPER_V2_SOCKET_PATH,
-      method,
-      path: pathname,
-      timeout: timeoutMs,
-      headers: {
-        'X-Helper-Token': token,
-        ...(hasBody ? {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(body),
-        } : {}),
-      },
-    }, (res) => {
-      let data = '';
-      res.on('data', (chunk) => {
-        data += chunk.toString();
+    const maxTime = String(Math.max(1, Math.ceil(Number(timeoutMs || 20000) / 1000)));
+    const requestMethod = String(method || 'GET').toUpperCase();
+    const marker = '__CURL_HTTP_CODE__';
+
+    const runWithToken = (token, callback) => {
+      const args = [
+        '--silent',
+        '--show-error',
+        '--max-time',
+        maxTime,
+        '--unix-socket',
+        HELPER_SOCKET_PATH,
+        '-H',
+        `X-Helper-Token: ${token}`,
+        '-X',
+        requestMethod,
+      ];
+      if (hasBody) {
+        args.push('-H', 'Content-Type: application/json', '-d', body);
+      }
+      args.push(
+        '--write-out',
+        `\\n${marker}:%{http_code}`,
+        `http://localhost${pathname}`,
+      );
+      execFile('/usr/bin/curl', args, { timeout: timeoutMs }, (error, stdout = '', stderr = '') => {
+        callback(error, String(stdout || ''), String(stderr || ''));
       });
-      res.on('end', () => {
+    };
+
+    const tryNext = (index = 0, lastError = null) => {
+      if (index >= tokens.length) {
+        reject(lastError || new Error('helper_unreachable'));
+        return;
+      }
+      runWithToken(tokens[index], (error, stdout, stderr) => {
+        if (error) {
+          const message = String(stderr || error.message || 'helper_request_failed').trim() || 'helper_request_failed';
+          tryNext(index + 1, new Error(message));
+          return;
+        }
+        const markerIndex = stdout.lastIndexOf(`\n${marker}:`);
+        const fallbackMarkerIndex = markerIndex >= 0 ? markerIndex : stdout.lastIndexOf(`${marker}:`);
+        if (fallbackMarkerIndex < 0) {
+          resolve({
+            statusCode: 200,
+            body: stdout.trim(),
+          });
+          return;
+        }
+        const statusText = stdout.slice(fallbackMarkerIndex).replace(/\n/g, '').replace(`${marker}:`, '').trim();
+        const statusCode = Number.parseInt(statusText, 10);
+        const bodyText = stdout.slice(0, fallbackMarkerIndex).trim();
+        if ((statusCode === 401 || statusCode === 403) && index < tokens.length - 1) {
+          tryNext(index + 1, new Error('unauthorized'));
+          return;
+        }
         resolve({
-          statusCode: Number(res.statusCode || 0),
-          body: data,
+          statusCode: Number.isFinite(statusCode) ? statusCode : 200,
+          body: bodyText,
         });
       });
-    });
-    request.on('error', (err) => reject(err));
-    request.on('timeout', () => {
-      request.destroy();
-      reject(new Error('timeout'));
-    });
-    if (hasBody) {
-      request.write(body);
-    }
-    request.end();
+    };
+
+    tryNext(0, null);
   });
 }
 
-async function runBridgeViaHelperV2(bridgeArgs = []) {
+function normalizeHelperApiError(err) {
+  const raw = String((err && err.message) || '').trim().toLowerCase();
+  if (!raw) {
+    return 'helper_unreachable';
+  }
+  if (raw.includes('token_missing') || raw.includes('unauthorized')) {
+    return 'unauthorized';
+  }
+  if (raw.includes('socket_missing') || raw.includes('no such file')) {
+    return 'socket_missing';
+  }
+  if (raw.includes('timed out') || raw.includes('timeout')) {
+    return 'timeout';
+  }
+  if (raw.includes('permission denied')) {
+    return 'permission_denied';
+  }
+  if (raw.includes('could not connect') || raw.includes('connection refused')) {
+    return 'helper_unreachable';
+  }
+  return 'helper_unreachable';
+}
+
+function isHelperHealthResponseOk(body = '') {
+  const text = String(body || '').trim();
+  if (!text) {
+    return false;
+  }
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && parsed.ok === true) {
+      return true;
+    }
+  } catch {
+    // fallback to relaxed check below
+  }
+  if (/"ok"\s*:\s*true/i.test(text)) {
+    return true;
+  }
+  if (/"status"\s*:\s*"ok"/i.test(text)) {
+    return true;
+  }
+  return false;
+}
+
+async function runBridgeViaHelperApi(bridgeArgs = []) {
   const commandType = String((bridgeArgs && bridgeArgs[0]) || '').trim();
   const commandArgs = Array.isArray(bridgeArgs) ? bridgeArgs.slice(1) : [];
   if (!commandType || process.platform !== 'darwin') {
     return null;
   }
 
-  const respondFromV2 = async (pathname, method = 'GET', payload = null) => {
-    const response = await sendHelperV2Request(pathname, method, payload);
-    if (!response || !response.body) {
+  const readArgValue = (name = '') => {
+    if (!name) {
+      return '';
+    }
+    for (let index = 0; index < commandArgs.length; index += 1) {
+      if (commandArgs[index] !== name) {
+        continue;
+      }
+      const value = commandArgs[index + 1];
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+    }
+    return '';
+  };
+
+  const respondFromHelper = async (pathname, method = 'GET', payload = null) => {
+    const response = await sendHelperRequest(pathname, method, payload);
+    if (!response) {
       return { ok: false, error: 'helper_unreachable' };
     }
+    const statusCode = Number(response.statusCode || 0);
+    const isHttpOk = statusCode >= 200 && statusCode < 300;
+    const textBody = String(response.body || '').trim();
+    if (!textBody) {
+      return isHttpOk ? { ok: true, data: {} } : { ok: false, error: `http_${statusCode || 0}` };
+    }
     try {
-      return parseBridgeOutput(response.body);
+      const parsed = parseBridgeOutput(textBody);
+      if (!parsed || typeof parsed !== 'object') {
+        return isHttpOk ? { ok: true, data: parsed } : { ok: false, error: 'helper_unreachable' };
+      }
+      if (parsed.ok === true) {
+        return parsed;
+      }
+      if (parsed.ok === false || parsed.error) {
+        return parsed;
+      }
+      if (parsed.status === 'ok' || parsed.success === true) {
+        return {
+          ok: true,
+          data: Object.prototype.hasOwnProperty.call(parsed, 'data') ? parsed.data : parsed,
+        };
+      }
+      if (isHttpOk) {
+        return { ok: true, data: parsed };
+      }
+      return parsed;
     } catch {
-      return { ok: false, error: 'parse_error', details: String(response.body || '').trim() };
+      if (isHttpOk) {
+        return { ok: true, data: textBody };
+      }
+      return { ok: false, error: 'parse_error', details: textBody };
     }
   };
 
   try {
     switch (commandType) {
       case 'ping': {
-        const result = await respondFromV2('/health', 'GET');
+        let response = null;
+        try {
+          response = await sendHelperRequest('/health', 'GET', null, 5000);
+        } catch {
+          response = null;
+        }
+        if (response && isHelperHealthResponseOk(response.body)) {
+          return {
+            ok: true,
+            data: {
+              status: 'ok',
+              source: 'helper',
+            },
+          };
+        }
+        const result = await respondFromHelper('/health', 'GET');
         if (result && result.ok) {
           return {
             ok: true,
             data: {
               status: 'ok',
-              source: 'helper_v2',
+              source: 'helper',
             },
           };
         }
         return result;
       }
       case 'status': {
-        const result = await respondFromV2('/v1/core/status', 'GET');
-        if (result && result.ok) {
-          const running = Boolean(result.running);
+        const result = await respondFromHelper('/v1/core/status', 'GET');
+        const hasStatusShape = Boolean(
+          result
+          && typeof result === 'object'
+          && (Object.prototype.hasOwnProperty.call(result, 'running')
+            || Object.prototype.hasOwnProperty.call(result, 'pid')
+            || Object.prototype.hasOwnProperty.call(result, 'binary')),
+        );
+        if (result && (result.ok || hasStatusShape)) {
+          const running = Boolean(
+            Object.prototype.hasOwnProperty.call(result, 'running')
+              ? result.running
+              : (result.data && result.data.running),
+          );
           return {
             ok: true,
             data: {
               running,
-              pid: Number(result.pid || 0),
-              path: String(result.binary || ''),
-              source: 'helper_v2',
+              pid: Number(
+                Object.prototype.hasOwnProperty.call(result, 'pid')
+                  ? result.pid
+                  : (result.data && result.data.pid) || 0,
+              ),
+              path: String(
+                Object.prototype.hasOwnProperty.call(result, 'binary')
+                  ? result.binary
+                  : (result.data && (result.data.binary || result.data.path)) || '',
+              ),
+              source: 'helper',
             },
           };
         }
         return result;
       }
-      case 'start':
-        return respondFromV2('/v1/core/start', 'POST', {});
+      case 'start': {
+        const settings = readAppSettings();
+        const configFileName = path.basename(resolveConfigPathFromSettingsOrArgs(settings)).trim();
+        if (!configFileName) {
+          return respondFromHelper('/v1/core/start', 'POST', {});
+        }
+        return respondFromHelper('/v1/core/start', 'POST', {
+          configPath: configFileName,
+        });
+      }
       case 'stop':
-        return respondFromV2('/v1/core/stop', 'POST', {});
-      case 'restart':
-        return respondFromV2('/v1/core/restart', 'POST', {});
+        return respondFromHelper('/v1/core/stop', 'POST', {});
+      case 'restart': {
+        const settings = readAppSettings();
+        const configFileName = path.basename(resolveConfigPathFromSettingsOrArgs(settings)).trim();
+        if (!configFileName) {
+          return respondFromHelper('/v1/core/restart', 'POST', {});
+        }
+        return respondFromHelper('/v1/core/restart', 'POST', {
+          configPath: configFileName,
+        });
+      }
+      // Current helper API does not expose TUN endpoints.
+      // Keep TUN operations on the script path (gui_bridge.sh) only.
       case 'tun-status':
         return { ok: false, error: 'unsupported_command' };
-      case 'tun': {
-        const enableValue = readBridgeArgValue(commandArgs, '--enable', '').toLowerCase();
-        if (enableValue === 'true' || enableValue === '1' || enableValue === 'on') {
-          return respondFromV2('/v1/tun/enable', 'POST', { enableIPForward: true, enablePF: true });
-        }
-        if (enableValue === 'false' || enableValue === '0' || enableValue === 'off') {
-          return respondFromV2('/v1/tun/disable', 'POST', {});
-        }
+      case 'tun':
         return { ok: false, error: 'unsupported_command' };
-      }
       case 'system-proxy-enable': {
-        const configPath = readBridgeArgValue(commandArgs, '--config', getConfigPathFromSettings());
-        const port = readProxyPortFromConfigPath(configPath);
+        const settings = readAppSettings();
+        const configPath = resolveConfigPathFromSettingsOrArgs(settings);
+        const ports = readProxyPortsFromConfigPath(configPath);
+        const portFromSettings = settings && Object.prototype.hasOwnProperty.call(settings, 'port')
+          ? String(settings.port || '').trim()
+          : '';
+        const socksFromSettings = settings && Object.prototype.hasOwnProperty.call(settings, 'socksPort')
+          ? String(settings.socksPort || '').trim()
+          : '';
+        const port = portFromSettings || String(ports.port || '').trim() || '7890';
+        const socksPort = socksFromSettings || String(ports.socksPort || '').trim() || String(port);
         const parsedPort = Number.parseInt(String(port || '').trim(), 10);
+        const parsedSocksPort = Number.parseInt(String(socksPort || '').trim(), 10);
         if (!Number.isFinite(parsedPort) || parsedPort <= 0 || parsedPort > 65535) {
-          return { ok: false, error: 'unsupported_command' };
+          return { ok: false, error: 'invalid_proxy_host_port' };
         }
-        const service = await resolveActiveNetworkServiceName();
-        if (!service) {
-          return { ok: false, error: 'unsupported_command' };
+        if (!Number.isFinite(parsedSocksPort) || parsedSocksPort <= 0 || parsedSocksPort > 65535) {
+          return { ok: false, error: 'invalid_proxy_host_port' };
         }
-        return respondFromV2('/v1/proxy/global', 'POST', {
+        const service = readArgValue('--service') || await resolveActiveNetworkServiceName() || 'Wi-Fi';
+        return respondFromHelper('/v1/proxy/enable', 'POST', {
           service,
           host: '127.0.0.1',
           port: parsedPort,
+          socksPort: parsedSocksPort,
         });
       }
       case 'system-proxy-disable': {
-        const service = await resolveActiveNetworkServiceName();
-        if (!service) {
-          return { ok: false, error: 'unsupported_command' };
-        }
-        return respondFromV2('/v1/proxy/off', 'POST', { service });
+        return respondFromHelper('/v1/proxy/disable', 'POST', {});
       }
       default:
         return { ok: false, error: 'unsupported_command' };
     }
-  } catch {
-    return null;
+  } catch (err) {
+    return {
+      ok: false,
+      error: normalizeHelperApiError(err),
+      details: String((err && err.message) || '').trim(),
+    };
   }
 }
 
 async function runBridgeViaHelper(bridgeArgs = []) {
   const commandType = bridgeArgs[0];
+  const helperOnlyCommands = new Set(['system-proxy-enable', 'system-proxy-disable']);
   if (!commandType || process.platform !== 'darwin') {
     return null;
   }
-  const v2Result = await runBridgeViaHelperV2(bridgeArgs);
-  if (v2Result && !(v2Result && v2Result.ok === false && v2Result.error === 'unsupported_command')) {
-    return v2Result;
+  const shouldFallbackToScript = (result) => {
+    if (!result || typeof result !== 'object' || result.ok === true) {
+      return false;
+    }
+    const errorCode = String(result.error || '').trim().toUpperCase();
+    const details = String(result.details || '').toLowerCase();
+    if (errorCode === 'UNSUPPORTED_COMMAND') {
+      return true;
+    }
+    const fallbackErrors = new Set([
+      'CIRCUIT_OPEN',
+      'RATE_LIMITED',
+      'FORBIDDEN_CALLER',
+      'UNAUTHORIZED',
+      'UNAUTHORIZED_TOKEN',
+      'FORBIDDEN',
+      'NOT_FOUND',
+      'PARSE_ERROR',
+      'HELPER_UNREACHABLE',
+      'SOCKET_MISSING',
+      'TOKEN_MISSING',
+      'TIMEOUT',
+    ]);
+    if (fallbackErrors.has(errorCode)) {
+      return true;
+    }
+    // Helper internal transient errors should not block TUN toggle flow.
+    if ((commandType === 'tun' || commandType === 'tun-status') && errorCode === 'UNEXPECTED_ERROR') {
+      return true;
+    }
+    if (details.includes('temporarily blocked') || details.includes('repeated failures')) {
+      return true;
+    }
+    return false;
+  };
+  const helperResult = await runBridgeViaHelperApi(bridgeArgs);
+  if (helperOnlyCommands.has(String(commandType || '').trim())) {
+    const isTransientHelperError = (result) => {
+      if (!result || typeof result !== 'object') {
+        return true;
+      }
+      if (result.ok) {
+        return false;
+      }
+      const code = String(result.error || '').trim().toLowerCase();
+      return code === 'helper_unreachable' || code === 'socket_missing' || code === 'timeout';
+    };
+    if (isTransientHelperError(helperResult)) {
+      await sleep(200);
+      const retryResult = await runBridgeViaHelperApi(bridgeArgs);
+      if (retryResult) {
+        return retryResult;
+      }
+    }
+    if (!helperResult) {
+      return { ok: false, error: 'helper_unreachable' };
+    }
+    return helperResult;
+  }
+  if (shouldFallbackToScript(helperResult)) {
+    return null;
+  }
+  if (helperResult) {
+    return helperResult;
   }
   return null;
 }
@@ -2497,9 +2984,9 @@ async function pingHelper() {
   if (process.platform !== 'darwin') {
     return { ok: false, error: 'unsupported_os' };
   }
-  const v2Result = await runBridgeViaHelperV2(['ping']);
-  if (v2Result && v2Result.ok) {
-    return v2Result;
+  const helperResult = await runBridgeViaHelperApi(['ping']);
+  if (helperResult && helperResult.ok) {
+    return helperResult;
   }
   return { ok: false, error: 'helper_unreachable' };
 }
@@ -2650,10 +3137,17 @@ function updateTrayCoreStartupEstimate(measuredMs) {
 async function getKernelRunningSilently(sudoPass = '') {
   try {
     const response = await runBridge(['status'], { sudoPass });
-    if (!response || !response.ok) {
-      return null;
+    if (response && response.ok) {
+      const running = Boolean(response.data && response.data.running);
+      if (running) {
+        return true;
+      }
     }
-    return Boolean(response.data && response.data.running);
+    const overview = await runBridge(['overview'], { sudoPass });
+    if (overview && overview.ok) {
+      return Boolean(overview.data && overview.data.running);
+    }
+    return null;
   } catch {
     return null;
   }
@@ -2696,7 +3190,9 @@ async function runTrayCommand(command, args = [], labels = TRAY_I18N.en, sudoPas
       });
       return { ok: false };
     }
-    const message = (result && (result.error || result.message)) ? String(result.error || result.message) : 'Unknown error';
+    const message = (result && (result.details || result.error || result.message))
+      ? String(result.details || result.error || result.message)
+      : 'Unknown error';
     await dialog.showMessageBox({
       type: 'error',
       buttons: [labels.ok || 'OK'],
@@ -2974,17 +3470,38 @@ async function buildTrayMenuOnce() {
   const labels = getTrayLabels();
   const uiLabels = getUiLabels();
   const configPath = getConfigPathFromSettings();
+  const traySettings = readAppSettings();
   let dashboardEnabled = false;
   let networkTakeoverEnabled = false;
   let networkTakeoverService = '';
-  let networkTakeoverPort = '7890';
+  let networkTakeoverPort = String(traySettings && traySettings.port ? traySettings.port : '7890').trim() || '7890';
+  let networkTakeoverSocksPort = String(traySettings && traySettings.socksPort ? traySettings.socksPort : '7891').trim() || '7891';
   let connectivityQuality = '-';
   let connectivityTone = 'neutral';
-  let tunEnabled = Boolean(readAppSettings().tunEnabled);
+  let tunEnabled = Boolean(
+    Object.prototype.hasOwnProperty.call(traySettings || {}, 'tun')
+      ? traySettings.tun
+      : (traySettings && traySettings.tunEnabled),
+  );
   let tunAvailable = true;
+  const parsedProxyPorts = readProxyPortsFromConfigPath(configPath);
+  if (!traySettings || !Object.prototype.hasOwnProperty.call(traySettings, 'port')) {
+    if (parsedProxyPorts && parsedProxyPorts.port) {
+      networkTakeoverPort = String(parsedProxyPorts.port).trim() || networkTakeoverPort;
+    }
+  }
+  if (!traySettings || !Object.prototype.hasOwnProperty.call(traySettings, 'socksPort')) {
+    if (parsedProxyPorts && parsedProxyPorts.socksPort) {
+      networkTakeoverSocksPort = String(parsedProxyPorts.socksPort).trim() || networkTakeoverSocksPort;
+    }
+  }
   try {
     const status = await runBridge(['status']);
     dashboardEnabled = Boolean(status && status.ok && status.data && status.data.running);
+    if (!dashboardEnabled) {
+      const overview = await runBridge(['overview']);
+      dashboardEnabled = Boolean(overview && overview.ok && overview.data && overview.data.running);
+    }
   } catch {
     dashboardEnabled = false;
   }
@@ -2997,11 +3514,25 @@ async function buildTrayMenuOnce() {
     networkTakeoverPort = (takeover && takeover.ok && takeover.data && takeover.data.port)
       ? String(takeover.data.port).trim()
       : '7890';
+    networkTakeoverSocksPort = (takeover && takeover.ok && takeover.data && takeover.data.socksPort)
+      ? String(takeover.data.socksPort).trim()
+      : (parsedProxyPorts && parsedProxyPorts.socksPort
+        ? String(parsedProxyPorts.socksPort).trim()
+        : networkTakeoverPort);
     persistSystemProxyEnabledToSettings(networkTakeoverEnabled);
   } catch {
     networkTakeoverEnabled = false;
     networkTakeoverService = '';
-    networkTakeoverPort = '7890';
+    networkTakeoverPort = (traySettings && Object.prototype.hasOwnProperty.call(traySettings, 'port'))
+      ? String(traySettings.port).trim()
+      : ((parsedProxyPorts && parsedProxyPorts.port)
+      ? String(parsedProxyPorts.port).trim()
+      : '7890');
+    networkTakeoverSocksPort = (traySettings && Object.prototype.hasOwnProperty.call(traySettings, 'socksPort'))
+      ? String(traySettings.socksPort).trim()
+      : ((parsedProxyPorts && parsedProxyPorts.socksPort)
+      ? String(parsedProxyPorts.socksPort).trim()
+      : '7891');
     // keep last persisted systemProxyEnabled on transient errors
   }
   const connectivitySnapshot = await getConnectivityQualitySnapshot(configPath);
@@ -3012,7 +3543,7 @@ async function buildTrayMenuOnce() {
     ? String(connectivitySnapshot.tone)
     : 'neutral';
   try {
-    const tunStatus = await runBridge(['tun-status', '--config', configPath, ...getControllerArgsFromSettings()]);
+    const tunStatus = await runBridge(['tun-status', '--config', configPath]);
     if (tunStatus && tunStatus.ok && tunStatus.data) {
       const tunEnabledRaw = Object.prototype.hasOwnProperty.call(tunStatus.data, 'enabled')
         ? tunStatus.data.enabled
@@ -3041,6 +3572,8 @@ async function buildTrayMenuOnce() {
     meta: {
       configPath,
       networkTakeoverPort,
+      networkTakeoverSocksPort,
+      networkTakeoverService,
       dashboardEnabled,
       currentOutboundMode,
       submenuSide: 'right',
@@ -3490,8 +4023,10 @@ async function handleTrayMenuAction(action, payload = {}) {
       try {
         const result = await checkForUpdates({ manual: true });
         if (!result.ok) {
-          emitMainToast('Check for updates failed.', 'error');
-          return { ok: false, hide: true, result };
+          const reason = String(result.error || 'unknown_error');
+          await shell.openExternal(resolveCheckUpdateUrlFromSettings());
+          emitMainToast(`Check for updates failed (${reason}). Opened releases page.`, 'warn');
+          return { ok: true, hide: true, result };
         }
         if (result.status === 'update_available') {
           await shell.openExternal(result.releaseUrl || resolveCheckUpdateUrlFromSettings());
@@ -3510,7 +4045,14 @@ async function handleTrayMenuAction(action, payload = {}) {
       const targetEnabled = Boolean(payload && payload.checked);
       patchTrayMenuNetworkState({ systemProxyEnabled: targetEnabled });
       const command = payload && payload.checked ? 'system-proxy-enable' : 'system-proxy-disable';
-      const response = await runTrayCommand(command, ['--config', configPath], labels);
+      const service = trayMenuData && trayMenuData.meta && trayMenuData.meta.networkTakeoverService
+        ? String(trayMenuData.meta.networkTakeoverService).trim()
+        : '';
+      const proxyArgs = ['--config', configPath];
+      if (service) {
+        proxyArgs.push('--service', service);
+      }
+      const response = await runTrayCommand(command, proxyArgs, labels);
       if (response.ok) {
         persistSystemProxyEnabledToSettings(targetEnabled);
       } else {
@@ -3523,7 +4065,7 @@ async function handleTrayMenuAction(action, payload = {}) {
     case 'toggle-tun': {
       const target = payload && payload.checked ? 'true' : 'false';
       patchTrayMenuNetworkState({ tunEnabled: target === 'true' });
-      const response = await runTrayCommand('tun', ['--enable', target, ...getControllerArgsFromSettings()], labels);
+      const response = await runTrayCommand('tun', ['--config', configPath, '--enable', target], labels);
       if (response.ok) {
         persistTunEnabledToSettings(target === 'true');
       } else {
@@ -3533,7 +4075,9 @@ async function handleTrayMenuAction(action, payload = {}) {
       return { ok: true, submenu: 'network' };
     }
     case 'copy-shell-export': {
-      const shellExportCommand = buildShellExportCommand((trayMenuData && trayMenuData.meta && trayMenuData.meta.networkTakeoverPort) || '7890');
+      const httpPort = (trayMenuData && trayMenuData.meta && trayMenuData.meta.networkTakeoverPort) || '7890';
+      const socksPort = (trayMenuData && trayMenuData.meta && trayMenuData.meta.networkTakeoverSocksPort) || '7891';
+      const shellExportCommand = buildShellExportCommand(httpPort, socksPort);
       clipboard.writeText(shellExportCommand);
       emitMainToast(labels.shellExportCopied || 'Shell export command copied.', 'info');
       createTrayMenu().catch(() => {});
@@ -3876,7 +4420,10 @@ function runBridge(args, options = {}) {
         };
         startBridgeProcess();
       } catch (err) {
-        // console.error('Error in runBridge:', err);
+        console.error('[runBridge] unexpected error:', {
+          args,
+          message: err && err.message ? err.message : String(err),
+        });
         resolve({ 
           ok: false, 
           error: 'unexpected_error', 
@@ -4192,7 +4739,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:command', async (_event, command, args = [], options = {}) => {
     const result = await runBridgeWithAutoAuth(command, args, options);
-    if (result && result.ok && ['start', 'stop', 'restart', 'mode'].includes(command)) {
+    if (result && result.ok && ['start', 'stop', 'restart', 'mode', 'tun', 'system-proxy-enable', 'system-proxy-disable'].includes(command)) {
       await createTrayMenu();
     }
     return result;
@@ -4493,6 +5040,14 @@ app.whenReady().then(() => {
       if (!fs.existsSync(settingsPath)) {
         const defaults = {
           configFile: defaultConfigPath,
+          proxy: 'rule',
+          systemProxy: false,
+          tun: false,
+          stack: 'Mixed',
+          mixedPort: 7893,
+          port: 7890,
+          socksPort: 7891,
+          allowLan: true,
           generalPageSize: '10',
           kernel: {},
           device: {
@@ -4534,6 +5089,64 @@ app.whenReady().then(() => {
       }
       if (!parsed.configFile && !(parsedPaths && parsedPaths.configFile)) {
         parsed.configFile = defaultConfigPath;
+        changed = true;
+      }
+      if (!Object.prototype.hasOwnProperty.call(parsed, 'mixedPort')) {
+        parsed.mixedPort = 7893;
+        changed = true;
+      }
+      if (!Object.prototype.hasOwnProperty.call(parsed, 'port')) {
+        parsed.port = Object.prototype.hasOwnProperty.call(parsed, 'httpPort')
+          ? parsed.httpPort
+          : 7890;
+        changed = true;
+      }
+      if (!Object.prototype.hasOwnProperty.call(parsed, 'proxy')) {
+        parsed.proxy = typeof parsed.proxyMode === 'string' ? parsed.proxyMode : 'rule';
+        changed = true;
+      }
+      if (!Object.prototype.hasOwnProperty.call(parsed, 'systemProxy')) {
+        parsed.systemProxy = Object.prototype.hasOwnProperty.call(parsed, 'systemProxyEnabled')
+          ? Boolean(parsed.systemProxyEnabled)
+          : false;
+        changed = true;
+      }
+      if (!Object.prototype.hasOwnProperty.call(parsed, 'tun')) {
+        parsed.tun = Object.prototype.hasOwnProperty.call(parsed, 'tunEnabled')
+          ? Boolean(parsed.tunEnabled)
+          : false;
+        changed = true;
+      }
+      if (!Object.prototype.hasOwnProperty.call(parsed, 'stack')) {
+        parsed.stack = typeof parsed.tunStack === 'string' ? parsed.tunStack : 'Mixed';
+        changed = true;
+      }
+      if (!Object.prototype.hasOwnProperty.call(parsed, 'socksPort')) {
+        parsed.socksPort = 7891;
+        changed = true;
+      }
+      if (!Object.prototype.hasOwnProperty.call(parsed, 'allowLan')) {
+        parsed.allowLan = true;
+        changed = true;
+      }
+      if (Object.prototype.hasOwnProperty.call(parsed, 'httpPort')) {
+        delete parsed.httpPort;
+        changed = true;
+      }
+      if (Object.prototype.hasOwnProperty.call(parsed, 'proxyMode')) {
+        delete parsed.proxyMode;
+        changed = true;
+      }
+      if (Object.prototype.hasOwnProperty.call(parsed, 'systemProxyEnabled')) {
+        delete parsed.systemProxyEnabled;
+        changed = true;
+      }
+      if (Object.prototype.hasOwnProperty.call(parsed, 'tunEnabled')) {
+        delete parsed.tunEnabled;
+        changed = true;
+      }
+      if (Object.prototype.hasOwnProperty.call(parsed, 'tunStack')) {
+        delete parsed.tunStack;
         changed = true;
       }
       const appearanceGeneralPageSize = parsed.appearance && typeof parsed.appearance === 'object'
@@ -4722,7 +5335,8 @@ app.whenReady().then(() => {
     const result = await checkForUpdates({ manual });
     if (manual) {
       if (!result.ok) {
-        emitMainToast('Check for updates failed.', 'error');
+        const reason = String(result.error || 'unknown_error');
+        emitMainToast(`Check for updates failed (${reason}).`, 'error');
       } else if (result.status === 'update_available') {
         emitMainToast(`Update available: v${result.latestVersion}`, 'info');
       } else {

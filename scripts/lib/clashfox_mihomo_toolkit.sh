@@ -2090,6 +2090,7 @@ set_clashfox_subdirectories() {
 set_clashfox_subdirectories
 # 当前激活的内核名称
 ACTIVE_CORE="mihomo"
+HELPER_SOCKET_PATH="/var/run/com.clashfox.helper.sock"
 
 # 可选 GitHub 用户
 GITHUB_USERS=("vernesong" "MetaCubeX")
@@ -2486,6 +2487,181 @@ get_backup_files_sorted() {
     ls -1t "$CLASHFOX_BACKUP_DIR"/mihomo.backup.* 2>/dev/null | awk 'NF'
 }
 
+helper_token_candidates() {
+    cat <<EOF
+$CLASHFOX_USER_DATA_DIR/helper/token
+/Library/Application Support/ClashFox/helper/token
+EOF
+}
+
+read_helper_token() {
+    local token=""
+    local path=""
+    while IFS= read -r path; do
+        [ -z "$path" ] && continue
+        if [ ! -f "$path" ]; then
+            continue
+        fi
+        token="$(cat "$path" 2>/dev/null | tr -d '\r\n')"
+        if [ -n "$token" ]; then
+            printf '%s' "$token"
+            return 0
+        fi
+    done <<< "$(helper_token_candidates)"
+    return 1
+}
+
+helper_request() {
+    local method="$1"
+    local endpoint="$2"
+    local payload="${3:-}"
+    local timeout="${4:-4}"
+    local token=""
+    token="$(read_helper_token 2>/dev/null || true)"
+    if [ -z "$token" ] || [ ! -S "$HELPER_SOCKET_PATH" ]; then
+        return 1
+    fi
+    if [ "$method" = "POST" ]; then
+        curl -sS --max-time "$timeout" --unix-socket "$HELPER_SOCKET_PATH" \
+            -H "X-Helper-Token: $token" \
+            -H "Content-Type: application/json" \
+            -X POST "http://localhost$endpoint" \
+            -d "${payload:-{}}" 2>/dev/null
+    else
+        curl -sS --max-time "$timeout" --unix-socket "$HELPER_SOCKET_PATH" \
+            -H "X-Helper-Token: $token" \
+            -X GET "http://localhost$endpoint" 2>/dev/null
+    fi
+}
+
+helper_response_ok() {
+    local raw="$1"
+    if [ -z "$raw" ]; then
+        return 1
+    fi
+    if command -v python3 >/dev/null 2>&1; then
+        CLASHFOX_HELPER_RAW="$raw" python3 - <<'PY'
+import json, os, sys
+raw = os.environ.get("CLASHFOX_HELPER_RAW", "")
+if not raw:
+    sys.exit(1)
+try:
+    data = json.loads(raw)
+except Exception:
+    sys.exit(1)
+if isinstance(data, dict):
+    if data.get("ok") is False:
+        sys.exit(1)
+    if data.get("error") and data.get("ok") is not True:
+        sys.exit(1)
+sys.exit(0)
+PY
+        return $?
+    fi
+    if echo "$raw" | grep -q '"ok"[[:space:]]*:[[:space:]]*false'; then
+        return 1
+    fi
+    if echo "$raw" | grep -q '"error"[[:space:]]*:' && ! echo "$raw" | grep -q '"ok"[[:space:]]*:[[:space:]]*true'; then
+        return 1
+    fi
+    return 0
+}
+
+helper_core_running_state() {
+    local response=""
+    response="$(helper_request GET "/v1/core/status" "" 3)" || return 2
+    if [ -z "$response" ]; then
+        return 2
+    fi
+    if command -v python3 >/dev/null 2>&1; then
+        CLASHFOX_HELPER_RAW="$response" python3 - <<'PY'
+import json, os, sys
+raw = os.environ.get("CLASHFOX_HELPER_RAW", "")
+try:
+    data = json.loads(raw)
+except Exception:
+    print("unknown")
+    sys.exit(0)
+if isinstance(data, dict) and isinstance(data.get("data"), dict):
+    data = data["data"]
+running = data.get("running") if isinstance(data, dict) else None
+if running is True or str(running).lower() in ("true", "1"):
+    print("running")
+elif running is False or str(running).lower() in ("false", "0"):
+    print("stopped")
+else:
+    print("unknown")
+PY
+    else
+        if echo "$response" | grep -q '"running"[[:space:]]*:[[:space:]]*true'; then
+            echo "running"
+        elif echo "$response" | grep -q '"running"[[:space:]]*:[[:space:]]*false'; then
+            echo "stopped"
+        else
+            echo "unknown"
+        fi
+    fi
+}
+
+helper_core_pid() {
+    local response=""
+    response="$(helper_request GET "/v1/core/status" "" 3)" || return 1
+    [ -z "$response" ] && return 1
+    if command -v python3 >/dev/null 2>&1; then
+        CLASHFOX_HELPER_RAW="$response" python3 - <<'PY'
+import json, os
+raw = os.environ.get("CLASHFOX_HELPER_RAW", "")
+try:
+    data = json.loads(raw)
+except Exception:
+    raise SystemExit
+if isinstance(data, dict) and isinstance(data.get("data"), dict):
+    data = data["data"]
+pid = ""
+if isinstance(data, dict):
+    pid = data.get("pid", "")
+if pid not in ("", None):
+    print(str(pid).strip())
+PY
+    else
+        echo "$response" | sed -nE 's/.*"pid"[[:space:]]*:[[:space:]]*"?([0-9]+)"?.*/\1/p' | head -n 1
+    fi
+}
+
+helper_core_action() {
+    local action="$1"
+    local endpoint=""
+    case "$action" in
+        start|stop|restart)
+            endpoint="/v1/core/$action"
+            ;;
+        *)
+            return 2
+            ;;
+    esac
+    local response=""
+    response="$(helper_request POST "$endpoint" "{}" 8)" || return 2
+    helper_response_ok "$response"
+}
+
+is_mihomo_running() {
+    local helper_state=""
+    helper_state="$(helper_core_running_state 2>/dev/null || true)"
+    if [ "$helper_state" = "running" ]; then
+        return 0
+    fi
+    if [ "$helper_state" = "stopped" ]; then
+        return 1
+    fi
+    if pgrep -x "$ACTIVE_CORE" > /dev/null 2>&1; then
+        return 0
+    fi
+    if sudo -n pgrep -x "$ACTIVE_CORE" > /dev/null 2>&1; then
+        return 0
+    fi
+    return 1
+}
+
 #============================
 # 检查 Mihomo 状态并显示完整信息
 #============================
@@ -2494,23 +2670,9 @@ check_mihomo_status() {
     status="$(tr_msg MSG_STATUS_STOPPED)"
     local exit_code=1
 
-    # 快速检查：首先尝试不使用 sudo 检查进程状态（最快）
-    if pgrep -x "$ACTIVE_CORE" > /dev/null 2>&1; then
+    if is_mihomo_running; then
         status="$(tr_msg MSG_STATUS_RUNNING)"
         exit_code=0
-    # 如果快速检查失败，静默尝试使用 sudo 检查（不触发完整的权限请求流程）
-    elif sudo -n pgrep -x "$ACTIVE_CORE" > /dev/null 2>&1; then
-        status="$(tr_msg MSG_STATUS_RUNNING)"
-        exit_code=0
-    # 如果需要交互式sudo权限，才调用完整的权限请求函数
-    elif ! sudo -n true > /dev/null 2>&1; then
-        # 确保有sudo权限
-        if request_sudo_permission; then
-            if sudo pgrep -x "$ACTIVE_CORE" > /dev/null 2>&1; then
-                status="$(tr_msg MSG_STATUS_RUNNING)"
-                exit_code=0
-            fi
-        fi
     fi
 
     # 显示Mihomo状态
@@ -2541,11 +2703,6 @@ check_mihomo_status() {
 show_status() {
     clear_screen
     show_title
-
-    # 确保有sudo权限
-    if ! request_sudo_permission; then
-        return
-    fi
 
     show_separator
     log_highlight "$(tr_msg LABEL_FUNCTION)" "$(tr_msg MSG_KERNEL_STATUS_CHECK)"
@@ -2951,12 +3108,6 @@ get_mihomo_version() {
 start_mihomo_kernel() {
     show_title
 
-    # 验证用户权限
-    if ! request_sudo_permission; then
-        wait_for_key
-        return
-    fi
-
     show_separator
     log_highlight "$(tr_msg LABEL_FUNCTION)" "$(tr_msg MSG_START_TITLE)"
     show_separator
@@ -2966,7 +3117,7 @@ start_mihomo_kernel() {
     fi
 
     # 检查内核是否已在运行
-    if check_mihomo_status | grep -q "$(tr_msg MSG_STATUS_RUNNING)"; then
+    if is_mihomo_running; then
         log_warning "$(tr_msg MSG_KERNEL_RUNNING)"
         wait_for_key
         return
@@ -3060,6 +3211,33 @@ start_mihomo_kernel() {
 
     log_success "$(tr_msg MSG_CONFIG_WILL_USE "$CONFIG_PATH")"
 
+    # helper 优先：当使用默认配置时，优先让特权助手接管内核启停。
+    if [ "$CONFIG_PATH" = "$CLASHFOX_CONFIG_DIR/default.yaml" ]; then
+        if helper_core_action "start"; then
+            sleep 1
+            PID="$(helper_core_pid)"
+            if [ -z "$PID" ]; then
+                PID="$(find_mihomo_pid)"
+            fi
+            if [ -n "$PID" ]; then
+                echo "$PID" > "$CLASHFOX_PID_DIR/clashfox.pid"
+                log_success "$(tr_msg MSG_PID_WRITTEN "$CLASHFOX_PID_DIR/clashfox.pid")"
+            fi
+            log_success "$(tr_msg MSG_KERNEL_STARTED)"
+            if [ -n "$PID" ]; then
+                log_success "$(tr_msg MSG_PROCESS_ID "$PID")"
+            fi
+            wait_for_key
+            return
+        fi
+    fi
+
+    # helper 不可用或失败时，回退到旧逻辑（需要 sudo）。
+    if ! request_sudo_permission; then
+        wait_for_key
+        return
+    fi
+
     # 启动内核（GUI 无 TTY 场景下避免使用 nohup，防止 "can't detach from console"）
     log_fmt "${BLUE}$(tr_msg MSG_START_PROCESS)"
     sudo sh -c "exec ./\"$ACTIVE_CORE\" -f \"$CONFIG_PATH\" -d \"$CLASHFOX_DATA_DIR\" >> \"$CLASHFOX_LOG_DIR/clashfox.log\" 2>&1 < /dev/null" &
@@ -3087,12 +3265,6 @@ start_mihomo_kernel() {
 kill_mihomo_kernel() {
     show_title
 
-    # 验证用户权限
-    if ! request_sudo_permission; then
-        wait_for_key
-        continue
-    fi
-
     show_separator
     log_highlight "$(tr_msg LABEL_FUNCTION)" "$(tr_msg MSG_STOP_TITLE)"
     show_separator
@@ -3102,13 +3274,29 @@ kill_mihomo_kernel() {
     fi
 
     # 检查内核是否在运行
-    if ! check_mihomo_status | grep -q "$(tr_msg MSG_STATUS_RUNNING)"; then
+    if ! is_mihomo_running; then
         log_warning "$(tr_msg MSG_KERNEL_NOT_RUNNING)"
         wait_for_key
         return
     fi
 
     log_fmt "${BLUE}$(tr_msg MSG_STOPPING_KERNEL)"
+
+    if helper_core_action "stop"; then
+        if [ -f "$CLASHFOX_PID_DIR/clashfox.pid" ]; then
+            rm -f "$CLASHFOX_PID_DIR/clashfox.pid"
+            log_success "$(tr_msg MSG_PID_CLEANED "$CLASHFOX_PID_DIR/clashfox.pid")"
+        fi
+        log_success "$(tr_msg MSG_KERNEL_STOPPED)"
+        wait_for_key
+        return
+    fi
+
+    # helper 不可用或失败时，回退到旧逻辑（需要 sudo）。
+    if ! request_sudo_permission; then
+        wait_for_key
+        return
+    fi
 
     # 获取 Mihomo 进程 ID（使用 sudo 确保能找到所有用户的进程）
     local pids=$(sudo pgrep -x "$ACTIVE_CORE")
@@ -3161,12 +3349,6 @@ kill_mihomo_kernel() {
 restart_mihomo_kernel() {
     show_title
 
-    # 验证用户权限
-    if ! request_sudo_permission; then
-        wait_for_key
-        continue
-    fi
-
     show_separator
     log_highlight "$(tr_msg LABEL_FUNCTION)" "$(tr_msg MSG_RESTART_TITLE)"
     show_separator
@@ -3175,13 +3357,21 @@ restart_mihomo_kernel() {
         return
     fi
 
-    # 先关闭内核
+    if helper_core_action "restart"; then
+        sleep 1
+        PID="$(helper_core_pid)"
+        if [ -n "$PID" ]; then
+            echo "$PID" > "$CLASHFOX_PID_DIR/clashfox.pid"
+            log_success "$(tr_msg MSG_PID_WRITTEN "$CLASHFOX_PID_DIR/clashfox.pid")"
+        fi
+        log_success "$(tr_msg MSG_KERNEL_STARTED)"
+        wait_for_key
+        return
+    fi
+
+    # helper 不可用或失败时，回退到旧逻辑。
     kill_mihomo_kernel
-
-    # 清除标题和分隔线
     clear_screen
-
-    # 再启动内核
     start_mihomo_kernel
 }
 
@@ -3191,12 +3381,6 @@ restart_mihomo_kernel() {
 manage_kernel_menu() {
     while true; do
         show_title
-
-        # 验证用户权限
-        if ! request_sudo_permission; then
-            wait_for_key
-            continue
-        fi
 
         show_separator
         log_highlight "$(tr_msg LABEL_FUNCTION)" "$(tr_msg MSG_KERNEL_MENU_TITLE)"
@@ -3663,12 +3847,6 @@ main() {
         parse_arguments "$@"
     fi
     show_title
-
-    # 程序启动时请求一次sudo权限
-    if ! request_sudo_permission; then
-        wait_for_key
-        exit 1  # 改为exit，因为这里不是循环结构
-    fi
 
     # 交互式询问用户是否修改默认目录 - 仅首次使用时提示
     if [ ! -d "$CLASHFOX_DIR" ]; then
