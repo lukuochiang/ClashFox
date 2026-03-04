@@ -557,8 +557,7 @@ function mergeAppearanceAliases(settings = {}) {
   return {
     ...source,
     lang: readString('lang', 'auto'),
-    theme: readString('theme', readString('themePreference', 'auto')),
-    themePreference: readString('theme', readString('themePreference', 'auto')),
+    theme: readString('theme', 'auto'),
     debugMode: readBoolean('debugMode', false),
     acceptBeta: readBoolean('acceptBeta', false),
     githubUser: readString('githubUser', 'vernesong'),
@@ -731,7 +730,7 @@ function normalizeSettingsForStorage(input = {}) {
 
   parsed.appearance = {
     lang: normalizeTextValue(parsed.lang) || 'auto',
-    theme: normalizeTextValue(parsed.theme) || normalizeTextValue(parsed.themePreference) || 'auto',
+    theme: normalizeTextValue(parsed.theme) || 'auto',
     debugMode: Boolean(parsed.debugMode),
     acceptBeta: Boolean(parsed.acceptBeta),
     githubUser: normalizeTextValue(parsed.githubUser) || 'vernesong',
@@ -743,12 +742,8 @@ function normalizeSettingsForStorage(input = {}) {
     logAutoRefresh: Boolean(parsed.logAutoRefresh),
     logIntervalPreset: normalizeTextValue(parsed.logIntervalPreset) || '3',
   };
-  if (Object.prototype.hasOwnProperty.call(parsed.appearance, 'themePreference')) {
-    delete parsed.appearance.themePreference;
-  }
   delete parsed.lang;
   delete parsed.theme;
-  delete parsed.themePreference;
   delete parsed.debugMode;
   delete parsed.acceptBeta;
   delete parsed.githubUser;
@@ -761,29 +756,14 @@ function normalizeSettingsForStorage(input = {}) {
   delete parsed.logIntervalPreset;
   delete parsed.overviewTopOrder;
 
-  const legacyProxy = normalizeTextValue(parsed.proxyMode);
-  const legacySystemProxy = Object.prototype.hasOwnProperty.call(parsed, 'systemProxyEnabled')
-    ? parsed.systemProxyEnabled
-    : undefined;
-  const legacyTun = Object.prototype.hasOwnProperty.call(parsed, 'tunEnabled')
-    ? parsed.tunEnabled
-    : undefined;
-  const legacyStack = normalizeTextValue(parsed.tunStack);
-  const legacyPort = parsed.httpPort;
-
-  parsed.proxy = normalizeTextValue(parsed.proxy) || legacyProxy || 'rule';
-  parsed.systemProxy = normalizeBool(parsed.systemProxy, normalizeBool(legacySystemProxy, false));
-  parsed.tun = normalizeBool(parsed.tun, normalizeBool(legacyTun, false));
-  parsed.stack = normalizeTextValue(parsed.stack) || legacyStack || 'Mixed';
+  parsed.proxy = normalizeTextValue(parsed.proxy) || 'rule';
+  parsed.systemProxy = normalizeBool(parsed.systemProxy, false);
+  parsed.tun = normalizeBool(parsed.tun, false);
+  parsed.stack = normalizeTextValue(parsed.stack) || 'Mixed';
   parsed.mixedPort = normalizePort(parsed.mixedPort, 7893);
-  parsed.port = normalizePort(parsed.port !== undefined ? parsed.port : legacyPort, 7890);
+  parsed.port = normalizePort(parsed.port, 7890);
   parsed.socksPort = normalizePort(parsed.socksPort, 7891);
   parsed.allowLan = normalizeBool(parsed.allowLan, true);
-  delete parsed.proxyMode;
-  delete parsed.systemProxyEnabled;
-  delete parsed.tunEnabled;
-  delete parsed.tunStack;
-  delete parsed.httpPort;
   delete parsed.captureMixedPort;
   delete parsed.captureHttpPort;
   delete parsed.captureSocksPort;
@@ -1617,7 +1597,18 @@ async function resolveUsableNetworkServiceName(preferred = '') {
       const lines = String(stdout || '')
         .split(/\r?\n/)
         .map((line) => String(line || '').trim())
-        .filter((line) => line && !line.startsWith('*') && line !== 'An asterisk (*) denotes that a network service is disabled.');
+        .filter((line, index) => {
+          if (!line) {
+            return false;
+          }
+          if (index === 0 && line.toLowerCase().includes('network services')) {
+            return false;
+          }
+          if (line.startsWith('*')) {
+            return false;
+          }
+          return true;
+        });
       resolve(lines);
     });
   });
@@ -1961,7 +1952,7 @@ function resolveOutboundModeFromSettings() {
   const parsed = readAppSettings();
   const mode = parsed && typeof parsed.proxy === 'string'
     ? parsed.proxy.trim().toLowerCase()
-    : (parsed && typeof parsed.proxyMode === 'string' ? parsed.proxyMode.trim().toLowerCase() : '');
+    : '';
   if (OUTBOUND_MODE_BADGE[mode]) {
     return mode;
   }
@@ -1976,9 +1967,6 @@ function persistOutboundModeToSettings(mode) {
     ensureAppDirs();
     const parsed = readAppSettings();
     parsed.proxy = mode;
-    if (Object.prototype.hasOwnProperty.call(parsed, 'proxyMode')) {
-      delete parsed.proxyMode;
-    }
     writeAppSettings(parsed);
     return true;
   } catch {
@@ -1991,9 +1979,6 @@ function persistTunEnabledToSettings(enabled) {
     ensureAppDirs();
     const parsed = readAppSettings();
     parsed.tun = Boolean(enabled);
-    if (Object.prototype.hasOwnProperty.call(parsed, 'tunEnabled')) {
-      delete parsed.tunEnabled;
-    }
     writeAppSettings(parsed);
     return true;
   } catch {
@@ -2006,9 +1991,6 @@ function persistSystemProxyEnabledToSettings(enabled) {
     ensureAppDirs();
     const parsed = readAppSettings() || {};
     parsed.systemProxy = Boolean(enabled);
-    if (Object.prototype.hasOwnProperty.call(parsed, 'systemProxyEnabled')) {
-      delete parsed.systemProxyEnabled;
-    }
     writeAppSettings(parsed);
     return true;
   } catch {
@@ -2021,9 +2003,6 @@ function persistSystemProxyEnabledToAppSettings(enabled) {
     ensureAppDirs();
     const parsed = readAppSettings() || {};
     parsed.systemProxy = Boolean(enabled);
-    if (Object.prototype.hasOwnProperty.call(parsed, 'systemProxyEnabled')) {
-      delete parsed.systemProxyEnabled;
-    }
     writeAppSettings(parsed);
     return parsed;
   } catch {
@@ -2247,7 +2226,7 @@ function persistOverviewSystemToSettings(overviewData = {}, source = 'overview')
 function buildShellExportCommand(settings = null) {
   const source = settings && typeof settings === 'object' ? settings : readAppSettings();
   const httpCandidate = String(
-    (source && (source.port ?? source.httpPort ?? source.mixedPort))
+    (source && (source.port ?? source.mixedPort))
       ?? '',
   ).trim();
   const socksCandidate = String(
@@ -3672,7 +3651,7 @@ async function buildTrayMenuOnce() {
   let tunEnabled = Boolean(
     Object.prototype.hasOwnProperty.call(traySettings || {}, 'tun')
       ? traySettings.tun
-      : (traySettings && traySettings.tunEnabled),
+      : false,
   );
   const expectedProxyPort = String(
     traySettings && Object.prototype.hasOwnProperty.call(traySettings, 'port')
@@ -3721,7 +3700,11 @@ async function buildTrayMenuOnce() {
         : networkTakeoverPort);
     persistSystemProxyEnabledToSettings(networkTakeoverEnabled);
   } catch {
-    networkTakeoverEnabled = false;
+    networkTakeoverEnabled = Boolean(
+      traySettings && Object.prototype.hasOwnProperty.call(traySettings, 'systemProxy')
+        ? traySettings.systemProxy
+        : false,
+    );
     networkTakeoverService = '';
     networkTakeoverPort = (traySettings && Object.prototype.hasOwnProperty.call(traySettings, 'port'))
       ? String(traySettings.port).trim()
@@ -3733,7 +3716,7 @@ async function buildTrayMenuOnce() {
       : ((parsedProxyPorts && parsedProxyPorts.socksPort)
       ? String(parsedProxyPorts.socksPort).trim()
       : '7891');
-    // keep last persisted systemProxyEnabled on transient errors
+    // Keep last persisted systemProxy on transient status errors.
   }
   const connectivitySnapshot = await getConnectivityQualitySnapshot(configPath);
   connectivityQuality = connectivitySnapshot && connectivitySnapshot.text
@@ -4264,8 +4247,16 @@ async function handleTrayMenuAction(action, payload = {}) {
         persistSystemProxyEnabledToSettings(actualEnabled);
         patchTrayMenuNetworkState({ systemProxyEnabled: actualEnabled });
       } else {
-        persistSystemProxyEnabledToSettings(false);
-        patchTrayMenuNetworkState({ systemProxyEnabled: false });
+        const statusSnapshot = await readSystemProxyEnabledSnapshot(configPath);
+        const fallbackEnabled = statusSnapshot.ok
+          ? Boolean(statusSnapshot.enabled)
+          : Boolean(
+            settings && Object.prototype.hasOwnProperty.call(settings, 'systemProxy')
+              ? settings.systemProxy
+              : false
+          );
+        persistSystemProxyEnabledToSettings(fallbackEnabled);
+        patchTrayMenuNetworkState({ systemProxyEnabled: fallbackEnabled });
       }
       await createTrayMenu().catch(() => {});
       emitTrayRefresh();
@@ -5303,29 +5294,23 @@ app.whenReady().then(() => {
         changed = true;
       }
       if (!Object.prototype.hasOwnProperty.call(parsed, 'port')) {
-        parsed.port = Object.prototype.hasOwnProperty.call(parsed, 'httpPort')
-          ? parsed.httpPort
-          : 7890;
+        parsed.port = 7890;
         changed = true;
       }
       if (!Object.prototype.hasOwnProperty.call(parsed, 'proxy')) {
-        parsed.proxy = typeof parsed.proxyMode === 'string' ? parsed.proxyMode : 'rule';
+        parsed.proxy = 'rule';
         changed = true;
       }
       if (!Object.prototype.hasOwnProperty.call(parsed, 'systemProxy')) {
-        parsed.systemProxy = Object.prototype.hasOwnProperty.call(parsed, 'systemProxyEnabled')
-          ? Boolean(parsed.systemProxyEnabled)
-          : false;
+        parsed.systemProxy = false;
         changed = true;
       }
       if (!Object.prototype.hasOwnProperty.call(parsed, 'tun')) {
-        parsed.tun = Object.prototype.hasOwnProperty.call(parsed, 'tunEnabled')
-          ? Boolean(parsed.tunEnabled)
-          : false;
+        parsed.tun = false;
         changed = true;
       }
       if (!Object.prototype.hasOwnProperty.call(parsed, 'stack')) {
-        parsed.stack = typeof parsed.tunStack === 'string' ? parsed.tunStack : 'Mixed';
+        parsed.stack = 'Mixed';
         changed = true;
       }
       if (!Object.prototype.hasOwnProperty.call(parsed, 'socksPort')) {
@@ -5334,26 +5319,6 @@ app.whenReady().then(() => {
       }
       if (!Object.prototype.hasOwnProperty.call(parsed, 'allowLan')) {
         parsed.allowLan = true;
-        changed = true;
-      }
-      if (Object.prototype.hasOwnProperty.call(parsed, 'httpPort')) {
-        delete parsed.httpPort;
-        changed = true;
-      }
-      if (Object.prototype.hasOwnProperty.call(parsed, 'proxyMode')) {
-        delete parsed.proxyMode;
-        changed = true;
-      }
-      if (Object.prototype.hasOwnProperty.call(parsed, 'systemProxyEnabled')) {
-        delete parsed.systemProxyEnabled;
-        changed = true;
-      }
-      if (Object.prototype.hasOwnProperty.call(parsed, 'tunEnabled')) {
-        delete parsed.tunEnabled;
-        changed = true;
-      }
-      if (Object.prototype.hasOwnProperty.call(parsed, 'tunStack')) {
-        delete parsed.tunStack;
         changed = true;
       }
       const appearanceGeneralPageSize = parsed.appearance && typeof parsed.appearance === 'object'

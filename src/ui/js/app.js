@@ -354,7 +354,6 @@ const MAIN_WINDOW_MAX_HEIGHT = 2160;
 const DEFAULT_SETTINGS = {
   lang: 'auto',
   theme: 'auto',
-  themePreference: 'auto',
   githubUser: 'vernesong',
   configPath: '',
   configDir: '',
@@ -397,7 +396,6 @@ const DEFAULT_SETTINGS = {
   appearance: {
     lang: 'auto',
     theme: 'auto',
-    themePreference: 'auto',
     debugMode: false,
     acceptBeta: false,
     githubUser: 'vernesong',
@@ -443,7 +441,7 @@ const state = {
   recommendPageSizeLocal: null,
   selectedBackupPaths: new Set(),
   theme: 'night',
-  themePreference: 'auto',
+  themeSetting: 'auto',
   installState: 'idle',
   dashboardAlerted: false,
   dashboardLoaded: false,
@@ -1232,8 +1230,7 @@ function normalizeSettingsForUi(settings) {
     return Number.isFinite(parsed) ? parsed : fallback;
   };
   normalized.lang = readAppearanceString('lang', 'auto');
-  normalized.theme = readAppearanceString('theme', readAppearanceString('themePreference', 'auto'));
-  normalized.themePreference = normalized.theme;
+  normalized.theme = readAppearanceString('theme', 'auto');
   normalized.debugMode = readAppearanceBool('debugMode', false);
   normalized.acceptBeta = readAppearanceBool('acceptBeta', false);
   normalized.githubUser = readAppearanceString('githubUser', 'vernesong');
@@ -1251,7 +1248,6 @@ function normalizeSettingsForUi(settings) {
     ...appearance,
     lang: normalized.lang,
     theme: normalized.theme,
-    themePreference: normalized.theme,
     debugMode: normalized.debugMode,
     acceptBeta: normalized.acceptBeta,
     githubUser: normalized.githubUser,
@@ -1299,21 +1295,12 @@ function normalizeSettingsForUi(settings) {
     normalized.secret = normalized.panelManager.secret;
   }
   normalized.authentication = normalized.panelManager.authentication;
-  normalized.proxy = normalizeProxyMode(normalized.proxy || normalized.proxyMode || 'rule');
-  normalized.proxyMode = normalized.proxy;
-  normalized.systemProxy = Object.prototype.hasOwnProperty.call(normalized, 'systemProxy')
-    ? Boolean(normalized.systemProxy)
-    : Boolean(normalized.systemProxyEnabled);
-  normalized.systemProxyEnabled = normalized.systemProxy;
-  normalized.tun = Object.prototype.hasOwnProperty.call(normalized, 'tun')
-    ? Boolean(normalized.tun)
-    : Boolean(normalized.tunEnabled);
-  normalized.tunEnabled = normalized.tun;
-  normalized.stack = normalizeTunStack(normalized.stack || normalized.tunStack || 'Mixed');
-  normalized.tunStack = normalized.stack;
+  normalized.proxy = normalizeProxyMode(normalized.proxy || 'rule');
+  normalized.systemProxy = Boolean(normalized.systemProxy);
+  normalized.tun = Boolean(normalized.tun);
+  normalized.stack = normalizeTunStack(normalized.stack || 'Mixed');
   normalized.mixedPort = Number.parseInt(String(normalized.mixedPort ?? ''), 10) || 7893;
-  normalized.port = Number.parseInt(String(normalized.port ?? normalized.httpPort ?? ''), 10) || 7890;
-  normalized.httpPort = normalized.port;
+  normalized.port = Number.parseInt(String(normalized.port ?? ''), 10) || 7890;
   normalized.socksPort = Number.parseInt(String(normalized.socksPort ?? ''), 10) || 7891;
   normalized.allowLan = Object.prototype.hasOwnProperty.call(normalized, 'allowLan')
     ? Boolean(normalized.allowLan)
@@ -1370,16 +1357,12 @@ function mapSettingsForFile(settings) {
   const existingAppearance = mapped.appearance && typeof mapped.appearance === 'object'
     ? mapped.appearance
     : {};
-  mapped.proxy = normalizeProxyMode(mapped.proxy || mapped.proxyMode || 'rule');
-  mapped.systemProxy = Object.prototype.hasOwnProperty.call(mapped, 'systemProxy')
-    ? Boolean(mapped.systemProxy)
-    : Boolean(mapped.systemProxyEnabled);
-  mapped.tun = Object.prototype.hasOwnProperty.call(mapped, 'tun')
-    ? Boolean(mapped.tun)
-    : Boolean(mapped.tunEnabled);
-  mapped.stack = normalizeTunStack(mapped.stack || mapped.tunStack || 'Mixed');
+  mapped.proxy = normalizeProxyMode(mapped.proxy || 'rule');
+  mapped.systemProxy = Boolean(mapped.systemProxy);
+  mapped.tun = Boolean(mapped.tun);
+  mapped.stack = normalizeTunStack(mapped.stack || 'Mixed');
   mapped.mixedPort = Number.parseInt(String(mapped.mixedPort ?? ''), 10) || 7893;
-  mapped.port = Number.parseInt(String(mapped.port ?? mapped.httpPort ?? ''), 10) || 7890;
+  mapped.port = Number.parseInt(String(mapped.port ?? ''), 10) || 7890;
   mapped.socksPort = Number.parseInt(String(mapped.socksPort ?? ''), 10) || 7891;
   mapped.allowLan = Object.prototype.hasOwnProperty.call(mapped, 'allowLan')
     ? Boolean(mapped.allowLan)
@@ -1387,7 +1370,7 @@ function mapSettingsForFile(settings) {
   mapped.appearance = {
     ...existingAppearance,
     lang: String(mapped.lang || existingAppearance.lang || 'auto'),
-    theme: String(mapped.theme || mapped.themePreference || existingAppearance.theme || existingAppearance.themePreference || 'auto'),
+    theme: String(mapped.theme || existingAppearance.theme || 'auto'),
     debugMode: Object.prototype.hasOwnProperty.call(mapped, 'debugMode')
       ? Boolean(mapped.debugMode)
       : Boolean(existingAppearance.debugMode),
@@ -1413,9 +1396,6 @@ function mapSettingsForFile(settings) {
       : Boolean(existingAppearance.logAutoRefresh),
     logIntervalPreset: String(mapped.logIntervalPreset || existingAppearance.logIntervalPreset || '3'),
   };
-  if (Object.prototype.hasOwnProperty.call(mapped.appearance, 'themePreference')) {
-    delete mapped.appearance.themePreference;
-  }
   const existingPanelManager = mapped.panelManager && typeof mapped.panelManager === 'object'
     ? mapped.panelManager
     : {};
@@ -1519,9 +1499,6 @@ function mapSettingsForFile(settings) {
   if (Object.prototype.hasOwnProperty.call(mapped, 'lang')) {
     delete mapped.lang;
   }
-  if (Object.prototype.hasOwnProperty.call(mapped, 'themePreference')) {
-    delete mapped.themePreference;
-  }
   if (Object.prototype.hasOwnProperty.call(mapped, 'theme')) {
     delete mapped.theme;
   }
@@ -1557,21 +1534,6 @@ function mapSettingsForFile(settings) {
   }
   if (Object.prototype.hasOwnProperty.call(mapped, 'overviewTopOrder')) {
     delete mapped.overviewTopOrder;
-  }
-  if (Object.prototype.hasOwnProperty.call(mapped, 'proxyMode')) {
-    delete mapped.proxyMode;
-  }
-  if (Object.prototype.hasOwnProperty.call(mapped, 'systemProxyEnabled')) {
-    delete mapped.systemProxyEnabled;
-  }
-  if (Object.prototype.hasOwnProperty.call(mapped, 'tunEnabled')) {
-    delete mapped.tunEnabled;
-  }
-  if (Object.prototype.hasOwnProperty.call(mapped, 'tunStack')) {
-    delete mapped.tunStack;
-  }
-  if (Object.prototype.hasOwnProperty.call(mapped, 'httpPort')) {
-    delete mapped.httpPort;
   }
   if (Object.prototype.hasOwnProperty.call(mapped, 'captureMixedPort')) {
     delete mapped.captureMixedPort;
@@ -1665,7 +1627,6 @@ function saveSettings(patch) {
   const appearanceKeys = [
     'lang',
     'theme',
-    'themePreference',
     'debugMode',
     'acceptBeta',
     'githubUser',
@@ -1682,14 +1643,6 @@ function saveSettings(patch) {
       nextAppearance[key] = nextPatch[key];
     }
   });
-  if (Object.prototype.hasOwnProperty.call(nextPatch, 'theme') && !Object.prototype.hasOwnProperty.call(nextPatch, 'themePreference')) {
-    nextPatch.themePreference = nextPatch.theme;
-    nextAppearance.themePreference = nextPatch.theme;
-  }
-  if (Object.prototype.hasOwnProperty.call(nextPatch, 'themePreference') && !Object.prototype.hasOwnProperty.call(nextPatch, 'theme')) {
-    nextPatch.theme = nextPatch.themePreference;
-    nextAppearance.theme = nextPatch.themePreference;
-  }
   if (Object.keys(nextAppearance).length) {
     nextPatch.appearance = nextAppearance;
   }
@@ -1971,7 +1924,7 @@ function syncDebugMode(enabled) {
 }
 
 function applySystemTheme(isDark) {
-  if (state.themePreference !== 'auto') {
+  if (state.themeSetting !== 'auto') {
     return;
   }
   applyTheme(isDark ? 'night' : 'day');
@@ -1980,7 +1933,7 @@ function applySystemTheme(isDark) {
 }
 
 function applyThemePreference(preference, persist = true) {
-  state.themePreference = preference;
+  state.themeSetting = preference;
   if (settingsTheme) {
     settingsTheme.value = preference;
   }
@@ -2020,7 +1973,7 @@ function applySettings(settings) {
     : '';
   // temporarily suppress transitions while applying initial theme
   document.body.classList.add('no-theme-transition');
-  applyThemePreference(state.settings.themePreference, false);
+  applyThemePreference(state.settings.theme, false);
   document.body.classList.remove('no-theme-transition');
   setLanguage(state.settings.lang, false, false);
   syncDebugMode(state.settings.debugMode);
@@ -2037,7 +1990,7 @@ function applySettings(settings) {
     settingsProxyMixedPort.value = Number.parseInt(String(state.settings.mixedPort ?? 7893), 10) || 7893;
   }
   if (settingsProxyPort) {
-    settingsProxyPort.value = Number.parseInt(String(state.settings.port ?? state.settings.httpPort ?? 7890), 10) || 7890;
+    settingsProxyPort.value = Number.parseInt(String(state.settings.port ?? 7890), 10) || 7890;
   }
   if (settingsProxySocksPort) {
     settingsProxySocksPort.value = Number.parseInt(String(state.settings.socksPort ?? 7891), 10) || 7891;
@@ -2117,19 +2070,15 @@ function applySettings(settings) {
   }
   setLogAutoRefresh(state.settings.logAutoRefresh);
   if (proxyModeSelect) {
-    setProxyModeValue(state.settings.proxy || state.settings.proxyMode || 'rule');
+    setProxyModeValue(state.settings.proxy || 'rule');
   }
   if (tunToggle) {
-    tunToggle.checked = Boolean(
-      Object.prototype.hasOwnProperty.call(state.settings, 'tun')
-        ? state.settings.tun
-        : state.settings.tunEnabled,
-    );
+    tunToggle.checked = Boolean(state.settings.tun);
   }
   if (tunStackSelect) {
-    const stack = normalizeTunStack(state.settings.stack || state.settings.tunStack);
+    const stack = normalizeTunStack(state.settings.stack);
     tunStackSelect.value = stack;
-    if ((state.settings.stack || state.settings.tunStack) !== stack) {
+    if (state.settings.stack !== stack) {
       saveSettings({ stack });
     }
   }
@@ -2172,7 +2121,7 @@ const prefersDarkQuery = window.matchMedia
 
 if (prefersDarkQuery) {
   prefersDarkQuery.addEventListener('change', () => {
-    if (state.themePreference === 'auto') {
+    if (state.themeSetting === 'auto') {
       applyThemePreference('auto', false);
     }
   });
@@ -2431,8 +2380,8 @@ async function syncProxyModeFromFile() {
   if (!response || !response.ok || !response.data) {
     return;
   }
-  const nextMode = normalizeProxyMode(response.data.proxyMode);
-  const currentMode = normalizeProxyMode(state.settings && (state.settings.proxy || state.settings.proxyMode));
+  const nextMode = normalizeProxyMode(response.data.proxy);
+  const currentMode = normalizeProxyMode(state.settings && state.settings.proxy);
   if (nextMode === currentMode) {
     return;
   }
@@ -3815,10 +3764,8 @@ async function waitForKernelState(expectedRunning, timeoutMs = 12000, intervalMs
 }
 
 async function applyTunSettingsAfterStart() {
-  const enabled = Boolean(state.settings && (Object.prototype.hasOwnProperty.call(state.settings, 'tun')
-    ? state.settings.tun
-    : state.settings.tunEnabled));
-  const stack = normalizeTunStack(state.settings && (state.settings.stack || state.settings.tunStack));
+  const enabled = Boolean(state.settings && state.settings.tun);
+  const stack = normalizeTunStack(state.settings && state.settings.stack);
   let response = await updateTunViaController({ enable: enabled, stack });
   if (!response || !response.ok) {
     const configPath = getCurrentConfigPath();
@@ -3903,14 +3850,14 @@ async function loadTunStatus(showToastOnSuccess = false) {
   }
   if (tunToggle && typeof response.data.enabled === 'boolean') {
     tunToggle.checked = response.data.enabled;
-    if ((Object.prototype.hasOwnProperty.call(state.settings, 'tun') ? state.settings.tun : state.settings.tunEnabled) !== response.data.enabled) {
+    if (state.settings.tun !== response.data.enabled) {
       saveSettings({ tun: response.data.enabled });
     }
   }
   if (tunStackSelect && typeof response.data.stack === 'string') {
     const stack = normalizeTunStack(response.data.stack);
     tunStackSelect.value = stack;
-    if ((state.settings.stack || state.settings.tunStack) !== stack) {
+    if (state.settings.stack !== stack) {
       saveSettings({ stack });
     }
   }
@@ -5266,7 +5213,7 @@ if (settingsProxyMixedPort) {
 
 if (settingsProxyPort) {
   settingsProxyPort.addEventListener('change', (event) => {
-    const fallback = Number.parseInt(String(state.settings.port ?? state.settings.httpPort ?? 7890), 10) || 7890;
+    const fallback = Number.parseInt(String(state.settings.port ?? 7890), 10) || 7890;
     const next = normalizeProxyPortSetting(event.target.value, fallback);
     event.target.value = next;
     saveSettings({ port: next });
@@ -6237,7 +6184,7 @@ if (proxyModeSelect) {
         return;
       }
       const value = getProxyModeValue();
-      const previous = (state.settings && (state.settings.proxy || state.settings.proxyMode)) || 'rule';
+      const previous = (state.settings && state.settings.proxy) || 'rule';
       saveSettings({ proxy: value });
       const response = await runCommand('mode', ['--mode', value, ...getControllerArgs()]);
       if (response.ok) {
@@ -6307,7 +6254,7 @@ if (tunToggle) {
 
 if (tunStackSelect) {
   tunStackSelect.addEventListener('change', async () => {
-    const previous = normalizeTunStack(state.settings && (state.settings.stack || state.settings.tunStack));
+    const previous = normalizeTunStack(state.settings && state.settings.stack);
     const value = normalizeTunStack(tunStackSelect.value);
     tunStackSelect.value = value;
     if (!state.coreRunning) {
@@ -6947,7 +6894,7 @@ async function initApp() {
   await loadStaticConfigs();
   await syncSettingsFromFile();
   applySettings(readSettings());
-  if (state.themePreference === 'auto' && prefersDarkQuery) {
+  if (state.themeSetting === 'auto' && prefersDarkQuery) {
     applySystemTheme(prefersDarkQuery.matches);
   }
   updateScrollbarWidthVar();
