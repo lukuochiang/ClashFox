@@ -1606,6 +1606,28 @@ async function resolveActiveNetworkServiceName() {
   return fallback || '';
 }
 
+async function resolveUsableNetworkServiceName(preferred = '') {
+  const candidate = String(preferred || '').trim();
+  const runCommand = (bin, args = []) => new Promise((resolve) => {
+    execFile(bin, args, { timeout: 2500 }, (err, stdout) => {
+      if (err) {
+        resolve([]);
+        return;
+      }
+      const lines = String(stdout || '')
+        .split(/\r?\n/)
+        .map((line) => String(line || '').trim())
+        .filter((line) => line && !line.startsWith('*') && line !== 'An asterisk (*) denotes that a network service is disabled.');
+      resolve(lines);
+    });
+  });
+  const services = await runCommand('/usr/sbin/networksetup', ['-listallnetworkservices']);
+  if (candidate && services.includes(candidate)) {
+    return candidate;
+  }
+  return (await resolveActiveNetworkServiceName()) || '';
+}
+
 function isHelperLaunchdLoaded(label = 'com.clashfox.helper') {
   return new Promise((resolve) => {
     execFile('/bin/launchctl', ['print', `system/${label}`], { timeout: 4000 }, (error) => {
@@ -2222,11 +2244,18 @@ function persistOverviewSystemToSettings(overviewData = {}, source = 'overview')
   }
 }
 
-function buildShellExportCommand(httpPortValue, socksPortValue) {
-  const httpPort = String(httpPortValue || '').trim();
-  const socksPort = String(socksPortValue || '').trim();
-  const safeHttpPort = /^[0-9]+$/.test(httpPort) ? httpPort : '7890';
-  const safeSocksPort = /^[0-9]+$/.test(socksPort) ? socksPort : '7891';
+function buildShellExportCommand(settings = null) {
+  const source = settings && typeof settings === 'object' ? settings : readAppSettings();
+  const httpCandidate = String(
+    (source && (source.port ?? source.httpPort ?? source.mixedPort))
+      ?? '',
+  ).trim();
+  const socksCandidate = String(
+    (source && source.socksPort)
+      ?? '',
+  ).trim();
+  const safeHttpPort = /^[0-9]+$/.test(httpCandidate) ? httpCandidate : '7890';
+  const safeSocksPort = /^[0-9]+$/.test(socksCandidate) ? socksCandidate : '7891';
   return `export http_proxy="http://127.0.0.1:${safeHttpPort}" https_proxy="http://127.0.0.1:${safeHttpPort}" all_proxy="socks5://127.0.0.1:${safeSocksPort}" no_proxy="localhost,127.0.0.1,::1"`;
 }
 
@@ -2346,8 +2375,18 @@ async function refreshNetworkSubmenuState() {
   const configPath = getConfigPathFromSettings();
   let systemProxyEnabled;
   let tunEnabled;
+  const traySettings = readAppSettings();
+  const expectedProxyPort = String(
+    traySettings && Object.prototype.hasOwnProperty.call(traySettings, 'port')
+      ? traySettings.port
+      : '',
+  ).trim();
   try {
-    const takeover = await runBridge(['system-proxy-status', '--config', configPath]);
+    const statusArgs = ['system-proxy-status', '--config', configPath];
+    if (expectedProxyPort) {
+      statusArgs.push('--port', expectedProxyPort);
+    }
+    const takeover = await runBridge(statusArgs);
     systemProxyEnabled = Boolean(takeover && takeover.ok && takeover.data && takeover.data.enabled);
   } catch {
     // ignore transient errors; keep last known value
@@ -2769,6 +2808,16 @@ async function runBridgeViaHelperApi(bridgeArgs = []) {
       return { ok: false, error: 'parse_error', details: textBody };
     }
   };
+  const isInvalidServiceError = (resp = null) => {
+    if (!resp || typeof resp !== 'object') {
+      return false;
+    }
+    const errorText = String(resp.error || '').trim().toLowerCase();
+    const detailsText = String(resp.details || resp.message || '').trim().toLowerCase();
+    return errorText.includes('invalid_service_name')
+      || errorText.includes('invalid service')
+      || detailsText.includes('invalid service name');
+  };
 
   try {
     switch (commandType) {
@@ -2883,16 +2932,93 @@ async function runBridgeViaHelperApi(bridgeArgs = []) {
         if (!Number.isFinite(parsedSocksPort) || parsedSocksPort <= 0 || parsedSocksPort > 65535) {
           return { ok: false, error: 'invalid_proxy_host_port' };
         }
-        const service = readArgValue('--service') || await resolveActiveNetworkServiceName() || 'Wi-Fi';
-        return respondFromHelper('/v1/proxy/enable', 'POST', {
+        let service = await resolveUsableNetworkServiceName(readArgValue('--service'));
+        if (!service) {
+          return { ok: false, error: 'network_service_not_found' };
+        }
+        const enablePayload = {
           service,
           host: '127.0.0.1',
           port: parsedPort,
           socksPort: parsedSocksPort,
-        });
+        };
+        let response = await respondFromHelper('/v1/proxy/enable', 'POST', enablePayload);
+        if (isInvalidServiceError(response)) {
+          const fallbackService = await resolveActiveNetworkServiceName();
+          if (fallbackService && fallbackService !== service) {
+            service = fallbackService;
+            response = await respondFromHelper('/v1/proxy/enable', 'POST', {
+              ...enablePayload,
+              service,
+            });
+          }
+          // Some helper builds can infer active service when omitted.
+          if (isInvalidServiceError(response)) {
+            response = await respondFromHelper('/v1/proxy/enable', 'POST', {
+              host: '127.0.0.1',
+              port: parsedPort,
+              socksPort: parsedSocksPort,
+            });
+          }
+        }
+        return response;
       }
       case 'system-proxy-disable': {
         return respondFromHelper('/v1/proxy/disable', 'POST', {});
+      }
+      case 'system-proxy-status': {
+        let service = await resolveUsableNetworkServiceName(readArgValue('--service'));
+        if (!service) {
+          return { ok: false, error: 'network_service_not_found' };
+        }
+        let endpoint = `/v1/proxy/status?service=${encodeURIComponent(service)}`;
+        let result = await respondFromHelper(endpoint, 'GET');
+        if (isInvalidServiceError(result)) {
+          const fallbackService = await resolveActiveNetworkServiceName();
+          if (fallbackService && fallbackService !== service) {
+            service = fallbackService;
+            endpoint = `/v1/proxy/status?service=${encodeURIComponent(service)}`;
+            result = await respondFromHelper(endpoint, 'GET');
+          }
+          if (isInvalidServiceError(result)) {
+            result = await respondFromHelper('/v1/proxy/status', 'GET');
+          }
+        }
+        if (!result || result.ok === false) {
+          return result;
+        }
+        const data = (result && result.data && typeof result.data === 'object')
+          ? result.data
+          : (result && typeof result === 'object' ? result : {});
+        const toBool = (value) => value === true || value === 'true' || value === 1 || value === '1';
+        const hasAnyEnabled = Object.prototype.hasOwnProperty.call(data, 'anyEnabled');
+        const hasMatchesDesired = Object.prototype.hasOwnProperty.call(data, 'matchesDesired');
+        const hasManagedByHelper = Object.prototype.hasOwnProperty.call(data, 'managedByHelper');
+        const anyEnabled = toBool(data.anyEnabled);
+        const matchesDesired = toBool(data.matchesDesired);
+        const managedByHelper = toBool(data.managedByHelper);
+        const enabledRaw = Object.prototype.hasOwnProperty.call(data, 'enabled')
+          ? data.enabled
+          : (Object.prototype.hasOwnProperty.call(data, 'enable') ? data.enable : false);
+        const legacyEnabled = toBool(enabledRaw);
+        const hasGuardFields = hasAnyEnabled || hasMatchesDesired || hasManagedByHelper;
+        const enabled = hasGuardFields
+          ? (anyEnabled && matchesDesired && managedByHelper)
+          : legacyEnabled;
+        return {
+          ok: true,
+          data: {
+            enabled,
+            service: String(data.service || service || '').trim(),
+            host: String(data.host || '127.0.0.1').trim(),
+            port: String(data.port || '').trim(),
+            socksPort: String(data.socksPort || '').trim(),
+            anyEnabled,
+            matchesDesired,
+            managedByHelper,
+            source: 'helper',
+          },
+        };
       }
       default:
         return { ok: false, error: 'unsupported_command' };
@@ -3168,10 +3294,75 @@ async function waitForKernelRunningFromTray(sudoPass = '', timeoutMs = 12000, in
   return false;
 }
 
+async function readSystemProxyEnabledSnapshot(configPath = '') {
+  const settings = readAppSettings();
+  const expectedPort = String(
+    settings && Object.prototype.hasOwnProperty.call(settings, 'port')
+      ? settings.port
+      : '',
+  ).trim();
+  const statusArgs = ['system-proxy-status'];
+  if (configPath) {
+    statusArgs.push('--config', configPath);
+  }
+  if (expectedPort) {
+    statusArgs.push('--port', expectedPort);
+  }
+  const statusResp = await runBridge(statusArgs);
+  if (!(statusResp && statusResp.ok && statusResp.data)) {
+    return { ok: false, enabled: null };
+  }
+  return {
+    ok: true,
+    enabled: Boolean(
+      Object.prototype.hasOwnProperty.call(statusResp.data, 'enabled')
+        ? statusResp.data.enabled
+        : false,
+    ),
+  };
+}
+
+async function waitForSystemProxyEnabledState(targetEnabled, configPath = '', timeoutMs = 1800, intervalMs = 220) {
+  const expected = Boolean(targetEnabled);
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() <= deadline) {
+    const snapshot = await readSystemProxyEnabledSnapshot(configPath);
+    if (snapshot.ok && snapshot.enabled === expected) {
+      return snapshot;
+    }
+    await sleep(intervalMs);
+  }
+  return readSystemProxyEnabledSnapshot(configPath);
+}
+
 async function runTrayCommand(command, args = [], labels = TRAY_I18N.en, sudoPass = '') {
   let effectiveSudoPass = sudoPass || '';
   let result = await runBridgeWithAutoAuth(command, args, { sudoPass: effectiveSudoPass });
   if (!result || !result.ok) {
+    if (command === 'system-proxy-enable') {
+      const configPath = getConfigPathFromSettings();
+      const settings = readAppSettings();
+      const expectedPort = String(
+        settings && Object.prototype.hasOwnProperty.call(settings, 'port')
+          ? settings.port
+          : '',
+      ).trim();
+      const statusArgs = ['system-proxy-status', '--config', configPath];
+      if (expectedPort) {
+        statusArgs.push('--port', expectedPort);
+      }
+      const statusProbe = await runBridge(statusArgs, { sudoPass: effectiveSudoPass });
+      const actuallyEnabled = Boolean(
+        statusProbe
+        && statusProbe.ok
+        && statusProbe.data
+        && Object.prototype.hasOwnProperty.call(statusProbe.data, 'enabled')
+        && statusProbe.data.enabled,
+      );
+      if (actuallyEnabled) {
+        return { ok: true, sudoPass: effectiveSudoPass, recovered: true };
+      }
+    }
     if (result && result.error === 'sudo_required') {
       await dialog.showMessageBox({
         type: 'warning',
@@ -3483,6 +3674,11 @@ async function buildTrayMenuOnce() {
       ? traySettings.tun
       : (traySettings && traySettings.tunEnabled),
   );
+  const expectedProxyPort = String(
+    traySettings && Object.prototype.hasOwnProperty.call(traySettings, 'port')
+      ? traySettings.port
+      : '',
+  ).trim();
   let tunAvailable = true;
   const parsedProxyPorts = readProxyPortsFromConfigPath(configPath);
   if (!traySettings || !Object.prototype.hasOwnProperty.call(traySettings, 'port')) {
@@ -3506,7 +3702,11 @@ async function buildTrayMenuOnce() {
     dashboardEnabled = false;
   }
   try {
-    const takeover = await runBridge(['system-proxy-status', '--config', configPath]);
+    const statusArgs = ['system-proxy-status', '--config', configPath];
+    if (expectedProxyPort) {
+      statusArgs.push('--port', expectedProxyPort);
+    }
+    const takeover = await runBridge(statusArgs);
     networkTakeoverEnabled = Boolean(takeover && takeover.ok && takeover.data && takeover.data.enabled);
     networkTakeoverService = (takeover && takeover.ok && takeover.data && takeover.data.service)
       ? String(takeover.data.service)
@@ -4045,20 +4245,29 @@ async function handleTrayMenuAction(action, payload = {}) {
       const targetEnabled = Boolean(payload && payload.checked);
       patchTrayMenuNetworkState({ systemProxyEnabled: targetEnabled });
       const command = payload && payload.checked ? 'system-proxy-enable' : 'system-proxy-disable';
-      const service = trayMenuData && trayMenuData.meta && trayMenuData.meta.networkTakeoverService
-        ? String(trayMenuData.meta.networkTakeoverService).trim()
-        : '';
       const proxyArgs = ['--config', configPath];
-      if (service) {
-        proxyArgs.push('--service', service);
+      const settings = readAppSettings();
+      const expectedPort = String(
+        settings && Object.prototype.hasOwnProperty.call(settings, 'port')
+          ? settings.port
+          : '',
+      ).trim();
+      if (expectedPort) {
+        proxyArgs.push('--port', expectedPort);
       }
       const response = await runTrayCommand(command, proxyArgs, labels);
       if (response.ok) {
-        persistSystemProxyEnabledToSettings(targetEnabled);
+        const statusSnapshot = await waitForSystemProxyEnabledState(targetEnabled, configPath);
+        const actualEnabled = statusSnapshot.ok
+          ? Boolean(statusSnapshot.enabled)
+          : targetEnabled;
+        persistSystemProxyEnabledToSettings(actualEnabled);
+        patchTrayMenuNetworkState({ systemProxyEnabled: actualEnabled });
       } else {
         persistSystemProxyEnabledToSettings(false);
-        createTrayMenu().catch(() => {});
+        patchTrayMenuNetworkState({ systemProxyEnabled: false });
       }
+      await createTrayMenu().catch(() => {});
       emitTrayRefresh();
       return { ok: true, submenu: 'network' };
     }
@@ -4075,9 +4284,7 @@ async function handleTrayMenuAction(action, payload = {}) {
       return { ok: true, submenu: 'network' };
     }
     case 'copy-shell-export': {
-      const httpPort = (trayMenuData && trayMenuData.meta && trayMenuData.meta.networkTakeoverPort) || '7890';
-      const socksPort = (trayMenuData && trayMenuData.meta && trayMenuData.meta.networkTakeoverSocksPort) || '7891';
-      const shellExportCommand = buildShellExportCommand(httpPort, socksPort);
+      const shellExportCommand = buildShellExportCommand(readAppSettings());
       clipboard.writeText(shellExportCommand);
       emitMainToast(labels.shellExportCopied || 'Shell export command copied.', 'info');
       createTrayMenu().catch(() => {});

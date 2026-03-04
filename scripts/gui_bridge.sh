@@ -114,13 +114,18 @@ resolve_controller_from_config() {
 
 resolve_proxy_port_from_config() {
     local config_path="$1"
+    local port_override="${2:-}"
+    if [ -n "$port_override" ] && echo "$port_override" | grep -qE '^[0-9]+$'; then
+        MIHOMO_PROXY_PORT="$port_override"
+        return
+    fi
     if [ -z "$config_path" ] || [ ! -f "$config_path" ]; then
         return
     fi
     local port=""
-    port="$(grep -E '^[[:space:]]*mixed-port:' "$config_path" | head -n 1 | sed -E 's/^[[:space:]]*mixed-port:[[:space:]]*//')"
+    port="$(grep -E '^[[:space:]]*port:' "$config_path" | head -n 1 | sed -E 's/^[[:space:]]*port:[[:space:]]*//')"
     if [ -z "$port" ]; then
-        port="$(grep -E '^[[:space:]]*port:' "$config_path" | head -n 1 | sed -E 's/^[[:space:]]*port:[[:space:]]*//')"
+        port="$(grep -E '^[[:space:]]*mixed-port:' "$config_path" | head -n 1 | sed -E 's/^[[:space:]]*mixed-port:[[:space:]]*//')"
     fi
     if [ -z "$port" ]; then
         port="$(grep -E '^[[:space:]]*socks-port:' "$config_path" | head -n 1 | sed -E 's/^[[:space:]]*socks-port:[[:space:]]*//')"
@@ -1559,11 +1564,16 @@ handle_panel_activate() {
 
 handle_system_proxy_status() {
     local config_path=""
+    local proxy_port_override=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --config|--config-path)
                 shift || true
                 config_path="${1:-}"
+                ;;
+            --port)
+                shift || true
+                proxy_port_override="${1:-}"
                 ;;
         esac
         shift || true
@@ -1571,7 +1581,7 @@ handle_system_proxy_status() {
     if [ -z "$config_path" ]; then
         config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
     fi
-    resolve_proxy_port_from_config "$config_path"
+    resolve_proxy_port_from_config "$config_path" "$proxy_port_override"
     if [ -z "$MIHOMO_PROXY_PORT" ]; then
         MIHOMO_PROXY_PORT="7890"
     fi
@@ -1594,11 +1604,16 @@ handle_system_proxy_status() {
 
 handle_system_proxy_enable() {
     local config_path=""
+    local proxy_port_override=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --config|--config-path)
                 shift || true
                 config_path="${1:-}"
+                ;;
+            --port)
+                shift || true
+                proxy_port_override="${1:-}"
                 ;;
         esac
         shift || true
@@ -1610,7 +1625,7 @@ handle_system_proxy_enable() {
     if [ -z "$config_path" ]; then
         config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
     fi
-    resolve_proxy_port_from_config "$config_path"
+    resolve_proxy_port_from_config "$config_path" "$proxy_port_override"
     if [ -z "$MIHOMO_PROXY_PORT" ]; then
         MIHOMO_PROXY_PORT="7890"
     fi
