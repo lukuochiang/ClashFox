@@ -2,6 +2,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const https = require('https');
+const dns = require('dns');
+const net = require('net');
+const maxmind = require('maxmind');
 const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme, shell, Tray, session, clipboard, screen } = require('electron');
 const { spawn, spawnSync, execFile } = require('child_process');
 
@@ -61,7 +64,10 @@ let traySubmenuAnchor = { top: 0, height: 0, rootHeight: 0 };
 let traySubmenuLastSize = { width: 0, height: 0 };
 let traySubmenuPendingPayload = null;
 let dashboardWindow = null;
+let worldwideWindow = null;
+let worldwidePreloadWindow = null;
 let mainWindowResizePersistTimer = null;
+let suppressMainWindowSizeApplyUntil = 0;
 let currentInstallProcess = null; // 仅用于跟踪安装进程，支持取消功能
 let globalSettings = {
   debugMode: true, // 是否启用调试模式
@@ -106,8 +112,8 @@ const KERNEL_BETA_VERSION_TXT_URL = {
   vernesong: 'https://github.com/vernesong/mihomo/releases/download/Prerelease-Alpha/version.txt',
   MetaCubeX: 'https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/version.txt',
 };
-const DEFAULT_MAIN_WINDOW_WIDTH = 997;
-const DEFAULT_MAIN_WINDOW_HEIGHT = 655;
+const DEFAULT_MAIN_WINDOW_WIDTH = 980;
+const DEFAULT_MAIN_WINDOW_HEIGHT = 640;
 const MIN_MAIN_WINDOW_WIDTH = 980;
 const MIN_MAIN_WINDOW_HEIGHT = 640;
 const MAX_MAIN_WINDOW_WIDTH = 4096;
@@ -125,6 +131,23 @@ let helperUpdateCache = {
   acceptBeta: null,
   result: null,
 };
+const WORLDWIDE_TRACK_LIMIT = 320;
+const WORLDWIDE_MAX_POINTS = 80;
+const WORLDWIDE_FILTER_TOP_TRACKS = 500;
+const WORLDWIDE_DNS_CACHE_TTL_MS = 10 * 60 * 1000;
+const WORLDWIDE_GEO_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const WORLDWIDE_SELF_GEO_TTL_MS = 30 * 60 * 1000;
+const worldwideDnsCache = new Map();
+const worldwideGeoCache = new Map();
+let worldwideSelfGeoCache = {
+  expiresAt: 0,
+  data: null,
+};
+let worldwideCityReader = null;
+let worldwideCountryReader = null;
+const dnsLookupAsync = dns.promises && dns.promises.lookup
+  ? dns.promises.lookup.bind(dns.promises)
+  : null;
 
 const I18N = require(path.join(APP_PATH, 'static', 'locales', 'i18n.js'));
 ;
@@ -4341,6 +4364,56 @@ async function applyTunCommandUnified(commandArgs = [], options = {}) {
   };
 }
 
+function detectTunConflictLikely() {
+  const safeRun = (bin, args = []) => {
+    try {
+      const result = spawnSync(bin, args, { encoding: 'utf8', timeout: 1800 });
+      return String((result && result.stdout) || '').trim();
+    } catch {
+      return '';
+    }
+  };
+
+  const ifacesRaw = safeRun('/sbin/ifconfig', ['-l']);
+  const ifaceList = ifacesRaw ? ifacesRaw.split(/\s+/).filter(Boolean) : [];
+  const utuns = ifaceList.filter((item) => String(item).startsWith('utun'));
+
+  const routeRaw = safeRun('/usr/sbin/route', ['get', 'default']);
+  const ifaceMatch = routeRaw.match(/interface:\s+([^\s]+)/i);
+  const defaultInterface = ifaceMatch ? String(ifaceMatch[1] || '').trim() : '';
+
+  const psRaw = safeRun('/bin/ps', ['-axo', 'comm']);
+  const processLines = psRaw
+    .split(/\r?\n/)
+    .map((line) => String(line || '').trim().toLowerCase())
+    .filter(Boolean);
+  const tunKeywords = [
+    'clash',
+    'surge',
+    'sing-box',
+    'v2ray',
+    'xray',
+    'wireguard',
+    'tailscale',
+    'protonvpn',
+    'warp',
+    'openvpn',
+  ];
+  const hitProcesses = processLines.filter((line) => tunKeywords.some((kw) => line.includes(kw)));
+
+  const defaultUtun = defaultInterface.startsWith('utun');
+  const conflictLikely = defaultUtun || (utuns.length >= 2 && hitProcesses.length > 0) || utuns.length >= 4;
+  return {
+    ok: true,
+    data: {
+      conflictLikely,
+      utunCount: utuns.length,
+      defaultInterface: defaultInterface || '-',
+      processHits: hitProcesses.slice(0, 8),
+    },
+  };
+}
+
 async function runTrayCommand(command, args = [], labels = TRAY_I18N.en, sudoPass = '') {
   let effectiveSudoPass = sudoPass || '';
   let result = await runBridgeWithAutoAuth(command, args, { sudoPass: effectiveSudoPass });
@@ -4503,6 +4576,517 @@ function openDashboardPanel() {
   } catch (err) {
     // fallback: just show main window
     showMainWindow();
+  }
+}
+
+function clampWorldwideNumber(value, min, max, fallback) {
+  const parsed = Number.parseInt(String(value || ''), 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, parsed));
+}
+
+function isPublicTrackIpV4(value = '') {
+  const ip = String(value || '').trim();
+  if (!ip || net.isIP(ip) !== 4) {
+    return false;
+  }
+  const parts = ip.split('.').map((item) => Number.parseInt(item, 10));
+  if (parts.some((item) => !Number.isFinite(item) || item < 0 || item > 255)) {
+    return false;
+  }
+  const [a, b] = parts;
+  if (a === 10 || a === 127 || a === 0) return false;
+  if (a === 169 && b === 254) return false;
+  if (a === 172 && b >= 16 && b <= 31) return false;
+  if (a === 192 && b === 168) return false;
+  if (a >= 224) return false;
+  return true;
+}
+
+function isPublicTrackIp(value = '') {
+  const ip = String(value || '').trim();
+  const family = net.isIP(ip);
+  if (!family) {
+    return false;
+  }
+  if (family === 4) {
+    return isPublicTrackIpV4(ip);
+  }
+  const text = ip.toLowerCase();
+  if (text === '::1' || text.startsWith('fe80:') || text.startsWith('fc') || text.startsWith('fd')) {
+    return false;
+  }
+  return true;
+}
+
+function getCachedEntry(cache = new Map(), key = '', ttlMs = 0) {
+  if (!key || !cache.has(key)) {
+    return null;
+  }
+  const entry = cache.get(key);
+  if (!entry || !Number.isFinite(entry.expiresAt) || entry.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+function setCachedEntry(cache = new Map(), key = '', value = null, ttlMs = 0) {
+  if (!key) {
+    return;
+  }
+  cache.set(key, {
+    value,
+    expiresAt: Date.now() + Math.max(1000, Number(ttlMs || 0)),
+  });
+}
+
+function resolveWorldwideMmdbPath(fileName = '') {
+  const name = String(fileName || '').trim();
+  if (!name) return '';
+  const candidates = app.isPackaged
+    ? [
+      path.join(process.resourcesPath || '', name),
+      path.join(APP_PATH, 'static', name),
+      path.join(ROOT_DIR, 'static', name),
+    ]
+    : [
+      path.join(ROOT_DIR, 'static', name),
+      path.join(APP_PATH, 'static', name),
+      path.join(process.resourcesPath || '', name),
+    ];
+  return candidates.find((candidate) => candidate && fs.existsSync(candidate)) || '';
+}
+
+function resolveCountryCentroid(countryCode = '') {
+  const code = String(countryCode || '').trim().toUpperCase();
+  if (!code) return null;
+  const known = {
+    US: [39.5, -98.35], CN: [35.0, 103.8], JP: [36.2, 138.3], KR: [36.4, 127.9], TW: [23.7, 121.0],
+    HK: [22.3, 114.2], SG: [1.35, 103.8], IN: [22.6, 79.0], RU: [61.5, 105.3], DE: [51.2, 10.4],
+    FR: [46.3, 2.2], GB: [54.2, -2.8], NL: [52.2, 5.3], IT: [41.9, 12.7], ES: [40.3, -3.7],
+    CH: [46.8, 8.3], SE: [62.1, 15.2], NO: [60.4, 8.5], FI: [64.3, 26.0], PL: [52.1, 19.4],
+    CZ: [49.8, 15.5], AT: [47.6, 14.1], IE: [53.4, -8.1], DK: [56.1, 10.0], BE: [50.8, 4.5],
+    AU: [-25.3, 133.8], NZ: [-41.3, 174.8], CA: [56.1, -106.3], BR: [-14.2, -51.9], MX: [23.6, -102.5],
+    AR: [-34.6, -64.0], CL: [-35.7, -71.5], ZA: [-30.6, 22.9], AE: [24.4, 54.4], SA: [24.0, 45.0],
+    TR: [39.0, 35.2], IL: [31.0, 35.0], TH: [15.9, 101.0], VN: [16.2, 107.9], MY: [4.2, 101.9],
+    ID: [-2.6, 118.0], PH: [12.8, 121.8], PK: [30.4, 69.3], UA: [49.0, 31.3], RO: [45.9, 24.9],
+  };
+  if (Object.prototype.hasOwnProperty.call(known, code)) {
+    return { lat: known[code][0], lon: known[code][1] };
+  }
+  let hash = 0;
+  for (let i = 0; i < code.length; i += 1) {
+    hash = ((hash << 5) - hash) + code.charCodeAt(i);
+    hash |= 0;
+  }
+  const positive = Math.abs(hash);
+  const lat = ((positive % 11500) / 100) - 55; // [-55, 60)
+  const lon = ((Math.floor(positive / 11500) % 34000) / 100) - 170; // [-170, 170)
+  return { lat, lon };
+}
+
+function getWorldwideReaders() {
+  if (!worldwideCityReader) {
+    const cityPath = resolveWorldwideMmdbPath('GeoLite2-City.mmdb');
+    if (!cityPath) {
+      throw new Error('city_mmdb_missing');
+    }
+    worldwideCityReader = new maxmind.Reader(fs.readFileSync(cityPath));
+  }
+  if (!worldwideCountryReader) {
+    const countryPath = resolveWorldwideMmdbPath('GeoLite2-Country.mmdb');
+    if (!countryPath) {
+      throw new Error('country_mmdb_missing');
+    }
+    worldwideCountryReader = new maxmind.Reader(fs.readFileSync(countryPath));
+  }
+  return {
+    cityReader: worldwideCityReader,
+    countryReader: worldwideCountryReader,
+  };
+}
+
+function lookupGeoFromMmdb(ip = '') {
+  const target = String(ip || '').trim();
+  if (!isPublicTrackIp(target)) {
+    return null;
+  }
+  const cacheKey = target;
+  const cached = getCachedEntry(worldwideGeoCache, cacheKey, WORLDWIDE_GEO_CACHE_TTL_MS);
+  if (cached) {
+    return cached;
+  }
+  let cityRecord = null;
+  let countryRecord = null;
+  try {
+    const readers = getWorldwideReaders();
+    cityRecord = readers.cityReader.get(target);
+    countryRecord = readers.countryReader.get(target);
+  } catch {
+    return null;
+  }
+  if (!cityRecord && !countryRecord) {
+    return null;
+  }
+  const location = cityRecord && cityRecord.location && typeof cityRecord.location === 'object'
+    ? cityRecord.location
+    : {};
+  const countryNode = (cityRecord && cityRecord.country) || (countryRecord && countryRecord.country) || {};
+  const cityNode = (cityRecord && cityRecord.city) || {};
+  const countryNames = countryNode && countryNode.names && typeof countryNode.names === 'object'
+    ? countryNode.names
+    : {};
+  const cityNames = cityNode && cityNode.names && typeof cityNode.names === 'object'
+    ? cityNode.names
+    : {};
+  const fallback = resolveCountryCentroid(String(countryNode.iso_code || '').trim());
+  const geo = {
+    ip: target,
+    lat: Number.isFinite(Number(location.latitude)) ? Number(location.latitude) : Number(fallback && fallback.lat),
+    lon: Number.isFinite(Number(location.longitude)) ? Number(location.longitude) : Number(fallback && fallback.lon),
+    city: String(cityNames.en || cityNames['zh-CN'] || cityNames.zh || '').trim(),
+    country: String(countryNames.en || countryNames['zh-CN'] || countryNames.zh || '').trim(),
+    countryCode: String(countryNode.iso_code || '').trim(),
+  };
+  if (!Number.isFinite(geo.lat) || !Number.isFinite(geo.lon)) {
+    return null;
+  }
+  setCachedEntry(worldwideGeoCache, cacheKey, geo, WORLDWIDE_GEO_CACHE_TTL_MS);
+  return geo;
+}
+
+async function resolveTrackIp(track = {}) {
+  const fromIp = String(track.ip || '').trim();
+  if (isPublicTrackIp(fromIp)) {
+    return fromIp;
+  }
+  const host = String(track.host || '').trim();
+  if (!host) {
+    return '';
+  }
+  if (isPublicTrackIp(host) && net.isIP(host) === 4) {
+    return host;
+  }
+
+  const cached = getCachedEntry(worldwideDnsCache, host, WORLDWIDE_DNS_CACHE_TTL_MS);
+  if (cached) {
+    return String(cached || '');
+  }
+  if (!dnsLookupAsync) {
+    return '';
+  }
+  try {
+    const resolved = await dnsLookupAsync(host, { family: 4, all: false });
+    const address = resolved && typeof resolved === 'object' ? String(resolved.address || '').trim() : '';
+    if (isPublicTrackIpV4(address)) {
+      setCachedEntry(worldwideDnsCache, host, address, WORLDWIDE_DNS_CACHE_TTL_MS);
+      return address;
+    }
+  } catch {
+    // ignore
+  }
+  return '';
+}
+
+async function resolveSelfGeoPoint() {
+  if (worldwideSelfGeoCache.data && Number(worldwideSelfGeoCache.expiresAt || 0) > Date.now()) {
+    return worldwideSelfGeoCache.data;
+  }
+  let geo = null;
+  try {
+    const overview = await runBridgeWithAutoAuth('overview');
+    const internetIp = overview && overview.ok && overview.data
+      ? String(overview.data.internetIp || overview.data.internetIp4 || '').trim()
+      : '';
+    if (isPublicTrackIp(internetIp)) {
+      geo = lookupGeoFromMmdb(internetIp);
+    }
+  } catch {
+    geo = null;
+  }
+  worldwideSelfGeoCache = {
+    expiresAt: Date.now() + WORLDWIDE_SELF_GEO_TTL_MS,
+    data: geo,
+  };
+  return geo;
+}
+
+async function buildWorldwideSnapshot(options = {}) {
+  const limit = clampWorldwideNumber(options.limit, 60, 1000, WORLDWIDE_TRACK_LIMIT);
+  const maxPoints = clampWorldwideNumber(options.maxPoints, 20, 200, WORLDWIDE_MAX_POINTS);
+  const commandResult = await runBridgeWithAutoAuth('track-connections', ['--limit', String(limit)]);
+  if (!commandResult || !commandResult.ok) {
+    return {
+      ok: false,
+      error: commandResult ? String(commandResult.error || 'track_failed') : 'track_failed',
+      details: commandResult ? String(commandResult.details || '') : '',
+    };
+  }
+
+  const payload = (commandResult.data && typeof commandResult.data === 'object') ? commandResult.data : {};
+  const rawTracks = Array.isArray(payload.tracks) ? payload.tracks : [];
+  const dedup = new Map();
+  for (const item of rawTracks) {
+    if (!item || typeof item !== 'object') {
+      continue;
+    }
+    const host = String(item.host || '').trim();
+    const ip = String(item.ip || '').trim();
+    const outbound = String(item.outbound || 'DIRECT').trim() || 'DIRECT';
+    if (!host && !ip) {
+      continue;
+    }
+    const key = `${ip}|${host}|${outbound}`;
+    const prev = dedup.get(key);
+    if (prev) {
+      prev.count += 1;
+      prev.download += Number(item.download || 0);
+      prev.upload += Number(item.upload || 0);
+    } else {
+      dedup.set(key, {
+        ip,
+        host,
+        outbound,
+        count: 1,
+        download: Number(item.download || 0),
+        upload: Number(item.upload || 0),
+      });
+    }
+  }
+
+  const dedupedTracks = Array.from(dedup.values())
+    .sort((a, b) => b.count - a.count)
+    .slice(0, Math.max(maxPoints * 3, WORLDWIDE_FILTER_TOP_TRACKS));
+
+  const resolvedTracks = [];
+  for (const item of dedupedTracks) {
+    const ip = await resolveTrackIp(item);
+    if (!ip) {
+      continue;
+    }
+    const geo = lookupGeoFromMmdb(ip);
+    if (!geo || !Number.isFinite(Number(geo.lat)) || !Number.isFinite(Number(geo.lon))) {
+      continue;
+    }
+    resolvedTracks.push({
+      ...item,
+      ip,
+      lat: Number(geo.lat),
+      lon: Number(geo.lon),
+      city: String(geo.city || '').trim(),
+      country: String(geo.country || '').trim(),
+      countryCode: String(geo.countryCode || '').trim(),
+    });
+  }
+
+  const pointMap = new Map();
+  for (const item of resolvedTracks) {
+    const locationKey = `${item.lat.toFixed(3)},${item.lon.toFixed(3)}`;
+    const existing = pointMap.get(locationKey);
+    if (existing) {
+      existing.count += item.count;
+      existing.download += item.download;
+      existing.upload += item.upload;
+      if (!existing.city && item.city) existing.city = item.city;
+      if (!existing.country && item.country) existing.country = item.country;
+      existing.outboundSet.add(item.outbound || 'DIRECT');
+      if (item.host) {
+        existing.hosts.add(item.host);
+      }
+      if (item.ip) {
+        existing.ips.add(item.ip);
+      }
+      continue;
+    }
+    pointMap.set(locationKey, {
+      key: locationKey,
+      lat: item.lat,
+      lon: item.lon,
+      city: item.city,
+      country: item.country,
+      countryCode: item.countryCode,
+      count: item.count,
+      download: item.download,
+      upload: item.upload,
+      outboundSet: new Set([item.outbound || 'DIRECT']),
+      hosts: new Set(item.host ? [item.host] : []),
+      ips: new Set(item.ip ? [item.ip] : []),
+    });
+  }
+
+  const points = Array.from(pointMap.values())
+    .sort((a, b) => b.count - a.count)
+    .slice(0, maxPoints)
+    .map((point) => ({
+      key: point.key,
+      lat: point.lat,
+      lon: point.lon,
+      city: point.city,
+      country: point.country,
+      countryCode: point.countryCode,
+      count: point.count,
+      download: point.download,
+      upload: point.upload,
+      outbounds: Array.from(point.outboundSet).filter(Boolean).slice(0, 6),
+      hostSamples: Array.from(point.hosts).filter(Boolean).slice(0, 6),
+      ipSamples: Array.from(point.ips).filter(Boolean).slice(0, 6),
+    }));
+
+  const allOutbounds = Array.from(new Set(
+    resolvedTracks.map((item) => String(item.outbound || 'DIRECT').trim() || 'DIRECT'),
+  )).sort((a, b) => a.localeCompare(b));
+  const allCountries = Array.from(new Set(
+    resolvedTracks.map((item) => String(item.country || '').trim()).filter(Boolean),
+  )).sort((a, b) => a.localeCompare(b));
+  const allCities = Array.from(new Set(
+    resolvedTracks.map((item) => String(item.city || '').trim()).filter(Boolean),
+  )).sort((a, b) => a.localeCompare(b));
+
+  const self = await resolveSelfGeoPoint();
+  return {
+    ok: true,
+    data: {
+      generatedAt: Date.now(),
+      local: self || null,
+      points,
+      stats: {
+        totalConnections: Number(payload.total || rawTracks.length || 0),
+        sampledConnections: rawTracks.length,
+        dedupedConnections: dedupedTracks.length,
+        renderedPoints: points.length,
+      },
+      filters: {
+        outbounds: allOutbounds,
+        countries: allCountries,
+        cities: allCities,
+      },
+      mmdb: {
+        city: resolveWorldwideMmdbPath('GeoLite2-City.mmdb'),
+        country: resolveWorldwideMmdbPath('GeoLite2-Country.mmdb'),
+      },
+    },
+  };
+}
+
+function openWorldwideWindow() {
+  try {
+    if (worldwideWindow && !worldwideWindow.isDestroyed()) {
+      worldwideWindow.show();
+      worldwideWindow.focus();
+      return;
+    }
+    if (worldwidePreloadWindow && !worldwidePreloadWindow.isDestroyed()) {
+      worldwideWindow = worldwidePreloadWindow;
+      worldwidePreloadWindow = null;
+      worldwideWindow.show();
+      worldwideWindow.focus();
+      return;
+    }
+    worldwideWindow = new BrowserWindow({
+      width: 1240,
+      height: 820,
+      minWidth: 900,
+      minHeight: 620,
+      show: true,
+      alwaysOnTop: false,
+      backgroundColor: '#0f1216',
+      autoHideMenuBar: true,
+      title: 'ClashFox Worldwide',
+      webPreferences: {
+        contextIsolation: true,
+        preload: path.join(__dirname, 'preload.js'),
+        devTools: false,
+      },
+    });
+
+    const windowRef = worldwideWindow;
+    windowRef.on('closed', () => {
+      if (worldwideWindow === windowRef) {
+        worldwideWindow = null;
+      }
+      if (worldwidePreloadWindow === windowRef) {
+        worldwidePreloadWindow = null;
+      }
+    });
+    windowRef.on('blur', () => {
+      if (windowRef && !windowRef.isDestroyed()) {
+        windowRef.setAlwaysOnTop(false);
+      }
+    });
+    windowRef.webContents.on('before-input-event', (event, input) => {
+      const key = String(input.key || '').toLowerCase();
+      const isDevToolsCombo =
+        (input.control && input.shift && key === 'i') ||
+        (input.meta && input.alt && key === 'i') ||
+        key === 'f12';
+      if (isDevToolsCombo) {
+        event.preventDefault();
+      }
+    });
+
+    windowRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'worldwide.html'));
+  } catch {
+    showMainWindow();
+  }
+}
+
+function preloadWorldwideWindow() {
+  try {
+    if (
+      (worldwideWindow && !worldwideWindow.isDestroyed())
+      || (worldwidePreloadWindow && !worldwidePreloadWindow.isDestroyed())
+    ) {
+      return;
+    }
+    worldwidePreloadWindow = new BrowserWindow({
+      width: 1240,
+      height: 820,
+      minWidth: 900,
+      minHeight: 620,
+      show: false,
+      alwaysOnTop: false,
+      backgroundColor: '#0f1216',
+      autoHideMenuBar: true,
+      title: 'ClashFox Worldwide',
+      webPreferences: {
+        contextIsolation: true,
+        preload: path.join(__dirname, 'preload.js'),
+        devTools: false,
+      },
+    });
+    const preloadRef = worldwidePreloadWindow;
+    preloadRef.on('closed', () => {
+      if (worldwidePreloadWindow === preloadRef) {
+        worldwidePreloadWindow = null;
+      }
+      if (worldwideWindow === preloadRef) {
+        worldwideWindow = null;
+      }
+    });
+    preloadRef.on('blur', () => {
+      if (preloadRef && !preloadRef.isDestroyed()) {
+        preloadRef.setAlwaysOnTop(false);
+      }
+    });
+    preloadRef.webContents.on('before-input-event', (event, input) => {
+      const key = String(input.key || '').toLowerCase();
+      const isDevToolsCombo =
+        (input.control && input.shift && key === 'i')
+        || (input.meta && input.alt && key === 'i')
+        || key === 'f12';
+      if (isDevToolsCombo) {
+        event.preventDefault();
+      }
+    });
+    preloadRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'worldwide.html'));
+  } catch {
+    if (worldwidePreloadWindow && !worldwidePreloadWindow.isDestroyed()) {
+      worldwidePreloadWindow.close();
+    }
+    worldwidePreloadWindow = null;
   }
 }
 
@@ -5212,6 +5796,10 @@ async function handleTrayMenuAction(action, payload = {}) {
       hideTrayMenuWindow();
       openDashboardPanel();
       return { ok: true, hide: true };
+    case 'open-worldwide':
+      hideTrayMenuWindow();
+      openWorldwideWindow();
+      return { ok: true, hide: true };
     case 'open-settings':
       hideTrayMenuWindow();
       openMainPage('settings');
@@ -5783,13 +6371,25 @@ function createWindow(showOnCreate = false) {
 
   win.webContents.on('before-input-event', (event, input) => {
     const key = (input.key || '').toLowerCase();
-    if (globalSettings.debugMode) {
-      return;
-    }
     const isReloadCombo = (input.control || input.meta) && key === 'r';
     const isReloadKey = key === 'f5';
     if (isReloadCombo || isReloadKey) {
       event.preventDefault();
+      if (!win.isDestroyed() && !win.isMaximized() && !win.isFullScreen()) {
+        const [width, height] = win.getSize();
+        persistMainWindowSizeToSettings(width, height);
+        suppressMainWindowSizeApplyUntil = Date.now() + 4000;
+      }
+      if (globalSettings.debugMode) {
+        try {
+          win.webContents.reload();
+        } catch {
+          // ignore reload failures
+        }
+      }
+      return;
+    }
+    if (globalSettings.debugMode) {
       return;
     }
     const isDevToolsCombo =
@@ -5814,6 +6414,14 @@ function createWindow(showOnCreate = false) {
   };
 
   win.webContents.on('did-finish-load', sendSystemTheme);
+  win.webContents.on('did-start-loading', () => {
+    if (!win || win.isDestroyed() || win.isMaximized() || win.isFullScreen()) {
+      return;
+    }
+    const [width, height] = win.getSize();
+    persistMainWindowSizeToSettings(width, height);
+    suppressMainWindowSizeApplyUntil = Date.now() + 4000;
+  });
   nativeTheme.on('updated', sendSystemTheme);
 
   // Do not auto-open DevTools here; it should only open when toggled on.
@@ -5959,6 +6567,9 @@ app.whenReady().then(() => {
   setTimeout(setDockIcon, 500);
   setTimeout(setDockIcon, 1500);
   setTimeout(setDockIcon, 3000);
+  setTimeout(() => {
+    preloadWorldwideWindow();
+  }, 1700);
 
   applyAppMenu();
 
@@ -5972,6 +6583,20 @@ app.whenReady().then(() => {
       await createTrayMenu();
     }
     return result;
+  });
+
+  ipcMain.handle('clashfox:detectTunConflict', async () => detectTunConflictLikely());
+
+  ipcMain.handle('clashfox:worldwideSnapshot', async (_event, options = {}) => {
+    try {
+      return await buildWorldwideSnapshot(options);
+    } catch (error) {
+      return {
+        ok: false,
+        error: 'worldwide_snapshot_failed',
+        details: String(error && error.message ? error.message : error || ''),
+      };
+    }
   });
 
   ipcMain.handle('clashfox:trayMenu:getData', async () => {
@@ -6491,7 +7116,13 @@ app.whenReady().then(() => {
       );
       const normalized = normalizeSettingsForStorage(merged);
       writeAppSettings(normalized);
-      if (mainWindow && !mainWindow.isDestroyed()) {
+      const canApplySizeNow = Boolean(
+        mainWindow
+        && !mainWindow.isDestroyed()
+        && mainWindow.webContents
+        && !mainWindow.webContents.isLoadingMainFrame(),
+      );
+      if (canApplySizeNow && Date.now() > Number(suppressMainWindowSizeApplyUntil || 0)) {
         const normalizedWithAliases = mergeAppearanceAliases(normalized);
         mainWindow.setSize(normalizedWithAliases.windowWidth, normalizedWithAliases.windowHeight);
       }

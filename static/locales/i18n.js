@@ -136,6 +136,30 @@ const I18N = {
       "hint": "If it does not load, please start the kernel first.",
       "unavailable": "Dashboard is not reachable."
     },
+    "worldwide": {
+      "title": "Track the Trackers",
+      "subtitle": "Track connections from your Mac to servers worldwide.",
+      "endpoint": "Endpoint",
+      "hoverDetail": "Hover a node to view details.",
+      "empty": "No active connections yet",
+      "loading": "Loading...",
+      "leafletFailed": "Leaflet failed to load.",
+      "bridgeMissing": "Bridge API not available.",
+      "loadFailed": "Unable to load connection tracks.",
+      "waitingLocal": "Waiting for local geo location...",
+      "yourMac": "Your Mac",
+      "unknown": "Unknown",
+      "filters": {
+        "outbound": "Outbound",
+        "country": "Country/Region",
+        "city": "City",
+        "all": "All"
+      },
+      "stats": {
+        "live": "Live {endpoints} endpoints · {connections} active connections · map: {provider}",
+        "liveUnavailable": "Live {endpoints} endpoints · {connections} active connections · map unavailable"
+      }
+    },
     "actions": {
       "start": "Start",
       "stop": "Stop",
@@ -259,7 +283,7 @@ const I18N = {
       "theme": "Theme",
       "themeNight": "Night",
       "themeDay": "Day",
-      "themeAuto": "Auto",
+      "themeAuto": "Follow System",
       "language": "Language",
       "panelManager": "Panel Manager",
       "panelOption": "Panel",
@@ -524,6 +548,30 @@ const I18N = {
       "hint": "如果无法加载，请先启动内核。",
       "unavailable": "Dashboard 无法访问。"
     },
+    "worldwide": {
+      "title": "Track the Trackers",
+      "subtitle": "追踪你的 Mac 到全球服务器的连接路径。",
+      "endpoint": "端点",
+      "hoverDetail": "悬停节点查看详情。",
+      "empty": "暂无活跃连接",
+      "loading": "加载中...",
+      "leafletFailed": "Leaflet 加载失败。",
+      "bridgeMissing": "Bridge API 不可用。",
+      "loadFailed": "连接轨迹加载失败。",
+      "waitingLocal": "正在等待本机地理定位...",
+      "yourMac": "你的 Mac",
+      "unknown": "未知",
+      "filters": {
+        "outbound": "出站",
+        "country": "国家/地区",
+        "city": "城市",
+        "all": "全部"
+      },
+      "stats": {
+        "live": "在线端点 {endpoints} · 活跃连接 {connections} · 地图: {provider}",
+        "liveUnavailable": "在线端点 {endpoints} · 活跃连接 {connections} · 地图服务不可用"
+      }
+    },
     "actions": {
       "start": "启动",
       "stop": "停止",
@@ -647,7 +695,7 @@ const I18N = {
       "theme": "主题",
       "themeNight": "夜间",
       "themeDay": "日间",
-      "themeAuto": "自动",
+      "themeAuto": "跟随系统",
       "language": "语言",
       "panelManager": "面板管理",
       "panelOption": "面板选择",
@@ -912,6 +960,30 @@ const I18N = {
       "hint": "読み込めない場合は、先にカーネルを起動してください。",
       "unavailable": "Dashboard に接続できません。"
     },
+    "worldwide": {
+      "title": "Track the Trackers",
+      "subtitle": "あなたの Mac から世界中のサーバーへの接続を追跡します。",
+      "endpoint": "エンドポイント",
+      "hoverDetail": "ノードにカーソルを合わせると詳細を表示します。",
+      "empty": "アクティブな接続はありません",
+      "loading": "読み込み中...",
+      "leafletFailed": "Leaflet の読み込みに失敗しました。",
+      "bridgeMissing": "Bridge API を利用できません。",
+      "loadFailed": "接続トラックを読み込めません。",
+      "waitingLocal": "ローカルの位置情報を取得中...",
+      "yourMac": "あなたの Mac",
+      "unknown": "不明",
+      "filters": {
+        "outbound": "アウトバウンド",
+        "country": "国/地域",
+        "city": "都市",
+        "all": "すべて"
+      },
+      "stats": {
+        "live": "ライブ {endpoints} エンドポイント · {connections} 接続中 · 地図: {provider}",
+        "liveUnavailable": "ライブ {endpoints} エンドポイント · {connections} 接続中 · 地図利用不可"
+      }
+    },
     "actions": {
       "start": "開始",
       "stop": "停止",
@@ -1035,7 +1107,7 @@ const I18N = {
       "theme": "テーマ",
       "themeNight": "夜間",
       "themeDay": "日中",
-      "themeAuto": "自動",
+      "themeAuto": "システムに従う",
       "language": "言語",
       "panelManager": "パネル管理",
       "panelOption": "パネル",
@@ -1294,6 +1366,30 @@ const I18N = {
       "hint": "로드되지 않으면 먼저 커널을 시작하세요.",
       "unavailable": "Dashboard에 연결할 수 없습니다."
     },
+    "worldwide": {
+      "title": "Track the Trackers",
+      "subtitle": "Mac에서 전 세계 서버로의 연결을 추적합니다.",
+      "endpoint": "엔드포인트",
+      "hoverDetail": "노드에 마우스를 올려 상세 정보를 확인하세요.",
+      "empty": "활성 연결이 없습니다",
+      "loading": "로딩 중...",
+      "leafletFailed": "Leaflet 로드에 실패했습니다.",
+      "bridgeMissing": "Bridge API를 사용할 수 없습니다.",
+      "loadFailed": "연결 트랙을 불러오지 못했습니다.",
+      "waitingLocal": "로컬 위치 정보를 기다리는 중...",
+      "yourMac": "내 Mac",
+      "unknown": "알 수 없음",
+      "filters": {
+        "outbound": "아웃바운드",
+        "country": "국가/지역",
+        "city": "도시",
+        "all": "전체"
+      },
+      "stats": {
+        "live": "실시간 엔드포인트 {endpoints} · 활성 연결 {connections} · 지도: {provider}",
+        "liveUnavailable": "실시간 엔드포인트 {endpoints} · 활성 연결 {connections} · 지도 사용 불가"
+      }
+    },
     "actions": {
       "start": "시작",
       "stop": "중지",
@@ -1417,7 +1513,7 @@ const I18N = {
       "theme": "테마",
       "themeNight": "야간",
       "themeDay": "주간",
-      "themeAuto": "자동",
+      "themeAuto": "시스템 따라가기",
       "language": "언어",
       "panelManager": "패널 관리",
       "panelOption": "패널",
@@ -1676,6 +1772,30 @@ const I18N = {
       "hint": "Si le chargement échoue, démarrez d'abord le noyau.",
       "unavailable": "Dashboard est injoignable."
     },
+    "worldwide": {
+      "title": "Track the Trackers",
+      "subtitle": "Suivez les connexions de votre Mac vers des serveurs dans le monde entier.",
+      "endpoint": "Point de terminaison",
+      "hoverDetail": "Survolez un nœud pour voir les détails.",
+      "empty": "Aucune connexion active pour le moment",
+      "loading": "Chargement...",
+      "leafletFailed": "Échec du chargement de Leaflet.",
+      "bridgeMissing": "API Bridge indisponible.",
+      "loadFailed": "Impossible de charger les traces de connexion.",
+      "waitingLocal": "En attente de la géolocalisation locale...",
+      "yourMac": "Votre Mac",
+      "unknown": "Inconnu",
+      "filters": {
+        "outbound": "Sortie",
+        "country": "Pays/Région",
+        "city": "Ville",
+        "all": "Tous"
+      },
+      "stats": {
+        "live": "{endpoints} points en direct · {connections} connexions actives · carte : {provider}",
+        "liveUnavailable": "{endpoints} points en direct · {connections} connexions actives · carte indisponible"
+      }
+    },
     "actions": {
       "start": "Démarrer",
       "stop": "Arrêter",
@@ -1799,7 +1919,7 @@ const I18N = {
       "theme": "Thème",
       "themeNight": "Nuit",
       "themeDay": "Jour",
-      "themeAuto": "Auto",
+      "themeAuto": "Suivre le système",
       "language": "Langue",
       "panelManager": "Gestion du panneau",
       "panelOption": "Panneau",
@@ -2058,6 +2178,30 @@ const I18N = {
       "hint": "Wenn es nicht lädt, starten Sie zuerst den Kernel.",
       "unavailable": "Dashboard ist nicht erreichbar."
     },
+    "worldwide": {
+      "title": "Track the Trackers",
+      "subtitle": "Verfolge Verbindungen von deinem Mac zu Servern weltweit.",
+      "endpoint": "Endpunkt",
+      "hoverDetail": "Bewege den Mauszeiger über einen Knoten, um Details zu sehen.",
+      "empty": "Noch keine aktiven Verbindungen",
+      "loading": "Laden...",
+      "leafletFailed": "Leaflet konnte nicht geladen werden.",
+      "bridgeMissing": "Bridge-API nicht verfügbar.",
+      "loadFailed": "Verbindungsspuren konnten nicht geladen werden.",
+      "waitingLocal": "Warte auf lokale Geoposition...",
+      "yourMac": "Dein Mac",
+      "unknown": "Unbekannt",
+      "filters": {
+        "outbound": "Ausgehend",
+        "country": "Land/Region",
+        "city": "Stadt",
+        "all": "Alle"
+      },
+      "stats": {
+        "live": "Live {endpoints} Endpunkte · {connections} aktive Verbindungen · Karte: {provider}",
+        "liveUnavailable": "Live {endpoints} Endpunkte · {connections} aktive Verbindungen · Karte nicht verfügbar"
+      }
+    },
     "actions": {
       "start": "Starten",
       "stop": "Stoppen",
@@ -2181,7 +2325,7 @@ const I18N = {
       "theme": "Thema",
       "themeNight": "Nacht",
       "themeDay": "Tag",
-      "themeAuto": "Auto",
+      "themeAuto": "System folgen",
       "language": "Sprache",
       "panelManager": "Panel-Verwaltung",
       "panelOption": "Panel",
@@ -2440,6 +2584,30 @@ const I18N = {
       "hint": "Если не загружается, сначала запустите ядро.",
       "unavailable": "Dashboard недоступен."
     },
+    "worldwide": {
+      "title": "Track the Trackers",
+      "subtitle": "Отслеживайте подключения с вашего Mac к серверам по всему миру.",
+      "endpoint": "Узел",
+      "hoverDetail": "Наведите на узел, чтобы увидеть подробности.",
+      "empty": "Пока нет активных подключений",
+      "loading": "Загрузка...",
+      "leafletFailed": "Не удалось загрузить Leaflet.",
+      "bridgeMissing": "Bridge API недоступен.",
+      "loadFailed": "Не удалось загрузить трассы подключений.",
+      "waitingLocal": "Ожидание локальной геолокации...",
+      "yourMac": "Ваш Mac",
+      "unknown": "Неизвестно",
+      "filters": {
+        "outbound": "Исходящий",
+        "country": "Страна/регион",
+        "city": "Город",
+        "all": "Все"
+      },
+      "stats": {
+        "live": "Активно {endpoints} узлов · {connections} подключений · карта: {provider}",
+        "liveUnavailable": "Активно {endpoints} узлов · {connections} подключений · карта недоступна"
+      }
+    },
     "actions": {
       "start": "Запустить",
       "stop": "Остановить",
@@ -2563,7 +2731,7 @@ const I18N = {
       "theme": "Тема",
       "themeNight": "Ночной",
       "themeDay": "Дневной",
-      "themeAuto": "Авто",
+      "themeAuto": "Следовать системе",
       "language": "Язык",
       "panelManager": "Управление панелью",
       "panelOption": "Панель",

@@ -17,17 +17,34 @@
   </button>
 </div>
 
-<div class="nav-scroll">
-  <nav class="nav">
+<div class="menu-brand-divider" aria-hidden="true"></div>
+
+<div class="nav-scroll" id="navScroll">
+  <nav class="nav" id="primaryNav">
     <button class="nav-btn" data-page="overview" data-i18n="nav.status">Overview</button>
     <button class="nav-btn" data-page="kernel" data-i18n="nav.kernel">Kernel</button>
     <button class="nav-btn" data-page="config" data-i18n="nav.config">Config</button>
     <button class="nav-btn" data-page="logs" data-i18n="nav.logs">Logs</button>
     <button class="nav-btn" data-tray-action="open-dashboard">Dashboard</button>
+    <button class="nav-btn" data-tray-action="open-worldwide">Worldwide</button>
   </nav>
 
   <nav class="nav nav-bottom">
     <button class="nav-btn" data-page="settings" data-i18n="nav.settings">Settings</button>
     <button class="nav-btn" data-page="help" data-i18n="nav.help">Help</button>
   </nav>
+</div>
+
+<div class="top-nav-more" id="topNavMore">
+  <button class="icon-btn ghost top-nav-more-btn" id="topNavMoreBtn" type="button" aria-label="More">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="5" r="1.8"></circle>
+      <circle cx="12" cy="12" r="1.8"></circle>
+      <circle cx="12" cy="19" r="1.8"></circle>
+    </svg>
+  </button>
+  <div class="top-nav-more-menu" id="topNavMoreMenu">
+    <button class="top-nav-more-item nav-btn" data-page="settings" data-i18n="nav.settings">Settings</button>
+    <button class="top-nav-more-item nav-btn" data-page="help" data-i18n="nav.help">Help</button>
+  </div>
 </div>

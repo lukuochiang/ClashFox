@@ -23,6 +23,11 @@ window.addEventListener('load', () => {
 });
 
 let navButtons = Array.from(document.querySelectorAll('.nav-btn'));
+let topNavMore = document.getElementById('topNavMore');
+let topNavMoreBtn = document.getElementById('topNavMoreBtn');
+let topNavMoreMenu = document.getElementById('topNavMoreMenu');
+let navScroll = document.getElementById('navScroll');
+let primaryNav = document.getElementById('primaryNav');
 let panels = Array.from(document.querySelectorAll('.panel'));
 let noticePop = document.getElementById('noticePop');
 let noticePopBody = document.getElementById('noticePopBody');
@@ -31,6 +36,7 @@ let contentRoot = document.getElementById('contentRoot');
 let currentPage = document.body ? document.body.dataset.page : '';
 const VALID_PAGES = new Set(['overview', 'kernel', 'config', 'logs', 'settings', 'help', 'dashboard']);
 let noticePopTimer = null;
+let topNavOverflowRaf = null;
 
 let statusRunning = document.getElementById('statusRunning');
 let statusVersion = document.getElementById('statusVersion');
@@ -349,8 +355,8 @@ const SETTINGS_KEY = 'clashfox-settings';
 const KERNEL_UPDATE_CACHE_KEY = 'clashfox-kernel-update-cache-v1';
 const OVERVIEW_NETWORK_CACHE_KEY = 'clashfox-overview-network-cache-v1';
 const OVERVIEW_TRAFFIC_CACHE_KEY = 'clashfox-overview-traffic-cache-v1';
-const MAIN_WINDOW_DEFAULT_WIDTH = 997;
-const MAIN_WINDOW_DEFAULT_HEIGHT = 655;
+const MAIN_WINDOW_DEFAULT_WIDTH = 980;
+const MAIN_WINDOW_DEFAULT_HEIGHT = 640;
 const MAIN_WINDOW_MIN_WIDTH = 980;
 const MAIN_WINDOW_MIN_HEIGHT = 640;
 const MAIN_WINDOW_MAX_WIDTH = 4096;
@@ -840,6 +846,7 @@ function applyI18n() {
   setInstallState(state.installState);
   renderConfigTable();
   refreshCustomSelects();
+  requestTopNavOverflowSync();
 }
 
 function closeActiveCustomSelect() {
@@ -3911,6 +3918,9 @@ async function waitForTunState(targetEnabled, timeoutMs = 3000, intervalMs = 350
 }
 
 function formatTunUpdateError(response, statusResponse, fallbackLabel) {
+  if (response && response.ok && response.data && response.data.mismatched === true) {
+    return ti('labels.tunConflictHint', 'TUN conflict detected. Turn off TUN mode in other proxy apps, then try again.');
+  }
   const mergedError = (response && response.error) || (statusResponse && statusResponse.error) || '';
   const helperState = ((state.settings && state.settings.helperStatus) || (state.fileSettings && state.fileSettings.helperStatus) || {}).state || '';
   const helperMissing = String(helperState || '').trim() === 'not_installed';
@@ -4597,11 +4607,117 @@ function getSelectedBackupIndex() {
 
 function refreshLayoutRefs() {
   navButtons = Array.from(document.querySelectorAll('.nav-btn'));
+  topNavMore = document.getElementById('topNavMore');
+  topNavMoreBtn = document.getElementById('topNavMoreBtn');
+  topNavMoreMenu = document.getElementById('topNavMoreMenu');
+  navScroll = document.getElementById('navScroll');
+  primaryNav = document.getElementById('primaryNav');
   appName = document.getElementById('appName');
   appVersion = document.getElementById('appVersion');
   themeToggle = document.getElementById('themeToggle');
   refreshStatusBtn = document.getElementById('refreshStatus');
   statusPill = document.getElementById('statusPill');
+}
+
+function setTopNavOverflowItemVisible(action = '', visible = false) {
+  if (!topNavMoreMenu) {
+    return;
+  }
+  const key = String(action || '').trim();
+  if (!key) {
+    return;
+  }
+  const item = topNavMoreMenu.querySelector(`[data-overflow-item="${key}"]`);
+  if (!item) {
+    return;
+  }
+  item.style.display = visible ? '' : 'none';
+}
+
+function isTopNavMode() {
+  return window.matchMedia && window.matchMedia('(max-width: 980px)').matches;
+}
+
+function syncTopNavOverflow() {
+  if (!primaryNav) {
+    return;
+  }
+  const overflowButtons = Array.from(primaryNav.querySelectorAll('.nav-btn[data-overflow-candidate="true"]'));
+  overflowButtons.forEach((btn) => {
+    btn.classList.remove('nav-overflow-hidden');
+    setTopNavOverflowItemVisible(btn.dataset.trayAction || '', false);
+  });
+  if (!isTopNavMode() || !navScroll) {
+    if (topNavMore) {
+      topNavMore.classList.remove('show');
+    }
+    return;
+  }
+
+  const available = Math.max(0, navScroll.clientWidth - 4);
+  let required = primaryNav.scrollWidth;
+  if (required <= available) {
+    return;
+  }
+
+  const orderedCandidates = overflowButtons.slice().reverse();
+  orderedCandidates.forEach((btn) => {
+    if (required <= available) {
+      return;
+    }
+    btn.classList.add('nav-overflow-hidden');
+    setTopNavOverflowItemVisible(btn.dataset.trayAction || '', true);
+    required = primaryNav.scrollWidth;
+  });
+}
+
+function requestTopNavOverflowSync() {
+  if (topNavOverflowRaf) {
+    cancelAnimationFrame(topNavOverflowRaf);
+  }
+  topNavOverflowRaf = requestAnimationFrame(() => {
+    topNavOverflowRaf = null;
+    syncTopNavOverflow();
+  });
+}
+
+function bindTopNavMore() {
+  if (!topNavMore || !topNavMoreBtn || !topNavMoreMenu) {
+    return;
+  }
+  if (topNavMoreBtn.dataset.bound !== 'true') {
+    topNavMoreBtn.dataset.bound = 'true';
+    topNavMoreBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      topNavMore.classList.toggle('show');
+    });
+  }
+  if (topNavMoreMenu.dataset.bound !== 'true') {
+    topNavMoreMenu.dataset.bound = 'true';
+    topNavMoreMenu.addEventListener('click', () => {
+      topNavMore.classList.remove('show');
+    });
+  }
+  if (document.body && document.body.dataset.topNavMoreBound !== 'true') {
+    document.body.dataset.topNavMoreBound = 'true';
+    document.addEventListener('click', (event) => {
+      if (!topNavMore || !topNavMore.classList.contains('show')) {
+        return;
+      }
+      const target = event.target;
+      if (target && topNavMore.contains(target)) {
+        return;
+      }
+      topNavMore.classList.remove('show');
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && topNavMore) {
+        topNavMore.classList.remove('show');
+      }
+    });
+  }
+  requestTopNavOverflowSync();
 }
 
 function refreshPageRefs() {
@@ -4792,12 +4908,16 @@ function refreshPageRefs() {
 }
 
 function bindNavButtons() {
+  bindTopNavMore();
   navButtons.forEach((btn) => {
     if (btn.dataset.bound === 'true') {
       return;
     }
     btn.dataset.bound = 'true';
     btn.addEventListener('click', () => {
+      if (topNavMore) {
+        topNavMore.classList.remove('show');
+      }
       const targetUrl = btn.dataset.url;
       if (targetUrl) {
         if (window.clashfox && typeof window.clashfox.openExternal === 'function') {
@@ -6416,6 +6536,28 @@ if (tunToggle) {
   tunToggle.addEventListener('change', async () => {
     const enabled = Boolean(tunToggle.checked);
     const previous = !enabled;
+    if (enabled && !previous && window.clashfox && typeof window.clashfox.detectTunConflict === 'function') {
+      try {
+        const conflictProbe = await window.clashfox.detectTunConflict();
+        const conflictLikely = Boolean(conflictProbe && conflictProbe.ok && conflictProbe.data && conflictProbe.data.conflictLikely);
+        if (conflictLikely) {
+          const proceed = await promptConfirm({
+            title: ti('confirm.tunConflictTitle', 'TUN Conflict Detected'),
+            body: ti('labels.tunConflictHint', 'TUN conflict detected. Turn off TUN mode in other proxy apps, then try again.'),
+            confirmLabel: ti('confirm.tunConflictProceed', 'Continue'),
+            confirmTone: 'primary',
+          });
+          if (!proceed) {
+            tunToggle.checked = previous;
+            saveSettings({ tun: previous });
+            showToast(ti('labels.tunConflictHint', 'TUN conflict detected. Turn off TUN mode in other proxy apps, then try again.'), 'warn');
+            return;
+          }
+        }
+      } catch {
+        // ignore preflight detection failures
+      }
+    }
     if (!state.coreRunning) {
       saveSettings({ tun: enabled });
       showToast(ti('labels.tunApplyOnStart', 'TUN setting saved, it will be applied on next start.'));
@@ -6440,7 +6582,8 @@ if (tunToggle) {
     const statusResponse = waitResult && waitResult.status ? waitResult.status : await loadTunStatus(false);
     const actual = tunToggle.checked;
     const statusOk = waitResult && waitResult.ok && statusResponse && statusResponse.ok && statusResponse.data;
-    if (!response.ok || !statusOk || actual !== enabled) {
+    const tunMismatch = Boolean(response && response.ok && response.data && response.data.mismatched === true);
+    if (!response.ok || tunMismatch || !statusOk || actual !== enabled) {
       const nextChecked = statusOk ? actual : previous;
       tunToggle.checked = nextChecked;
       saveSettings({ tun: nextChecked });
@@ -7117,7 +7260,10 @@ async function initApp() {
     applySystemTheme(prefersDarkQuery.matches);
   }
   updateScrollbarWidthVar();
-  window.addEventListener('resize', updateScrollbarWidthVar);
+  window.addEventListener('resize', () => {
+    updateScrollbarWidthVar();
+    requestTopNavOverflowSync();
+  });
   bindPageEvents();
   renderRecommendTable();
   if (contentRoot && contentRoot.firstElementChild) {

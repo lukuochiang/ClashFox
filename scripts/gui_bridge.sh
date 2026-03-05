@@ -716,6 +716,124 @@ get_mihomo_connections() {
     '
 }
 
+get_mihomo_track_connections() {
+    local limit="${1:-240}"
+    if ! echo "$limit" | grep -qE '^[0-9]+$'; then
+        limit=240
+    fi
+    if [ "$limit" -lt 1 ]; then
+        limit=1
+    fi
+    if [ "$limit" -gt 1200 ]; then
+        limit=1200
+    fi
+
+    local api_url="http://127.0.0.1:9090/connections"
+    if [ -n "$MIHOMO_CONTROLLER" ]; then
+        api_url="${MIHOMO_CONTROLLER}/connections"
+    fi
+    local token=""
+    if [ -n "$MIHOMO_SECRET" ]; then
+        token="$MIHOMO_SECRET"
+    elif [ -n "${CLASHFOX_MIHOMO_TOKEN:-}" ]; then
+        token="$CLASHFOX_MIHOMO_TOKEN"
+    fi
+    local auth_args=()
+    if [ -n "$token" ]; then
+        auth_args=(-H "Authorization: Bearer $token")
+    fi
+    if ! command -v curl >/dev/null 2>&1; then
+        echo '{"total":0,"tracks":[]}'
+        return
+    fi
+    local response
+    response="$(curl -s --max-time 2 "${auth_args[@]}" "$api_url" 2>/dev/null)"
+    if [ -z "$response" ]; then
+        echo '{"total":0,"tracks":[]}'
+        return
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+        CLASHFOX_TRACK_RAW="$response" CLASHFOX_TRACK_LIMIT="$limit" python3 - <<'PY'
+import json
+import os
+
+raw = os.environ.get("CLASHFOX_TRACK_RAW", "")
+limit_raw = os.environ.get("CLASHFOX_TRACK_LIMIT", "240").strip()
+try:
+    limit = int(limit_raw)
+except Exception:
+    limit = 240
+limit = max(1, min(limit, 1200))
+
+try:
+    payload = json.loads(raw)
+except Exception:
+    payload = {}
+
+connections = payload.get("connections") if isinstance(payload, dict) else None
+if not isinstance(connections, list):
+    connections = []
+
+tracks = []
+for conn in connections:
+    if not isinstance(conn, dict):
+        continue
+    metadata = conn.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+    destination_ip = str(metadata.get("destinationIP") or "").strip()
+    host = str(metadata.get("host") or metadata.get("destinationHost") or "").strip()
+    destination_port = metadata.get("destinationPort")
+    try:
+        destination_port = int(destination_port)
+    except Exception:
+        destination_port = 0
+
+    outbound = ""
+    chains = conn.get("chains")
+    if isinstance(chains, list):
+        for item in chains:
+            text = str(item or "").strip()
+            if text:
+                outbound = text
+                break
+    if not outbound:
+        outbound = str(conn.get("outbound") or metadata.get("specialProxy") or conn.get("chain") or "").strip()
+
+    item = {
+        "id": str(conn.get("id") or "").strip(),
+        "ip": destination_ip,
+        "host": host,
+        "port": destination_port,
+        "outbound": outbound,
+        "network": str(metadata.get("network") or "").strip(),
+        "type": str(metadata.get("type") or "").strip(),
+        "rule": str(conn.get("rule") or "").strip(),
+        "download": int(conn.get("download") or 0),
+        "upload": int(conn.get("upload") or 0),
+        "start": str(conn.get("start") or "").strip(),
+        "sourceIp": str(metadata.get("sourceIP") or "").strip(),
+        "sourcePort": int(metadata.get("sourcePort") or 0),
+    }
+    if not item["ip"] and not item["host"]:
+        continue
+    tracks.append(item)
+    if len(tracks) >= limit:
+        break
+
+result = {
+    "total": len(connections),
+    "tracks": tracks,
+}
+print(json.dumps(result, separators=(",", ":"), ensure_ascii=False))
+PY
+        return
+    fi
+
+    echo '{"total":0,"tracks":[]}'
+}
+
 # Runtime snapshot (kernel path / pid / running / version) shared by status-like commands.
 collect_runtime_snapshot() {
     local kernel_path="$CLASHFOX_CORE_DIR/$ACTIVE_CORE"
@@ -964,6 +1082,37 @@ handle_runtime_memory() {
 JSON
 )
     print_ok "$data"
+}
+
+handle_track_connections() {
+    rotate_logs
+    local limit="240"
+    local args=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --limit)
+                shift || true
+                if echo "${1:-}" | grep -qE '^[0-9]+$'; then
+                    limit="$1"
+                fi
+                ;;
+            *)
+                args+=("$1")
+                ;;
+        esac
+        shift || true
+    done
+
+    parse_common_controller_args "${args[@]}"
+    local config_path="$CF_ARG_CONFIG_PATH"
+    if [ -z "$config_path" ]; then
+        config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+    fi
+    apply_controller_overrides "$config_path" "$CF_ARG_CONTROLLER_OVERRIDE" "$CF_ARG_SECRET_OVERRIDE"
+
+    local payload
+    payload="$(get_mihomo_track_connections "$limit")"
+    print_ok "$payload"
 }
 
 handle_traffic() {
@@ -2603,6 +2752,9 @@ case "$command" in
         ;;
     overview-memory)
         handle_runtime_memory "$@"
+        ;;
+    track-connections)
+        handle_track_connections "$@"
         ;;
     panel-install)
         handle_panel_install "$@"

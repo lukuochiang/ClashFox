@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('clashfox', {
   runCommand: (command, args = [], options = {}) => ipcRenderer.invoke('clashfox:command', command, args, options),
+  detectTunConflict: () => ipcRenderer.invoke('clashfox:detectTunConflict'),
+  worldwideSnapshot: (options = {}) => ipcRenderer.invoke('clashfox:worldwideSnapshot', options),
   cancelCommand: () => ipcRenderer.invoke('clashfox:cancelCommand'),
   selectConfig: () => ipcRenderer.invoke('clashfox:selectConfig'),
   importConfig: () => ipcRenderer.invoke('clashfox:importConfig'),

@@ -1,7 +1,7 @@
 {
   "name": "ClashFox",
   "version": "0.4.2",
-  "buildNumber": 6,
+  "buildNumber": 7,
   "description": "ClashFox GUI for Mihomo",
   "license": "GPL-3.0",
   "author": "Kuochiang Lu <lukuochiang@gmail.com> (https://github.com/lukuochiang/ClashFox)",
@@ -61,6 +61,14 @@
         "to": "GeoLite2-ASN.mmdb"
       },
       {
+        "from": "static/GeoLite2-City.mmdb",
+        "to": "GeoLite2-City.mmdb"
+      },
+      {
+        "from": "static/GeoLite2-Country.mmdb",
+        "to": "GeoLite2-Country.mmdb"
+      },
+      {
         "from": "static/geosite.dat",
         "to": "geosite.dat"
       }
@@ -100,5 +108,8 @@
       ],
       "title": "ClashFox Installer"
     }
+  },
+  "dependencies": {
+    "maxmind": "^4.3.24"
   }
 }

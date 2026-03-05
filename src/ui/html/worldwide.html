@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ClashFox Worldwide</title>
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('lastTheme');
+          if (t) {
+            document.documentElement.setAttribute('data-theme', t);
+            if (document.body) {
+              document.body.dataset.theme = t;
+            } else {
+              document.addEventListener('DOMContentLoaded', function () {
+                document.body.dataset.theme = t;
+              });
+            }
+          }
+        } catch (_err) {}
+      })();
+    </script>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="../css/worldwide.css" />
+  </head>
+  <body>
+    <div class="worldwide-shell">
+      <header class="worldwide-header">
+        <div>
+          <h1 data-i18n="worldwide.title">Track the Trackers</h1>
+          <p data-i18n="worldwide.subtitle">Track connections from your Mac to servers worldwide.</p>
+        </div>
+        <div class="worldwide-header-actions">
+          <label class="worldwide-filter">
+            <span data-i18n="worldwide.filters.outbound">Outbound</span>
+            <select id="filterOutbound">
+              <option value="" data-i18n="worldwide.filters.all">All</option>
+            </select>
+          </label>
+          <label class="worldwide-filter">
+            <span data-i18n="worldwide.filters.country">Country/Region</span>
+            <select id="filterCountry">
+              <option value="" data-i18n="worldwide.filters.all">All</option>
+            </select>
+          </label>
+          <label class="worldwide-filter">
+            <span data-i18n="worldwide.filters.city">City</span>
+            <select id="filterCity">
+              <option value="" data-i18n="worldwide.filters.all">All</option>
+            </select>
+          </label>
+<!--          <div class="worldwide-badge">Experimental</div>-->
+        </div>
+      </header>
+      <section class="worldwide-map-wrap">
+        <div id="worldwideMap" class="worldwide-map" aria-label="Worldwide connections map"></div>
+        <div id="worldwideEmpty" class="worldwide-empty" data-i18n="worldwide.empty">No active connections yet</div>
+        <div id="worldwideStats" class="worldwide-stats" data-i18n="worldwide.loading">Loading...</div>
+        <aside id="worldwideDetail" class="worldwide-detail">
+          <div id="worldwideDetailTitle" class="worldwide-detail-title" data-i18n="worldwide.endpoint">Endpoint</div>
+          <div id="worldwideDetailBody" data-i18n="worldwide.hoverDetail">Hover a node to view details.</div>
+        </aside>
+      </section>
+    </div>
+    <script src="../../../static/locales/i18n.js"></script>
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="../js/worldwide.js"></script>
+  </body>
+</html>
