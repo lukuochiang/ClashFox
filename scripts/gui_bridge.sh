@@ -2198,63 +2198,6 @@ resolve_overview_local_ip() {
     printf '%s' "$local_ip"
 }
 
-load_overview_cache_state() {
-    local cache_file="$1"
-    local disable_cache="$2"
-    local cache_ttl="$3"
-    local now_ts="$4"
-
-    cache_valid=false
-    cached_internet_ms=""
-    cached_dns_ms=""
-    cached_router_ms=""
-
-    if [ "$disable_cache" = false ] && [ -r "$cache_file" ]; then
-        # shellcheck disable=SC1090
-        . "$cache_file" 2>/dev/null || return 0
-        cached_internet_ms="${internet_ms:-}"
-        cached_dns_ms="${dns_ms:-}"
-        cached_router_ms="${router_ms:-}"
-        if [ -n "${ts:-}" ] && [ $((now_ts - ts)) -lt "$cache_ttl" ]; then
-            cache_valid=true
-            internet_ip_v4="${internet_ip_v4:-}"
-            internet_ip_v6="${internet_ip_v6:-}"
-            internet_ms="${internet_ms:-}"
-            proxy_ip="${proxy_ip:-}"
-            dns_ms="${dns_ms:-}"
-            router_ms="${router_ms:-}"
-            if [ -n "$internet_ip_v6" ] && ! echo "$internet_ip_v6" | grep -q ':'; then
-                if [ -z "$internet_ip_v4" ] && echo "$internet_ip_v6" | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$'; then
-                    internet_ip_v4="$internet_ip_v6"
-                fi
-                internet_ip_v6=""
-            fi
-            if [ -n "$internet_ip_v4" ] && ! echo "$internet_ip_v4" | grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$'; then
-                internet_ip_v4=""
-            fi
-        fi
-    fi
-}
-
-save_overview_cache_state() {
-    local cache_file="$1"
-    local disable_cache="$2"
-    local now_ts="$3"
-    local cache_dir
-    cache_dir="$(dirname "$cache_file")"
-    if [ "$disable_cache" = false ] && [ -d "$cache_dir" ] && [ -w "$cache_dir" ]; then
-        {
-            printf 'ts=%s\n' "$now_ts"
-            printf 'internet_ip_v4=%q\n' "$internet_ip_v4"
-            printf 'internet_ip_v6=%q\n' "$internet_ip_v6"
-            printf 'internet_ms=%q\n' "$internet_ms"
-            printf 'proxy_ip=%q\n' "$proxy_ip"
-            printf 'dns_ms=%q\n' "$dns_ms"
-            printf 'router_ms=%q\n' "$router_ms"
-        } > "$cache_file" 2>/dev/null || true
-    fi
-}
-
 normalize_overview_runtime_fields() {
     router_ms="$(printf '%s' "$router_ms" | tr -d '[:space:]')"
     dns_ms="$(printf '%s' "$dns_ms" | tr -d '[:space:]')"
@@ -2267,24 +2210,6 @@ normalize_overview_runtime_fields() {
     fi
     if [ -n "$internet_ms" ] && ! echo "$internet_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
         internet_ms=""
-    fi
-    if [ -n "$cached_dns_ms" ] && ! echo "$cached_dns_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
-        cached_dns_ms=""
-    fi
-    if [ -n "$cached_router_ms" ] && ! echo "$cached_router_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
-        cached_router_ms=""
-    fi
-    if [ -n "$cached_internet_ms" ] && ! echo "$cached_internet_ms" | grep -qE '^[0-9]+([.][0-9]+)?$'; then
-        cached_internet_ms=""
-    fi
-    if [ -z "$dns_ms" ] && [ -n "$cached_dns_ms" ]; then
-        dns_ms="$cached_dns_ms"
-    fi
-    if [ -z "$router_ms" ] && [ -n "$cached_router_ms" ]; then
-        router_ms="$cached_router_ms"
-    fi
-    if [ -z "$internet_ms" ] && [ -n "$cached_internet_ms" ]; then
-        internet_ms="$cached_internet_ms"
     fi
     if [ -z "$router_ms" ]; then
         router_ms="$(awk -v d="$dns_ms" -v i="$internet_ms" 'BEGIN{
@@ -2578,14 +2503,13 @@ JSON
 
 handle_overview() {
         rotate_logs
-        parse_common_controller_args --allow-cache "$@"
+        parse_common_controller_args "$@"
         config_path="$CF_ARG_CONFIG_PATH"
-        cache_ttl="$CF_ARG_CACHE_TTL"
-        disable_cache="$CF_ARG_DISABLE_CACHE"
         if [ -z "$config_path" ]; then
             config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
         fi
         apply_controller_overrides "$config_path" "$CF_ARG_CONTROLLER_OVERRIDE" "$CF_ARG_SECRET_OVERRIDE"
+        rm -f "$CLASHFOX_PID_DIR/overview_cache" 2>/dev/null || true
 
         collect_runtime_snapshot
         kernel_path="$CF_RT_KERNEL_PATH"
@@ -2610,19 +2534,8 @@ handle_overview() {
         proxy_ip=""
         dns_ms=""
         router_ms=""
-        cached_internet_ms=""
-        cached_dns_ms=""
-        cached_router_ms=""
-
-        cache_file="$CLASHFOX_PID_DIR/overview_cache"
-        now_ts="$(date +%s)"
-        load_overview_cache_state "$cache_file" "$disable_cache" "$cache_ttl" "$now_ts"
-
-        if [ "$cache_valid" = false ]; then
         probe_overview_ips "$iface"
         probe_overview_latencies "$iface" "$gateway" "$local_ip"
-        save_overview_cache_state "$cache_file" "$disable_cache" "$now_ts"
-        fi
 
         normalize_overview_runtime_fields
 

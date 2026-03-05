@@ -1395,6 +1395,90 @@ function findHelperBinaryInDirectory(searchDir = '') {
   return '';
 }
 
+function resolveExtractedHelperRoot(binaryPath = '', extractTempDir = '') {
+  const binary = String(binaryPath || '').trim();
+  const root = String(extractTempDir || '').trim();
+  if (!binary || !root) {
+    return '';
+  }
+  const resolvedRoot = path.resolve(root);
+  const resolvedBinary = path.resolve(binary);
+  if (!resolvedBinary.startsWith(`${resolvedRoot}${path.sep}`) && resolvedBinary !== resolvedRoot) {
+    return '';
+  }
+  let candidate = path.dirname(resolvedBinary);
+  const maxSteps = 6;
+  for (let i = 0; i < maxSteps; i += 1) {
+    const helperBin = path.join(candidate, 'com.clashfox.helper');
+    const installScript = path.join(candidate, 'install-helper.sh');
+    if (fs.existsSync(helperBin) || fs.existsSync(installScript)) {
+      return candidate;
+    }
+    const parent = path.dirname(candidate);
+    if (!parent || parent === candidate || !parent.startsWith(resolvedRoot)) {
+      break;
+    }
+    candidate = parent;
+  }
+  return path.dirname(resolvedBinary);
+}
+
+function syncExtractedHelperPackageFiles(binaryPath = '', extractTempDir = '', bundleHelperDir = '') {
+  const sourceRoot = resolveExtractedHelperRoot(binaryPath, extractTempDir);
+  const targetRoot = String(bundleHelperDir || '').trim();
+  if (!sourceRoot || !targetRoot || !fs.existsSync(sourceRoot)) {
+    return { ok: false, copied: [], sourceRoot, targetRoot };
+  }
+  const fileNames = [
+    'com.clashfox.helper',
+    'com.clashfox.helper.plist',
+    'install-helper.sh',
+    'uninstall-helper.sh',
+    'doctor-helper.sh',
+    'check-helper.sh',
+    'VERSION',
+    'manifest.json',
+    'checksums.txt',
+    'CHANGELOG.md',
+    'README.md',
+    'LICENSE',
+  ];
+  const copied = [];
+  const failed = [];
+  try {
+    fs.mkdirSync(targetRoot, { recursive: true });
+    for (const name of fileNames) {
+      const src = path.join(sourceRoot, name);
+      if (!fs.existsSync(src)) {
+        continue;
+      }
+      const stat = fs.statSync(src);
+      if (!stat.isFile()) {
+        continue;
+      }
+      const dst = path.join(targetRoot, name);
+      try {
+        fs.copyFileSync(src, dst);
+        if (name.endsWith('.sh') || name === 'com.clashfox.helper') {
+          fs.chmodSync(dst, 0o755);
+        }
+        copied.push(name);
+      } catch (error) {
+        failed.push({ name, error: String((error && error.message) || error || 'copy_failed') });
+      }
+    }
+    return { ok: failed.length === 0, copied, failed, sourceRoot, targetRoot };
+  } catch (error) {
+    return {
+      ok: false,
+      copied,
+      failed: failed.concat([{ name: '*', error: String((error && error.message) || error || 'sync_failed') }]),
+      sourceRoot,
+      targetRoot,
+    };
+  }
+}
+
 function resolveHelperWorkspaceDir() {
   const helperDir = HELPER_APP_BUNDLE_DIR;
   try {
@@ -1566,6 +1650,7 @@ async function installLatestHelperFromOnline() {
     if (!binaryPath || !fs.existsSync(binaryPath)) {
       return { ok: false, error: 'helper_binary_missing' };
     }
+    const syncResult = syncExtractedHelperPackageFiles(binaryPath, extractTempDir, bundleHelperDir);
     const installResult = await installHelperBinaryWithSystemAuth(binaryPath, latest.version || '');
     if (!installResult || !installResult.ok) {
       return {
@@ -1576,6 +1661,7 @@ async function installLatestHelperFromOnline() {
           packageDir,
           bundleHelperDir,
           extractTempDir,
+          helperSync: syncResult,
           expectedBackupPath: path.join(bundleHelperDir, 'install-backup', 'com.clashfox.helper'),
         },
       };
@@ -1595,6 +1681,7 @@ async function installLatestHelperFromOnline() {
         packageDir,
         bundleHelperDir,
         extractTempDir,
+        helperSync: syncResult,
         expectedBackupPath: path.join(bundleHelperDir, 'install-backup', 'com.clashfox.helper'),
       },
     };
@@ -3994,6 +4081,37 @@ async function waitForSystemProxyEnabledState(targetEnabled, configPath = '', ti
   return readSystemProxyEnabledSnapshot(configPath);
 }
 
+async function readTunEnabledSnapshot(configPath = '') {
+  const statusArgs = ['tun-status'];
+  if (configPath) {
+    statusArgs.push('--config', configPath);
+  }
+  const statusResp = await runBridge(statusArgs);
+  if (!(statusResp && statusResp.ok && statusResp.data)) {
+    return { ok: false, enabled: null };
+  }
+  const enabledRaw = Object.prototype.hasOwnProperty.call(statusResp.data, 'enabled')
+    ? statusResp.data.enabled
+    : statusResp.data.enable;
+  return {
+    ok: true,
+    enabled: enabledRaw === true || enabledRaw === 'true' || enabledRaw === 1,
+  };
+}
+
+async function waitForTunEnabledState(targetEnabled, configPath = '', timeoutMs = 2600, intervalMs = 260) {
+  const expected = Boolean(targetEnabled);
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() <= deadline) {
+    const snapshot = await readTunEnabledSnapshot(configPath);
+    if (snapshot.ok && snapshot.enabled === expected) {
+      return snapshot;
+    }
+    await sleep(intervalMs);
+  }
+  return readTunEnabledSnapshot(configPath);
+}
+
 async function runTrayCommand(command, args = [], labels = TRAY_I18N.en, sudoPass = '') {
   let effectiveSudoPass = sudoPass || '';
   let result = await runBridgeWithAutoAuth(command, args, { sudoPass: effectiveSudoPass });
@@ -4906,7 +5024,6 @@ async function handleTrayMenuAction(action, payload = {}) {
       return { ok: true, hide: true };
     case 'toggle-system-proxy': {
       const targetEnabled = Boolean(payload && payload.checked);
-      patchTrayMenuNetworkState({ systemProxyEnabled: targetEnabled });
       const command = payload && payload.checked ? 'system-proxy-enable' : 'system-proxy-disable';
       const proxyArgs = ['--config', configPath];
       const settings = readAppSettings();
@@ -4943,16 +5060,33 @@ async function handleTrayMenuAction(action, payload = {}) {
       return { ok: true, submenu: 'network' };
     }
     case 'toggle-tun': {
-      const target = payload && payload.checked ? 'true' : 'false';
-      patchTrayMenuNetworkState({ tunEnabled: target === 'true' });
+      const targetEnabled = Boolean(payload && payload.checked);
+      const target = targetEnabled ? 'true' : 'false';
       const response = await runTrayCommand('tun', ['--config', configPath, '--enable', target], labels);
       if (response.ok) {
-        persistTunEnabledToSettings(target === 'true');
+        const tunSnapshot = await waitForTunEnabledState(targetEnabled, configPath);
+        const actualEnabled = tunSnapshot.ok
+          ? Boolean(tunSnapshot.enabled)
+          : targetEnabled;
+        persistTunEnabledToSettings(actualEnabled);
+        patchTrayMenuNetworkState({ tunEnabled: actualEnabled });
       } else {
-        createTrayMenu().catch(() => {});
+        const fallbackTunSnapshot = await readTunEnabledSnapshot(configPath);
+        const fallbackSettings = readAppSettings();
+        const fallbackEnabled = fallbackTunSnapshot.ok
+          ? Boolean(fallbackTunSnapshot.enabled)
+          : Boolean(
+            fallbackSettings
+            && Object.prototype.hasOwnProperty.call(fallbackSettings, 'tun')
+              ? fallbackSettings.tun
+              : false
+          );
+        persistTunEnabledToSettings(fallbackEnabled);
+        patchTrayMenuNetworkState({ tunEnabled: fallbackEnabled });
       }
+      await createTrayMenu().catch(() => {});
       emitTrayRefresh();
-      return { ok: true, submenu: 'network' };
+      return { ok: true, submenu: 'network', data: trayMenuData };
     }
     case 'copy-shell-export': {
       const shellExportCommand = buildShellExportCommand(readAppSettings());
@@ -5437,12 +5571,13 @@ function createWindow(showOnCreate = false) {
 
   win.webContents.on('before-input-event', (event, input) => {
     const key = (input.key || '').toLowerCase();
-    const isReloadCombo = (input.control || input.meta) && key === 'r';
-    if (isReloadCombo) {
-      event.preventDefault();
+    if (globalSettings.debugMode) {
       return;
     }
-    if (globalSettings.debugMode) {
+    const isReloadCombo = (input.control || input.meta) && key === 'r';
+    const isReloadKey = key === 'f5';
+    if (isReloadCombo || isReloadKey) {
+      event.preventDefault();
       return;
     }
     const isDevToolsCombo =
@@ -6299,9 +6434,12 @@ app.whenReady().then(() => {
   });
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    hideTrayMenuWindow();
+    if (!mainWindow || mainWindow.isDestroyed()) {
       createWindow(true);
+      return;
     }
+    showMainWindow();
   });
 });
 

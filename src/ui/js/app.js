@@ -277,6 +277,9 @@ let logAutoRefresh = document.getElementById('logAutoRefresh');
 let logIntervalPreset = document.getElementById('logIntervalPreset');
 
 const LAYOUT_CACHE_VERSION = 'v2';
+const PAGE_TEMPLATE_CACHE_VERSION = 'v1';
+const PAGE_TEMPLATE_CACHE_PREFIX = `page:${PAGE_TEMPLATE_CACHE_VERSION}:`;
+const pageTemplateCache = new Map();
 let cleanBtn = document.getElementById('cleanBtn');
 let dashboardFrame = document.getElementById('dashboardFrame');
 let dashboardEmpty = document.getElementById('dashboardEmpty');
@@ -4891,6 +4894,94 @@ function getPageFromLocation() {
   return VALID_PAGES.has(page) ? page : currentPage;
 }
 
+function pageTemplateStorageKey(page) {
+  return `${PAGE_TEMPLATE_CACHE_PREFIX}${page}`;
+}
+
+function extractPageSectionHtml(pageHtml = '') {
+  if (!pageHtml) {
+    return '';
+  }
+  const parsed = new DOMParser().parseFromString(pageHtml, 'text/html');
+  const root = parsed.getElementById('contentRoot');
+  const section = root && root.firstElementChild ? root.firstElementChild : null;
+  return section ? section.outerHTML : '';
+}
+
+function savePageTemplateCache(page, sectionHtml) {
+  if (!page || !sectionHtml) {
+    return;
+  }
+  pageTemplateCache.set(page, sectionHtml);
+  try {
+    sessionStorage.setItem(pageTemplateStorageKey(page), sectionHtml);
+  } catch {
+    // ignore cache quota errors
+  }
+}
+
+function readPageTemplateCache(page) {
+  if (!page) {
+    return '';
+  }
+  const memoryCached = pageTemplateCache.get(page);
+  if (memoryCached) {
+    return memoryCached;
+  }
+  try {
+    const cached = sessionStorage.getItem(pageTemplateStorageKey(page));
+    if (cached) {
+      pageTemplateCache.set(page, cached);
+      return cached;
+    }
+  } catch {
+    // ignore
+  }
+  return '';
+}
+
+async function loadPageSectionTemplate(page, allowFetch = true) {
+  const cached = readPageTemplateCache(page);
+  if (cached) {
+    return cached;
+  }
+  if (!allowFetch) {
+    return '';
+  }
+  const response = await fetch(new URL(`${page}.html`, window.location.href));
+  if (!response.ok) {
+    return '';
+  }
+  const html = await response.text();
+  const sectionHtml = extractPageSectionHtml(html);
+  if (sectionHtml) {
+    savePageTemplateCache(page, sectionHtml);
+  }
+  return sectionHtml;
+}
+
+async function preloadPageTemplates(excludePage = '') {
+  const tasks = Array.from(VALID_PAGES)
+    .filter((page) => page !== excludePage)
+    .map((page) => loadPageSectionTemplate(page, true));
+  await Promise.allSettled(tasks);
+}
+
+function preventPageReloadShortcuts() {
+  document.addEventListener('keydown', (event) => {
+    if (state && state.settings && state.settings.debugMode) {
+      return;
+    }
+    const key = String(event.key || '').toLowerCase();
+    const isReloadShortcut = (event.metaKey || event.ctrlKey) && key === 'r';
+    const isF5 = key === 'f5';
+    if (isReloadShortcut || isF5) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, true);
+}
+
 async function navigatePage(targetPage, pushState = true) {
   const normalized = String(targetPage || '').trim();
   if (!VALID_PAGES.has(normalized)) {
@@ -4907,19 +4998,18 @@ async function navigatePage(targetPage, pushState = true) {
     window.location.href = `${normalized}.html`;
     return;
   }
-  const response = await fetch(`${normalized}.html`);
-  if (!response.ok) {
+  const sectionHtml = await loadPageSectionTemplate(normalized, true);
+  if (!sectionHtml) {
     window.location.href = `${normalized}.html`;
     return;
   }
-  const html = await response.text();
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  const newRoot = doc.getElementById('contentRoot');
-  if (!newRoot || !newRoot.firstElementChild) {
+  const template = document.createElement('template');
+  template.innerHTML = sectionHtml.trim();
+  const newSection = template.content.firstElementChild;
+  if (!newSection) {
     window.location.href = `${targetPage}.html`;
     return;
   }
-  const newSection = document.importNode(newRoot.firstElementChild, true);
   newSection.classList.add('page-section');
   contentRoot.innerHTML = '';
   contentRoot.appendChild(newSection);
@@ -7012,11 +7102,13 @@ function initDashboardFrame() {
 }
 
 async function initApp() {
+  preventPageReloadShortcuts();
   await loadLayoutParts();
   const targetPage = getPageFromLocation();
   if (targetPage && targetPage !== currentPage) {
     await navigatePage(targetPage, false);
   }
+  preloadPageTemplates(targetPage || currentPage).catch(() => {});
   await loadStaticConfigs();
   await syncSettingsFromFile();
   applySettings(readSettings());

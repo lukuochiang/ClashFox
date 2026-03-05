@@ -7,6 +7,9 @@ let connectivityRefreshTimer = null;
 const CONNECTIVITY_REFRESH_MS = 1000;
 const SUBMENU_MIN_WIDTH = 170;
 const SUBMENU_MAX_WIDTH = 340;
+const NETWORK_TOGGLE_ACTIONS = new Set(['toggle-system-proxy', 'toggle-tun']);
+const pendingActionSet = new Set();
+const ACTION_TIMEOUT_MS = 12000;
 
 const ICON_SVGS = {
   systemProxy: '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6l7-3z"/></svg>',
@@ -84,10 +87,15 @@ function ensureConnectivityRefresh() {
   }, CONNECTIVITY_REFRESH_MS);
 }
 
-function makeLeading(item) {
+function makeLeading(item, isLoading = false) {
   const check = document.createElement('div');
-  check.className = `menu-check${item.checked ? '' : ' empty'}`;
-  check.textContent = item.checked ? '✓' : ' ';
+  if (isLoading) {
+    check.className = 'menu-check loading';
+    check.textContent = ' ';
+  } else {
+    check.className = `menu-check${item.checked ? '' : ' empty'}`;
+    check.textContent = item.checked ? '✓' : ' ';
+  }
 
   const leading = document.createElement('div');
   leading.className = 'menu-leading';
@@ -101,6 +109,15 @@ async function runActionForItem(item) {
   if (!item || !item.action || !window.clashfox || typeof window.clashfox.trayMenuAction !== 'function') {
     return;
   }
+  const actionName = String(item.action || '').trim();
+  const withLoading = NETWORK_TOGGLE_ACTIONS.has(actionName);
+  if (withLoading && pendingActionSet.has(actionName)) {
+    return;
+  }
+  if (withLoading) {
+    pendingActionSet.add(actionName);
+    renderSubmenu();
+  }
   // Keep submenu considered “hovered” briefly so blur from opening Finder doesn’t auto-hide.
   if (window.clashfox && typeof window.clashfox.traySubmenuHover === 'function') {
     window.clashfox.traySubmenuHover(true);
@@ -109,7 +126,39 @@ async function runActionForItem(item) {
   if (typeof item.checked === 'boolean') {
     payload.checked = !item.checked;
   }
-  const response = await window.clashfox.trayMenuAction(item.action, payload);
+  let response = null;
+  try {
+    const actionPromise = window.clashfox.trayMenuAction(item.action, payload);
+    const timeoutPromise = new Promise((resolve) => {
+      setTimeout(() => resolve({ ok: false, error: 'action_timeout', submenu: submenuKey || '' }), ACTION_TIMEOUT_MS);
+    });
+    response = await Promise.race([actionPromise, timeoutPromise]);
+  } catch {
+    response = { ok: false, error: 'action_failed' };
+  } finally {
+    if (withLoading) {
+      pendingActionSet.delete(actionName);
+      renderSubmenu();
+    }
+  }
+  if (response && response.submenu) {
+    try {
+      const data = response && response.data ? response.data : await window.clashfox.trayMenuGetData();
+      const latestItems = data
+        && data.submenus
+        && Array.isArray(data.submenus[response.submenu])
+        ? data.submenus[response.submenu]
+        : null;
+      if (latestItems) {
+        setSubmenu({
+          key: response.submenu,
+          items: latestItems,
+        });
+      }
+    } catch {
+      // ignore sync failure
+    }
+  }
   if (response && response.hide) {
     window.clashfox.trayMenuHide();
     window.clashfox.traySubmenuHide();
@@ -136,14 +185,16 @@ function makeRow(item) {
   if (item.iconKey) {
     row.dataset.iconKey = String(item.iconKey);
   }
-  const clickable = item.enabled !== false;
+  const actionName = item && item.action ? String(item.action).trim() : '';
+  const isLoading = NETWORK_TOGGLE_ACTIONS.has(actionName) && pendingActionSet.has(actionName);
+  const clickable = item.enabled !== false && !isLoading;
   if (clickable) {
     row.classList.add('clickable');
   } else {
     row.classList.add('disabled');
   }
 
-  const leadingParts = makeLeading(item);
+  const leadingParts = makeLeading(item, isLoading);
   if (typeof item.checked === 'boolean') {
     row.appendChild(leadingParts.check);
   }

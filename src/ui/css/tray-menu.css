@@ -223,8 +223,12 @@ body {
 }
 
 .menu-check {
-  width: 12px;
-  min-width: 12px;
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   color: var(--check);
   font-size: 12px;
@@ -234,6 +238,29 @@ body {
 
 .menu-check.empty {
   color: transparent;
+}
+
+.menu-check.loading {
+  color: transparent;
+  position: relative;
+}
+
+.menu-check.loading::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  margin: auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid rgba(147, 164, 183, 0.42);
+  border-top-color: rgba(233, 238, 243, 0.98);
+  border-right-color: rgba(244, 179, 74, 0.92);
+  box-shadow: 0 0 0 1px rgba(244, 179, 74, 0.12);
+  animation: tray-spin 0.62s linear infinite;
 }
 
 .menu-leading {
@@ -259,6 +286,11 @@ body {
 .menu-row.disabled .menu-leading,
 .menu-row.disabled .menu-check {
   color: var(--muted);
+}
+
+@keyframes tray-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .menu-label {
