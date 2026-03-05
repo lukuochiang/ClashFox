@@ -183,8 +183,7 @@ body {
 }
 
 .leaflet-control-attribution {
-  background: rgba(10, 18, 26, 0.76) !important;
-  color: #b9cbdd !important;
+  display: none !important;
 }
 
 .world-link-path {
@@ -298,9 +297,8 @@ html[data-theme="day"] #worldwideDetailBody {
   color: #284359;
 }
 
-html[data-theme="day"] .leaflet-control-attribution {
-  background: rgba(248, 252, 255, 0.88) !important;
-  color: #49657f !important;
+.world-link-flow {
+  filter: drop-shadow(0 0 2px rgba(150, 232, 255, 0.52));
 }
 
 @media (max-width: 980px) {

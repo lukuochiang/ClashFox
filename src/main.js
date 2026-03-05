@@ -6338,6 +6338,16 @@ function createWindow(showOnCreate = false) {
     event.preventDefault();
     persistMainWindowClosedToSettings(true);
     win.hide();
+    const hasStandaloneVisibleWindow = (
+      (dashboardWindow && !dashboardWindow.isDestroyed() && dashboardWindow.isVisible())
+      || (worldwideWindow && !worldwideWindow.isDestroyed() && worldwideWindow.isVisible())
+    );
+    if (hasStandaloneVisibleWindow) {
+      if (app.dock && app.dock.show) {
+        app.dock.show();
+      }
+      return;
+    }
     if (app.dock && app.dock.hide) {
       app.dock.hide();
     }

@@ -2,6 +2,7 @@ let map = null;
 let localMarker = null;
 let pointsLayer = null;
 let linksLayer = null;
+let flowLayer = null;
 let pollTimer = null;
 let polling = false;
 let lastCenterKey = '';
@@ -13,6 +14,9 @@ let tileErrorCount = 0;
 let activeProviderIndex = 0;
 let hasAnyTileLoaded = false;
 let allProvidersFailed = false;
+let flowParticles = [];
+let flowAnimationFrame = 0;
+let flowLastFrameAt = 0;
 let languagePreference = 'auto';
 let activeLanguage = 'en';
 let themePreference = 'auto';
@@ -30,6 +34,7 @@ const filterCityEl = document.getElementById('filterCity');
 const POLL_INTERVAL_MS = 2400;
 const RENDER_MAX_POINTS = 70;
 const RENDER_LABEL_MAX = 28;
+const FLOW_MAX_PARTICLES = 54;
 const canvasRenderer = typeof L !== 'undefined' ? L.canvas({ padding: 0.2 }) : null;
 const TILE_ERROR_SWITCH_THRESHOLD = 6;
 const TILE_PROVIDERS = [
@@ -268,6 +273,54 @@ function normalizeLongitude(lon) {
   return value;
 }
 
+function stopFlowAnimation() {
+  if (flowAnimationFrame) {
+    window.cancelAnimationFrame(flowAnimationFrame);
+    flowAnimationFrame = 0;
+  }
+  flowLastFrameAt = 0;
+}
+
+function clearFlowParticles() {
+  stopFlowAnimation();
+  flowParticles = [];
+  if (flowLayer) {
+    flowLayer.clearLayers();
+  }
+}
+
+function startFlowAnimation() {
+  if (flowAnimationFrame || !flowParticles.length || document.hidden) {
+    return;
+  }
+  const tick = (ts) => {
+    if (!flowParticles.length || document.hidden) {
+      stopFlowAnimation();
+      return;
+    }
+    const now = Number(ts || 0);
+    const elapsed = flowLastFrameAt > 0 ? Math.max(0, now - flowLastFrameAt) : 16;
+    flowLastFrameAt = now;
+    const delta = Math.min(elapsed, 80) / 1000;
+    flowParticles.forEach((particle) => {
+      const marker = particle.marker;
+      if (!marker) {
+        return;
+      }
+      particle.progress += delta * particle.speed;
+      while (particle.progress >= 2) {
+        particle.progress -= 2;
+      }
+      const progress = particle.progress <= 1 ? particle.progress : (2 - particle.progress);
+      const lat = particle.from[0] + ((particle.to[0] - particle.from[0]) * progress);
+      const lon = particle.from[1] + ((particle.to[1] - particle.from[1]) * progress);
+      marker.setLatLng([lat, lon]);
+    });
+    flowAnimationFrame = window.requestAnimationFrame(tick);
+  };
+  flowAnimationFrame = window.requestAnimationFrame(tick);
+}
+
 function buildArcPoints(from = [0, 0], to = [0, 0], steps = 30) {
   const fromLat = Number(from[0] || 0);
   const fromLon = normalizeLongitude(from[1]);
@@ -396,6 +449,7 @@ function initMap() {
 
   pointsLayer = L.layerGroup().addTo(map);
   linksLayer = L.layerGroup().addTo(map);
+  flowLayer = L.layerGroup().addTo(map);
   return map;
 }
 
@@ -455,6 +509,7 @@ function drawSnapshot(snapshot) {
   const points = applyFilters(pointsSource).slice(0, RENDER_MAX_POINTS);
   pointsLayer.clearLayers();
   linksLayer.clearLayers();
+  clearFlowParticles();
   setDetail(null);
   if (emptyEl) {
     emptyEl.classList.toggle('show', points.length === 0);
@@ -482,6 +537,7 @@ function drawSnapshot(snapshot) {
   });
 
   const boundsPoints = [L.latLng(localLatLng[0], localLatLng[1])];
+  const flowCandidates = [];
   points.forEach((point, pointIndex) => {
     const lat = Number(point.lat);
     const lon = Number(point.lon);
@@ -508,13 +564,19 @@ function drawSnapshot(snapshot) {
 
     const linePoints = [localLatLng, [lat, lon]];
     L.polyline(linePoints, {
-      color: '#294f73',
-      opacity: 0.8,
+      color: '#2f8fd8',
+      opacity: 0.74,
       weight,
       className: 'world-link-path',
       interactive: false,
       renderer: canvasRenderer || undefined,
     }).addTo(linksLayer);
+    flowCandidates.push({
+      from: localLatLng,
+      to: [lat, lon],
+      count: Number(point.count || 0),
+      weight,
+    });
 
     const cityLabel = String(point.city || '').trim() || String(point.country || '').trim();
     if (cityLabel && pointIndex < RENDER_LABEL_MAX) {
@@ -532,6 +594,37 @@ function drawSnapshot(snapshot) {
     }
     boundsPoints.push(L.latLng(lat, lon));
   });
+
+  flowCandidates
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 28)
+    .forEach((item) => {
+      const density = item.weight >= 4.2 ? 3 : (item.weight >= 3.2 ? 2 : 1);
+      for (let i = 0; i < density; i += 1) {
+        if (flowParticles.length >= FLOW_MAX_PARTICLES) {
+          break;
+        }
+        const marker = L.circleMarker(item.from, {
+          radius: 1.9,
+          color: '#e0f8ff',
+          fillColor: '#89ebff',
+          fillOpacity: 0.95,
+          opacity: 0.95,
+          weight: 1,
+          className: 'world-link-flow',
+          interactive: false,
+          renderer: canvasRenderer || undefined,
+        }).addTo(flowLayer);
+        flowParticles.push({
+          marker,
+          from: item.from,
+          to: item.to,
+          speed: 0.12 + Math.random() * 0.14,
+          progress: Math.random() * 2,
+        });
+      }
+    });
+  startFlowAnimation();
 
   const centerKey = `${localLatLng[0].toFixed(2)},${localLatLng[1].toFixed(2)}|${points.length}`;
   if (boundsPoints.length > 1 && centerKey !== lastCenterKey) {
@@ -624,6 +717,7 @@ function stopPolling() {
     clearInterval(pollTimer);
     pollTimer = null;
   }
+  stopFlowAnimation();
 }
 
 window.addEventListener('beforeunload', () => {
@@ -637,6 +731,9 @@ function syncPollingWithVisibility() {
   }
   if (!pollTimer) {
     startPolling();
+  }
+  if (flowParticles.length) {
+    startFlowAnimation();
   }
 }
 
