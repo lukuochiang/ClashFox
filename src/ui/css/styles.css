@@ -828,7 +828,7 @@ h1 {
 
 .card.quick-actions[data-module="network-history"] {
   display: grid;
-  gap: 12px;
+  gap: 24px;
 }
 
 .quick-actions-card .cf-select {
@@ -1405,11 +1405,13 @@ body[data-page="help"] .help-stack .card {
   content: '';
   width: 16px;
   height: 16px;
+  flex: 0 0 16px;
   background: currentColor;
   mask-repeat: no-repeat;
   mask-size: 16px 16px;
   mask-position: center;
   mask-image: var(--card-icon-mask, var(--icon-gear));
+  transform: translateY(-0.5px);
 }
 
 .card-split {
@@ -1458,6 +1460,15 @@ body[data-page="help"] .help-stack .card {
 
 .outbound-icon {
   --card-icon-mask: var(--icon-outbound);
+}
+
+.outbound-icon::before {
+  mask-size: 15px 15px;
+  transform: translateY(-1px);
+}
+
+body[data-page="overview"] .outbound-card .card-header-row > h3 {
+  transform: translateY(-1px);
 }
 
 .quick-actions-icon {
