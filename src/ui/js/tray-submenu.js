@@ -9,7 +9,18 @@ const SUBMENU_MIN_WIDTH = 170;
 const SUBMENU_MAX_WIDTH = 340;
 const NETWORK_TOGGLE_ACTIONS = new Set(['toggle-system-proxy', 'toggle-tun']);
 const pendingActionSet = new Set();
+const loadingVisibleSet = new Set();
+const loadingTimerMap = new Map();
+const loadingVisibleAtMap = new Map();
 const ACTION_TIMEOUT_MS = 12000;
+const LOADING_SHOW_DELAY_MS = 180;
+const MIN_LOADING_VISIBLE_MS = 220;
+
+function wait(ms = 0) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, Math.max(0, Number(ms) || 0));
+  });
+}
 
 const ICON_SVGS = {
   systemProxy: '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6l7-3z"/></svg>',
@@ -116,7 +127,15 @@ async function runActionForItem(item) {
   }
   if (withLoading) {
     pendingActionSet.add(actionName);
-    renderSubmenu();
+    const timer = setTimeout(() => {
+      if (!pendingActionSet.has(actionName)) {
+        return;
+      }
+      loadingVisibleSet.add(actionName);
+      loadingVisibleAtMap.set(actionName, Date.now());
+      renderSubmenu();
+    }, LOADING_SHOW_DELAY_MS);
+    loadingTimerMap.set(actionName, timer);
   }
   // Keep submenu considered “hovered” briefly so blur from opening Finder doesn’t auto-hide.
   if (window.clashfox && typeof window.clashfox.traySubmenuHover === 'function') {
@@ -137,6 +156,20 @@ async function runActionForItem(item) {
     response = { ok: false, error: 'action_failed' };
   } finally {
     if (withLoading) {
+      const timer = loadingTimerMap.get(actionName);
+      if (timer) {
+        clearTimeout(timer);
+        loadingTimerMap.delete(actionName);
+      }
+      if (loadingVisibleSet.has(actionName)) {
+        const shownAt = Number(loadingVisibleAtMap.get(actionName) || 0);
+        const elapsed = shownAt > 0 ? Date.now() - shownAt : 0;
+        if (elapsed < MIN_LOADING_VISIBLE_MS) {
+          await wait(MIN_LOADING_VISIBLE_MS - elapsed);
+        }
+      }
+      loadingVisibleAtMap.delete(actionName);
+      loadingVisibleSet.delete(actionName);
       pendingActionSet.delete(actionName);
       renderSubmenu();
     }
@@ -186,8 +219,9 @@ function makeRow(item) {
     row.dataset.iconKey = String(item.iconKey);
   }
   const actionName = item && item.action ? String(item.action).trim() : '';
-  const isLoading = NETWORK_TOGGLE_ACTIONS.has(actionName) && pendingActionSet.has(actionName);
-  const clickable = item.enabled !== false && !isLoading;
+  const pending = NETWORK_TOGGLE_ACTIONS.has(actionName) && pendingActionSet.has(actionName);
+  const isLoading = NETWORK_TOGGLE_ACTIONS.has(actionName) && loadingVisibleSet.has(actionName);
+  const clickable = item.enabled !== false && !pending;
   if (clickable) {
     row.classList.add('clickable');
   } else {

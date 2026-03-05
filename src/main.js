@@ -3688,19 +3688,19 @@ async function runBridgeViaHelperApi(bridgeArgs = []) {
           port: parsedPort,
           socksPort: parsedSocksPort,
         };
-        let response = await respondFromHelper('/v1/proxy/enable', 'POST', enablePayload);
+        let response = await respondFromHelper('/v1/proxy/enable?withStatus=1', 'POST', enablePayload);
         if (isInvalidServiceError(response)) {
           const fallbackService = await resolveActiveNetworkServiceName();
           if (fallbackService && fallbackService !== service) {
             service = fallbackService;
-            response = await respondFromHelper('/v1/proxy/enable', 'POST', {
+            response = await respondFromHelper('/v1/proxy/enable?withStatus=1', 'POST', {
               ...enablePayload,
               service,
             });
           }
           // Some helper builds can infer active service when omitted.
           if (isInvalidServiceError(response)) {
-            response = await respondFromHelper('/v1/proxy/enable', 'POST', {
+            response = await respondFromHelper('/v1/proxy/enable?withStatus=1', 'POST', {
               host: '127.0.0.1',
               port: parsedPort,
               socksPort: parsedSocksPort,
@@ -3710,7 +3710,7 @@ async function runBridgeViaHelperApi(bridgeArgs = []) {
         return response;
       }
       case 'system-proxy-disable': {
-        return respondFromHelper('/v1/proxy/disable', 'POST', {});
+        return respondFromHelper('/v1/proxy/disable?withStatus=1', 'POST', {});
       }
       case 'system-proxy-status': {
         let service = await resolveUsableNetworkServiceName(readArgValue('--service'));
@@ -4068,7 +4068,7 @@ async function readSystemProxyEnabledSnapshot(configPath = '') {
   };
 }
 
-async function waitForSystemProxyEnabledState(targetEnabled, configPath = '', timeoutMs = 1800, intervalMs = 220) {
+async function waitForSystemProxyEnabledState(targetEnabled, configPath = '', timeoutMs = 1000, intervalMs = 160) {
   const expected = Boolean(targetEnabled);
   const deadline = Date.now() + timeoutMs;
   while (Date.now() <= deadline) {
@@ -4081,10 +4081,39 @@ async function waitForSystemProxyEnabledState(targetEnabled, configPath = '', ti
   return readSystemProxyEnabledSnapshot(configPath);
 }
 
-async function readTunEnabledSnapshot(configPath = '') {
+function resolveSystemProxyEnabledFromPayload(payload = null) {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+  const toBool = (value) => value === true || value === 'true' || value === 1 || value === '1';
+  const data = (payload && payload.data && typeof payload.data === 'object')
+    ? payload.data
+    : payload;
+  const hasAnyEnabled = Object.prototype.hasOwnProperty.call(data, 'anyEnabled');
+  const hasMatchesDesired = Object.prototype.hasOwnProperty.call(data, 'matchesDesired');
+  const hasManagedByHelper = Object.prototype.hasOwnProperty.call(data, 'managedByHelper');
+  if (hasAnyEnabled || hasMatchesDesired || hasManagedByHelper) {
+    return toBool(data.anyEnabled) && toBool(data.matchesDesired) && toBool(data.managedByHelper);
+  }
+  if (Object.prototype.hasOwnProperty.call(data, 'enabled')) {
+    return toBool(data.enabled);
+  }
+  if (Object.prototype.hasOwnProperty.call(data, 'enable')) {
+    return toBool(data.enable);
+  }
+  return null;
+}
+
+async function readTunEnabledSnapshot(configPath = '', controllerOverride = '', secretOverride = '') {
   const statusArgs = ['tun-status'];
   if (configPath) {
     statusArgs.push('--config', configPath);
+  }
+  if (controllerOverride) {
+    statusArgs.push('--controller', controllerOverride);
+  }
+  if (secretOverride) {
+    statusArgs.push('--secret', secretOverride);
   }
   const statusResp = await runBridge(statusArgs);
   if (!(statusResp && statusResp.ok && statusResp.data)) {
@@ -4099,47 +4128,223 @@ async function readTunEnabledSnapshot(configPath = '') {
   };
 }
 
-async function waitForTunEnabledState(targetEnabled, configPath = '', timeoutMs = 2600, intervalMs = 260) {
+async function waitForTunEnabledState(
+  targetEnabled,
+  configPath = '',
+  timeoutMs = 3200,
+  intervalMs = 220,
+  controllerOverride = '',
+  secretOverride = '',
+) {
   const expected = Boolean(targetEnabled);
   const deadline = Date.now() + timeoutMs;
   while (Date.now() <= deadline) {
-    const snapshot = await readTunEnabledSnapshot(configPath);
+    const snapshot = await readTunEnabledSnapshot(configPath, controllerOverride, secretOverride);
     if (snapshot.ok && snapshot.enabled === expected) {
       return snapshot;
     }
     await sleep(intervalMs);
   }
-  return readTunEnabledSnapshot(configPath);
+  return readTunEnabledSnapshot(configPath, controllerOverride, secretOverride);
+}
+
+function readArgValueFromList(args = [], name = '') {
+  if (!Array.isArray(args) || !name) {
+    return '';
+  }
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] !== name) {
+      continue;
+    }
+    const value = args[index + 1];
+    if (typeof value === 'string') {
+      return value.trim();
+    }
+    return '';
+  }
+  return '';
+}
+
+function parseEnableFlagValue(value = '') {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+  if (['0', 'false', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+  return null;
+}
+
+function buildTunPatchPayloadFromArgs(args = []) {
+  const payload = {};
+  const enableRaw = readArgValueFromList(args, '--enable');
+  const stackRaw = readArgValueFromList(args, '--stack');
+  const enable = parseEnableFlagValue(enableRaw);
+  if (enable !== null) {
+    payload.enable = enable;
+  }
+  if (stackRaw) {
+    payload.stack = String(stackRaw);
+  }
+  return payload;
+}
+
+function resolveControllerAccessFromSettings(controllerOverride = '', secretOverride = '') {
+  const settings = readAppSettings();
+  const controllerRaw = settings && Object.prototype.hasOwnProperty.call(settings, 'externalController')
+    ? String(settings.externalController || '').trim()
+    : '';
+  const secretRaw = settings && Object.prototype.hasOwnProperty.call(settings, 'secret')
+    ? String(settings.secret || '').trim()
+    : '';
+  const controller = String(controllerOverride || '').trim() || controllerRaw || '127.0.0.1:9090';
+  const baseUrl = /^https?:\/\//i.test(controller) ? controller : `http://${controller}`;
+  return {
+    baseUrl: String(baseUrl || '').replace(/\/+$/, ''),
+    secret: String(secretOverride || '').trim() || secretRaw || 'clashfox',
+  };
+}
+
+async function applyTunViaControllerMain(partialTun = {}, controllerOverride = '', secretOverride = '') {
+  try {
+    const { baseUrl, secret } = resolveControllerAccessFromSettings(controllerOverride, secretOverride);
+    if (!baseUrl) {
+      return { ok: false, error: 'controller_missing' };
+    }
+    const tunBody = {};
+    if (Object.prototype.hasOwnProperty.call(partialTun, 'enable')) {
+      tunBody.enable = Boolean(partialTun.enable);
+    }
+    if (Object.prototype.hasOwnProperty.call(partialTun, 'stack') && partialTun.stack) {
+      tunBody.stack = String(partialTun.stack);
+    }
+    if (!Object.keys(tunBody).length) {
+      return { ok: false, error: 'invalid_tun' };
+    }
+    const headers = { 'Content-Type': 'application/json' };
+    if (secret) {
+      headers.Authorization = `Bearer ${secret}`;
+    }
+    const candidates = [
+      { method: 'PATCH', payload: { tun: tunBody } },
+      { method: 'PUT', payload: { tun: tunBody } },
+    ];
+    if (Object.prototype.hasOwnProperty.call(tunBody, 'enable')) {
+      const enabledBody = { ...tunBody, enabled: tunBody.enable };
+      delete enabledBody.enable;
+      candidates.push({ method: 'PATCH', payload: { tun: enabledBody } });
+      candidates.push({ method: 'PUT', payload: { tun: enabledBody } });
+    }
+    let lastError = { ok: false, error: 'request_failed' };
+    for (const candidate of candidates) {
+      const resp = await fetch(`${baseUrl}/configs`, {
+        method: candidate.method,
+        headers,
+        body: JSON.stringify(candidate.payload),
+      });
+      if (resp.ok) {
+        return { ok: true };
+      }
+      const details = (await resp.text().catch(() => '')) || `http_status=${resp.status}`;
+      lastError = { ok: false, error: 'request_failed', details };
+    }
+    return lastError;
+  } catch (error) {
+    return {
+      ok: false,
+      error: 'request_failed',
+      details: String((error && error.message) || error || 'request_failed'),
+    };
+  }
+}
+
+async function applyTunCommandUnified(commandArgs = [], options = {}) {
+  const args = Array.isArray(commandArgs) ? commandArgs : [];
+  const enableRaw = readArgValueFromList(args, '--enable');
+  const hasEnableTarget = enableRaw !== '';
+  const targetEnabled = hasEnableTarget ? parseEnableFlagValue(enableRaw) : null;
+  const configPath = readArgValueFromList(args, '--config') || getConfigPathFromSettings();
+  const controllerOverride = readArgValueFromList(args, '--controller');
+  const secretOverride = readArgValueFromList(args, '--secret');
+  const tunPatchPayload = buildTunPatchPayloadFromArgs(args);
+
+  let response = null;
+  if (Object.keys(tunPatchPayload).length > 0) {
+    const controllerApply = await applyTunViaControllerMain(
+      tunPatchPayload,
+      controllerOverride,
+      secretOverride,
+    );
+    if (controllerApply && controllerApply.ok) {
+      response = { ok: true, source: 'controller' };
+    }
+  }
+  if (!(response && response.ok)) {
+    response = await runBridgeWithAutoAuth('tun', args, options);
+  }
+  if (!(response && response.ok)) {
+    if (hasEnableTarget && targetEnabled !== null) {
+      const fallbackTunSnapshot = await readTunEnabledSnapshot(configPath, controllerOverride, secretOverride);
+      const fallbackSettings = readAppSettings();
+      const fallbackEnabled = fallbackTunSnapshot.ok
+        ? Boolean(fallbackTunSnapshot.enabled)
+        : Boolean(
+          fallbackSettings
+          && Object.prototype.hasOwnProperty.call(fallbackSettings, 'tun')
+            ? fallbackSettings.tun
+            : false
+        );
+      persistTunEnabledToSettings(fallbackEnabled);
+      patchTrayMenuNetworkState({ tunEnabled: fallbackEnabled });
+    }
+    return response;
+  }
+
+  if (!hasEnableTarget || targetEnabled === null) {
+    return response;
+  }
+
+  const tunSnapshot = await waitForTunEnabledState(
+    targetEnabled,
+    configPath,
+    3200,
+    220,
+    controllerOverride,
+    secretOverride,
+  );
+  let actualEnabled = tunSnapshot.ok
+    ? Boolean(tunSnapshot.enabled)
+    : targetEnabled;
+  let mismatch = tunSnapshot.ok && actualEnabled !== targetEnabled;
+  if (mismatch) {
+    await sleep(600);
+    const retrySnapshot = await readTunEnabledSnapshot(configPath, controllerOverride, secretOverride);
+    if (retrySnapshot.ok) {
+      actualEnabled = Boolean(retrySnapshot.enabled);
+      mismatch = actualEnabled !== targetEnabled;
+    }
+  }
+  persistTunEnabledToSettings(actualEnabled);
+  patchTrayMenuNetworkState({ tunEnabled: actualEnabled });
+  return {
+    ...response,
+    data: {
+      ...(response && response.data && typeof response.data === 'object' ? response.data : {}),
+      requestedEnabled: targetEnabled,
+      enabled: actualEnabled,
+      mismatched: Boolean(mismatch),
+    },
+  };
 }
 
 async function runTrayCommand(command, args = [], labels = TRAY_I18N.en, sudoPass = '') {
   let effectiveSudoPass = sudoPass || '';
   let result = await runBridgeWithAutoAuth(command, args, { sudoPass: effectiveSudoPass });
   if (!result || !result.ok) {
-    if (command === 'system-proxy-enable') {
-      const configPath = getConfigPathFromSettings();
-      const settings = readAppSettings();
-      const expectedPort = String(
-        settings && Object.prototype.hasOwnProperty.call(settings, 'port')
-          ? settings.port
-          : '',
-      ).trim();
-      const statusArgs = ['system-proxy-status', '--config', configPath];
-      if (expectedPort) {
-        statusArgs.push('--port', expectedPort);
-      }
-      const statusProbe = await runBridge(statusArgs, { sudoPass: effectiveSudoPass });
-      const actuallyEnabled = Boolean(
-        statusProbe
-        && statusProbe.ok
-        && statusProbe.data
-        && Object.prototype.hasOwnProperty.call(statusProbe.data, 'enabled')
-        && statusProbe.data.enabled,
-      );
-      if (actuallyEnabled) {
-        return { ok: true, sudoPass: effectiveSudoPass, recovered: true };
-      }
-    }
     if (result && result.error === 'sudo_required') {
       await dialog.showMessageBox({
         type: 'warning',
@@ -4170,7 +4375,7 @@ async function runTrayCommand(command, args = [], labels = TRAY_I18N.en, sudoPas
     });
     return { ok: false };
   }
-  return { ok: true, sudoPass: effectiveSudoPass };
+  return { ok: true, sudoPass: effectiveSudoPass, result };
 }
 
 async function confirmTrayRestart(labels) {
@@ -4584,6 +4789,7 @@ async function buildTrayMenuOnce() {
           label: labels.systemProxy || 'System Proxy',
           action: 'toggle-system-proxy',
           checked: networkTakeoverEnabled,
+          enabled: true,
           rightText: networkTakeoverEnabled ? 'On' : 'Off',
           iconKey: 'systemProxy',
         },
@@ -5035,58 +5241,53 @@ async function handleTrayMenuAction(action, payload = {}) {
       if (expectedPort) {
         proxyArgs.push('--port', expectedPort);
       }
+      const serviceHint = String(
+        trayMenuData
+        && trayMenuData.meta
+        && Object.prototype.hasOwnProperty.call(trayMenuData.meta, 'networkTakeoverService')
+          ? trayMenuData.meta.networkTakeoverService
+          : '',
+      ).trim();
+      if (serviceHint) {
+        proxyArgs.push('--service', serviceHint);
+      }
       const response = await runTrayCommand(command, proxyArgs, labels);
       if (response.ok) {
-        const statusSnapshot = await waitForSystemProxyEnabledState(targetEnabled, configPath);
-        const actualEnabled = statusSnapshot.ok
-          ? Boolean(statusSnapshot.enabled)
-          : targetEnabled;
+        let actualEnabled = resolveSystemProxyEnabledFromPayload(response.result);
+        if (actualEnabled === null) actualEnabled = targetEnabled;
         persistSystemProxyEnabledToSettings(actualEnabled);
         patchTrayMenuNetworkState({ systemProxyEnabled: actualEnabled });
       } else {
-        const statusSnapshot = await readSystemProxyEnabledSnapshot(configPath);
-        const fallbackEnabled = statusSnapshot.ok
-          ? Boolean(statusSnapshot.enabled)
-          : Boolean(
-            settings && Object.prototype.hasOwnProperty.call(settings, 'systemProxy')
-              ? settings.systemProxy
-              : false
-          );
+        const fallbackEnabled = Boolean(
+          settings && Object.prototype.hasOwnProperty.call(settings, 'systemProxy')
+            ? settings.systemProxy
+            : false
+        );
         persistSystemProxyEnabledToSettings(fallbackEnabled);
         patchTrayMenuNetworkState({ systemProxyEnabled: fallbackEnabled });
       }
-      await createTrayMenu().catch(() => {});
       emitTrayRefresh();
-      return { ok: true, submenu: 'network' };
+      return { ok: true, submenu: 'network', data: trayMenuData };
     }
     case 'toggle-tun': {
       const targetEnabled = Boolean(payload && payload.checked);
       const target = targetEnabled ? 'true' : 'false';
-      const response = await runTrayCommand('tun', ['--config', configPath, '--enable', target], labels);
-      if (response.ok) {
-        const tunSnapshot = await waitForTunEnabledState(targetEnabled, configPath);
-        const actualEnabled = tunSnapshot.ok
-          ? Boolean(tunSnapshot.enabled)
-          : targetEnabled;
-        persistTunEnabledToSettings(actualEnabled);
-        patchTrayMenuNetworkState({ tunEnabled: actualEnabled });
-      } else {
-        const fallbackTunSnapshot = await readTunEnabledSnapshot(configPath);
-        const fallbackSettings = readAppSettings();
-        const fallbackEnabled = fallbackTunSnapshot.ok
-          ? Boolean(fallbackTunSnapshot.enabled)
-          : Boolean(
-            fallbackSettings
-            && Object.prototype.hasOwnProperty.call(fallbackSettings, 'tun')
-              ? fallbackSettings.tun
-              : false
-          );
-        persistTunEnabledToSettings(fallbackEnabled);
-        patchTrayMenuNetworkState({ tunEnabled: fallbackEnabled });
+      const tunArgs = ['--config', configPath, '--enable', target, ...getControllerArgsFromSettings()];
+      const tunResult = await applyTunCommandUnified(tunArgs, {});
+      if (!(tunResult && tunResult.ok)) {
+        const message = (tunResult && (tunResult.details || tunResult.error || tunResult.message))
+          ? String(tunResult.details || tunResult.error || tunResult.message)
+          : 'Unknown error';
+        await dialog.showMessageBox({
+          type: 'error',
+          buttons: [labels.ok || 'OK'],
+          title: labels.errorTitle || 'Operation Failed',
+          message: `${labels.commandFailed || 'Command failed'}: tun`,
+          detail: message,
+        });
       }
-      await createTrayMenu().catch(() => {});
       emitTrayRefresh();
-      return { ok: true, submenu: 'network', data: trayMenuData };
+      return { ok: true, submenu: 'network', data: trayMenuData, result: tunResult };
     }
     case 'copy-shell-export': {
       const shellExportCommand = buildShellExportCommand(readAppSettings());
@@ -5751,7 +5952,11 @@ app.whenReady().then(() => {
   applyAppMenu();
 
   ipcMain.handle('clashfox:command', async (_event, command, args = [], options = {}) => {
-    const result = await runBridgeWithAutoAuth(command, args, options);
+    const cmd = String(command || '').trim();
+    const cmdArgs = Array.isArray(args) ? args : [];
+    const result = cmd === 'tun'
+      ? await applyTunCommandUnified(cmdArgs, options)
+      : await runBridgeWithAutoAuth(cmd, cmdArgs, options);
     if (result && result.ok && ['start', 'stop', 'restart', 'mode', 'tun', 'system-proxy-enable', 'system-proxy-disable'].includes(command)) {
       await createTrayMenu();
     }
@@ -5772,7 +5977,10 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:trayMenu:action', async (_event, action, payload = {}) => {
     const result = await handleTrayMenuAction(action, payload);
-    createTrayMenu().catch(() => {});
+    const skipRebuildActions = new Set(['toggle-system-proxy', 'toggle-tun']);
+    if (!skipRebuildActions.has(String(action || '').trim())) {
+      createTrayMenu().catch(() => {});
+    }
     return result || { ok: false };
   });
 

@@ -2153,6 +2153,7 @@ if (window.clashfox && typeof window.clashfox.onTrayRefresh === 'function') {
   window.clashfox.onTrayRefresh(async () => {
     await syncProxyModeFromFile();
     loadStatus();
+    loadTunStatus(false);
   });
 }
 
