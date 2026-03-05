@@ -15,6 +15,7 @@
   --icon: #d7dde8;
   --shadow: 0 14px 32px rgba(0, 0, 0, 0.35);
   --row-hover: rgba(244, 179, 74, 0.12);
+  --row-selected: rgba(244, 179, 74, 0.22);
   --header-status: #8ce0c6;
   --font-display: "Georgia", "Times New Roman", serif;
   --font-body: "Trebuchet MS", "Verdana", sans-serif;
@@ -213,6 +214,14 @@ body {
   border-color: rgba(244, 179, 74, 0.4);
 }
 
+.menu-row.selected {
+  background: var(--row-selected);
+}
+
+.menu-row.selected .menu-label {
+  color: #f2e5cb;
+}
+
 .menu-row.disabled {
   color: var(--muted);
 }
@@ -385,6 +394,7 @@ body {
     --icon: #273244;
     --shadow: 0 12px 30px rgba(31, 46, 60, 0.12);
     --row-hover: rgba(244, 179, 74, 0.16);
+    --row-selected: rgba(234, 162, 67, 0.22);
     --header-status: #2f8f78;
   }
 
@@ -399,5 +409,9 @@ body {
   .menu-badge.tone-neutral {
     background: rgba(107, 119, 141, 0.25);
     color: #2c3a52;
+  }
+
+  .menu-row.selected .menu-label {
+    color: #2f2410;
   }
 }

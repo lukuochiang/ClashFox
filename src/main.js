@@ -4476,6 +4476,7 @@ function openDashboardPanel() {
       title: 'ClashFox Dashboard',
       webPreferences: {
         contextIsolation: true,
+        devTools: false,
       },
     });
 
@@ -4485,6 +4486,16 @@ function openDashboardPanel() {
     dashboardWindow.on('blur', () => {
       if (dashboardWindow && !dashboardWindow.isDestroyed()) {
         dashboardWindow.setAlwaysOnTop(false);
+      }
+    });
+    dashboardWindow.webContents.on('before-input-event', (event, input) => {
+      const key = String(input.key || '').toLowerCase();
+      const isDevToolsCombo =
+        (input.control && input.shift && key === 'i') ||
+        (input.meta && input.alt && key === 'i') ||
+        key === 'f12';
+      if (isDevToolsCombo) {
+        event.preventDefault();
       }
     });
 

@@ -222,10 +222,14 @@ function makeRow(item) {
   const pending = NETWORK_TOGGLE_ACTIONS.has(actionName) && pendingActionSet.has(actionName);
   const isLoading = NETWORK_TOGGLE_ACTIONS.has(actionName) && loadingVisibleSet.has(actionName);
   const clickable = item.enabled !== false && !pending;
+  const checked = typeof item.checked === 'boolean' && item.checked;
   if (clickable) {
     row.classList.add('clickable');
   } else {
     row.classList.add('disabled');
+  }
+  if (checked) {
+    row.classList.add('selected');
   }
 
   const leadingParts = makeLeading(item, isLoading);
