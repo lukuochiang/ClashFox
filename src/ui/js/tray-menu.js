@@ -24,6 +24,8 @@ const TRAFFIC_HISTORY_POINTS = 520;
 const TRAFFIC_INTERVAL_MS = 1000;
 const OVERVIEW_INTERVAL_MS = 5000;
 const SETTINGS_CACHE_MS = 10000;
+const TRAFFIC_CACHE_KEY = 'clashfox.trayMenuTrafficCache.v1';
+const TRAFFIC_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 const trafficState = {
   trafficTimer: null,
   overviewTimer: null,
@@ -43,6 +45,65 @@ const trafficState = {
   settingsAt: 0,
   chartEnabled: true,
 };
+
+function persistTrafficCache() {
+  try {
+    localStorage.setItem(TRAFFIC_CACHE_KEY, JSON.stringify({
+      savedAt: Date.now(),
+      historyRx: trafficState.historyRx.slice(-TRAFFIC_HISTORY_POINTS),
+      historyTx: trafficState.historyTx.slice(-TRAFFIC_HISTORY_POINTS),
+      lastRateRx: trafficState.lastRateRx,
+      lastRateTx: trafficState.lastRateTx,
+      lastTotalRx: trafficState.lastTotalRx,
+      lastTotalTx: trafficState.lastTotalTx,
+      trafficRxBytes: trafficState.trafficRxBytes,
+      trafficTxBytes: trafficState.trafficTxBytes,
+      trafficAt: trafficState.trafficAt,
+      lastTrafficAt: trafficState.lastTrafficAt,
+    }));
+  } catch {
+    // ignore cache persistence failures
+  }
+}
+
+function restoreTrafficCache() {
+  try {
+    const raw = localStorage.getItem(TRAFFIC_CACHE_KEY);
+    if (!raw) {
+      return false;
+    }
+    const parsed = JSON.parse(raw);
+    const savedAt = Number(parsed && parsed.savedAt);
+    if (!Number.isFinite(savedAt) || (Date.now() - savedAt) > TRAFFIC_CACHE_MAX_AGE_MS) {
+      localStorage.removeItem(TRAFFIC_CACHE_KEY);
+      return false;
+    }
+    const historyRx = Array.isArray(parsed.historyRx) ? parsed.historyRx : [];
+    const historyTx = Array.isArray(parsed.historyTx) ? parsed.historyTx : [];
+    trafficState.historyRx = historyRx
+      .map((value) => Number.parseFloat(value))
+      .filter((value) => Number.isFinite(value) && value >= 0)
+      .slice(-TRAFFIC_HISTORY_POINTS);
+    trafficState.historyTx = historyTx
+      .map((value) => Number.parseFloat(value))
+      .filter((value) => Number.isFinite(value) && value >= 0)
+      .slice(-TRAFFIC_HISTORY_POINTS);
+    trafficState.lastRateRx = Number.isFinite(parsed.lastRateRx) ? parsed.lastRateRx : Number.parseFloat(parsed.lastRateRx);
+    trafficState.lastRateTx = Number.isFinite(parsed.lastRateTx) ? parsed.lastRateTx : Number.parseFloat(parsed.lastRateTx);
+    trafficState.lastTotalRx = Number.isFinite(parsed.lastTotalRx) ? parsed.lastTotalRx : Number.parseFloat(parsed.lastTotalRx);
+    trafficState.lastTotalTx = Number.isFinite(parsed.lastTotalTx) ? parsed.lastTotalTx : Number.parseFloat(parsed.lastTotalTx);
+    trafficState.trafficRxBytes = Number.isFinite(parsed.trafficRxBytes) ? parsed.trafficRxBytes : Number.parseFloat(parsed.trafficRxBytes);
+    trafficState.trafficTxBytes = Number.isFinite(parsed.trafficTxBytes) ? parsed.trafficTxBytes : Number.parseFloat(parsed.trafficTxBytes);
+    trafficState.trafficAt = Number.isFinite(parsed.trafficAt) ? parsed.trafficAt : Number.parseFloat(parsed.trafficAt);
+    trafficState.lastTrafficAt = Number.isFinite(parsed.lastTrafficAt) ? parsed.lastTrafficAt : Number.parseFloat(parsed.lastTrafficAt);
+    renderTrafficBars();
+    updateChartTimeLabels();
+    setOverlayLabels();
+    return trafficState.historyRx.length > 0 || trafficState.historyTx.length > 0;
+  } catch {
+    return false;
+  }
+}
 
 const ICON_SVGS = {
   showMain: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 9h16"/></svg>',
@@ -264,6 +325,7 @@ function resetTrafficChart() {
   if (chartBottomLabelEl) chartBottomLabelEl.textContent = '-';
   if (chartTopTotalEl) chartTopTotalEl.textContent = '-';
   if (chartBottomTotalEl) chartBottomTotalEl.textContent = '-';
+  persistTrafficCache();
 }
 
 function updateTrafficHistory(rxRate, txRate) {
@@ -279,6 +341,7 @@ function updateTrafficHistory(rxRate, txRate) {
   }
   renderTrafficBars();
   updateChartTimeLabels();
+  persistTrafficCache();
 }
 
 function updateProxyTraffic(downRate, upRate) {
@@ -292,6 +355,7 @@ function updateProxyTraffic(downRate, upRate) {
   trafficState.lastRateTx = up;
   setOverlayLabels();
   updateTrafficHistory(down, up);
+  persistTrafficCache();
 }
 
 function updateSystemTraffic(rxBytes, txBytes) {
@@ -304,6 +368,7 @@ function updateSystemTraffic(rxBytes, txBytes) {
   trafficState.lastTotalRx = rx;
   trafficState.lastTotalTx = tx;
   setOverlayLabels();
+  persistTrafficCache();
   if (trafficState.lastTrafficAt && (now - trafficState.lastTrafficAt) <= 1500) {
     return;
   }
@@ -798,7 +863,9 @@ function renderAll() {
 async function init() {
   ensureMenuAutoResize();
   if (chartEl) {
-    resetTrafficChart();
+    if (!restoreTrafficCache()) {
+      resetTrafficChart();
+    }
   }
   if (window.clashfox && typeof window.clashfox.onTrayMenuUpdate === 'function') {
     window.clashfox.onTrayMenuUpdate((payload) => {
@@ -845,9 +912,7 @@ async function init() {
 
   headerEl.addEventListener('mouseenter', hideSubmenu);
 
-  if (document.visibilityState === 'visible') {
-    startTrafficTimers();
-  }
+  startTrafficTimers();
 }
 
 window.addEventListener('keydown', (event) => {
@@ -872,9 +937,12 @@ document.addEventListener('visibilitychange', () => {
     blockClickUntil = Date.now() + 220;
     hideSubmenu();
     startTrafficTimers();
-    return;
   }
+});
+
+window.addEventListener('beforeunload', () => {
   stopTrafficTimers();
+  persistTrafficCache();
 });
 
 init();

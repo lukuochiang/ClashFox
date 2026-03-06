@@ -5513,6 +5513,7 @@ function ensureTrayMenuWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
       devTools: false,
+      backgroundThrottling: false,
     },
   });
   if (trayMenuWindow.setSkipTaskbar) {
@@ -5524,6 +5525,29 @@ function ensureTrayMenuWindow() {
   trayMenuWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   trayMenuWindow.setAlwaysOnTop(true, 'pop-up-menu');
   trayMenuRendererReady = false;
+  trayMenuWindow.webContents.on('before-input-event', (event, input) => {
+    const key = String(input.key || '').toLowerCase();
+    const isReloadCombo = (input.control || input.meta) && key === 'r';
+    const isReloadKey = key === 'f5';
+    const isDevToolsCombo =
+      (input.control && input.shift && key === 'i')
+      || (input.meta && input.alt && key === 'i')
+      || key === 'f12';
+    if (isReloadCombo || isReloadKey) {
+      event.preventDefault();
+      if (globalSettings.debugMode) {
+        try {
+          trayMenuWindow.webContents.reload();
+        } catch {
+          // ignore reload failures
+        }
+      }
+      return;
+    }
+    if (isDevToolsCombo && !globalSettings.debugMode) {
+      event.preventDefault();
+    }
+  });
   trayMenuWindow.loadFile(path.join(__dirname, 'ui', 'html', 'tray-menu.html'));
   trayMenuWindow.on('blur', () => {
     setTimeout(() => {
@@ -5697,6 +5721,7 @@ function computeTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, expl
   const trayBounds = tray.getBounds();
   const display = screen.getDisplayNearestPoint({ x: trayBounds.x, y: trayBounds.y });
   const area = display.workArea;
+  const screenBounds = display.bounds;
   const mainMenuWidth = 260;
   const popupWidth = Number.isFinite(explicitWidth)
     ? Math.max(mainMenuWidth, Math.round(explicitWidth))
@@ -5707,7 +5732,12 @@ function computeTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, expl
   const logoCenterX = 36;
   const desiredX = anchorX - logoCenterX;
   const x = Math.max(area.x + 8, Math.min(desiredX, area.x + area.width - popupWidth - 8));
-  const y = Math.max(area.y, Math.min(trayBounds.y + trayBounds.height, area.y + area.height - popupHeight - 8));
+  const trayBottomY = trayBounds.y + trayBounds.height;
+  const attachedY = process.platform === 'darwin'
+    ? trayBottomY - 10
+    : trayBottomY;
+  const minY = process.platform === 'darwin' ? screenBounds.y : area.y;
+  const y = Math.max(minY, Math.min(attachedY, area.y + area.height - popupHeight - 8));
   return {
     bounds: { x, y, width: popupWidth, height: popupHeight },
   };
@@ -5725,8 +5755,10 @@ function applyTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, preser
     const current = trayMenuWindow.getBounds();
     const display = screen.getDisplayNearestPoint({ x: current.x, y: current.y });
     const area = display.workArea;
+    const screenBounds = display.bounds;
+    const minY = process.platform === 'darwin' ? screenBounds.y : area.y + 8;
     const boundedX = Math.max(area.x + 8, Math.min(current.x, area.x + area.width - computed.bounds.width - 8));
-    const boundedY = Math.max(area.y + 8, Math.min(current.y, area.y + area.height - computed.bounds.height - 8));
+    const boundedY = Math.max(minY, Math.min(current.y, area.y + area.height - computed.bounds.height - 8));
     computed = {
       ...computed,
       bounds: {

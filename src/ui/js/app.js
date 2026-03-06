@@ -1147,7 +1147,25 @@ function applyCardIcons() {
     if (key === 'status.proxyMode') return 'var(--icon-outbound)';
     if (key === 'status.connLiveTitle') return 'var(--icon-connections)';
     if (key === 'status.trafficTitle') return 'var(--icon-clock)';
+    if (key === 'settings.appearance') return 'var(--icon-palette)';
+    if (key === 'settings.panelManager') return 'var(--icon-panels)';
+    if (key === 'settings.paths') return 'var(--icon-folders)';
     if (key === 'settings.proxyConfigTitle') return 'var(--icon-slider-h)';
+    if (key === 'settings.logs') return 'var(--icon-doc)';
+    return '';
+  };
+
+  const mapFillByI18nKey = (key) => {
+    if (!key) return '';
+    if (key === 'status.quick') return 'var(--icon-fill-config)';
+    if (key === 'status.proxyMode') return 'var(--icon-fill-dashboard)';
+    if (key === 'status.connLiveTitle') return 'var(--icon-fill-connections)';
+    if (key === 'status.trafficTitle') return 'var(--icon-fill-clock)';
+    if (key === 'settings.panelManager') return 'var(--icon-fill-overview)';
+    if (key === 'settings.paths') return 'var(--icon-fill-worldwide)';
+    if (key === 'settings.proxyConfigTitle') return 'var(--icon-fill-config)';
+    if (key === 'settings.logs') return 'var(--icon-fill-logs)';
+    if (key === 'settings.appearance') return 'var(--icon-fill-help)';
     return '';
   };
 
@@ -1184,6 +1202,24 @@ function applyCardIcons() {
     return 'var(--icon-gear)';
   };
 
+  const mapFill = (text) => {
+    const tname = (text || '').toLowerCase();
+    if (tname.includes('network history')) return 'var(--icon-fill-clock)';
+    if (tname.includes('running status')) return 'var(--icon-fill-dashboard)';
+    if (tname.includes('realtime connections') || tname.includes('real-time connections') || tname.includes('实时连接')) return 'var(--icon-fill-connections)';
+    if (tname.includes('privileged helper') || tname.includes('特权助手')) return 'var(--icon-fill-settings)';
+    if (tname.includes('panel manager')) return 'var(--icon-fill-overview)';
+    if (tname.includes('outbound mode')) return 'var(--icon-fill-dashboard)';
+    if (tname.includes('user data paths')) return 'var(--icon-fill-worldwide)';
+    if (tname.includes('appearance')) return 'var(--icon-fill-help)';
+    if (tname.includes('log')) return 'var(--icon-fill-logs)';
+    if (tname.includes('config')) return 'var(--icon-fill-config)';
+    if (tname.includes('quick') || tname.includes('action')) return 'var(--icon-fill-config)';
+    if (tname.includes('overview') || tname.includes('status')) return 'var(--icon-fill-overview)';
+    if (tname.includes('help')) return 'var(--icon-fill-help)';
+    return 'var(--icon-fill-default)';
+  };
+
   document.querySelectorAll('.card h3').forEach((h) => {
     h.classList.add('iconized');
 
@@ -1191,24 +1227,30 @@ function applyCardIcons() {
     if (explicitIcon) {
       const iconVar = explicitIcon.startsWith('var(') ? explicitIcon : `var(--icon-${explicitIcon})`;
       h.style.setProperty('--card-icon-mask', iconVar);
+      h.style.setProperty('--card-icon-fill', 'var(--icon-fill-list)');
       return;
     }
 
     // Respect explicit icon classes to avoid i18n text matching side effects.
     if (h.classList.contains('outbound-icon') || h.classList.contains('conn-live-icon') || h.classList.contains('quick-actions-icon')) {
       h.style.removeProperty('--card-icon-mask');
+      h.style.removeProperty('--card-icon-fill');
       return;
     }
 
     const iconByKey = mapIconByI18nKey(h.dataset.i18n || '');
+    const fillByKey = mapFillByI18nKey(h.dataset.i18n || '');
     if (iconByKey) {
       h.style.setProperty('--card-icon-mask', iconByKey);
+      if (fillByKey) h.style.setProperty('--card-icon-fill', fillByKey);
       return;
     }
 
     const text = h.textContent || '';
     const icon = mapIcon(text);
+    const fill = mapFill(text);
     h.style.setProperty('--card-icon-mask', icon);
+    h.style.setProperty('--card-icon-fill', fill);
   });
 }
 
@@ -5653,6 +5695,7 @@ function setHelperPrimaryAction(snapshot = {}) {
   } else {
     helperInstallBtn.textContent = ti('settings.helperInstall', 'Install');
   }
+  helperInstallBtn.dataset.helperAction = helperPrimaryAction;
   if (helperCheckUpdateBtn) {
     // Only show "Check updates" after helper is installed.
     helperCheckUpdateBtn.classList.toggle('is-hidden', !installed);

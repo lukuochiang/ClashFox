@@ -60,20 +60,20 @@
   --icon-external-link: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M14 5h5v5' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M10 14L19 5' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M19 13v5a1 1 0 0 1-1 1h-12a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
   --icon-outbound: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 7h8V4l6 5-6 5v-3H4V7Zm16 10H12v3l-6-5 6-5v3h8v4Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-connections: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='7' cy='12' r='3' fill='%23000'/%3E%3Ccircle cx='17' cy='7' r='3' fill='%23000'/%3E%3Ccircle cx='17' cy='17' r='3' fill='%23000'/%3E%3Cpath d='M9.8 10.8l4.4-2.6M9.8 13.2l4.4 2.6' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
-  --icon-fill-default: linear-gradient(135deg, #f4b34a 0%, #ff7a4a 100%);
-  --icon-fill-overview: linear-gradient(135deg, #5eb7ff 0%, #3c6cff 100%);
-  --icon-fill-kernel: linear-gradient(135deg, #ffbe5c 0%, #ff7a4a 100%);
-  --icon-fill-config: linear-gradient(135deg, #5ed9c8 0%, #2aa79f 100%);
-  --icon-fill-logs: linear-gradient(135deg, #a78bfa 0%, #5b7cff 100%);
-  --icon-fill-dashboard: linear-gradient(135deg, #34d399 0%, #1d9bf0 100%);
-  --icon-fill-worldwide: linear-gradient(135deg, #22c55e 0%, #3b82f6 100%);
-  --icon-fill-settings: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
-  --icon-fill-help: linear-gradient(135deg, #fb7185 0%, #8b5cf6 100%);
-  --icon-fill-list: linear-gradient(135deg, #60a5fa 0%, #22c55e 100%);
-  --icon-fill-current: linear-gradient(135deg, #22c55e 0%, #14b8a6 100%);
-  --icon-fill-connections: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
-  --icon-fill-clock: linear-gradient(135deg, #f59e0b 0%, #fb7185 100%);
-  --icon-fill-shield: linear-gradient(135deg, #fbbf24 0%, #f97316 100%);
+  --icon-fill-default: linear-gradient(135deg, #ffbf47 0%, #ff8f57 100%);
+  --icon-fill-overview: linear-gradient(135deg, #6fd3ff 0%, #4f86ff 100%);
+  --icon-fill-kernel: linear-gradient(135deg, #ffc85a 0%, #ff9452 100%);
+  --icon-fill-config: linear-gradient(135deg, #6fe7d2 0%, #3ec7b4 100%);
+  --icon-fill-logs: linear-gradient(135deg, #c28fff 0%, #6f8cff 100%);
+  --icon-fill-dashboard: linear-gradient(135deg, #61e6bb 0%, #41b8ff 100%);
+  --icon-fill-worldwide: linear-gradient(135deg, #58de9c 0%, #59a3ff 100%);
+  --icon-fill-settings: linear-gradient(135deg, #ffbe55 0%, #ff7d5c 100%);
+  --icon-fill-help: linear-gradient(135deg, #ff8fb1 0%, #9b7bff 100%);
+  --icon-fill-list: linear-gradient(135deg, #73c4ff 0%, #56d98d 100%);
+  --icon-fill-current: linear-gradient(135deg, #52e59b 0%, #34d3c7 100%);
+  --icon-fill-connections: linear-gradient(135deg, #5fd5ff 0%, #8b8cff 100%);
+  --icon-fill-clock: linear-gradient(135deg, #ffbf54 0%, #ff8cab 100%);
+  --icon-fill-shield: linear-gradient(135deg, #ffd05c 0%, #ff9858 100%);
 }
 
 body[data-theme="night"], html[data-theme="night"] body {
@@ -1893,6 +1893,49 @@ body[data-theme="day"] .history-axis {
   flex-wrap: wrap;
 }
 
+.helper-card-actions .btn {
+  min-height: 38px;
+  border-radius: 12px;
+}
+
+#helperInstallBtn[data-helper-action="install"] {
+  background: linear-gradient(135deg, rgba(243, 221, 191, 0.99), rgba(229, 192, 152, 0.96));
+  border-color: rgba(207, 156, 102, 0.78);
+  color: #653a18;
+  box-shadow: 0 16px 30px rgba(155, 103, 56, 0.16), inset 0 1px 0 rgba(255, 250, 242, 0.54);
+}
+
+#helperInstallBtn[data-helper-action="update"] {
+  background: linear-gradient(135deg, rgba(245, 229, 205, 0.98), rgba(236, 207, 174, 0.94));
+  border-color: rgba(215, 166, 112, 0.66);
+  color: #6b4320;
+  box-shadow: 0 14px 26px rgba(166, 113, 62, 0.14), inset 0 1px 0 rgba(255, 250, 242, 0.5);
+}
+
+#helperInstallBtn[data-helper-action="uninstall"] {
+  background: linear-gradient(135deg, rgba(244, 234, 226, 0.98), rgba(235, 217, 205, 0.94));
+  border-color: rgba(201, 163, 138, 0.58);
+  color: #7a4c32;
+  box-shadow: 0 10px 20px rgba(145, 102, 71, 0.1), inset 0 1px 0 rgba(255, 251, 247, 0.46);
+}
+
+#helperRepairBtn,
+#helperRefreshBtn,
+#helperLogsOpenBtn {
+  background: linear-gradient(180deg, rgba(250, 246, 240, 0.98), rgba(240, 232, 222, 0.94));
+  border-color: rgba(199, 178, 153, 0.48);
+  color: #6d5642;
+  box-shadow: 0 8px 16px rgba(116, 89, 62, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+#helperRepairBtn:hover,
+#helperRefreshBtn:hover,
+#helperLogsOpenBtn:hover {
+  background: linear-gradient(180deg, rgba(252, 248, 242, 1), rgba(243, 235, 226, 0.98));
+  border-color: rgba(212, 184, 153, 0.58);
+  box-shadow: 0 12px 20px rgba(126, 95, 66, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.76);
+}
+
 .helper-card-meta {
   margin: 0;
   font-size: 12px;
@@ -2003,6 +2046,26 @@ body[data-theme="day"] .paths-input::placeholder {
   margin: 0;
 }
 
+.quick-actions-card > .card-header-row,
+.outbound-card > .card-header-row {
+  height: 34px;
+  min-height: 34px;
+  margin-bottom: 10px;
+}
+
+.quick-actions-card > .card-header-row > h3,
+.outbound-card > .card-header-row > h3 {
+  height: 34px;
+  min-height: 34px;
+  line-height: 1;
+  padding: 0;
+}
+
+.quick-actions-card > .card-header-row > .overview-drag-handle,
+.outbound-card > .card-header-row > .overview-drag-handle {
+  align-self: center;
+}
+
 .quick-group {
   position: relative;
   border: 1px solid rgba(148, 171, 197, 0.2);
@@ -2040,15 +2103,56 @@ body[data-theme="day"] .quick-group {
 
 .quick-actions-buttons .btn {
   width: 100%;
-  min-height: 40px;
-  padding-top: 8px;
-  padding-bottom: 8px;
+  min-height: 42px;
+  padding-top: 9px;
+  padding-bottom: 9px;
   border-radius: 14px;
   font-size: 14px;
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
+  box-shadow: 0 8px 18px rgba(16, 24, 36, 0.08);
+}
+
+.quick-actions-buttons #startBtn {
+  background: linear-gradient(135deg, rgba(243, 221, 191, 0.99), rgba(229, 192, 152, 0.96));
+  border-color: rgba(207, 156, 102, 0.78);
+  color: #653a18;
+  box-shadow: 0 18px 34px rgba(155, 103, 56, 0.18), inset 0 1px 0 rgba(255, 250, 242, 0.54);
+}
+
+.quick-actions-buttons #stopBtn {
+  background: linear-gradient(135deg, rgba(248, 244, 239, 0.97), rgba(239, 232, 224, 0.94));
+  border-color: rgba(193, 177, 157, 0.42);
+  color: #7a6655;
+  box-shadow: 0 6px 14px rgba(118, 91, 67, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+}
+
+.quick-actions-buttons #restartBtn {
+  background: linear-gradient(135deg, rgba(246, 239, 229, 0.97), rgba(239, 228, 211, 0.94));
+  border-color: rgba(202, 176, 144, 0.46);
+  color: #775940;
+  box-shadow: 0 8px 16px rgba(140, 104, 67, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+}
+
+.quick-actions-buttons #startBtn:hover {
+  background: linear-gradient(135deg, rgba(246, 227, 201, 1), rgba(234, 199, 163, 0.98));
+  border-color: rgba(214, 162, 107, 0.86);
+  box-shadow: 0 20px 36px rgba(155, 103, 56, 0.22);
+}
+
+.quick-actions-buttons #stopBtn:hover {
+  background: linear-gradient(135deg, rgba(250, 246, 241, 1), rgba(241, 234, 226, 0.98));
+  border-color: rgba(198, 181, 160, 0.52);
+  box-shadow: 0 10px 18px rgba(118, 91, 67, 0.06);
+}
+
+.quick-actions-buttons #restartBtn:hover {
+  background: linear-gradient(135deg, rgba(248, 241, 231, 1), rgba(241, 230, 214, 0.98));
+  border-color: rgba(205, 179, 148, 0.56);
+  box-shadow: 0 10px 18px rgba(140, 104, 67, 0.08);
 }
 
 .quick-controls-grid {
@@ -2086,17 +2190,17 @@ body[data-theme="day"] .quick-group {
 }
 
 .quick-tun-row .toggle-pill {
-  width: 34px;
-  height: 18px;
+  width: 36px;
+  height: 20px;
 }
 
 .quick-tun-row .toggle-pill::after {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .quick-tun-row .toggle input:checked + .toggle-pill::after {
-  left: 17px;
+  left: 18px;
 }
 
 .quick-stack-row {
@@ -2139,9 +2243,9 @@ body[data-theme="day"] .quick-group {
   font-weight: 600;
   line-height: 1.2;
   border-radius: 12px;
-  border: 1px solid var(--border);
-  box-shadow: none;
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(148, 171, 197, 0.24);
+  box-shadow: 0 6px 16px rgba(16, 24, 36, 0.06);
+  background: rgba(255, 255, 255, 0.08);
   min-height: 32px;
 }
 
@@ -2158,9 +2262,9 @@ body[data-theme="day"] .quick-stack-row select {
 }
 
 body[data-theme="day"] .quick-stack-row .cf-select-trigger {
-  border: 1px solid var(--border);
-  box-shadow: none;
-  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(166, 182, 201, 0.52);
+  box-shadow: 0 8px 18px rgba(24, 33, 44, 0.06);
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .mode-row {
@@ -2269,7 +2373,7 @@ body[data-theme="day"] .conn-live-chart {
 .outbound-body {
   display: grid;
   gap: 8px;
-  margin-top: 2px;
+  margin-top: 0;
 }
 
 .outbound-body .mode-label {
@@ -2284,7 +2388,7 @@ body[data-theme="day"] .conn-live-chart {
 .outbound-options {
   display: grid;
   grid-template-columns: 1fr;
-  /*gap: 8px;*/
+  gap: 8px;
   border: none;
   background: transparent;
 }
@@ -2294,15 +2398,15 @@ body[data-theme="day"] .conn-live-chart {
   align-items: flex-start;
   gap: 10px;
   padding: 10px 14px 10px 28px;
-  border: 1px solid rgba(126, 156, 190, 0.24);
+  border: 1px solid rgba(146, 172, 203, 0.26);
   border-radius: 12px;
-  background: rgba(22, 32, 46, 0.58);
+  background: linear-gradient(180deg, rgba(28, 39, 55, 0.54), rgba(21, 31, 44, 0.5));
   color: rgba(233, 238, 243, 0.86);
   cursor: pointer;
   user-select: none;
   position: relative;
   overflow: hidden;
-  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .radio-pill input[type="radio"] {
@@ -2312,25 +2416,28 @@ body[data-theme="day"] .conn-live-chart {
 }
 
 .radio-pill:has(input[type="radio"]:checked) {
-  background: linear-gradient(135deg, rgba(244, 179, 74, 0.5), rgba(255, 122, 74, 0.48));
-  border-color: rgba(244, 179, 74, 0.4);
-  box-shadow: 0 6px 14px rgba(96, 58, 24, 0.12);
-  color: #2a1a0f;
+  background: linear-gradient(135deg, rgba(245, 229, 208, 0.92), rgba(236, 214, 188, 0.88));
+  border-color: rgba(223, 175, 120, 0.52);
+  box-shadow: 0 8px 20px rgba(146, 87, 38, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.34);
+  color: #4b2d16;
 }
 
 body[data-theme="night"] .radio-pill:not(:has(input[type="radio"]:checked)):hover {
-  background: rgba(30, 43, 61, 0.74);
+  background: linear-gradient(135deg, rgba(96, 74, 52, 0.4), rgba(132, 95, 68, 0.34));
+  border-color: rgba(226, 176, 122, 0.34);
+  box-shadow: 0 8px 18px rgba(33, 21, 12, 0.12);
 }
 
 .radio-pill::before {
   content: "";
   position: absolute;
   left: 12px;
-  top: 15px;
-  width: 8px;
-  height: 8px;
+  top: 14px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(212, 197, 180, 0.96);
+  box-shadow: 0 0 0 3px rgba(201, 177, 149, 0.22);
 }
 
 .radio-pill:has(input[type="radio"]:checked)::before {
@@ -2339,12 +2446,13 @@ body[data-theme="night"] .radio-pill:not(:has(input[type="radio"]:checked)):hove
   height: auto;
   border-radius: 0;
   background: transparent;
-  color: #2a1a0f;
+  color: #7a4a22;
   font-size: 14px;
   font-weight: 700;
   line-height: 1;
-  top: 13px;
+  top: 12px;
   left: 11px;
+  box-shadow: none;
 }
 
 .radio-copy {
@@ -2366,23 +2474,34 @@ body[data-theme="night"] .radio-pill:not(:has(input[type="radio"]:checked)):hove
 
 body[data-theme="day"] .radio-pill {
   color: #1f2a36;
-  background: rgba(248, 252, 255, 0.95);
-  border-color: rgba(96, 113, 133, 0.22);
+  background: linear-gradient(180deg, rgba(251, 253, 255, 0.98), rgba(243, 248, 253, 0.96));
+  border-color: rgba(166, 183, 203, 0.46);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 body[data-theme="day"] .radio-pill:has(input[type="radio"]:checked) {
-  background: linear-gradient(135deg, rgba(244, 179, 74, 0.46), rgba(255, 122, 74, 0.42));
-  border-color: rgba(244, 179, 74, 0.38);
-  box-shadow: 0 4px 12px rgba(131, 83, 35, 0.12);
-  color: #2a1a0f;
+  background: linear-gradient(135deg, rgba(247, 233, 214, 1), rgba(240, 219, 194, 0.98));
+  border-color: rgba(225, 178, 123, 0.58);
+  box-shadow: 0 10px 22px rgba(180, 122, 61, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.68);
+  color: #4b2d16;
 }
 
 body[data-theme="day"] .radio-pill:not(:has(input[type="radio"]:checked)):hover {
-  background: rgba(228, 234, 242, 0.96);
+  background: linear-gradient(135deg, rgba(250, 239, 224, 0.98), rgba(245, 231, 214, 0.96));
+  border-color: rgba(236, 185, 127, 0.54);
+  box-shadow: 0 8px 18px rgba(156, 108, 62, 0.08);
 }
 
 body[data-theme="day"] .radio-title {
   color: #1f2a36;
+}
+
+body[data-theme="day"] .radio-pill:has(input[type="radio"]:checked) .radio-title {
+  color: #6c4220;
+}
+
+body[data-theme="day"] .radio-pill:has(input[type="radio"]:checked) .radio-hint {
+  color: rgba(113, 77, 47, 0.82);
 }
 
 body[data-theme="day"] .radio-hint {
@@ -2390,11 +2509,12 @@ body[data-theme="day"] .radio-hint {
 }
 
 body[data-theme="day"] .radio-pill::before {
-  background: rgba(96, 113, 133, 0.35);
+  background: rgba(205, 187, 167, 0.96);
+  box-shadow: 0 0 0 3px rgba(221, 203, 180, 0.38);
 }
 
 body[data-theme="day"] .radio-pill:has(input[type="radio"]:checked)::before {
-  color: #1f2a36;
+  color: #7a4a22;
 }
 
 .radio-pill:has(input[type="radio"]:checked)::after {
@@ -2673,14 +2793,15 @@ body[data-page="kernel"] #kernel.panel .pagination {
 }
 
 .btn {
-  background: rgba(148, 171, 197, 0.15);
-  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(148, 171, 197, 0.12));
+  border: 1px solid rgba(148, 171, 197, 0.26);
   color: var(--ink);
   padding: 10px 16px;
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
   font-size: 14px;
+  box-shadow: 0 8px 18px rgba(12, 18, 28, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .btn.has-tip {
@@ -2755,16 +2876,18 @@ body[data-theme="day"] .btn.has-tip::before {
 }
 
 .btn:hover {
-  border-color: rgba(244, 179, 74, 0.5);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(148, 171, 197, 0.18));
+  border-color: rgba(115, 187, 255, 0.42);
+  box-shadow: 0 12px 24px rgba(21, 44, 72, 0.12);
   transform: translateY(-1px);
 }
 
 .btn.primary {
-  background: var(--active-strong-bg);
-  border-color: var(--active-strong-border);
+  background: linear-gradient(135deg, rgba(255, 218, 151, 0.95), rgba(255, 154, 108, 0.92));
+  border-color: rgba(255, 185, 94, 0.58);
   color: var(--active-strong-ink);
   font-weight: 600;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  box-shadow: 0 14px 28px rgba(182, 119, 58, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 .btn.ghost {
@@ -2782,6 +2905,41 @@ body[data-theme="day"] .btn.has-tip::before {
 .btn.danger {
   background: rgba(255, 122, 74, 0.2);
   border-color: rgba(255, 122, 74, 0.5);
+}
+
+body[data-theme="day"] .btn {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(240, 245, 251, 0.92));
+  border-color: rgba(166, 183, 203, 0.52);
+  box-shadow: 0 10px 22px rgba(24, 33, 44, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+body[data-theme="day"] .btn:hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(235, 243, 250, 0.96));
+  border-color: rgba(122, 186, 243, 0.56);
+  box-shadow: 0 14px 28px rgba(38, 74, 116, 0.1);
+}
+
+body[data-theme="day"] .btn.primary {
+  background: linear-gradient(135deg, rgba(255, 221, 162, 0.98), rgba(255, 166, 122, 0.94));
+  border-color: rgba(255, 183, 95, 0.6);
+}
+
+body[data-theme="day"] .quick-actions-buttons #startBtn {
+  background: linear-gradient(135deg, rgba(244, 223, 195, 1), rgba(231, 196, 158, 0.97));
+  border-color: rgba(208, 157, 103, 0.74);
+  color: #663b18;
+}
+
+body[data-theme="day"] .quick-actions-buttons #stopBtn {
+  background: linear-gradient(135deg, rgba(249, 246, 242, 1), rgba(240, 234, 226, 0.99));
+  border-color: rgba(194, 179, 159, 0.44);
+  color: #7a6655;
+}
+
+body[data-theme="day"] .quick-actions-buttons #restartBtn {
+  background: linear-gradient(135deg, rgba(247, 241, 232, 1), rgba(240, 229, 213, 0.99));
+  border-color: rgba(202, 178, 148, 0.48);
+  color: #775940;
 }
 
 .form-row {
@@ -2822,7 +2980,7 @@ body[data-page="settings"] .paths-value {
 input,
 select {
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border);
+  border: 1px solid rgba(175, 159, 138, 0.28);
   color: var(--ink);
   padding: 10px 12px;
   border-radius: 10px;
@@ -2849,8 +3007,8 @@ select {
 
 .cf-select-trigger {
   width: 100%;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(181, 163, 141, 0.28);
   color: var(--ink);
   padding: 10px 12px;
   border-radius: 10px;
@@ -2863,6 +3021,8 @@ select {
   cursor: pointer;
   text-align: left;
   font: inherit;
+  box-shadow: 0 6px 16px rgba(16, 24, 36, 0.05);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, transform 0.18s ease;
 }
 
 .cf-select-value {
@@ -2892,6 +3052,13 @@ select {
 
 .cf-select.is-open .cf-select-arrow {
   transform: rotate(180deg);
+}
+
+.cf-select-trigger:hover,
+.cf-select.is-open .cf-select-trigger {
+  border-color: rgba(226, 178, 123, 0.5);
+  box-shadow: 0 10px 24px rgba(155, 107, 61, 0.1);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .cf-select.is-disabled .cf-select-trigger {
@@ -2930,12 +3097,12 @@ select {
 .cf-select-option:hover,
 .cf-select-option:focus-visible {
   outline: none;
-  background: rgba(244, 179, 74, 0.14);
+  background: rgba(111, 211, 255, 0.14);
 }
 
 .cf-select-option.is-selected {
-  background: rgba(244, 179, 74, 0.2);
-  color: #ffd18d;
+  background: linear-gradient(135deg, rgba(255, 210, 131, 0.28), rgba(255, 151, 103, 0.2));
+  color: #ffe4b5;
 }
 
 .cf-select-option:disabled {
@@ -2945,13 +3112,24 @@ select {
 
 body[data-theme="day"] input,
 body[data-theme="day"] select {
-  background: rgba(255, 255, 255, 0.75);
+  background: linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(247, 241, 233, 0.94));
   color: var(--ink);
+  border-color: rgba(204, 181, 153, 0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 body[data-theme="day"] .cf-select-trigger {
-  background: rgba(255, 255, 255, 0.75);
+  background: linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(247, 241, 233, 0.94));
   color: var(--ink);
+  border-color: rgba(204, 181, 153, 0.5);
+  box-shadow: 0 8px 18px rgba(112, 82, 51, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+body[data-theme="day"] .cf-select-trigger:hover,
+body[data-theme="day"] .cf-select.is-open .cf-select-trigger {
+  background: linear-gradient(180deg, rgba(255, 248, 240, 1), rgba(249, 239, 228, 0.98));
+  border-color: rgba(228, 183, 129, 0.58);
+  box-shadow: 0 10px 22px rgba(156, 109, 65, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.86);
 }
 
 body[data-theme="day"] .cf-select-menu {
@@ -2960,7 +3138,7 @@ body[data-theme="day"] .cf-select-menu {
 }
 
 body[data-theme="day"] .cf-select-option.is-selected {
-  background: rgba(255, 177, 91, 0.24);
+  background: linear-gradient(135deg, rgba(255, 213, 141, 0.42), rgba(255, 169, 121, 0.34));
   color: #6b3b00;
 }
 
@@ -3059,37 +3237,38 @@ body[data-page="settings"] .proxy-config-columns .form-row > label:first-child {
 }
 
 .toggle-pill {
-  width: 38px;
-  height: 20px;
+  width: 36px;
+  height: 18px;
   border-radius: 999px;
-  background: rgba(148, 171, 197, 0.28);
-  border: 1px solid rgba(96, 113, 133, 0.45);
+  background: linear-gradient(180deg, rgba(228, 219, 208, 0.42), rgba(213, 199, 181, 0.34));
+  border: 1px solid rgba(191, 171, 148, 0.3);
   position: relative;
   transition: all 0.2s ease;
-  box-shadow: inset 0 0 0 1px rgba(15, 21, 29, 0.08);
+  box-shadow: inset 0 1px 1px rgba(255, 251, 246, 0.32), 0 2px 6px rgba(93, 66, 37, 0.04);
 }
 
 .toggle-pill::after {
   content: "";
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: #f7fafc;
+  background: linear-gradient(180deg, #ffffff 0%, #edf3f9 100%);
   position: absolute;
   top: 1px;
   left: 1px;
   transition: all 0.2s ease;
-  box-shadow: 0 1px 2px rgba(15, 21, 29, 0.2);
+  box-shadow: 0 1px 4px rgba(72, 50, 28, 0.12);
 }
 
 .toggle input:checked + .toggle-pill {
-  background: rgba(244, 179, 74, 0.3);
-  border-color: rgba(244, 179, 74, 0.5);
+  background: linear-gradient(135deg, rgba(235, 207, 175, 0.84), rgba(224, 185, 139, 0.8));
+  border-color: rgba(206, 160, 108, 0.48);
+  box-shadow: inset 0 1px 0 rgba(255, 250, 242, 0.2), 0 4px 10px rgba(166, 118, 67, 0.08);
 }
 
 .toggle input:checked + .toggle-pill::after {
   left: 19px;
-  background: #1a0f07;
+  background: linear-gradient(180deg, #5b3520 0%, #3f2416 100%);
 }
 
 body[data-theme="day"] .toggle {
@@ -3097,14 +3276,14 @@ body[data-theme="day"] .toggle {
 }
 
 body[data-theme="day"] .toggle-pill {
-  background: rgba(96, 113, 133, 0.2);
-  border-color: rgba(96, 113, 133, 0.4);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+  background: linear-gradient(180deg, rgba(232, 223, 213, 0.62), rgba(219, 205, 188, 0.54));
+  border-color: rgba(195, 175, 151, 0.34);
+  box-shadow: inset 0 1px 0 rgba(255, 252, 247, 0.74), 0 2px 8px rgba(98, 70, 43, 0.04);
 }
 
 body[data-theme="day"] .toggle-pill::after {
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(31, 46, 60, 0.2);
+  background: linear-gradient(180deg, #ffffff 0%, #eef3f8 100%);
+  box-shadow: 0 1px 4px rgba(31, 46, 60, 0.14);
 }
 
 .hint {
