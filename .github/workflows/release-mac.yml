@@ -16,11 +16,6 @@ on:
       tag:
         description: "Tag to build (e.g. v1.2.3 or v1.2.3-beta.1). Empty = current ref"
         required: false
-      with_helper:
-        description: "Build and package helper"
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: write
@@ -62,18 +57,12 @@ jobs:
           VERSION="${INPUT_TAG#v}"
           RELEASE_NAME="ClashFox ${VERSION}"
 
-          WITH_HELPER="false"
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.with_helper }}" == "true" ]]; then
-            WITH_HELPER="true"
-          fi
-
           echo "input_tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
           echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
           echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "update_channel=$UPDATE_CHANNEL" >> "$GITHUB_OUTPUT"
-          echo "with_helper=$WITH_HELPER" >> "$GITHUB_OUTPUT"
 
       - name: Checkout source
         uses: actions/checkout@v4
@@ -94,8 +83,12 @@ jobs:
         shell: bash
         run: npm version "${{ steps.meta.outputs.version }}" --no-git-tag-version
 
-      - name: Normalize artifact name (no buildNumber suffix)
+      - name: Build standard mac packages
         shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          UPDATE_CHANNEL: ${{ steps.meta.outputs.update_channel }}
+          ARTIFACT_NAME: ${{ '${productName}-${version}-mac-${arch}.${ext}' }}
         run: |
           set -euo pipefail
           node -e '
@@ -104,24 +97,31 @@ jobs:
             const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
             pkg.build = pkg.build || {};
             pkg.build.mac = pkg.build.mac || {};
-            pkg.build.mac.artifactName = "${productName}-${version}-mac-${arch}.${ext}";
+            pkg.build.mac.artifactName = process.env.ARTIFACT_NAME;
             fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
           '
+          export UPDATE_CHANNEL
+          npm run build:mac
 
-      - name: Build mac packages
+      - name: Build helper mac packages
+        shell: bash
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           UPDATE_CHANNEL: ${{ steps.meta.outputs.update_channel }}
-        shell: bash
+          ARTIFACT_NAME: ${{ '${productName}-${version}-mac-${arch}-helper.${ext}' }}
         run: |
           set -euo pipefail
+          node -e '
+            const fs = require("fs");
+            const pkgPath = "package.json";
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+            pkg.build = pkg.build || {};
+            pkg.build.mac = pkg.build.mac || {};
+            pkg.build.mac.artifactName = process.env.ARTIFACT_NAME;
+            fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+          '
           export UPDATE_CHANNEL
-
-          if [[ "${{ steps.meta.outputs.with_helper }}" == "true" ]]; then
-            npm run build:mac:helper
-          else
-            npm run build:mac
-          fi
+          npm run build:mac:helper
 
       - name: Prepare artifacts
         shell: bash

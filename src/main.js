@@ -35,15 +35,16 @@ function ensureAppDirs() {
 
 function getBridgePath() {
   const candidates = [
-    path.join(ROOT_DIR, 'scripts', 'gui_bridge.sh'),
+    path.join(ROOT_DIR, 'static', 'scripts', 'gui_bridge.sh'),
     path.join(process.resourcesPath || '', 'scripts', 'gui_bridge.sh'),
+    path.join(ROOT_DIR, 'scripts', 'gui_bridge.sh'),
   ];
   for (const candidate of candidates) {
     if (candidate && fs.existsSync(candidate)) {
       return candidate;
     }
   }
-  return path.join(ROOT_DIR, 'scripts', 'gui_bridge.sh');
+  return path.join(ROOT_DIR, 'static', 'scripts', 'gui_bridge.sh');
 }
 let mainWindow = null;
 let tray = null;
@@ -2045,6 +2046,7 @@ function resolveHelperInstallScriptPath() {
   const candidates = [
     path.join(HELPER_APP_BUNDLE_DIR, 'install-helper.sh'),
     path.join(process.resourcesPath || '', 'helper', 'install-helper.sh'),
+    path.join(APP_PATH, 'static', 'helper', 'install-helper.sh'),
     path.join(APP_PATH, 'helper', 'install-helper.sh'),
   ];
   for (const candidate of candidates) {
@@ -2059,6 +2061,7 @@ function resolveHelperUninstallScriptPath() {
   const candidates = [
     path.join(HELPER_APP_BUNDLE_DIR, 'uninstall-helper.sh'),
     path.join(process.resourcesPath || '', 'helper', 'uninstall-helper.sh'),
+    path.join(APP_PATH, 'static', 'helper', 'uninstall-helper.sh'),
     path.join(APP_PATH, 'helper', 'uninstall-helper.sh'),
   ];
   for (const candidate of candidates) {
@@ -2073,6 +2076,7 @@ function resolveHelperDoctorScriptPath() {
   const candidates = [
     path.join(HELPER_APP_BUNDLE_DIR, 'doctor-helper.sh'),
     path.join(process.resourcesPath || '', 'helper', 'doctor-helper.sh'),
+    path.join(APP_PATH, 'static', 'helper', 'doctor-helper.sh'),
     path.join(APP_PATH, 'helper', 'doctor-helper.sh'),
   ];
   for (const candidate of candidates) {
@@ -2245,6 +2249,7 @@ function readInstalledHelperVersion(paths = getHelperPaths()) {
 function readBundledHelperVersion() {
   const candidates = [
     path.join(process.resourcesPath || '', 'helper', 'com.clashfox.helper'),
+    path.join(APP_PATH, 'static', 'helper', 'com.clashfox.helper'),
     path.join(APP_PATH, 'helper', 'com.clashfox.helper'),
   ];
   for (const candidate of candidates) {
@@ -4665,12 +4670,18 @@ function resolveWorldwideMmdbPath(fileName = '') {
   const candidates = app.isPackaged
     ? [
       path.join(process.resourcesPath || '', name),
+      path.join(process.resourcesPath || '', 'geoip', name),
+      path.join(APP_PATH, 'static', 'geoip', name),
       path.join(APP_PATH, 'static', name),
+      path.join(ROOT_DIR, 'static', 'geoip', name),
       path.join(ROOT_DIR, 'static', name),
     ]
     : [
+      path.join(ROOT_DIR, 'static', 'geoip', name),
       path.join(ROOT_DIR, 'static', name),
+      path.join(APP_PATH, 'static', 'geoip', name),
       path.join(APP_PATH, 'static', name),
+      path.join(process.resourcesPath || '', 'geoip', name),
       path.join(process.resourcesPath || '', name),
     ];
   return candidates.find((candidate) => candidate && fs.existsSync(candidate)) || '';
