@@ -17,6 +17,10 @@
   --row-hover: rgba(244, 179, 74, 0.12);
   --row-selected: rgba(244, 179, 74, 0.22);
   --header-status: #8ce0c6;
+  --chart-down: #32a0ff;
+  --chart-down-glow: rgba(50, 160, 255, 0.2);
+  --chart-up: #d96bff;
+  --chart-up-glow: rgba(217, 107, 255, 0.2);
   --font-display: "Georgia", "Times New Roman", serif;
   --font-body: "Trebuchet MS", "Verdana", sans-serif;
 }
@@ -35,7 +39,7 @@ body {
 .tray-stage {
   position: relative;
   width: 100%;
-  min-height: 200px;
+  min-height: 0;
   padding: 0;
 }
 
@@ -182,6 +186,94 @@ body {
 
 .menu-header-status.neutral {
   color: var(--muted);
+}
+
+.menu-chart {
+  padding: 8px 12px 6px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+}
+
+.menu-chart.is-hidden {
+  display: none;
+}
+
+.menu-chart-body {
+  margin-top: 3px;
+  position: relative;
+  background: transparent;
+  border: 1px solid rgba(170, 180, 196, 0.45);
+  border-radius: 8px;
+  padding: 2px 3px;
+}
+
+.menu-chart-svg {
+  width: 100%;
+  height: 78px;
+  display: block;
+  shape-rendering: crispEdges;
+}
+
+.chart-bar.down {
+  fill: url(#trayDownGradient);
+  opacity: 0.9;
+}
+
+.chart-bar.up {
+  fill: url(#trayUpGradient);
+  opacity: 0.85;
+}
+
+.menu-chart-overlay {
+  position: absolute;
+  left: 6px;
+  top: 4px;
+  bottom: 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.menu-chart-overlay.right {
+  left: auto;
+  right: 6px;
+  align-items: flex-end;
+}
+
+.menu-chart-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(32, 40, 54, 0.9);
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(150, 170, 196, 0.35);
+  border-radius: 4px;
+  padding: 1px 5px;
+  box-shadow: 0 2px 6px rgba(14, 18, 26, 0.08);
+}
+
+.menu-chart-label.top {
+  color: rgba(148, 76, 200, 0.95);
+}
+
+.menu-chart-label.bottom {
+  color: rgba(33, 110, 196, 0.95);
+}
+
+.menu-chart-label.total {
+  background: rgba(246, 248, 252, 0.92);
+  border-color: rgba(160, 170, 186, 0.28);
+  font-size: 9px;
+  opacity: 0.9;
+}
+
+.menu-chart-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 9px;
+  color: rgba(120, 136, 158, 0.9);
+  letter-spacing: 0.2px;
 }
 
 .menu-list {
@@ -396,6 +488,10 @@ body {
     --row-hover: rgba(244, 179, 74, 0.16);
     --row-selected: rgba(234, 162, 67, 0.22);
     --header-status: #2f8f78;
+    --chart-down: #1b7fd6;
+    --chart-down-glow: rgba(27, 127, 214, 0.2);
+    --chart-up: #b454e0;
+    --chart-up-glow: rgba(180, 84, 224, 0.2);
   }
 
   .menu-header-logo .logo-dark {
@@ -413,5 +509,23 @@ body {
 
   .menu-row.selected .menu-label {
     color: #2f2410;
+  }
+
+  .menu-chart-body {
+    background: transparent;
+  }
+
+  .menu-chart-label {
+    color: rgba(40, 53, 68, 0.85);
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 2px 6px rgba(31, 46, 60, 0.08);
+  }
+
+  .menu-chart-label.top {
+    color: rgba(148, 76, 200, 0.95);
+  }
+
+  .menu-chart-label.bottom {
+    color: rgba(33, 110, 196, 0.95);
   }
 }

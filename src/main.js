@@ -592,6 +592,9 @@ function mergeAppearanceAliases(settings = {}) {
     debugMode: readBoolean('debugMode', false),
     acceptBeta: readBoolean('acceptBeta', false),
     githubUser: readString('githubUser', 'vernesong'),
+    trayMenuChartEnabled: readBoolean('trayMenuChartEnabled', true),
+    trayMenuKernelManagerEnabled: readBoolean('trayMenuKernelManagerEnabled', true),
+    trayMenuDirectoryLocationsEnabled: readBoolean('trayMenuDirectoryLocationsEnabled', true),
     windowWidth: readNumber('windowWidth', DEFAULT_MAIN_WINDOW_WIDTH),
     windowHeight: readNumber('windowHeight', DEFAULT_MAIN_WINDOW_HEIGHT),
     mainWindowClosed: readBoolean('mainWindowClosed', false),
@@ -765,6 +768,9 @@ function normalizeSettingsForStorage(input = {}) {
     debugMode: Boolean(parsed.debugMode),
     acceptBeta: Boolean(parsed.acceptBeta),
     githubUser: normalizeTextValue(parsed.githubUser) || 'vernesong',
+    trayMenuChartEnabled: normalizeBool(parsed.trayMenuChartEnabled, true),
+    trayMenuKernelManagerEnabled: normalizeBool(parsed.trayMenuKernelManagerEnabled, true),
+    trayMenuDirectoryLocationsEnabled: normalizeBool(parsed.trayMenuDirectoryLocationsEnabled, true),
     windowWidth: Number.parseInt(String(parsed.windowWidth ?? ''), 10) || DEFAULT_MAIN_WINDOW_WIDTH,
     windowHeight: Number.parseInt(String(parsed.windowHeight ?? ''), 10) || DEFAULT_MAIN_WINDOW_HEIGHT,
     mainWindowClosed: Boolean(parsed.mainWindowClosed),
@@ -778,6 +784,10 @@ function normalizeSettingsForStorage(input = {}) {
   delete parsed.debugMode;
   delete parsed.acceptBeta;
   delete parsed.githubUser;
+  delete parsed.trayMenuChartEnabled;
+  delete parsed.trayMenuKernelManagerEnabled;
+  delete parsed.trayMenuDirectoryLocationsEnabled;
+  delete parsed.trayMenuChartEnabled;
   delete parsed.windowWidth;
   delete parsed.windowHeight;
   delete parsed.mainWindowClosed;
@@ -5343,6 +5353,33 @@ async function buildTrayMenuOnce() {
   const trayStatusState = dashboardEnabled ? 'running' : 'stopped';
   const trayStatusLabel = dashboardEnabled ? runningLabel : stoppedLabel;
 
+  const showKernelManager = traySettings ? traySettings.trayMenuKernelManagerEnabled !== false : true;
+  const showDirectoryLocations = traySettings ? traySettings.trayMenuDirectoryLocationsEnabled !== false : true;
+  const items = [
+    { type: 'action', label: labels.showMain, action: 'show-main', rightText: '⌘ 1', shortcut: 'Cmd+1', iconKey: 'showMain' },
+    { type: 'separator' },
+    { type: 'action', label: labels.networkTakeover || 'Network Takeover', submenu: 'network', iconKey: 'networkTakeover' },
+    { type: 'separator' },
+    { type: 'action', label: labels.outboundMode || 'Outbound Mode', rightText: `[${currentOutboundBadge}]`, submenu: 'outbound', iconKey: 'outboundMode' },
+    { type: 'separator' },
+    { type: 'action', label: labels.dashboard, action: 'open-dashboard', enabled: dashboardEnabled, rightText: '⌘ 2', shortcut: 'Cmd+2', iconKey: 'dashboard' },
+  ];
+  if (showKernelManager) {
+    items.push({ type: 'separator' });
+    items.push({ type: 'action', label: labels.kernelManager, submenu: 'kernel', iconKey: 'kernelManager' });
+  }
+  if (showDirectoryLocations) {
+    items.push({ type: 'separator' });
+    items.push({ type: 'action', label: labels.directoryLocations || 'Directory Locations', submenu: 'directory', iconKey: 'directory' });
+  }
+  items.push(
+    { type: 'separator' },
+    { type: 'action', label: getNavLabels().settings || 'Settings', action: 'open-settings', rightText: '⌘ ,', shortcut: 'Cmd+,', iconKey: 'settings' },
+    { type: 'separator' },
+    { type: 'action', label: labels.checkUpdate || 'Check for Updates', action: 'check-update', iconKey: 'checkUpdate' },
+    { type: 'action', label: labels.quit, action: 'quit', rightText: '⌘ Q', shortcut: 'Cmd+Q', iconKey: 'quit' },
+  );
+
   const nextMenuData = {
     header: {
       title: app.getName(),
@@ -5359,24 +5396,7 @@ async function buildTrayMenuOnce() {
       currentOutboundMode,
       submenuSide: 'right',
     },
-    items: [
-      { type: 'action', label: labels.showMain, action: 'show-main', rightText: '⌘ 1', shortcut: 'Cmd+1', iconKey: 'showMain' },
-      { type: 'separator' },
-      { type: 'action', label: labels.networkTakeover || 'Network Takeover', submenu: 'network', iconKey: 'networkTakeover' },
-      { type: 'separator' },
-      { type: 'action', label: labels.outboundMode || 'Outbound Mode', rightText: `[${currentOutboundBadge}]`, submenu: 'outbound', iconKey: 'outboundMode' },
-      { type: 'separator' },
-      { type: 'action', label: labels.dashboard, action: 'open-dashboard', enabled: dashboardEnabled, rightText: '⌘ 2', shortcut: 'Cmd+2', iconKey: 'dashboard' },
-      { type: 'separator' },
-      { type: 'action', label: labels.kernelManager, submenu: 'kernel', iconKey: 'kernelManager' },
-      { type: 'separator' },
-      { type: 'action', label: labels.directoryLocations || 'Directory Locations', submenu: 'directory', iconKey: 'directory' },
-      { type: 'separator' },
-      { type: 'action', label: getNavLabels().settings || 'Settings', action: 'open-settings', rightText: '⌘ ,', shortcut: 'Cmd+,', iconKey: 'settings' },
-      { type: 'separator' },
-      { type: 'action', label: labels.checkUpdate || 'Check for Updates', action: 'check-update', iconKey: 'checkUpdate' },
-      { type: 'action', label: labels.quit, action: 'quit', rightText: '⌘ Q', shortcut: 'Cmd+Q', iconKey: 'quit' },
-    ],
+    items,
     submenus: {
       network: [
         {
@@ -5671,7 +5691,7 @@ function computeTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, expl
   const popupWidth = Number.isFinite(explicitWidth)
     ? Math.max(mainMenuWidth, Math.round(explicitWidth))
     : mainMenuWidth;
-  const popupHeight = Math.max(200, Math.min(Number(contentHeight) || 420, 620));
+  const popupHeight = Math.max(120, Math.min(Number(contentHeight) || 420, 760));
   const anchorX = trayBounds.x + Math.round(trayBounds.width / 2);
   // Align tray icon center with the header logo center (padding-left 12px + logo radius 24px).
   const logoCenterX = 36;
@@ -5706,7 +5726,7 @@ function applyTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, preser
       },
     };
   }
-  trayMenuContentHeight = Math.max(200, Math.min(Number(contentHeight) || trayMenuContentHeight || 420, 620));
+  trayMenuContentHeight = Math.max(120, Math.min(Number(contentHeight) || trayMenuContentHeight || 420, 760));
   trayMenuWindow.setBounds(computed.bounds);
   if (
     traySubmenuVisible
@@ -6916,6 +6936,9 @@ app.whenReady().then(() => {
           socksPort: 7891,
           allowLan: true,
           generalPageSize: '10',
+          trayMenuChartEnabled: true,
+          trayMenuKernelManagerEnabled: true,
+          trayMenuDirectoryLocationsEnabled: true,
           kernel: {},
           device: {
             user: resolveCurrentDeviceUser(),
@@ -6988,6 +7011,18 @@ app.whenReady().then(() => {
       }
       if (!Object.prototype.hasOwnProperty.call(parsed, 'allowLan')) {
         parsed.allowLan = true;
+        changed = true;
+      }
+      if (!Object.prototype.hasOwnProperty.call(parsed, 'trayMenuChartEnabled')) {
+        parsed.trayMenuChartEnabled = true;
+        changed = true;
+      }
+      if (!Object.prototype.hasOwnProperty.call(parsed, 'trayMenuKernelManagerEnabled')) {
+        parsed.trayMenuKernelManagerEnabled = true;
+        changed = true;
+      }
+      if (!Object.prototype.hasOwnProperty.call(parsed, 'trayMenuDirectoryLocationsEnabled')) {
+        parsed.trayMenuDirectoryLocationsEnabled = true;
         changed = true;
       }
       const appearanceGeneralPageSize = parsed.appearance && typeof parsed.appearance === 'object'

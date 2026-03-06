@@ -10,6 +10,35 @@
   <div id="trayStage" class="tray-stage side-right">
     <div id="menuRoot" class="menu-root">
       <div id="menuHeader" class="menu-header"></div>
+      <div id="menuChart" class="menu-chart">
+        <div class="menu-chart-body">
+          <div class="menu-chart-overlay">
+            <div id="menuChartTopLabel" class="menu-chart-label top">-</div>
+            <div id="menuChartBottomLabel" class="menu-chart-label bottom">-</div>
+          </div>
+          <div class="menu-chart-overlay right">
+            <div id="menuChartTopTotal" class="menu-chart-label top total">-</div>
+            <div id="menuChartBottomTotal" class="menu-chart-label bottom total">-</div>
+          </div>
+          <svg class="menu-chart-svg" viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <linearGradient id="trayDownGradient" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stop-color="#32a0ff" stop-opacity="0.95" />
+                <stop offset="100%" stop-color="#32a0ff" stop-opacity="0.2" />
+              </linearGradient>
+              <linearGradient id="trayUpGradient" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stop-color="#d96bff" stop-opacity="0.95" />
+                <stop offset="100%" stop-color="#d96bff" stop-opacity="0.2" />
+              </linearGradient>
+            </defs>
+            <g id="menuChartBars"></g>
+          </svg>
+        </div>
+        <div class="menu-chart-footer">
+          <span id="menuChartLeftTime">-</span>
+          <span id="menuChartRightTime">now</span>
+        </div>
+      </div>
       <div id="menuList" class="menu-list"></div>
     </div>
   </div>

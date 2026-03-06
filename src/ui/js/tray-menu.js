@@ -1,6 +1,14 @@
 const stageEl = document.getElementById('trayStage');
 const menuRootEl = document.getElementById('menuRoot');
 const headerEl = document.getElementById('menuHeader');
+const chartEl = document.getElementById('menuChart');
+const chartTopLabelEl = document.getElementById('menuChartTopLabel');
+const chartBottomLabelEl = document.getElementById('menuChartBottomLabel');
+const chartTopTotalEl = document.getElementById('menuChartTopTotal');
+const chartBottomTotalEl = document.getElementById('menuChartBottomTotal');
+const chartBarsEl = document.getElementById('menuChartBars');
+const chartLeftTimeEl = document.getElementById('menuChartLeftTime');
+const chartRightTimeEl = document.getElementById('menuChartRightTime');
 const listEl = document.getElementById('menuList');
 let menuData = null;
 let activeSubmenuKey = null;
@@ -9,6 +17,32 @@ let lastHeightSent = 0;
 let lastWidthSent = 0;
 let blockClickUntil = 0;
 let menuVersion = 0;
+let menuResizeObserver = null;
+let menuMutationObserver = null;
+let geometryRaf = 0;
+const TRAFFIC_HISTORY_POINTS = 520;
+const TRAFFIC_INTERVAL_MS = 1000;
+const OVERVIEW_INTERVAL_MS = 5000;
+const SETTINGS_CACHE_MS = 10000;
+const trafficState = {
+  trafficTimer: null,
+  overviewTimer: null,
+  trafficLoading: false,
+  overviewLoading: false,
+  trafficRxBytes: null,
+  trafficTxBytes: null,
+  trafficAt: 0,
+  lastTrafficAt: 0,
+  lastRateRx: null,
+  lastRateTx: null,
+  lastTotalRx: null,
+  lastTotalTx: null,
+  historyRx: [],
+  historyTx: [],
+  settings: null,
+  settingsAt: 0,
+  chartEnabled: true,
+};
 
 const ICON_SVGS = {
   showMain: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 9h16"/></svg>',
@@ -38,10 +72,385 @@ const ICON_SVGS = {
   logDir: '<svg viewBox="0 0 24 24"><path d="M6 4h9l3 3v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M9 11h6M9 15h6"/></svg>',
 };
 
+function formatBytes(value) {
+  const num = Number.parseFloat(value);
+  if (!Number.isFinite(num) || num < 0) {
+    return '-';
+  }
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = num;
+  let idx = 0;
+  while (size >= 1024 && idx < units.length - 1) {
+    size /= 1024;
+    idx += 1;
+  }
+  const fixed = size >= 100 ? 0 : size >= 10 ? 1 : 2;
+  return `${size.toFixed(fixed)} ${units[idx]}`;
+}
+
+function formatBitrate(bytesPerSec) {
+  const num = Number.parseFloat(bytesPerSec);
+  if (!Number.isFinite(num) || num < 0) {
+    return '-';
+  }
+  const bitsPerSec = (num * 8) / 1000;
+  const units = ['Kb/s', 'Mb/s', 'Gb/s', 'Tb/s'];
+  let value = bitsPerSec;
+  let idx = 0;
+  while (value >= 1000 && idx < units.length - 1) {
+    value /= 1000;
+    idx += 1;
+  }
+  const fixed = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(fixed)} ${units[idx]}`;
+}
+
+function niceMaxValue(value) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return 8;
+  }
+  const magnitude = Math.pow(10, Math.floor(Math.log10(value)));
+  const normalized = value / magnitude;
+  let factor = 10;
+  if (normalized <= 1) factor = 1;
+  else if (normalized <= 2) factor = 2;
+  else if (normalized <= 5) factor = 5;
+  return factor * magnitude;
+}
+
+function renderTrafficBars() {
+  if (!chartBarsEl) {
+    return;
+  }
+  const count = Math.max(trafficState.historyRx.length, trafficState.historyTx.length, 0);
+  if (!count) {
+    if (Array.isArray(chartBarsEl._barPairs)) {
+      chartBarsEl._barPairs.forEach((pair) => {
+        pair.down.setAttribute('display', 'none');
+        pair.up.setAttribute('display', 'none');
+      });
+    }
+    return;
+  }
+  const maxRx = trafficState.historyRx.length ? Math.max(...trafficState.historyRx, 0) : 0;
+  const maxTx = trafficState.historyTx.length ? Math.max(...trafficState.historyTx, 0) : 0;
+  if (!maxRx && !maxTx) {
+    chartBarsEl.innerHTML = '';
+    return;
+  }
+  let niceMaxRx = niceMaxValue(maxRx);
+  let niceMaxTx = niceMaxValue(maxTx);
+  if (niceMaxRx < 8) niceMaxRx = 8;
+  if (niceMaxTx < 8) niceMaxTx = 8;
+  const width = 100;
+  const height = 60;
+  const baseline = height / 2;
+  const available = baseline - 2.6;
+  const svgEl = chartBarsEl.ownerSVGElement;
+  const svgRect = svgEl ? svgEl.getBoundingClientRect() : null;
+  const desiredPx = 5.7;
+  const pxPerUnit = svgRect && svgRect.width ? svgRect.width / width : 2.4;
+  const barWidth = Math.min(4, Math.max(0.6, desiredPx / pxPerUnit));
+  const gap = Math.max(0.2, barWidth * 0.25);
+  const unit = barWidth + gap;
+  const maxBars = Math.max(1, Math.floor(width / unit));
+  const startIndex = Math.max(0, count - maxBars);
+  const visibleCount = Math.min(count, maxBars);
+  const startX = width - unit * visibleCount;
+  if (!Array.isArray(chartBarsEl._barPairs)) {
+    chartBarsEl._barPairs = [];
+  }
+  const needed = maxBars;
+  while (chartBarsEl._barPairs.length < needed) {
+    const down = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    down.setAttribute('class', 'chart-bar down');
+    const up = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    up.setAttribute('class', 'chart-bar up');
+    chartBarsEl.appendChild(down);
+    chartBarsEl.appendChild(up);
+    chartBarsEl._barPairs.push({ down, up });
+  }
+  for (let i = 0; i < chartBarsEl._barPairs.length; i += 1) {
+    const pair = chartBarsEl._barPairs[i];
+    if (i >= visibleCount) {
+      pair.down.setAttribute('display', 'none');
+      pair.up.setAttribute('display', 'none');
+      continue;
+    }
+    const idx = startIndex + i;
+    const downValue = trafficState.historyRx[idx] || 0;
+    const upValue = trafficState.historyTx[idx] || 0;
+    const downHeight = Math.max(0, Math.min(available, (downValue / niceMaxRx) * available));
+    const upHeight = Math.max(0, Math.min(available, (upValue / niceMaxTx) * available));
+    const x = startX + i * unit + gap / 2;
+    if (downHeight > 0.2) {
+      pair.down.setAttribute('display', '');
+      pair.down.setAttribute('x', x.toFixed(2));
+      pair.down.setAttribute('y', (baseline + 0.2).toFixed(2));
+      pair.down.setAttribute('width', barWidth.toFixed(2));
+      pair.down.setAttribute('height', downHeight.toFixed(2));
+      pair.down.setAttribute('rx', '0.35');
+    } else {
+      pair.down.setAttribute('display', 'none');
+    }
+    if (upHeight > 0.2) {
+      pair.up.setAttribute('display', '');
+      pair.up.setAttribute('x', x.toFixed(2));
+      pair.up.setAttribute('y', (baseline - upHeight - 0.2).toFixed(2));
+      pair.up.setAttribute('width', barWidth.toFixed(2));
+      pair.up.setAttribute('height', upHeight.toFixed(2));
+      pair.up.setAttribute('rx', '0.35');
+    } else {
+      pair.up.setAttribute('display', 'none');
+    }
+  }
+}
+
+function updateChartTimeLabels() {
+  if (!chartLeftTimeEl || !chartRightTimeEl) {
+    return;
+  }
+  const points = Math.max(trafficState.historyRx.length, trafficState.historyTx.length, 0);
+  if (points <= 1) {
+    chartLeftTimeEl.textContent = '-';
+    chartRightTimeEl.textContent = 'now';
+    return;
+  }
+  const totalMs = (points - 1) * TRAFFIC_INTERVAL_MS;
+  const totalSec = Math.max(1, Math.round(totalMs / 1000));
+  if (totalSec < 60) {
+    chartLeftTimeEl.textContent = `${totalSec} seconds ago`;
+  } else {
+    const mins = Math.max(1, Math.round(totalSec / 60));
+    chartLeftTimeEl.textContent = `${mins} minutes ago`;
+  }
+  chartRightTimeEl.textContent = 'now';
+}
+
+function formatRateLabel(value) {
+  const num = Number.parseFloat(value);
+  if (!Number.isFinite(num) || num < 0) {
+    return '-';
+  }
+  return `${formatBytes(num)}/s`;
+}
+
+function setOverlayLabels() {
+  const rxRate = trafficState.lastRateRx;
+  const txRate = trafficState.lastRateTx;
+  const rxTotal = trafficState.lastTotalRx;
+  const txTotal = trafficState.lastTotalTx;
+  if (chartTopLabelEl) {
+    chartTopLabelEl.textContent = Number.isFinite(txRate) ? formatRateLabel(txRate) : '-';
+  }
+  if (chartBottomLabelEl) {
+    chartBottomLabelEl.textContent = Number.isFinite(rxRate) ? formatRateLabel(rxRate) : '-';
+  }
+  if (chartTopTotalEl) {
+    chartTopTotalEl.textContent = Number.isFinite(txTotal) ? formatBytes(txTotal) : 'U';
+  }
+  if (chartBottomTotalEl) {
+    chartBottomTotalEl.textContent = Number.isFinite(rxTotal) ? formatBytes(rxTotal) : 'D';
+  }
+}
+
+function resetTrafficChart() {
+  trafficState.historyRx = [];
+  trafficState.historyTx = [];
+  renderTrafficBars();
+  updateChartTimeLabels();
+  if (chartTopLabelEl) chartTopLabelEl.textContent = '-';
+  if (chartBottomLabelEl) chartBottomLabelEl.textContent = '-';
+  if (chartTopTotalEl) chartTopTotalEl.textContent = '-';
+  if (chartBottomTotalEl) chartBottomTotalEl.textContent = '-';
+}
+
+function updateTrafficHistory(rxRate, txRate) {
+  const rxK = Math.max(0, rxRate / 1024);
+  const txK = Math.max(0, txRate / 1024);
+  trafficState.historyRx.push(rxK);
+  trafficState.historyTx.push(txK);
+  if (trafficState.historyRx.length > TRAFFIC_HISTORY_POINTS) {
+    trafficState.historyRx.shift();
+  }
+  if (trafficState.historyTx.length > TRAFFIC_HISTORY_POINTS) {
+    trafficState.historyTx.shift();
+  }
+  renderTrafficBars();
+  updateChartTimeLabels();
+}
+
+function updateProxyTraffic(downRate, upRate) {
+  const down = Number.parseFloat(downRate);
+  const up = Number.parseFloat(upRate);
+  if (!Number.isFinite(down) || !Number.isFinite(up) || down < 0 || up < 0) {
+    return;
+  }
+  trafficState.lastTrafficAt = Date.now();
+  trafficState.lastRateRx = down;
+  trafficState.lastRateTx = up;
+  setOverlayLabels();
+  updateTrafficHistory(down, up);
+}
+
+function updateSystemTraffic(rxBytes, txBytes) {
+  const rx = Number.parseFloat(rxBytes);
+  const tx = Number.parseFloat(txBytes);
+  const now = Date.now();
+  if (!Number.isFinite(rx) || !Number.isFinite(tx)) {
+    return;
+  }
+  trafficState.lastTotalRx = rx;
+  trafficState.lastTotalTx = tx;
+  setOverlayLabels();
+  if (trafficState.lastTrafficAt && (now - trafficState.lastTrafficAt) <= 1500) {
+    return;
+  }
+  if (trafficState.trafficRxBytes === null || trafficState.trafficTxBytes === null || !trafficState.trafficAt) {
+    trafficState.trafficRxBytes = rx;
+    trafficState.trafficTxBytes = tx;
+    trafficState.trafficAt = now;
+    return;
+  }
+  const deltaSec = (now - trafficState.trafficAt) / 1000;
+  if (deltaSec <= 0) {
+    return;
+  }
+  const rxRate = (rx - trafficState.trafficRxBytes) / deltaSec;
+  const txRate = (tx - trafficState.trafficTxBytes) / deltaSec;
+  trafficState.trafficRxBytes = rx;
+  trafficState.trafficTxBytes = tx;
+  trafficState.trafficAt = now;
+  if (!Number.isFinite(rxRate) || !Number.isFinite(txRate) || rxRate < 0 || txRate < 0) {
+    return;
+  }
+  updateTrafficHistory(rxRate, txRate);
+}
+
+function applyChartEnabled(enabled) {
+  trafficState.chartEnabled = enabled;
+  if (chartEl) {
+    chartEl.classList.toggle('is-hidden', !enabled);
+  }
+  if (!enabled) {
+    stopTrafficTimers();
+    resetTrafficChart();
+    syncWindowGeometry();
+  }
+}
+
+async function getTrafficArgs() {
+  if (!window.clashfox || typeof window.clashfox.readSettings !== 'function') {
+    return [];
+  }
+  const now = Date.now();
+  if (trafficState.settings && (now - trafficState.settingsAt) < SETTINGS_CACHE_MS) {
+    return trafficState.settings;
+  }
+  try {
+    const response = await window.clashfox.readSettings();
+    const settings = response && response.ok ? response.data : null;
+    if (!settings || typeof settings !== 'object') {
+      return [];
+    }
+    applyChartEnabled(settings.trayMenuChartEnabled !== false);
+    const configFile = String(settings.configFile || settings.configPath || '').trim();
+    const controller = String(settings.externalController || '').trim();
+    const secret = String(settings.secret || '').trim();
+    const args = [];
+    if (configFile) {
+      args.push('--config', configFile);
+    }
+    if (controller) {
+      args.push('--controller', controller);
+    }
+    if (secret) {
+      args.push('--secret', secret);
+    }
+    trafficState.settings = args;
+    trafficState.settingsAt = now;
+    return args;
+  } catch {
+    return [];
+  }
+}
+
+async function loadTrafficSnapshot() {
+  if (!window.clashfox || typeof window.clashfox.runCommand !== 'function') {
+    return;
+  }
+  if (trafficState.trafficLoading) {
+    return;
+  }
+  trafficState.trafficLoading = true;
+  try {
+    const args = await getTrafficArgs();
+    const response = await window.clashfox.runCommand('traffic', args);
+    if (!response || !response.ok || !response.data) {
+      return;
+    }
+    const downRaw = response.data.down ?? response.data.download ?? response.data.rx ?? '';
+    const upRaw = response.data.up ?? response.data.upload ?? response.data.tx ?? '';
+    updateProxyTraffic(downRaw, upRaw);
+  } catch {
+    // ignore
+  } finally {
+    trafficState.trafficLoading = false;
+  }
+}
+
+async function loadOverviewSnapshot() {
+  if (!window.clashfox || typeof window.clashfox.runCommand !== 'function') {
+    return;
+  }
+  if (trafficState.overviewLoading) {
+    return;
+  }
+  trafficState.overviewLoading = true;
+  try {
+    const args = await getTrafficArgs();
+    const response = await window.clashfox.runCommand('overview', ['--cache-ttl', '1', ...args]);
+    if (!response || !response.ok || !response.data) {
+      return;
+    }
+    updateSystemTraffic(response.data.rxBytes, response.data.txBytes);
+  } catch {
+    // ignore
+  } finally {
+    trafficState.overviewLoading = false;
+  }
+}
+
+async function startTrafficTimers() {
+  if (trafficState.trafficTimer || trafficState.overviewTimer) {
+    return;
+  }
+  await getTrafficArgs();
+  if (!trafficState.chartEnabled) {
+    return;
+  }
+  loadTrafficSnapshot();
+  loadOverviewSnapshot();
+  trafficState.trafficTimer = setInterval(loadTrafficSnapshot, TRAFFIC_INTERVAL_MS);
+  trafficState.overviewTimer = setInterval(loadOverviewSnapshot, OVERVIEW_INTERVAL_MS);
+}
+
+function stopTrafficTimers() {
+  if (trafficState.trafficTimer) {
+    clearInterval(trafficState.trafficTimer);
+    trafficState.trafficTimer = null;
+  }
+  if (trafficState.overviewTimer) {
+    clearInterval(trafficState.overviewTimer);
+    trafficState.overviewTimer = null;
+  }
+}
+
 function syncWindowGeometry() {
   const rootRect = menuRootEl.getBoundingClientRect();
   const rootWidth = Math.ceil(rootRect.width) || 260;
-  const height = Math.ceil(rootRect.height) + 2;
+  const contentHeight = Math.ceil(menuRootEl.scrollHeight || rootRect.height || 0);
+  const height = contentHeight + 2;
   const width = rootWidth;
   if (
     Math.abs(height - lastHeightSent) <= 2
@@ -52,6 +461,44 @@ function syncWindowGeometry() {
   lastHeightSent = height;
   lastWidthSent = width;
   window.clashfox.trayMenuSetExpanded(false, { height, width });
+}
+
+function scheduleGeometrySync() {
+  if (geometryRaf) {
+    return;
+  }
+  geometryRaf = requestAnimationFrame(() => {
+    geometryRaf = 0;
+    syncWindowGeometry();
+  });
+}
+
+function ensureMenuAutoResize() {
+  if (!menuRootEl) {
+    return;
+  }
+  if (!menuResizeObserver && typeof ResizeObserver !== 'undefined') {
+    menuResizeObserver = new ResizeObserver(() => {
+      scheduleGeometrySync();
+    });
+    menuResizeObserver.observe(menuRootEl);
+  }
+  if (!menuMutationObserver && typeof MutationObserver !== 'undefined') {
+    menuMutationObserver = new MutationObserver(() => {
+      scheduleGeometrySync();
+    });
+    menuMutationObserver.observe(menuRootEl, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      characterData: true,
+    });
+  }
+  if (document.fonts && typeof document.fonts.ready === 'object' && typeof document.fonts.ready.then === 'function') {
+    document.fonts.ready.then(() => {
+      scheduleGeometrySync();
+    }).catch(() => {});
+  }
 }
 
 function hideSubmenu() {
@@ -286,6 +733,7 @@ function renderMainList() {
   for (const item of items) {
     listEl.appendChild(makeRow(item));
   }
+  scheduleGeometrySync();
 }
 
 function findMainAnchorBySubmenuKey(submenuKey) {
@@ -343,10 +791,14 @@ function renderAll() {
   renderHeader();
   renderMainList();
   hideSubmenu();
-  syncWindowGeometry();
+  scheduleGeometrySync();
 }
 
 async function init() {
+  ensureMenuAutoResize();
+  if (chartEl) {
+    resetTrafficChart();
+  }
   if (window.clashfox && typeof window.clashfox.onTrayMenuUpdate === 'function') {
     window.clashfox.onTrayMenuUpdate((payload) => {
       if (!payload) {
@@ -391,6 +843,10 @@ async function init() {
   }
 
   headerEl.addEventListener('mouseenter', hideSubmenu);
+
+  if (document.visibilityState === 'visible') {
+    startTrafficTimers();
+  }
 }
 
 window.addEventListener('keydown', (event) => {
@@ -414,7 +870,10 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     blockClickUntil = Date.now() + 220;
     hideSubmenu();
+    startTrafficTimers();
+    return;
   }
+  stopTrafficTimers();
 });
 
 init();
