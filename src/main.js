@@ -235,6 +235,9 @@ function refreshTrayMenuLabelsOnly() {
     if (item.action === 'open-dashboard') {
       return { ...item, label: labels.dashboard };
     }
+    if (item.action === 'open-worldwide') {
+      return { ...item, label: 'Trackers' };
+    }
     if (item.submenu === 'kernel') {
       return { ...item, label: labels.kernelManager };
     }
@@ -593,6 +596,7 @@ function mergeAppearanceAliases(settings = {}) {
     acceptBeta: readBoolean('acceptBeta', false),
     githubUser: readString('githubUser', 'vernesong'),
     trayMenuChartEnabled: readBoolean('trayMenuChartEnabled', true),
+    trayMenuTrackersEnabled: readBoolean('trayMenuTrackersEnabled', true),
     trayMenuKernelManagerEnabled: readBoolean('trayMenuKernelManagerEnabled', true),
     trayMenuDirectoryLocationsEnabled: readBoolean('trayMenuDirectoryLocationsEnabled', true),
     windowWidth: readNumber('windowWidth', DEFAULT_MAIN_WINDOW_WIDTH),
@@ -769,6 +773,7 @@ function normalizeSettingsForStorage(input = {}) {
     acceptBeta: Boolean(parsed.acceptBeta),
     githubUser: normalizeTextValue(parsed.githubUser) || 'vernesong',
     trayMenuChartEnabled: normalizeBool(parsed.trayMenuChartEnabled, true),
+    trayMenuTrackersEnabled: normalizeBool(parsed.trayMenuTrackersEnabled, true),
     trayMenuKernelManagerEnabled: normalizeBool(parsed.trayMenuKernelManagerEnabled, true),
     trayMenuDirectoryLocationsEnabled: normalizeBool(parsed.trayMenuDirectoryLocationsEnabled, true),
     windowWidth: Number.parseInt(String(parsed.windowWidth ?? ''), 10) || DEFAULT_MAIN_WINDOW_WIDTH,
@@ -785,6 +790,7 @@ function normalizeSettingsForStorage(input = {}) {
   delete parsed.acceptBeta;
   delete parsed.githubUser;
   delete parsed.trayMenuChartEnabled;
+  delete parsed.trayMenuTrackersEnabled;
   delete parsed.trayMenuKernelManagerEnabled;
   delete parsed.trayMenuDirectoryLocationsEnabled;
   delete parsed.trayMenuChartEnabled;
@@ -5037,7 +5043,7 @@ function openWorldwideWindow() {
       }
     });
 
-    windowRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'worldwide.html'));
+    windowRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'trackers.html'));
   } catch {
     showMainWindow();
   }
@@ -5091,7 +5097,7 @@ function preloadWorldwideWindow() {
         event.preventDefault();
       }
     });
-    preloadRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'worldwide.html'));
+    preloadRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'trackers.html'));
   } catch {
     if (worldwidePreloadWindow && !worldwidePreloadWindow.isDestroyed()) {
       worldwidePreloadWindow.close();
@@ -5355,6 +5361,7 @@ async function buildTrayMenuOnce() {
 
   const showKernelManager = traySettings ? traySettings.trayMenuKernelManagerEnabled !== false : true;
   const showDirectoryLocations = traySettings ? traySettings.trayMenuDirectoryLocationsEnabled !== false : true;
+  const showTrackers = traySettings ? traySettings.trayMenuTrackersEnabled !== false : true;
   const items = [
     { type: 'action', label: labels.showMain, action: 'show-main', rightText: '⌘ 1', shortcut: 'Cmd+1', iconKey: 'showMain' },
     { type: 'separator' },
@@ -5364,6 +5371,9 @@ async function buildTrayMenuOnce() {
     { type: 'separator' },
     { type: 'action', label: labels.dashboard, action: 'open-dashboard', enabled: dashboardEnabled, rightText: '⌘ 2', shortcut: 'Cmd+2', iconKey: 'dashboard' },
   ];
+  if (showTrackers) {
+    items.push({ type: 'action', label: 'Trackers', action: 'open-worldwide', rightText: '⌘ 3', shortcut: 'Cmd+3', iconKey: 'trackers' });
+  }
   if (showKernelManager) {
     items.push({ type: 'separator' });
     items.push({ type: 'action', label: labels.kernelManager, submenu: 'kernel', iconKey: 'kernelManager' });
@@ -5758,7 +5768,12 @@ async function showTrayMenuWindow() {
   hideTraySubmenuWindow();
   const popup = ensureTrayMenuWindow();
   const currentBounds = popup.getBounds();
-  if (currentBounds && Number.isFinite(currentBounds.height) && currentBounds.height > 0) {
+  if (
+    currentBounds
+    && Number.isFinite(currentBounds.height)
+    && currentBounds.height > 0
+    && (!Number.isFinite(trayMenuContentHeight) || trayMenuContentHeight <= 0)
+  ) {
     trayMenuContentHeight = currentBounds.height;
   }
   if (!trayMenuData) {
@@ -6666,9 +6681,9 @@ app.whenReady().then(() => {
       ? Number(payload.width)
       : 260;
     const requestedHeight = payload && Number.isFinite(payload.height) ? Number(payload.height) : trayMenuContentHeight;
-    trayMenuContentHeight = Math.max(200, Math.min(requestedHeight || trayMenuContentHeight || 420, 620));
-    if (trayMenuWindow && !trayMenuWindow.isDestroyed() && trayMenuVisible) {
-      applyTrayMenuWindowBounds(trayMenuContentHeight, true, requestedWidth, false);
+    trayMenuContentHeight = Math.max(200, Math.min(requestedHeight || trayMenuContentHeight || 420, 760));
+    if (trayMenuWindow && !trayMenuWindow.isDestroyed()) {
+      applyTrayMenuWindowBounds(trayMenuContentHeight, trayMenuVisible, requestedWidth, false);
     }
   });
   ipcMain.on('clashfox:trayMenu:openSubmenu', async (_event, payload = {}) => {
@@ -6937,6 +6952,7 @@ app.whenReady().then(() => {
           allowLan: true,
           generalPageSize: '10',
           trayMenuChartEnabled: true,
+          trayMenuTrackersEnabled: true,
           trayMenuKernelManagerEnabled: true,
           trayMenuDirectoryLocationsEnabled: true,
           kernel: {},
@@ -7015,6 +7031,10 @@ app.whenReady().then(() => {
       }
       if (!Object.prototype.hasOwnProperty.call(parsed, 'trayMenuChartEnabled')) {
         parsed.trayMenuChartEnabled = true;
+        changed = true;
+      }
+      if (!Object.prototype.hasOwnProperty.call(parsed, 'trayMenuTrackersEnabled')) {
+        parsed.trayMenuTrackersEnabled = true;
         changed = true;
       }
       if (!Object.prototype.hasOwnProperty.call(parsed, 'trayMenuKernelManagerEnabled')) {

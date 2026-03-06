@@ -339,6 +339,7 @@ let settingsWindowWidth = document.getElementById('settingsWindowWidth');
 let settingsWindowHeight = document.getElementById('settingsWindowHeight');
 let settingsAcceptBeta = document.getElementById('settingsAcceptBeta');
 let settingsTrayMenuChart = document.getElementById('settingsTrayMenuChart');
+let settingsTrayMenuTrackers = document.getElementById('settingsTrayMenuTrackers');
 let settingsTrayMenuKernelManager = document.getElementById('settingsTrayMenuKernelManager');
 let settingsTrayMenuDirectoryLocations = document.getElementById('settingsTrayMenuDirectoryLocations');
 let settingsProxyMixedPort = document.getElementById('settingsProxyMixedPort');
@@ -404,6 +405,7 @@ const DEFAULT_SETTINGS = {
   acceptBeta: false,
   debugMode: false,
   trayMenuChartEnabled: true,
+  trayMenuTrackersEnabled: true,
   trayMenuKernelManagerEnabled: true,
   trayMenuDirectoryLocationsEnabled: true,
   windowWidth: MAIN_WINDOW_DEFAULT_WIDTH,
@@ -416,6 +418,7 @@ const DEFAULT_SETTINGS = {
     acceptBeta: false,
     githubUser: 'vernesong',
     trayMenuChartEnabled: true,
+    trayMenuTrackersEnabled: true,
     trayMenuKernelManagerEnabled: true,
     trayMenuDirectoryLocationsEnabled: true,
     windowWidth: MAIN_WINDOW_DEFAULT_WIDTH,
@@ -1264,6 +1267,7 @@ function normalizeSettingsForUi(settings) {
   normalized.acceptBeta = readAppearanceBool('acceptBeta', false);
   normalized.githubUser = readAppearanceString('githubUser', 'vernesong');
   normalized.trayMenuChartEnabled = readAppearanceBool('trayMenuChartEnabled', true);
+  normalized.trayMenuTrackersEnabled = readAppearanceBool('trayMenuTrackersEnabled', true);
   normalized.trayMenuKernelManagerEnabled = readAppearanceBool('trayMenuKernelManagerEnabled', true);
   normalized.trayMenuDirectoryLocationsEnabled = readAppearanceBool('trayMenuDirectoryLocationsEnabled', true);
   normalized.windowWidth = readAppearanceNum('windowWidth', MAIN_WINDOW_DEFAULT_WIDTH);
@@ -1284,6 +1288,7 @@ function normalizeSettingsForUi(settings) {
     acceptBeta: normalized.acceptBeta,
     githubUser: normalized.githubUser,
     trayMenuChartEnabled: normalized.trayMenuChartEnabled,
+    trayMenuTrackersEnabled: normalized.trayMenuTrackersEnabled,
     trayMenuKernelManagerEnabled: normalized.trayMenuKernelManagerEnabled,
     trayMenuDirectoryLocationsEnabled: normalized.trayMenuDirectoryLocationsEnabled,
     windowWidth: normalized.windowWidth,
@@ -1416,6 +1421,9 @@ function mapSettingsForFile(settings) {
     trayMenuChartEnabled: Object.prototype.hasOwnProperty.call(mapped, 'trayMenuChartEnabled')
       ? Boolean(mapped.trayMenuChartEnabled)
       : Boolean(existingAppearance.trayMenuChartEnabled),
+    trayMenuTrackersEnabled: Object.prototype.hasOwnProperty.call(mapped, 'trayMenuTrackersEnabled')
+      ? Boolean(mapped.trayMenuTrackersEnabled)
+      : Boolean(existingAppearance.trayMenuTrackersEnabled),
     trayMenuKernelManagerEnabled: Object.prototype.hasOwnProperty.call(mapped, 'trayMenuKernelManagerEnabled')
       ? Boolean(mapped.trayMenuKernelManagerEnabled)
       : Boolean(existingAppearance.trayMenuKernelManagerEnabled),
@@ -1558,6 +1566,9 @@ function mapSettingsForFile(settings) {
   if (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuChartEnabled')) {
     delete mapped.trayMenuChartEnabled;
   }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuTrackersEnabled')) {
+    delete mapped.trayMenuTrackersEnabled;
+  }
   if (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuKernelManagerEnabled')) {
     delete mapped.trayMenuKernelManagerEnabled;
   }
@@ -1684,6 +1695,7 @@ function saveSettings(patch) {
     'acceptBeta',
     'githubUser',
     'trayMenuChartEnabled',
+    'trayMenuTrackersEnabled',
     'trayMenuKernelManagerEnabled',
     'trayMenuDirectoryLocationsEnabled',
     'windowWidth',
@@ -2044,6 +2056,9 @@ function applySettings(settings) {
   }
   if (settingsTrayMenuChart) {
     settingsTrayMenuChart.checked = state.settings.trayMenuChartEnabled !== false;
+  }
+  if (settingsTrayMenuTrackers) {
+    settingsTrayMenuTrackers.checked = state.settings.trayMenuTrackersEnabled !== false;
   }
   if (settingsTrayMenuKernelManager) {
     settingsTrayMenuKernelManager.checked = state.settings.trayMenuKernelManagerEnabled !== false;
@@ -4953,6 +4968,7 @@ function refreshPageRefs() {
   settingsWindowHeight = document.getElementById('settingsWindowHeight');
   settingsAcceptBeta = document.getElementById('settingsAcceptBeta');
   settingsTrayMenuChart = document.getElementById('settingsTrayMenuChart');
+  settingsTrayMenuTrackers = document.getElementById('settingsTrayMenuTrackers');
   settingsTrayMenuKernelManager = document.getElementById('settingsTrayMenuKernelManager');
   settingsTrayMenuDirectoryLocations = document.getElementById('settingsTrayMenuDirectoryLocations');
   settingsProxyMixedPort = document.getElementById('settingsProxyMixedPort');
@@ -5509,6 +5525,13 @@ if (settingsTrayMenuChart) {
   settingsTrayMenuChart.addEventListener('change', (event) => {
     const enabled = Boolean(event.target.checked);
     saveSettings({ trayMenuChartEnabled: enabled });
+  });
+}
+
+if (settingsTrayMenuTrackers) {
+  settingsTrayMenuTrackers.addEventListener('change', (event) => {
+    const enabled = Boolean(event.target.checked);
+    saveSettings({ trayMenuTrackersEnabled: enabled });
   });
 }
 
