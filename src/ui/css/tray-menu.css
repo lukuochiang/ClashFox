@@ -371,7 +371,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--icon);
+  color: var(--menu-icon-color, var(--icon));
 }
 
 .menu-leading svg {
@@ -386,8 +386,35 @@ body {
 
 .menu-row.disabled .menu-leading,
 .menu-row.disabled .menu-check {
-  color: var(--muted);
+  color: var(--muted) !important;
 }
+
+.menu-row[data-icon-key="showMain"] { --menu-icon-color: #5eb7ff; }
+.menu-row[data-icon-key="dashboard"] { --menu-icon-color: #34d399; }
+.menu-row[data-icon-key="trackers"] { --menu-icon-color: #3b82f6; }
+.menu-row[data-icon-key="networkTakeover"] { --menu-icon-color: #38bdf8; }
+.menu-row[data-icon-key="connectivityQuality"] { --menu-icon-color: #22c55e; }
+.menu-row[data-icon-key="outboundMode"] { --menu-icon-color: #fb923c; }
+.menu-row[data-icon-key="modeGlobal"] { --menu-icon-color: #3b82f6; }
+.menu-row[data-icon-key="modeRule"] { --menu-icon-color: #8b5cf6; }
+.menu-row[data-icon-key="modeDirect"] { --menu-icon-color: #14b8a6; }
+.menu-row[data-icon-key="kernelManager"] { --menu-icon-color: #ff9f43; }
+.menu-row[data-icon-key="kernelStart"] { --menu-icon-color: #22c55e; }
+.menu-row[data-icon-key="kernelStop"] { --menu-icon-color: #ef4444; }
+.menu-row[data-icon-key="kernelRestart"] { --menu-icon-color: #f59e0b; }
+.menu-row[data-icon-key="settings"] { --menu-icon-color: #f97316; }
+.menu-row[data-icon-key="checkUpdate"] { --menu-icon-color: #fbbf24; }
+.menu-row[data-icon-key="quit"] { --menu-icon-color: #fb7185; }
+.menu-row[data-icon-key="systemProxy"] { --menu-icon-color: #f59e0b; }
+.menu-row[data-icon-key="tun"] { --menu-icon-color: #14b8a6; }
+.menu-row[data-icon-key="currentService"] { --menu-icon-color: #60a5fa; }
+.menu-row[data-icon-key="copyShellExport"] { --menu-icon-color: #a78bfa; }
+.menu-row[data-icon-key="directory"] { --menu-icon-color: #f59e0b; }
+.menu-row[data-icon-key="folder"] { --menu-icon-color: #facc15; }
+.menu-row[data-icon-key="userDir"] { --menu-icon-color: #2dd4bf; }
+.menu-row[data-icon-key="configDir"] { --menu-icon-color: #38bdf8; }
+.menu-row[data-icon-key="workDir"] { --menu-icon-color: #22c55e; }
+.menu-row[data-icon-key="logDir"] { --menu-icon-color: #a78bfa; }
 
 @keyframes tray-spin {
   from { transform: rotate(0deg); }
