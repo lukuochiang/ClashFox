@@ -34,31 +34,36 @@
               <div class="card-header-row">
                 <h3 data-i18n="logs.title">Kernel Logs</h3>
               </div>
-              <div class="form-row">
-                <div class="field-inline">
-                  <label data-i18n="logs.lines">Lines</label>
-                  <input id="logLines" type="number" min="10" max="2000" value="10" />
-                </div>
-                <button class="btn" id="logRefresh" data-i18n="logs.refresh">Refresh</button>
-                <div class="interval-group">
-                  <label data-i18n="logs.interval">Interval</label>
-                  <select id="logIntervalPreset">
-                    <option value="1">1s</option>
-                    <option value="3" selected>3s</option>
-                    <option value="5">5s</option>
-                    <option value="10">10s</option>
-                    <option value="15">15s</option>
-                    <option value="30">30s</option>
-                    <option value="60">60s</option>
+              <div class="form-row logs-toolbar">
+                <div class="field-inline logs-level-filter">
+                  <label for="logLevelFilter" data-i18n="logs.levelLabel">Level</label>
+                  <select id="logLevelFilter">
+                    <option value="all" data-i18n="logs.levelAll">All</option>
+                    <option value="debug">DEBUG</option>
+                    <option value="info">INFO</option>
+                    <option value="warn">WARN</option>
+                    <option value="error">ERROR</option>
+                    <option value="fatal">FATAL</option>
+                    <option value="trace">TRACE</option>
                   </select>
                 </div>
-                <label class="toggle">
-                  <input id="logAutoRefresh" type="checkbox" />
-                  <span class="toggle-pill"></span>
-                  <span data-i18n="logs.auto">Auto refresh</span>
-                </label>
+                <div class="field-inline logs-msg-filter">
+                  <label for="logMessageFilter" data-i18n="logs.msgLabel">MSG</label>
+                  <input id="logMessageFilter" type="search" data-i18n-placeholder="logs.searchPlaceholder" placeholder="Search message..." />
+                </div>
               </div>
-              <pre class="log-view" id="logContent"></pre>
+              <div class="log-table-wrap">
+                <table class="log-table" id="logTable">
+                  <thead>
+                    <tr>
+                      <th data-i18n="logs.tableDate">Date</th>
+                      <th data-i18n="logs.tableLevel">Level</th>
+                      <th data-i18n="logs.tableMessage">MSG</th>
+                    </tr>
+                  </thead>
+                  <tbody id="logTableBody"></tbody>
+                </table>
+              </div>
             </div>
             <div class="card card-full">
               <div class="card-header-row">

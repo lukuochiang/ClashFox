@@ -106,7 +106,16 @@ const I18N = {
       "refresh": "Refresh",
       "delete": "Delete",
       "auto": "Auto refresh",
-      "interval": "Interval"
+      "interval": "Interval",
+      "tableDate": "Date",
+      "tableLevel": "Level",
+      "tableMessage": "MSG",
+      "levelLabel": "Level",
+      "msgLabel": "MSG",
+      "levelAll": "All",
+      "searchPlaceholder": "Search message...",
+      "noMatching": "No matching logs.",
+      "fileNotFound": "Log file not found."
     },
     "clean": {
       "title": "Clean Logs",
@@ -525,7 +534,16 @@ const I18N = {
       "refresh": "刷新",
       "delete": "删除",
       "auto": "自动刷新",
-      "interval": "间隔"
+      "interval": "间隔",
+      "tableDate": "日期",
+      "tableLevel": "级别",
+      "tableMessage": "消息",
+      "levelLabel": "级别",
+      "msgLabel": "消息",
+      "levelAll": "全部",
+      "searchPlaceholder": "搜索消息...",
+      "noMatching": "没有匹配的日志。",
+      "fileNotFound": "未找到日志文件。"
     },
     "clean": {
       "title": "清理日志",
@@ -944,7 +962,16 @@ const I18N = {
       "refresh": "更新",
       "delete": "削除",
       "auto": "自動更新",
-      "interval": "間隔"
+      "interval": "間隔",
+      "tableDate": "日時",
+      "tableLevel": "レベル",
+      "tableMessage": "メッセージ",
+      "levelLabel": "レベル",
+      "msgLabel": "メッセージ",
+      "levelAll": "すべて",
+      "searchPlaceholder": "メッセージを検索...",
+      "noMatching": "一致するログがありません。",
+      "fileNotFound": "ログファイルが見つかりません。"
     },
     "clean": {
       "title": "ログの削除",
@@ -1357,7 +1384,16 @@ const I18N = {
       "refresh": "새로고침",
       "delete": "삭제",
       "auto": "자동 새로고침",
-      "interval": "간격"
+      "interval": "간격",
+      "tableDate": "날짜",
+      "tableLevel": "레벨",
+      "tableMessage": "메시지",
+      "levelLabel": "레벨",
+      "msgLabel": "메시지",
+      "levelAll": "전체",
+      "searchPlaceholder": "메시지 검색...",
+      "noMatching": "일치하는 로그가 없습니다.",
+      "fileNotFound": "로그 파일을 찾을 수 없습니다."
     },
     "clean": {
       "title": "로그 정리",
@@ -1770,7 +1806,16 @@ const I18N = {
       "refresh": "Actualiser",
       "delete": "Supprimer",
       "auto": "Actualisation automatique",
-      "interval": "Intervalle"
+      "interval": "Intervalle",
+      "tableDate": "Date",
+      "tableLevel": "Niveau",
+      "tableMessage": "MSG",
+      "levelLabel": "Niveau",
+      "msgLabel": "MSG",
+      "levelAll": "Tous",
+      "searchPlaceholder": "Rechercher un message...",
+      "noMatching": "Aucun journal correspondant.",
+      "fileNotFound": "Fichier journal introuvable."
     },
     "clean": {
       "title": "Nettoyer les journaux",
@@ -2183,7 +2228,16 @@ const I18N = {
       "refresh": "Aktualisieren",
       "delete": "Löschen",
       "auto": "Automatisch aktualisieren",
-      "interval": "Intervall"
+      "interval": "Intervall",
+      "tableDate": "Datum",
+      "tableLevel": "Level",
+      "tableMessage": "Nachricht",
+      "levelLabel": "Level",
+      "msgLabel": "Nachricht",
+      "levelAll": "Alle",
+      "searchPlaceholder": "Nachricht suchen...",
+      "noMatching": "Keine passenden Logs gefunden.",
+      "fileNotFound": "Log-Datei nicht gefunden."
     },
     "clean": {
       "title": "Logs bereinigen",
@@ -2596,7 +2650,16 @@ const I18N = {
       "refresh": "Обновить",
       "delete": "Удалить",
       "auto": "Автообновление",
-      "interval": "Интервал"
+      "interval": "Интервал",
+      "tableDate": "Дата",
+      "tableLevel": "Уровень",
+      "tableMessage": "Сообщение",
+      "levelLabel": "Уровень",
+      "msgLabel": "Сообщение",
+      "levelAll": "Все",
+      "searchPlaceholder": "Поиск по сообщению...",
+      "noMatching": "Подходящих журналов нет.",
+      "fileNotFound": "Файл журнала не найден."
     },
     "clean": {
       "title": "Очистка журналов",

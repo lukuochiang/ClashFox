@@ -281,6 +281,9 @@ let logRefresh = document.getElementById('logRefresh');
 let logContent = document.getElementById('logContent');
 let logAutoRefresh = document.getElementById('logAutoRefresh');
 let logIntervalPreset = document.getElementById('logIntervalPreset');
+let logLevelFilter = document.getElementById('logLevelFilter');
+let logMessageFilter = document.getElementById('logMessageFilter');
+let logTableBody = document.getElementById('logTableBody');
 
 const LAYOUT_CACHE_VERSION = 'v3';
 const PAGE_TEMPLATE_CACHE_VERSION = 'v2';
@@ -457,6 +460,7 @@ const state = {
   fileSettings: {},
   logTimer: null,
   logIntervalMs: 3000,
+  logEntries: [],
   switchPage: 1,
   backupsPage: 1,
   configPage: 1,
@@ -2257,7 +2261,7 @@ function applySettings(settings) {
   if (settingsLogAutoRefresh) {
     settingsLogAutoRefresh.checked = state.settings.logAutoRefresh;
   }
-  setLogAutoRefresh(state.settings.logAutoRefresh);
+  setLogAutoRefresh(true);
   if (proxyModeSelect) {
     setProxyModeValue(state.settings.proxy || 'rule');
   }
@@ -4713,23 +4717,43 @@ function renderRecommendTable() {
 }
 
 async function loadLogs() {
-  if (!logLines || !logContent) {
+  if (!logTableBody && !logContent) {
     return;
   }
-  const lines = logLines.value || 200;
+  const lines = Number.parseInt(
+    String(
+      (logLines && logLines.value)
+      || (settingsLogLines && settingsLogLines.value)
+      || (state.settings && state.settings.logLines)
+      || 200,
+    ),
+    10,
+  ) || 200;
   const response = await runCommand('logs', ['--lines', String(lines)]);
   if (!response.ok) {
-    logContent.textContent = t('labels.logMissing');
+    state.logEntries = [];
+    if (logTableBody) {
+      logTableBody.innerHTML = `<tr><td class="empty-cell" colspan="3">${escapeLogCell(ti('logs.fileNotFound', 'Log file not found.'))}</td></tr>`;
+    }
+    if (logContent) {
+      logContent.textContent = t('labels.logMissing');
+    }
     return;
   }
+  let textContent = '';
   if (response.data && response.data.contentBase64) {
     const binary = atob(response.data.contentBase64);
     const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
     const decoded = new TextDecoder('utf-8').decode(bytes);
-    const linesList = decoded.replace(/\n$/, '').split('\n').reverse();
-    logContent.textContent = linesList.join('\n');
+    textContent = decoded || '';
   } else {
-    logContent.textContent = response.data.content || '';
+    textContent = String((response.data && response.data.content) || '');
+  }
+  const linesList = textContent.replace(/\n$/, '').split('\n').filter((line) => String(line || '').trim()).reverse();
+  state.logEntries = linesList.map(parseLogLine).filter(Boolean);
+  renderLogTable();
+  if (logContent) {
+    logContent.textContent = linesList.join('\n');
   }
 }
 
@@ -4738,11 +4762,7 @@ function setLogAutoRefresh(enabled) {
     clearInterval(state.logTimer);
     state.logTimer = null;
   }
-  if (!logIntervalPreset) {
-    return;
-  }
-  logIntervalPreset.disabled = !enabled;
-  if (!enabled || !logAutoRefresh) {
+  if (!enabled) {
     return;
   }
   state.logTimer = setInterval(() => {
@@ -4751,19 +4771,166 @@ function setLogAutoRefresh(enabled) {
 }
 
 function getIntervalMs() {
-  const presetValue = Number.parseInt(logIntervalPreset.value, 10);
+  const sourcePreset = (logIntervalPreset && logIntervalPreset.value)
+    || (settingsLogIntervalPreset && settingsLogIntervalPreset.value)
+    || (state.settings && state.settings.logIntervalPreset)
+    || '3';
+  const presetValue = Number.parseInt(String(sourcePreset), 10);
   const clamped = Math.min(Math.max(presetValue || 3, 1), 60);
   return clamped * 1000;
 }
 
 function updateInterval() {
-  if (!logIntervalPreset || !logAutoRefresh) {
-    return;
-  }
   state.logIntervalMs = getIntervalMs();
-  if (logAutoRefresh.checked) {
+  if (state.logTimer) {
     setLogAutoRefresh(true);
   }
+}
+
+function normalizeLogLevel(level = '') {
+  const raw = String(level || '').trim().toUpperCase();
+  if (!raw) return 'INFO';
+  if (raw === 'WARNING') return 'WARN';
+  if (raw === 'ERR') return 'ERROR';
+  return raw;
+}
+
+function formatLogDate(value = '') {
+  const text = String(value || '').trim();
+  if (!text || text === '-') {
+    return '-';
+  }
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) {
+    const yyyy = parsed.getFullYear();
+    const mm = String(parsed.getMonth() + 1).padStart(2, '0');
+    const dd = String(parsed.getDate()).padStart(2, '0');
+    const hh = String(parsed.getHours()).padStart(2, '0');
+    const mi = String(parsed.getMinutes()).padStart(2, '0');
+    const ss = String(parsed.getSeconds()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+  }
+  const normalized = text.replace('T', ' ').replace(/Z$/i, '');
+  const match = normalized.match(
+    /^(\d{4}[-/]\d{2}[-/]\d{2})\s+(\d{2}:\d{2}:\d{2})(?:\.\d+)?(?:\s*[+\-]\d{2}:?\d{2})?$/,
+  );
+  if (match) {
+    return `${match[1].replace(/\//g, '-')} ${match[2]}`;
+  }
+  return normalized.replace(/\.\d+(?=\s*[+\-]\d{2}:?\d{2}$|$)/, '');
+}
+
+function parseLogLine(line = '') {
+  const source = String(line || '').trim();
+  if (!source) {
+    return null;
+  }
+  const raw = source.replace(/\x1b\[[0-9;]*m/g, '').trim();
+  let date = '-';
+  let level = 'INFO';
+  let msg = raw;
+
+  const readLogfmtValue = (text = '', key = '') => {
+    const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const quoted = text.match(new RegExp(`(?:^|\\s)${escapedKey}=\"((?:\\\\.|[^\"])*)\"`));
+    if (quoted) {
+      return String(quoted[1] || '').replace(/\\"/g, '"').replace(/\\\\/g, '\\').trim();
+    }
+    const plain = text.match(new RegExp(`(?:^|\\s)${escapedKey}=([^\\s]+)`));
+    if (plain) {
+      return String(plain[1] || '').trim();
+    }
+    return '';
+  };
+
+  // e.g. time="2026-03-07T12:00:00.123+08:00" level=info msg="..."
+  const hasLogfmtTokens = /\b(?:time|timestamp|ts|date)=/.test(raw) && /\blevel=/.test(raw);
+  if (hasLogfmtTokens) {
+    const tokenDate = readLogfmtValue(raw, 'time')
+      || readLogfmtValue(raw, 'timestamp')
+      || readLogfmtValue(raw, 'ts')
+      || readLogfmtValue(raw, 'date');
+    const tokenLevel = readLogfmtValue(raw, 'level');
+    const tokenMsg = readLogfmtValue(raw, 'msg') || readLogfmtValue(raw, 'message');
+    if (tokenDate) {
+      date = tokenDate;
+    }
+    if (tokenLevel) {
+      level = normalizeLogLevel(tokenLevel);
+    }
+    if (tokenMsg) {
+      msg = tokenMsg;
+    } else {
+      msg = raw
+        .replace(/(?:^|\s)(?:time|timestamp|ts|date)=(?:"(?:\\.|[^"])*"|[^\s]+)/g, ' ')
+        .replace(/(?:^|\s)level=(?:"(?:\\.|[^"])*"|[^\s]+)/g, ' ')
+        .replace(/(?:^|\s)(?:msg|message)=(?:"(?:\\.|[^"])*"|[^\s]+)/g, ' ')
+        .trim() || '-';
+    }
+    return { date: formatLogDate(date), level, msg };
+  }
+
+  const fullMatch = raw.match(/^(\d{4}[-/]\d{2}[-/]\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:?\d{2})?)\s+\[?([A-Za-z]+)\]?\s*(.*)$/);
+  if (fullMatch) {
+    date = fullMatch[1];
+    level = normalizeLogLevel(fullMatch[2]);
+    msg = String(fullMatch[3] || '').trim() || '-';
+    return { date: formatLogDate(date), level, msg };
+  }
+
+  const timeLevelMatch = raw.match(/^(\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+\[?([A-Za-z]+)\]?\s*(.*)$/);
+  if (timeLevelMatch) {
+    date = timeLevelMatch[1];
+    level = normalizeLogLevel(timeLevelMatch[2]);
+    msg = String(timeLevelMatch[3] || '').trim() || '-';
+    return { date: formatLogDate(date), level, msg };
+  }
+
+  const levelTokenMatch = raw.match(/\b(DEBUG|INFO|WARN|WARNING|ERROR|FATAL|TRACE)\b/i);
+  if (levelTokenMatch) {
+    level = normalizeLogLevel(levelTokenMatch[1]);
+    msg = raw.replace(levelTokenMatch[0], '').trim() || raw;
+  }
+  return { date: formatLogDate(date), level, msg };
+}
+
+function escapeLogCell(value = '') {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderLogTable() {
+  if (!logTableBody) {
+    return;
+  }
+  const levelFilter = String((logLevelFilter && logLevelFilter.value) || 'all').toLowerCase();
+  const keyword = String((logMessageFilter && logMessageFilter.value) || '').trim().toLowerCase();
+  const rows = (Array.isArray(state.logEntries) ? state.logEntries : []).filter((entry) => {
+    const entryLevel = String(entry.level || '').toLowerCase();
+    if (levelFilter !== 'all' && entryLevel !== levelFilter) {
+      return false;
+    }
+    if (!keyword) {
+      return true;
+    }
+    return String(entry.msg || '').toLowerCase().includes(keyword);
+  });
+  if (!rows.length) {
+    logTableBody.innerHTML = `<tr><td class="empty-cell" colspan="3">${escapeLogCell(ti('logs.noMatching', 'No matching logs.'))}</td></tr>`;
+    return;
+  }
+  logTableBody.innerHTML = rows.map((entry) => {
+    const levelClass = `log-level-${String(entry.level || '').toLowerCase()}`;
+    return `<tr>
+      <td class="log-date-col">${escapeLogCell(entry.date)}</td>
+      <td class="log-level-col"><span class="log-level-badge ${levelClass}">${escapeLogCell(entry.level)}</span></td>
+      <td class="log-msg-col">${escapeLogCell(entry.msg)}</td>
+    </tr>`;
+  }).join('');
 }
 
 function getSelectedBackupIndex() {
@@ -5100,6 +5267,9 @@ function refreshPageRefs() {
   logContent = document.getElementById('logContent');
   logAutoRefresh = document.getElementById('logAutoRefresh');
   logIntervalPreset = document.getElementById('logIntervalPreset');
+  logLevelFilter = document.getElementById('logLevelFilter');
+  logMessageFilter = document.getElementById('logMessageFilter');
+  logTableBody = document.getElementById('logTableBody');
   cleanBtn = document.getElementById('cleanBtn');
   dashboardFrame = document.getElementById('dashboardFrame');
   dashboardEmpty = document.getElementById('dashboardEmpty');
@@ -5232,7 +5402,7 @@ function refreshPageView() {
   renderSwitchTable();
   renderBackupsTable();
   renderRecommendTable();
-  if (logContent || logLines) {
+  if (logContent || logLines || logTableBody) {
     loadLogs();
   }
   loadStatus();
@@ -7263,9 +7433,9 @@ if (settingsLogAutoRefresh) {
   settingsLogAutoRefresh.addEventListener('change', (event) => {
     if (logAutoRefresh) {
       logAutoRefresh.checked = event.target.checked;
-      setLogAutoRefresh(event.target.checked);
-      saveSettings({ logAutoRefresh: event.target.checked });
     }
+    saveSettings({ logAutoRefresh: event.target.checked });
+    setLogAutoRefresh(true);
   });
 }
 
@@ -7295,6 +7465,18 @@ if (logLines) {
     if (logLines) {
       logLines.value = value;
     }
+  });
+}
+
+if (logLevelFilter) {
+  logLevelFilter.addEventListener('change', () => {
+    renderLogTable();
+  });
+}
+
+if (logMessageFilter) {
+  logMessageFilter.addEventListener('input', () => {
+    renderLogTable();
   });
 }
 
