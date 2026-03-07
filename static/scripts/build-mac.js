@@ -1,12 +1,18 @@
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..', '..');
 const pkg = require(path.join(ROOT, 'package.json'));
-const withHelper = process.argv.includes('--with-helper') || process.env.CLASHFOX_WITH_HELPER === '1';
-const tempConfigPath = path.join(ROOT, 'dist', 'electron-builder.no-helper.json');
-const tempX64ConfigPath = path.join(ROOT, 'dist', withHelper ? 'electron-builder.x64.json' : 'electron-builder.no-helper.x64.json');
+const forceWithoutHelper = process.argv.includes('--without-helper') || process.env.CLASHFOX_WITH_HELPER === '0';
+const forceWithHelper = process.argv.includes('--with-helper') || process.env.CLASHFOX_WITH_HELPER === '1';
+const withHelper = forceWithHelper || !forceWithoutHelper;
+const dualOutputFromHelper = withHelper && process.env.CLASHFOX_DUAL_FROM_HELPER === '1';
+const artifactNameOverride = String(process.env.CLASHFOX_ARTIFACT_NAME || '').trim();
+const configMode = withHelper ? 'helper' : 'no-helper';
+const tempConfigPath = path.join(ROOT, 'dist', `electron-builder.${configMode}.json`);
+const tempX64ConfigPath = path.join(ROOT, 'dist', `electron-builder.${configMode}.x64.json`);
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -59,6 +65,12 @@ function buildConfig({ includeHelper = true, forceX64Suffix = false } = {}) {
     files,
     extraResources,
   };
+  if (artifactNameOverride) {
+    config.mac = {
+      ...(config.mac || {}),
+      artifactName: artifactNameOverride,
+    };
+  }
   if (forceX64Suffix) {
     config.mac = {
       ...(config.mac || {}),
@@ -101,13 +113,95 @@ function buildMac() {
     PYTHON: process.env.PYTHON || 'python3',
   };
   const commonArgs = ['--mac', 'zip'];
-  const configArgs = withHelper ? [] : ['--config', tempConfigPath];
   run('npx', ['electron-builder', ...commonArgs, '--x64', '--publish', 'never', '--config', tempX64ConfigPath], { env });
   renameUnpackedMacDir('mac', 'mac-x64');
-  run('npx', ['electron-builder', ...commonArgs, '--arm64', '--publish', 'never', ...configArgs], { env });
+  run('npx', ['electron-builder', ...commonArgs, '--arm64', '--publish', 'never', '--config', tempConfigPath], { env });
   renameUnpackedMacDir('mac', 'mac-arm64');
-  run('npx', ['electron-builder', ...commonArgs, '--universal', '--publish', 'never', ...configArgs], { env });
+  run('npx', ['electron-builder', ...commonArgs, '--universal', '--publish', 'never', '--config', tempConfigPath], { env });
   renameUnpackedMacDir('mac', 'mac-universal');
+}
+
+function findAppBundlePath(baseDir) {
+  const entries = fs.readdirSync(baseDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isDirectory() && entry.name.endsWith('.app')) {
+      return path.join(baseDir, entry.name);
+    }
+  }
+  return '';
+}
+
+function renderArtifactName(pattern, arch, ext = 'zip') {
+  const productName = String((pkg.build && pkg.build.productName) || pkg.productName || pkg.name || 'ClashFox');
+  const version = String(pkg.version || '0.0.0');
+  const buildNumber = String(process.env.CLASHFOX_BUILD_NUMBER || pkg.buildNumber || '');
+  return String(pattern || '')
+    .replace(/\$\{productName\}/g, productName)
+    .replace(/\$\{version\}/g, version)
+    .replace(/\$\{arch\}/g, arch)
+    .replace(/\$\{ext\}/g, ext)
+    .replace(/\$\{env\.CLASHFOX_BUILD_NUMBER\}/g, buildNumber)
+    .replace(/\$\{env\.[A-Z0-9_]+\}/g, '');
+}
+
+function resolveDualArtifactNames(arch) {
+  const fallbackPattern = '${productName}-${version}-mac-${arch}.zip';
+  const helperPattern = (artifactNameOverride || fallbackPattern).replace(/\.zip$/i, '.zip');
+  const helperName = renderArtifactName(helperPattern, arch, 'zip');
+  const normalPattern = helperPattern.replace(/-helper(?=\.zip$)/i, '');
+  const normalName = renderArtifactName(normalPattern, arch, 'zip');
+  return { helperName, normalName };
+}
+
+function zipAppBundle(appPath, outputZipPath) {
+  const parentDir = path.dirname(appPath);
+  const appName = path.basename(appPath);
+  if (fs.existsSync(outputZipPath)) {
+    fs.unlinkSync(outputZipPath);
+  }
+  run('ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', appName, outputZipPath], { cwd: parentDir });
+}
+
+function zipAppBundleWithoutHelper(appPath, outputZipPath) {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clashfox-no-helper-'));
+  try {
+    const tempAppPath = path.join(tempRoot, path.basename(appPath));
+    run('ditto', [appPath, tempAppPath]);
+    const helperDirs = [
+      path.join(tempAppPath, 'Contents', 'Resources', 'helper'),
+      path.join(tempAppPath, 'Contents', 'Resources', 'static', 'helper'),
+    ];
+    for (const helperDir of helperDirs) {
+      if (fs.existsSync(helperDir)) {
+        fs.rmSync(helperDir, { recursive: true, force: true });
+      }
+    }
+    zipAppBundle(tempAppPath, outputZipPath);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+}
+
+function buildDualArtifactsFromUnpacked() {
+  const archDirs = [
+    { arch: 'x64', dir: path.join(ROOT, 'dist', 'mac-x64') },
+    { arch: 'arm64', dir: path.join(ROOT, 'dist', 'mac-arm64') },
+    { arch: 'universal', dir: path.join(ROOT, 'dist', 'mac-universal') },
+  ];
+  for (const item of archDirs) {
+    if (!fs.existsSync(item.dir)) {
+      continue;
+    }
+    const appPath = findAppBundlePath(item.dir);
+    if (!appPath) {
+      throw new Error(`Cannot locate .app bundle in ${item.dir}`);
+    }
+    const { helperName, normalName } = resolveDualArtifactNames(item.arch);
+    const helperZipPath = path.join(ROOT, 'dist', helperName);
+    const normalZipPath = path.join(ROOT, 'dist', normalName);
+    zipAppBundle(appPath, helperZipPath);
+    zipAppBundleWithoutHelper(appPath, normalZipPath);
+  }
 }
 
 run('node', ['static/scripts/clean-dist-mac.js', '--pre']);
@@ -118,6 +212,9 @@ writeBuildConfigs();
 let exitCode = 0;
 try {
   buildMac();
+  if (dualOutputFromHelper) {
+    buildDualArtifactsFromUnpacked();
+  }
 } catch {
   exitCode = 1;
 } finally {

@@ -83,45 +83,34 @@ jobs:
         shell: bash
         run: npm version "${{ steps.meta.outputs.version }}" --no-git-tag-version
 
-      - name: Build standard mac packages
+      - name: Build mac packages
         shell: bash
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           UPDATE_CHANNEL: ${{ steps.meta.outputs.update_channel }}
-          ARTIFACT_NAME: ${{ '${productName}-${version}-mac-${arch}.${ext}' }}
+          CLASHFOX_ARTIFACT_NAME: ${{ '${productName}-${version}-mac-${arch}-helper.${ext}' }}
+          CLASHFOX_DUAL_FROM_HELPER: "1"
         run: |
           set -euo pipefail
-          node -e '
-            const fs = require("fs");
-            const pkgPath = "package.json";
-            const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
-            pkg.build = pkg.build || {};
-            pkg.build.mac = pkg.build.mac || {};
-            pkg.build.mac.artifactName = process.env.ARTIFACT_NAME;
-            fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
-          '
           export UPDATE_CHANNEL
           npm run build:mac
 
-      - name: Build helper mac packages
+      - name: Verify zip artifacts
         shell: bash
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          UPDATE_CHANNEL: ${{ steps.meta.outputs.update_channel }}
-          ARTIFACT_NAME: ${{ '${productName}-${version}-mac-${arch}-helper.${ext}' }}
         run: |
           set -euo pipefail
-          node -e '
-            const fs = require("fs");
-            const pkgPath = "package.json";
-            const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
-            pkg.build = pkg.build || {};
-            pkg.build.mac = pkg.build.mac || {};
-            pkg.build.mac.artifactName = process.env.ARTIFACT_NAME;
-            fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
-          '
-          export UPDATE_CHANNEL
-          npm run build:mac:helper
+          echo "Checking helper zip outputs..."
+          find dist -type f -name "*-helper.zip" -print
+          if ! find dist -type f -name "*-helper.zip" | grep -q .; then
+            echo "Missing helper artifacts (*-helper.zip)"
+            exit 1
+          fi
+          echo "Checking standard zip outputs..."
+          find dist -type f -name "*.zip" ! -name "*-helper.zip" -print
+          if ! find dist -type f -name "*.zip" ! -name "*-helper.zip" | grep -q .; then
+            echo "Missing standard artifacts (*.zip without -helper)"
+            exit 1
+          fi
 
       - name: Prepare artifacts
         shell: bash
