@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ClashFox | Dashboard</title>
+    <script>
+      (function(){
+        try {
+          var t = localStorage.getItem('lastTheme');
+          if (t) {
+            document.documentElement.setAttribute('data-theme', t);
+            if (document.body) document.body.dataset.theme = t;
+            else document.addEventListener('DOMContentLoaded', () => {
+              document.body.dataset.theme = t;
+            });
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <link rel="stylesheet" href="../css/styles.css" />
+  </head>
+  <body data-page="foxboard">
+    <div class="foxboard-shell">
+      <header class="foxboard-header">
+        <div>
+          <h1 id="foxboardTitle">Foxboard</h1>
+          <p id="foxboardSubtitle">Live traffic intelligence with request, DNS, device, and policy views.</p>
+        </div>
+      </header>
+      <section id="dashboard" class="panel active dashboard-panel-local">
+        <div class="dashboard-shell-local dashboard-shell-standalone" id="dashboardLocalPanel">
+          <aside class="dashboard-sidebar-local">
+            <div class="dashboard-group-switch" id="dashboardGroupButtons">
+              <button class="active" type="button" data-dashboard-group="client">By Client</button>
+              <button type="button" data-dashboard-group="host">By Host</button>
+            </div>
+            <div class="dashboard-sidebar-label">Requests</div>
+            <div class="dashboard-filter-list" id="dashboardFilterList"></div>
+          </aside>
+
+          <section class="dashboard-main-local">
+            <header class="dashboard-toolbar-local">
+              <div class="dashboard-tabs-local" id="dashboardTabs">
+                <button class="active" type="button" data-dashboard-tab="recent">Recent Requests</button>
+                <button type="button" data-dashboard-tab="active">Active Connection</button>
+                <button type="button" data-dashboard-tab="dns">DNS</button>
+                <button type="button" data-dashboard-tab="devices">Devices</button>
+                <button type="button" data-dashboard-tab="traffic">Traffic Statistics</button>
+              </div>
+              <div class="dashboard-control-row" id="dashboardControlRow">
+                <div class="dashboard-status-filters" id="dashboardStatusFilters">
+                  <button class="active" type="button" data-recent-status="all">All</button>
+                  <button type="button" data-recent-status="active">Active</button>
+                  <button type="button" data-recent-status="completed">Completed</button>
+                  <button type="button" data-recent-status="failed">Failed</button>
+                </div>
+                <div class="dashboard-time-filters" id="dashboardTimeFilters">
+                  <button class="active" type="button" data-recent-range="0">All Time</button>
+                  <button type="button" data-recent-range="300000">5m</button>
+                  <button type="button" data-recent-range="900000">15m</button>
+                  <button type="button" data-recent-range="3600000">1h</button>
+                </div>
+                <label class="dashboard-search-local">
+                  <input id="dashboardSearchInput" type="search" placeholder="Filter client, host, policy" />
+                </label>
+              </div>
+            </header>
+
+            <div class="dashboard-summary-grid" id="dashboardSummaryGrid"></div>
+
+            <div class="dashboard-table-card">
+              <div class="dashboard-table-header">
+                <div>
+                  <h3 id="dashboardPanelTitle">Recent Requests</h3>
+                  <div class="dashboard-panel-meta" id="dashboardPanelMeta">Updated -</div>
+                </div>
+                <div class="dashboard-table-tools">
+                  <div class="dashboard-live-meta" id="dashboardLiveMeta">Connecting...</div>
+                </div>
+              </div>
+              <div class="dashboard-table-scroll">
+                <div class="dashboard-cards-view" id="dashboardCardsView" hidden></div>
+                <table class="dashboard-table-local">
+                  <thead id="dashboardTableHead"></thead>
+                  <tbody id="dashboardTableBody"></tbody>
+                </table>
+              </div>
+              <div class="dashboard-detail-panel" id="dashboardDetailPanel"></div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </div>
+
+    <script src="../../../static/locales/i18n.js"></script>
+    <script type="module" src="../js/foxboard.js"></script>
+  </body>
+</html>

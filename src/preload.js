@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('clashfox', {
   runCommand: (command, args = [], options = {}) => ipcRenderer.invoke('clashfox:command', command, args, options),
   detectTunConflict: () => ipcRenderer.invoke('clashfox:detectTunConflict'),
   worldwideSnapshot: (options = {}) => ipcRenderer.invoke('clashfox:worldwideSnapshot', options),
+  dashboardSnapshot: (options = {}) => ipcRenderer.invoke('clashfox:dashboardSnapshot', options),
   cancelCommand: () => ipcRenderer.invoke('clashfox:cancelCommand'),
   selectConfig: () => ipcRenderer.invoke('clashfox:selectConfig'),
   importConfig: () => ipcRenderer.invoke('clashfox:importConfig'),

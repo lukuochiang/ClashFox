@@ -65,6 +65,8 @@ let traySubmenuAnchor = { top: 0, height: 0, rootHeight: 0 };
 let traySubmenuLastSize = { width: 0, height: 0 };
 let traySubmenuPendingPayload = null;
 let dashboardWindow = null;
+let foxboardWindow = null;
+let foxboardPreloadWindow = null;
 let worldwideWindow = null;
 let worldwidePreloadWindow = null;
 let mainWindowResizePersistTimer = null;
@@ -138,8 +140,18 @@ const WORLDWIDE_FILTER_TOP_TRACKS = 500;
 const WORLDWIDE_DNS_CACHE_TTL_MS = 10 * 60 * 1000;
 const WORLDWIDE_GEO_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const WORLDWIDE_SELF_GEO_TTL_MS = 30 * 60 * 1000;
+const DASHBOARD_TRACK_LIMIT = 320;
+const DASHBOARD_RECENT_LIMIT = 240;
+const DASHBOARD_DNS_LIMIT = 200;
+const DASHBOARD_DEVICES_LIMIT = 32;
+const DASHBOARD_TOP_LIMIT = 24;
+const DASHBOARD_HISTORY_MAX_AGE_MS = 45 * 60 * 1000;
 const worldwideDnsCache = new Map();
 const worldwideGeoCache = new Map();
+const dashboardActiveConnections = new Map();
+const dashboardDnsRecords = new Map();
+const dashboardRecentRequests = [];
+let dashboardEventSeq = 1;
 let worldwideSelfGeoCache = {
   expiresAt: 0,
   data: null,
@@ -238,6 +250,9 @@ function refreshTrayMenuLabelsOnly() {
     }
     if (item.action === 'open-worldwide') {
       return { ...item, label: 'Trackers' };
+    }
+    if (item.action === 'open-foxboard') {
+      return { ...item, label: 'Foxboard' };
     }
     if (item.submenu === 'kernel') {
       return { ...item, label: labels.kernelManager };
@@ -572,6 +587,9 @@ function mergeAppearanceAliases(settings = {}) {
   const appearance = source.appearance && typeof source.appearance === 'object'
     ? source.appearance
     : {};
+  const trayMenu = source.trayMenu && typeof source.trayMenu === 'object'
+    ? source.trayMenu
+    : {};
   const readString = (key, fallback = '') => normalizeTextValue(appearance[key]) || normalizeTextValue(source[key]) || fallback;
   const readBoolean = (key, fallback = false) => {
     if (Object.prototype.hasOwnProperty.call(appearance, key)) {
@@ -589,6 +607,18 @@ function mergeAppearanceAliases(settings = {}) {
     const parsed = Number.parseInt(String(candidate ?? ''), 10);
     return Number.isFinite(parsed) ? parsed : fallback;
   };
+  const readTrayBoolean = (key, fallback = false) => {
+    if (Object.prototype.hasOwnProperty.call(trayMenu, key)) {
+      return Boolean(trayMenu[key]);
+    }
+    if (Object.prototype.hasOwnProperty.call(appearance, key)) {
+      return Boolean(appearance[key]);
+    }
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      return Boolean(source[key]);
+    }
+    return fallback;
+  };
   return {
     ...source,
     lang: readString('lang', 'auto'),
@@ -596,10 +626,11 @@ function mergeAppearanceAliases(settings = {}) {
     debugMode: readBoolean('debugMode', false),
     acceptBeta: readBoolean('acceptBeta', false),
     githubUser: readString('githubUser', 'vernesong'),
-    trayMenuChartEnabled: readBoolean('trayMenuChartEnabled', true),
-    trayMenuTrackersEnabled: readBoolean('trayMenuTrackersEnabled', true),
-    trayMenuKernelManagerEnabled: readBoolean('trayMenuKernelManagerEnabled', true),
-    trayMenuDirectoryLocationsEnabled: readBoolean('trayMenuDirectoryLocationsEnabled', true),
+    trayMenuChartEnabled: readTrayBoolean('trayMenuChartEnabled', true),
+    trayMenuTrackersEnabled: readTrayBoolean('trayMenuTrackersEnabled', true),
+    trayMenuFoxboardEnabled: readTrayBoolean('trayMenuFoxboardEnabled', true),
+    trayMenuKernelManagerEnabled: readTrayBoolean('trayMenuKernelManagerEnabled', true),
+    trayMenuDirectoryLocationsEnabled: readTrayBoolean('trayMenuDirectoryLocationsEnabled', true),
     windowWidth: readNumber('windowWidth', DEFAULT_MAIN_WINDOW_WIDTH),
     windowHeight: readNumber('windowHeight', DEFAULT_MAIN_WINDOW_HEIGHT),
     mainWindowClosed: readBoolean('mainWindowClosed', false),
@@ -766,6 +797,9 @@ function normalizeSettingsForStorage(input = {}) {
   delete parsed.switchPageSize;
   delete parsed.configPageSize;
   delete parsed.recommendPageSize;
+  const trayMenuConfig = parsed.trayMenu && typeof parsed.trayMenu === 'object'
+    ? parsed.trayMenu
+    : {};
 
   parsed.appearance = {
     lang: normalizeTextValue(parsed.lang) || 'auto',
@@ -773,10 +807,6 @@ function normalizeSettingsForStorage(input = {}) {
     debugMode: Boolean(parsed.debugMode),
     acceptBeta: Boolean(parsed.acceptBeta),
     githubUser: normalizeTextValue(parsed.githubUser) || 'vernesong',
-    trayMenuChartEnabled: normalizeBool(parsed.trayMenuChartEnabled, true),
-    trayMenuTrackersEnabled: normalizeBool(parsed.trayMenuTrackersEnabled, true),
-    trayMenuKernelManagerEnabled: normalizeBool(parsed.trayMenuKernelManagerEnabled, true),
-    trayMenuDirectoryLocationsEnabled: normalizeBool(parsed.trayMenuDirectoryLocationsEnabled, true),
     windowWidth: Number.parseInt(String(parsed.windowWidth ?? ''), 10) || DEFAULT_MAIN_WINDOW_WIDTH,
     windowHeight: Number.parseInt(String(parsed.windowHeight ?? ''), 10) || DEFAULT_MAIN_WINDOW_HEIGHT,
     mainWindowClosed: Boolean(parsed.mainWindowClosed),
@@ -785,6 +815,38 @@ function normalizeSettingsForStorage(input = {}) {
     logAutoRefresh: Boolean(parsed.logAutoRefresh),
     logIntervalPreset: normalizeTextValue(parsed.logIntervalPreset) || '3',
   };
+  parsed.trayMenu = {
+    trayMenuChartEnabled: normalizeBool(
+      Object.prototype.hasOwnProperty.call(parsed, 'trayMenuChartEnabled')
+        ? parsed.trayMenuChartEnabled
+        : trayMenuConfig.trayMenuChartEnabled,
+      true,
+    ),
+    trayMenuTrackersEnabled: normalizeBool(
+      Object.prototype.hasOwnProperty.call(parsed, 'trayMenuTrackersEnabled')
+        ? parsed.trayMenuTrackersEnabled
+        : trayMenuConfig.trayMenuTrackersEnabled,
+      true,
+    ),
+    trayMenuFoxboardEnabled: normalizeBool(
+      Object.prototype.hasOwnProperty.call(parsed, 'trayMenuFoxboardEnabled')
+        ? parsed.trayMenuFoxboardEnabled
+        : trayMenuConfig.trayMenuFoxboardEnabled,
+      true,
+    ),
+    trayMenuKernelManagerEnabled: normalizeBool(
+      Object.prototype.hasOwnProperty.call(parsed, 'trayMenuKernelManagerEnabled')
+        ? parsed.trayMenuKernelManagerEnabled
+        : trayMenuConfig.trayMenuKernelManagerEnabled,
+      true,
+    ),
+    trayMenuDirectoryLocationsEnabled: normalizeBool(
+      Object.prototype.hasOwnProperty.call(parsed, 'trayMenuDirectoryLocationsEnabled')
+        ? parsed.trayMenuDirectoryLocationsEnabled
+        : trayMenuConfig.trayMenuDirectoryLocationsEnabled,
+      true,
+    ),
+  };
   delete parsed.lang;
   delete parsed.theme;
   delete parsed.debugMode;
@@ -792,9 +854,9 @@ function normalizeSettingsForStorage(input = {}) {
   delete parsed.githubUser;
   delete parsed.trayMenuChartEnabled;
   delete parsed.trayMenuTrackersEnabled;
+  delete parsed.trayMenuFoxboardEnabled;
   delete parsed.trayMenuKernelManagerEnabled;
   delete parsed.trayMenuDirectoryLocationsEnabled;
-  delete parsed.trayMenuChartEnabled;
   delete parsed.windowWidth;
   delete parsed.windowHeight;
   delete parsed.mainWindowClosed;
@@ -853,6 +915,7 @@ function normalizeSettingsForStorage(input = {}) {
     'socksPort',
     'allowLan',
     'appearance',
+    'trayMenu',
     'userDataPaths',
     'panelManager',
     'kernel',
@@ -4998,6 +5061,402 @@ async function buildWorldwideSnapshot(options = {}) {
   };
 }
 
+function parseDashboardTimestamp(value = '') {
+  const text = String(value || '').trim();
+  if (!text) {
+    return 0;
+  }
+  const stamp = Date.parse(text);
+  return Number.isFinite(stamp) ? stamp : 0;
+}
+
+function trimDashboardState(now = Date.now()) {
+  const minAliveAt = now - DASHBOARD_HISTORY_MAX_AGE_MS;
+  while (dashboardRecentRequests.length > DASHBOARD_RECENT_LIMIT) {
+    dashboardRecentRequests.pop();
+  }
+  for (let index = dashboardRecentRequests.length - 1; index >= 0; index -= 1) {
+    if (Number(dashboardRecentRequests[index].eventAt || 0) < minAliveAt) {
+      dashboardRecentRequests.splice(index, 1);
+    }
+  }
+  for (const [host, record] of dashboardDnsRecords.entries()) {
+    if (Number(record.lastSeenAt || 0) < minAliveAt) {
+      dashboardDnsRecords.delete(host);
+    }
+  }
+}
+
+function buildDashboardConnectionKey(track = {}) {
+  return String(track.id || '').trim()
+    || [
+      String(track.processPath || track.process || '').trim(),
+      String(track.sourceIp || '').trim(),
+      String(track.sourcePort || '').trim(),
+      String(track.host || track.ip || '').trim(),
+      String(track.port || '').trim(),
+      String(track.outbound || '').trim(),
+      String(track.start || '').trim(),
+    ].join('|');
+}
+
+function normalizeDashboardClientName(track = {}) {
+  const processPath = String(track.processPath || '').trim();
+  const processName = String(track.process || '').trim();
+  const explicit = processName || (processPath ? path.basename(processPath) : '');
+  if (explicit) {
+    return explicit;
+  }
+  const host = String(track.host || '').trim();
+  if (host) {
+    return host;
+  }
+  return String(track.sourceIp || 'Unknown');
+}
+
+function makeDashboardRecord(track = {}, now = Date.now()) {
+  const startedAt = parseDashboardTimestamp(track.start) || now;
+  const upload = Math.max(0, Number(track.upload || 0));
+  const download = Math.max(0, Number(track.download || 0));
+  const client = normalizeDashboardClientName(track);
+  return {
+    key: buildDashboardConnectionKey(track),
+    id: String(track.id || '').trim() || String(dashboardEventSeq),
+    startedAt,
+    firstSeenAt: now,
+    lastSeenAt: now,
+    client,
+    host: String(track.host || '').trim(),
+    ip: String(track.ip || '').trim(),
+    port: Number(track.port || 0),
+    outbound: String(track.outbound || track.rule || 'DIRECT').trim() || 'DIRECT',
+    network: String(track.network || track.type || '').trim().toUpperCase(),
+    rule: String(track.rule || '').trim(),
+    process: String(track.process || '').trim(),
+    processPath: String(track.processPath || '').trim(),
+    sourceIp: String(track.sourceIp || '').trim(),
+    sourcePort: Number(track.sourcePort || 0),
+    upload,
+    download,
+  };
+}
+
+function pushDashboardRecentEvent(record = {}, status = 'Active', eventAt = Date.now()) {
+  const recentKey = String(record.key || [record.id, record.host || record.ip || '', record.port || '', record.startedAt || ''].join('|')).trim();
+  for (let index = dashboardRecentRequests.length - 1; index >= 0; index -= 1) {
+    if (String(dashboardRecentRequests[index].recentKey || '').trim() === recentKey) {
+      dashboardRecentRequests.splice(index, 1);
+    }
+  }
+  dashboardRecentRequests.unshift({
+    eventId: dashboardEventSeq++,
+    recentKey,
+    status,
+    eventAt,
+    id: record.id,
+    client: record.client,
+    host: record.host,
+    ip: record.ip,
+    port: record.port,
+    outbound: record.outbound,
+    network: record.network,
+    rule: record.rule,
+    upload: record.upload,
+    download: record.download,
+    startedAt: record.startedAt,
+    process: record.process,
+    processPath: record.processPath,
+    sourceIp: record.sourceIp,
+    sourcePort: record.sourcePort,
+    durationMs: Math.max(0, eventAt - Number(record.startedAt || eventAt)),
+  });
+}
+
+function updateDashboardDnsRecord(record = {}, now = Date.now()) {
+  const host = String(record.host || '').trim();
+  if (!host) {
+    return;
+  }
+  const existing = dashboardDnsRecords.get(host);
+  if (existing) {
+    existing.lastSeenAt = now;
+    existing.hits += 1;
+    if (!existing.ip && record.ip) existing.ip = record.ip;
+    if (record.client) existing.clients.add(record.client);
+    if (record.outbound) existing.outbounds.add(record.outbound);
+    return;
+  }
+  dashboardDnsRecords.set(host, {
+    host,
+    ip: String(record.ip || '').trim(),
+    firstSeenAt: now,
+    lastSeenAt: now,
+    hits: 1,
+    clients: new Set(record.client ? [record.client] : []),
+    outbounds: new Set(record.outbound ? [record.outbound] : []),
+  });
+}
+
+async function buildDashboardSnapshot(options = {}) {
+  const limit = Math.max(60, Math.min(Number(options.limit) || DASHBOARD_TRACK_LIMIT, 1200));
+  const now = Date.now();
+  const trackResult = await runBridgeWithAutoAuth('track-connections', ['--limit', String(limit)]);
+  if (!trackResult || !trackResult.ok) {
+    return {
+      ok: false,
+      error: trackResult ? String(trackResult.error || 'dashboard_track_failed') : 'dashboard_track_failed',
+      details: trackResult ? String(trackResult.details || '') : '',
+    };
+  }
+
+  const payload = trackResult && trackResult.data && typeof trackResult.data === 'object' ? trackResult.data : {};
+  const tracks = Array.isArray(payload.tracks) ? payload.tracks : [];
+  const currentKeys = new Set();
+  const currentRecords = [];
+  for (const track of tracks) {
+    if (!track || typeof track !== 'object') {
+      continue;
+    }
+    const nextRecord = makeDashboardRecord(track, now);
+    currentKeys.add(nextRecord.key);
+    const previous = dashboardActiveConnections.get(nextRecord.key);
+    if (!previous) {
+      dashboardActiveConnections.set(nextRecord.key, nextRecord);
+      pushDashboardRecentEvent(nextRecord, 'Active', now);
+      updateDashboardDnsRecord(nextRecord, now);
+      currentRecords.push(nextRecord);
+      continue;
+    }
+    previous.lastSeenAt = now;
+    previous.upload = nextRecord.upload;
+    previous.download = nextRecord.download;
+    previous.outbound = nextRecord.outbound || previous.outbound;
+    previous.network = nextRecord.network || previous.network;
+    previous.rule = nextRecord.rule || previous.rule;
+    previous.client = nextRecord.client || previous.client;
+    previous.host = nextRecord.host || previous.host;
+    previous.ip = nextRecord.ip || previous.ip;
+    previous.port = nextRecord.port || previous.port;
+    previous.process = nextRecord.process || previous.process;
+    previous.processPath = nextRecord.processPath || previous.processPath;
+    previous.sourceIp = nextRecord.sourceIp || previous.sourceIp;
+    previous.sourcePort = nextRecord.sourcePort || previous.sourcePort;
+    updateDashboardDnsRecord(previous, now);
+    currentRecords.push({ ...previous });
+  }
+
+  for (const [key, previous] of Array.from(dashboardActiveConnections.entries())) {
+    if (currentKeys.has(key)) {
+      continue;
+    }
+    const endedAt = now;
+    const totalBytes = Number(previous.upload || 0) + Number(previous.download || 0);
+    pushDashboardRecentEvent(previous, totalBytes > 0 ? 'Completed' : 'Failed', endedAt);
+    dashboardActiveConnections.delete(key);
+  }
+
+  trimDashboardState(now);
+
+  let overviewData = {};
+  let trafficData = {};
+  try {
+    const overviewResult = await runBridgeWithAutoAuth('overview', ['--cache-ttl', '2']);
+    if (overviewResult && overviewResult.ok && overviewResult.data && typeof overviewResult.data === 'object') {
+      overviewData = overviewResult.data;
+    }
+  } catch {
+    overviewData = {};
+  }
+  try {
+    const trafficResult = await runBridgeWithAutoAuth('traffic');
+    if (trafficResult && trafficResult.ok && trafficResult.data && typeof trafficResult.data === 'object') {
+      trafficData = trafficResult.data;
+    }
+  } catch {
+    trafficData = {};
+  }
+
+  const settings = readAppSettings();
+  const normalizedDevice = normalizeDeviceSettings(settings && settings.device, overviewData);
+
+  const activeConnections = currentRecords
+    .sort((a, b) => Number(b.startedAt || 0) - Number(a.startedAt || 0))
+    .slice(0, limit)
+    .map((record) => ({
+      id: record.id,
+      startedAt: record.startedAt,
+      client: record.client,
+      host: record.host,
+      ip: record.ip,
+      port: record.port,
+      outbound: record.outbound,
+      network: record.network,
+      rule: record.rule,
+      upload: record.upload,
+      download: record.download,
+      durationMs: Math.max(0, now - Number(record.startedAt || now)),
+      sourceIp: record.sourceIp,
+      sourcePort: record.sourcePort,
+      process: record.process,
+      processPath: record.processPath,
+      status: 'Active',
+    }));
+
+  const recentRequests = dashboardRecentRequests
+    .slice(0, DASHBOARD_RECENT_LIMIT)
+    .map((item) => ({ ...item }));
+
+  const dnsRecords = Array.from(dashboardDnsRecords.values())
+    .sort((a, b) => Number(b.lastSeenAt || 0) - Number(a.lastSeenAt || 0))
+    .slice(0, DASHBOARD_DNS_LIMIT)
+    .map((record) => ({
+      host: record.host,
+      ip: record.ip,
+      hits: record.hits,
+      firstSeenAt: record.firstSeenAt,
+      lastSeenAt: record.lastSeenAt,
+      clients: Array.from(record.clients).filter(Boolean).slice(0, 6),
+      outbounds: Array.from(record.outbounds).filter(Boolean).slice(0, 6),
+    }));
+
+  const deviceMap = new Map();
+  const localDeviceKey = normalizedDevice.computerName || normalizedDevice.user || 'local-device';
+  deviceMap.set(localDeviceKey, {
+    id: localDeviceKey,
+    name: normalizedDevice.computerName || normalizedDevice.user || 'Current Mac',
+    os: normalizedDevice.os || String(overviewData.systemName || '').trim(),
+    version: normalizedDevice.version || String(overviewData.systemVersion || '').trim(),
+    build: normalizedDevice.build || String(overviewData.systemBuild || '').trim(),
+    user: normalizedDevice.user || '',
+    userRealName: normalizedDevice.userRealName || '',
+    source: 'local',
+    connections: activeConnections.length,
+    upload: activeConnections.reduce((sum, item) => sum + Number(item.upload || 0), 0),
+    download: activeConnections.reduce((sum, item) => sum + Number(item.download || 0), 0),
+    endpoints: new Set(activeConnections.map((item) => item.sourceIp).filter(Boolean)),
+    clients: new Set(activeConnections.map((item) => item.client).filter(Boolean)),
+    lastSeenAt: now,
+  });
+  for (const item of activeConnections) {
+    const endpointKey = String(item.sourceIp || '').trim();
+    if (!endpointKey) {
+      continue;
+    }
+    const existing = deviceMap.get(endpointKey) || {
+      id: endpointKey,
+      name: endpointKey,
+      os: '',
+      version: '',
+      build: '',
+      user: '',
+      userRealName: '',
+      source: 'endpoint',
+      connections: 0,
+      upload: 0,
+      download: 0,
+      endpoints: new Set([endpointKey]),
+      clients: new Set(),
+      lastSeenAt: now,
+    };
+    existing.connections += 1;
+    existing.upload += Number(item.upload || 0);
+    existing.download += Number(item.download || 0);
+    if (item.client) existing.clients.add(item.client);
+    existing.lastSeenAt = now;
+    deviceMap.set(endpointKey, existing);
+  }
+  const devices = Array.from(deviceMap.values())
+    .sort((a, b) => {
+      if (a.source === 'local' && b.source !== 'local') return -1;
+      if (a.source !== 'local' && b.source === 'local') return 1;
+      return Number(b.connections || 0) - Number(a.connections || 0);
+    })
+    .slice(0, DASHBOARD_DEVICES_LIMIT)
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      os: item.os,
+      version: item.version,
+      build: item.build,
+      user: item.user,
+      userRealName: item.userRealName,
+      source: item.source,
+      connections: item.connections,
+      upload: item.upload,
+      download: item.download,
+      endpoints: Array.from(item.endpoints).filter(Boolean).slice(0, 6),
+      clients: Array.from(item.clients).filter(Boolean).slice(0, 8),
+      lastSeenAt: item.lastSeenAt,
+    }));
+
+  const topClientMap = new Map();
+  const topHostMap = new Map();
+  for (const item of activeConnections) {
+    const clientKey = item.client || 'Unknown';
+    const clientEntry = topClientMap.get(clientKey) || { name: clientKey, connections: 0, upload: 0, download: 0, outbounds: new Set() };
+    clientEntry.connections += 1;
+    clientEntry.upload += Number(item.upload || 0);
+    clientEntry.download += Number(item.download || 0);
+    if (item.outbound) clientEntry.outbounds.add(item.outbound);
+    topClientMap.set(clientKey, clientEntry);
+
+    const hostKey = item.host || item.ip || 'Unknown';
+    const hostEntry = topHostMap.get(hostKey) || { name: hostKey, connections: 0, upload: 0, download: 0, clients: new Set() };
+    hostEntry.connections += 1;
+    hostEntry.upload += Number(item.upload || 0);
+    hostEntry.download += Number(item.download || 0);
+    if (item.client) hostEntry.clients.add(item.client);
+    topHostMap.set(hostKey, hostEntry);
+  }
+
+  const topClients = Array.from(topClientMap.values())
+    .sort((a, b) => (b.upload + b.download) - (a.upload + a.download))
+    .slice(0, DASHBOARD_TOP_LIMIT)
+    .map((item) => ({
+      name: item.name,
+      connections: item.connections,
+      upload: item.upload,
+      download: item.download,
+      outbounds: Array.from(item.outbounds).filter(Boolean).slice(0, 6),
+    }));
+
+  const topHosts = Array.from(topHostMap.values())
+    .sort((a, b) => (b.upload + b.download) - (a.upload + a.download))
+    .slice(0, DASHBOARD_TOP_LIMIT)
+    .map((item) => ({
+      name: item.name,
+      connections: item.connections,
+      upload: item.upload,
+      download: item.download,
+      clients: Array.from(item.clients).filter(Boolean).slice(0, 6),
+    }));
+
+  return {
+    ok: true,
+    data: {
+      generatedAt: now,
+      summary: {
+        activeConnections: activeConnections.length,
+        totalConnections: Number(payload.total || activeConnections.length),
+        dnsHosts: dnsRecords.length,
+        recentRequests: recentRequests.length,
+        uploadRate: Number(trafficData.up || trafficData.upload || 0),
+        downloadRate: Number(trafficData.down || trafficData.download || 0),
+        totalUploadBytes: Number(overviewData.txBytes || 0),
+        totalDownloadBytes: Number(overviewData.rxBytes || 0),
+      },
+      recentRequests,
+      activeConnections,
+      dnsRecords,
+      devices,
+      traffic: {
+        topClients,
+        topHosts,
+      },
+    },
+  };
+}
+
 function openWorldwideWindow() {
   try {
     if (worldwideWindow && !worldwideWindow.isDestroyed()) {
@@ -5058,6 +5517,171 @@ function openWorldwideWindow() {
   } catch {
     showMainWindow();
   }
+}
+
+function openFoxboardWindow() {
+  try {
+    if (foxboardWindow && !foxboardWindow.isDestroyed()) {
+      foxboardWindow.show();
+      foxboardWindow.focus();
+      return;
+    }
+    if (foxboardPreloadWindow && !foxboardPreloadWindow.isDestroyed()) {
+      foxboardWindow = foxboardPreloadWindow;
+      foxboardPreloadWindow = null;
+      if (!foxboardWindow.__clashfoxKeepAliveBound) {
+        foxboardWindow.__clashfoxKeepAliveBound = true;
+        foxboardWindow.on('close', (event) => {
+          if (isQuitting || !foxboardWindow || foxboardWindow.isDestroyed()) {
+            return;
+          }
+          event.preventDefault();
+          if (foxboardWindow && !foxboardWindow.isDestroyed()) {
+            foxboardWindow.hide();
+          }
+        });
+      }
+      foxboardWindow.show();
+      foxboardWindow.focus();
+      return;
+    }
+    foxboardWindow = new BrowserWindow({
+      width: 1320,
+      height: 860,
+      minWidth: 980,
+      minHeight: 680,
+      show: true,
+      alwaysOnTop: false,
+      backgroundColor: '#0f1216',
+      autoHideMenuBar: true,
+      title: 'ClashFox Foxboard',
+      webPreferences: {
+        contextIsolation: true,
+        preload: path.join(__dirname, 'preload.js'),
+        devTools: false,
+      },
+    });
+    const windowRef = foxboardWindow;
+    if (!windowRef.__clashfoxKeepAliveBound) {
+      windowRef.__clashfoxKeepAliveBound = true;
+      windowRef.on('close', (event) => {
+        if (isQuitting) {
+          return;
+        }
+        event.preventDefault();
+        if (windowRef && !windowRef.isDestroyed()) {
+          windowRef.hide();
+        }
+      });
+    }
+    windowRef.on('closed', () => {
+      if (foxboardWindow === windowRef) {
+        foxboardWindow = null;
+      }
+      if (foxboardPreloadWindow === windowRef) {
+        foxboardPreloadWindow = null;
+      }
+    });
+    windowRef.on('blur', () => {
+      if (windowRef && !windowRef.isDestroyed()) {
+        windowRef.setAlwaysOnTop(false);
+      }
+    });
+    windowRef.webContents.on('before-input-event', (event, input) => {
+      const key = String(input.key || '').toLowerCase();
+      const isDevToolsCombo =
+        (input.control && input.shift && key === 'i')
+        || (input.meta && input.alt && key === 'i')
+        || key === 'f12';
+      if (isDevToolsCombo) {
+        event.preventDefault();
+      }
+    });
+    windowRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'dashboard.html'));
+  } catch {
+    showMainWindow();
+  }
+}
+
+function preloadFoxboardWindow() {
+  try {
+    if (
+      (foxboardWindow && !foxboardWindow.isDestroyed())
+      || (foxboardPreloadWindow && !foxboardPreloadWindow.isDestroyed())
+    ) {
+      return;
+    }
+    foxboardPreloadWindow = new BrowserWindow({
+      width: 1320,
+      height: 860,
+      minWidth: 980,
+      minHeight: 680,
+      show: false,
+      alwaysOnTop: false,
+      backgroundColor: '#0f1216',
+      autoHideMenuBar: true,
+      title: 'ClashFox Foxboard',
+      webPreferences: {
+        contextIsolation: true,
+        preload: path.join(__dirname, 'preload.js'),
+        devTools: false,
+      },
+    });
+    const preloadRef = foxboardPreloadWindow;
+    preloadRef.on('closed', () => {
+      if (foxboardPreloadWindow === preloadRef) {
+        foxboardPreloadWindow = null;
+      }
+      if (foxboardWindow === preloadRef) {
+        foxboardWindow = null;
+      }
+    });
+    preloadRef.on('blur', () => {
+      if (preloadRef && !preloadRef.isDestroyed()) {
+        preloadRef.setAlwaysOnTop(false);
+      }
+    });
+    preloadRef.webContents.on('before-input-event', (event, input) => {
+      const key = String(input.key || '').toLowerCase();
+      const isDevToolsCombo =
+        (input.control && input.shift && key === 'i')
+        || (input.meta && input.alt && key === 'i')
+        || key === 'f12';
+      if (isDevToolsCombo) {
+        event.preventDefault();
+      }
+    });
+    preloadRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'dashboard.html'));
+  } catch {
+    if (foxboardPreloadWindow && !foxboardPreloadWindow.isDestroyed()) {
+      foxboardPreloadWindow.close();
+    }
+    foxboardPreloadWindow = null;
+  }
+}
+
+function focusPreferredWindowOnActivate() {
+  const candidates = [
+    BrowserWindow.getFocusedWindow(),
+    foxboardWindow,
+    dashboardWindow,
+    worldwideWindow,
+    mainWindow,
+  ].filter((win, index, arr) => win && !win.isDestroyed() && arr.indexOf(win) === index);
+  const target = candidates.find((win) => win.isVisible()) || candidates[0] || null;
+  if (!target) {
+    return false;
+  }
+  try {
+    if (target.isMinimized()) {
+      target.restore();
+    }
+  } catch {
+    // ignore
+  }
+  target.show();
+  target.focus();
+  return true;
 }
 
 function preloadWorldwideWindow() {
@@ -5373,6 +5997,7 @@ async function buildTrayMenuOnce() {
   const showKernelManager = traySettings ? traySettings.trayMenuKernelManagerEnabled !== false : true;
   const showDirectoryLocations = traySettings ? traySettings.trayMenuDirectoryLocationsEnabled !== false : true;
   const showTrackers = traySettings ? traySettings.trayMenuTrackersEnabled !== false : true;
+  const showFoxboard = traySettings ? traySettings.trayMenuFoxboardEnabled !== false : true;
   const items = [
     { type: 'action', label: labels.showMain, action: 'show-main', rightText: '⌘ 1', shortcut: 'Cmd+1', iconKey: 'showMain' },
     { type: 'separator' },
@@ -5384,6 +6009,9 @@ async function buildTrayMenuOnce() {
   ];
   if (showTrackers) {
     items.push({ type: 'action', label: 'Trackers', action: 'open-worldwide', rightText: '⌘ 3', shortcut: 'Cmd+3', iconKey: 'trackers' });
+  }
+  if (showFoxboard) {
+    items.push({ type: 'action', label: 'Foxboard', action: 'open-foxboard', rightText: '⌘ 4', shortcut: 'Cmd+4', iconKey: 'foxboard' });
   }
   if (showKernelManager) {
     items.push({ type: 'separator' });
@@ -5869,6 +6497,10 @@ async function handleTrayMenuAction(action, payload = {}) {
     case 'show-main':
       hideTrayMenuWindow();
       showMainWindow();
+      return { ok: true, hide: true };
+    case 'open-foxboard':
+      hideTrayMenuWindow();
+      openFoxboardWindow();
       return { ok: true, hide: true };
     case 'open-dashboard':
       hideTrayMenuWindow();
@@ -6416,16 +7048,6 @@ function createWindow(showOnCreate = false) {
     event.preventDefault();
     persistMainWindowClosedToSettings(true);
     win.hide();
-    const hasStandaloneVisibleWindow = (
-      (dashboardWindow && !dashboardWindow.isDestroyed() && dashboardWindow.isVisible())
-      || (worldwideWindow && !worldwideWindow.isDestroyed() && worldwideWindow.isVisible())
-    );
-    if (hasStandaloneVisibleWindow) {
-      if (app.dock && app.dock.show) {
-        app.dock.show();
-      }
-      return;
-    }
     if (app.dock && app.dock.hide) {
       app.dock.hide();
     }
@@ -6656,6 +7278,9 @@ app.whenReady().then(() => {
   setTimeout(setDockIcon, 1500);
   setTimeout(setDockIcon, 3000);
   setTimeout(() => {
+    preloadFoxboardWindow();
+  }, 1600);
+  setTimeout(() => {
     preloadWorldwideWindow();
   }, 1700);
 
@@ -6682,6 +7307,18 @@ app.whenReady().then(() => {
       return {
         ok: false,
         error: 'worldwide_snapshot_failed',
+        details: String(error && error.message ? error.message : error || ''),
+      };
+    }
+  });
+
+  ipcMain.handle('clashfox:dashboardSnapshot', async (_event, options = {}) => {
+    try {
+      return await buildDashboardSnapshot(options);
+    } catch (error) {
+      return {
+        ok: false,
+        error: 'dashboard_snapshot_failed',
         details: String(error && error.message ? error.message : error || ''),
       };
     }
@@ -6994,10 +7631,13 @@ app.whenReady().then(() => {
           socksPort: 7891,
           allowLan: true,
           generalPageSize: '10',
-          trayMenuChartEnabled: true,
-          trayMenuTrackersEnabled: true,
-          trayMenuKernelManagerEnabled: true,
-          trayMenuDirectoryLocationsEnabled: true,
+          trayMenu: {
+            trayMenuChartEnabled: true,
+            trayMenuTrackersEnabled: true,
+            trayMenuFoxboardEnabled: true,
+            trayMenuKernelManagerEnabled: true,
+            trayMenuDirectoryLocationsEnabled: true,
+          },
           kernel: {},
           device: {
             user: resolveCurrentDeviceUser(),
@@ -7072,22 +7712,41 @@ app.whenReady().then(() => {
         parsed.allowLan = true;
         changed = true;
       }
-      if (!Object.prototype.hasOwnProperty.call(parsed, 'trayMenuChartEnabled')) {
-        parsed.trayMenuChartEnabled = true;
+      const parsedTrayMenu = parsed.trayMenu && typeof parsed.trayMenu === 'object'
+        ? parsed.trayMenu
+        : {};
+      if (!parsed.trayMenu || typeof parsed.trayMenu !== 'object') {
+        parsed.trayMenu = parsedTrayMenu;
         changed = true;
       }
-      if (!Object.prototype.hasOwnProperty.call(parsed, 'trayMenuTrackersEnabled')) {
-        parsed.trayMenuTrackersEnabled = true;
+      const ensureTrayFlag = (key) => {
+        if (Object.prototype.hasOwnProperty.call(parsedTrayMenu, key)) {
+          return;
+        }
+        if (Object.prototype.hasOwnProperty.call(parsed, key)) {
+          parsedTrayMenu[key] = Boolean(parsed[key]);
+        } else {
+          parsedTrayMenu[key] = true;
+        }
         changed = true;
-      }
-      if (!Object.prototype.hasOwnProperty.call(parsed, 'trayMenuKernelManagerEnabled')) {
-        parsed.trayMenuKernelManagerEnabled = true;
-        changed = true;
-      }
-      if (!Object.prototype.hasOwnProperty.call(parsed, 'trayMenuDirectoryLocationsEnabled')) {
-        parsed.trayMenuDirectoryLocationsEnabled = true;
-        changed = true;
-      }
+      };
+      ensureTrayFlag('trayMenuChartEnabled');
+      ensureTrayFlag('trayMenuTrackersEnabled');
+      ensureTrayFlag('trayMenuFoxboardEnabled');
+      ensureTrayFlag('trayMenuKernelManagerEnabled');
+      ensureTrayFlag('trayMenuDirectoryLocationsEnabled');
+      [
+        'trayMenuChartEnabled',
+        'trayMenuTrackersEnabled',
+        'trayMenuFoxboardEnabled',
+        'trayMenuKernelManagerEnabled',
+        'trayMenuDirectoryLocationsEnabled',
+      ].forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(parsed, key)) {
+          delete parsed[key];
+          changed = true;
+        }
+      });
       const appearanceGeneralPageSize = parsed.appearance && typeof parsed.appearance === 'object'
         ? String(parsed.appearance.generalPageSize || '').trim()
         : '';
@@ -7393,6 +8052,9 @@ app.whenReady().then(() => {
 
   app.on('activate', () => {
     hideTrayMenuWindow();
+    if (focusPreferredWindowOnActivate()) {
+      return;
+    }
     if (!mainWindow || mainWindow.isDestroyed()) {
       createWindow(true);
       return;

@@ -75,9 +75,7 @@ function writeTempConfig(filePath, config) {
 function writeBuildConfigs() {
   const baseConfig = buildConfig({ includeHelper: withHelper });
   const x64Config = buildConfig({ includeHelper: withHelper, forceX64Suffix: true });
-  if (!withHelper) {
-    writeTempConfig(tempConfigPath, baseConfig);
-  }
+  writeTempConfig(tempConfigPath, baseConfig);
   writeTempConfig(tempX64ConfigPath, x64Config);
 }
 

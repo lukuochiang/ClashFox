@@ -806,6 +806,8 @@ for conn in connections:
         "ip": destination_ip,
         "host": host,
         "port": destination_port,
+        "process": str(metadata.get("process") or conn.get("process") or "").strip(),
+        "processPath": str(metadata.get("processPath") or conn.get("processPath") or "").strip(),
         "outbound": outbound,
         "network": str(metadata.get("network") or "").strip(),
         "type": str(metadata.get("type") or "").strip(),

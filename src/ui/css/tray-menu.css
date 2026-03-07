@@ -406,6 +406,7 @@ body {
 .menu-row[data-icon-key="showMain"] { --menu-icon-color: #5eb7ff; }
 .menu-row[data-icon-key="dashboard"] { --menu-icon-color: #34d399; }
 .menu-row[data-icon-key="trackers"] { --menu-icon-color: #3b82f6; }
+.menu-row[data-icon-key="foxboard"] { --menu-icon-color: #ff9a67; }
 .menu-row[data-icon-key="networkTakeover"] { --menu-icon-color: #38bdf8; }
 .menu-row[data-icon-key="connectivityQuality"] { --menu-icon-color: #22c55e; }
 .menu-row[data-icon-key="outboundMode"] { --menu-icon-color: #fb923c; }

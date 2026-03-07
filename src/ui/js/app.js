@@ -290,6 +290,7 @@ let cleanBtn = document.getElementById('cleanBtn');
 let dashboardFrame = document.getElementById('dashboardFrame');
 let dashboardEmpty = document.getElementById('dashboardEmpty');
 let dashboardHint = document.getElementById('dashboardHint');
+let dashboardLocalModule = null;
 let sudoModal = document.getElementById('sudoModal');
 let sudoPassword = document.getElementById('sudoPassword');
 let sudoCancel = document.getElementById('sudoCancel');
@@ -340,6 +341,7 @@ let settingsWindowHeight = document.getElementById('settingsWindowHeight');
 let settingsAcceptBeta = document.getElementById('settingsAcceptBeta');
 let settingsTrayMenuChart = document.getElementById('settingsTrayMenuChart');
 let settingsTrayMenuTrackers = document.getElementById('settingsTrayMenuTrackers');
+let settingsTrayMenuFoxboard = document.getElementById('settingsTrayMenuFoxboard');
 let settingsTrayMenuKernelManager = document.getElementById('settingsTrayMenuKernelManager');
 let settingsTrayMenuDirectoryLocations = document.getElementById('settingsTrayMenuDirectoryLocations');
 let settingsProxyMixedPort = document.getElementById('settingsProxyMixedPort');
@@ -406,8 +408,16 @@ const DEFAULT_SETTINGS = {
   debugMode: false,
   trayMenuChartEnabled: true,
   trayMenuTrackersEnabled: true,
+  trayMenuFoxboardEnabled: true,
   trayMenuKernelManagerEnabled: true,
   trayMenuDirectoryLocationsEnabled: true,
+  trayMenu: {
+    trayMenuChartEnabled: true,
+    trayMenuTrackersEnabled: true,
+    trayMenuFoxboardEnabled: true,
+    trayMenuKernelManagerEnabled: true,
+    trayMenuDirectoryLocationsEnabled: true,
+  },
   windowWidth: MAIN_WINDOW_DEFAULT_WIDTH,
   windowHeight: MAIN_WINDOW_DEFAULT_HEIGHT,
   mainWindowClosed: false,
@@ -417,10 +427,6 @@ const DEFAULT_SETTINGS = {
     debugMode: false,
     acceptBeta: false,
     githubUser: 'vernesong',
-    trayMenuChartEnabled: true,
-    trayMenuTrackersEnabled: true,
-    trayMenuKernelManagerEnabled: true,
-    trayMenuDirectoryLocationsEnabled: true,
     windowWidth: MAIN_WINDOW_DEFAULT_WIDTH,
     windowHeight: MAIN_WINDOW_DEFAULT_HEIGHT,
     mainWindowClosed: false,
@@ -1276,6 +1282,9 @@ function normalizeSettingsForUi(settings) {
   const appearance = normalized.appearance && typeof normalized.appearance === 'object'
     ? normalized.appearance
     : {};
+  const trayMenu = normalized.trayMenu && typeof normalized.trayMenu === 'object'
+    ? normalized.trayMenu
+    : {};
   const readAppearanceString = (key, fallback = '') => {
     const top = normalized[key];
     if (typeof top === 'string' && top.trim()) {
@@ -1296,6 +1305,18 @@ function normalizeSettingsForUi(settings) {
     }
     return fallback;
   };
+  const readTrayMenuBool = (key, fallback = false) => {
+    if (Object.prototype.hasOwnProperty.call(normalized, key)) {
+      return Boolean(normalized[key]);
+    }
+    if (Object.prototype.hasOwnProperty.call(trayMenu, key)) {
+      return Boolean(trayMenu[key]);
+    }
+    if (Object.prototype.hasOwnProperty.call(appearance, key)) {
+      return Boolean(appearance[key]);
+    }
+    return fallback;
+  };
   const readAppearanceNum = (key, fallback = 0) => {
     const top = Object.prototype.hasOwnProperty.call(normalized, key) ? normalized[key] : undefined;
     const inner = Object.prototype.hasOwnProperty.call(appearance, key) ? appearance[key] : undefined;
@@ -1308,10 +1329,11 @@ function normalizeSettingsForUi(settings) {
   normalized.debugMode = readAppearanceBool('debugMode', false);
   normalized.acceptBeta = readAppearanceBool('acceptBeta', false);
   normalized.githubUser = readAppearanceString('githubUser', 'vernesong');
-  normalized.trayMenuChartEnabled = readAppearanceBool('trayMenuChartEnabled', true);
-  normalized.trayMenuTrackersEnabled = readAppearanceBool('trayMenuTrackersEnabled', true);
-  normalized.trayMenuKernelManagerEnabled = readAppearanceBool('trayMenuKernelManagerEnabled', true);
-  normalized.trayMenuDirectoryLocationsEnabled = readAppearanceBool('trayMenuDirectoryLocationsEnabled', true);
+  normalized.trayMenuChartEnabled = readTrayMenuBool('trayMenuChartEnabled', true);
+  normalized.trayMenuTrackersEnabled = readTrayMenuBool('trayMenuTrackersEnabled', true);
+  normalized.trayMenuFoxboardEnabled = readTrayMenuBool('trayMenuFoxboardEnabled', true);
+  normalized.trayMenuKernelManagerEnabled = readTrayMenuBool('trayMenuKernelManagerEnabled', true);
+  normalized.trayMenuDirectoryLocationsEnabled = readTrayMenuBool('trayMenuDirectoryLocationsEnabled', true);
   normalized.windowWidth = readAppearanceNum('windowWidth', MAIN_WINDOW_DEFAULT_WIDTH);
   normalized.windowHeight = readAppearanceNum('windowHeight', MAIN_WINDOW_DEFAULT_HEIGHT);
   normalized.mainWindowClosed = readAppearanceBool('mainWindowClosed', false);
@@ -1329,10 +1351,6 @@ function normalizeSettingsForUi(settings) {
     debugMode: normalized.debugMode,
     acceptBeta: normalized.acceptBeta,
     githubUser: normalized.githubUser,
-    trayMenuChartEnabled: normalized.trayMenuChartEnabled,
-    trayMenuTrackersEnabled: normalized.trayMenuTrackersEnabled,
-    trayMenuKernelManagerEnabled: normalized.trayMenuKernelManagerEnabled,
-    trayMenuDirectoryLocationsEnabled: normalized.trayMenuDirectoryLocationsEnabled,
     windowWidth: normalized.windowWidth,
     windowHeight: normalized.windowHeight,
     mainWindowClosed: normalized.mainWindowClosed,
@@ -1340,6 +1358,14 @@ function normalizeSettingsForUi(settings) {
     logLines: normalized.logLines,
     logAutoRefresh: normalized.logAutoRefresh,
     logIntervalPreset: normalized.logIntervalPreset,
+  };
+  normalized.trayMenu = {
+    ...trayMenu,
+    trayMenuChartEnabled: normalized.trayMenuChartEnabled,
+    trayMenuTrackersEnabled: normalized.trayMenuTrackersEnabled,
+    trayMenuFoxboardEnabled: normalized.trayMenuFoxboardEnabled,
+    trayMenuKernelManagerEnabled: normalized.trayMenuKernelManagerEnabled,
+    trayMenuDirectoryLocationsEnabled: normalized.trayMenuDirectoryLocationsEnabled,
   };
 
   const panelManager = normalized.panelManager && typeof normalized.panelManager === 'object'
@@ -1439,6 +1465,9 @@ function mapSettingsForFile(settings) {
   const existingAppearance = mapped.appearance && typeof mapped.appearance === 'object'
     ? mapped.appearance
     : {};
+  const existingTrayMenu = mapped.trayMenu && typeof mapped.trayMenu === 'object'
+    ? mapped.trayMenu
+    : {};
   mapped.proxy = normalizeProxyMode(mapped.proxy || 'rule');
   mapped.systemProxy = Boolean(mapped.systemProxy);
   mapped.tun = Boolean(mapped.tun);
@@ -1460,18 +1489,6 @@ function mapSettingsForFile(settings) {
       ? Boolean(mapped.acceptBeta)
       : Boolean(existingAppearance.acceptBeta),
     githubUser: String(mapped.githubUser || existingAppearance.githubUser || 'vernesong'),
-    trayMenuChartEnabled: Object.prototype.hasOwnProperty.call(mapped, 'trayMenuChartEnabled')
-      ? Boolean(mapped.trayMenuChartEnabled)
-      : Boolean(existingAppearance.trayMenuChartEnabled),
-    trayMenuTrackersEnabled: Object.prototype.hasOwnProperty.call(mapped, 'trayMenuTrackersEnabled')
-      ? Boolean(mapped.trayMenuTrackersEnabled)
-      : Boolean(existingAppearance.trayMenuTrackersEnabled),
-    trayMenuKernelManagerEnabled: Object.prototype.hasOwnProperty.call(mapped, 'trayMenuKernelManagerEnabled')
-      ? Boolean(mapped.trayMenuKernelManagerEnabled)
-      : Boolean(existingAppearance.trayMenuKernelManagerEnabled),
-    trayMenuDirectoryLocationsEnabled: Object.prototype.hasOwnProperty.call(mapped, 'trayMenuDirectoryLocationsEnabled')
-      ? Boolean(mapped.trayMenuDirectoryLocationsEnabled)
-      : Boolean(existingAppearance.trayMenuDirectoryLocationsEnabled),
     windowWidth: Number.parseInt(String(mapped.windowWidth ?? existingAppearance.windowWidth ?? MAIN_WINDOW_DEFAULT_WIDTH), 10) || MAIN_WINDOW_DEFAULT_WIDTH,
     windowHeight: Number.parseInt(String(mapped.windowHeight ?? existingAppearance.windowHeight ?? MAIN_WINDOW_DEFAULT_HEIGHT), 10) || MAIN_WINDOW_DEFAULT_HEIGHT,
     mainWindowClosed: Object.prototype.hasOwnProperty.call(mapped, 'mainWindowClosed')
@@ -1489,6 +1506,34 @@ function mapSettingsForFile(settings) {
       ? Boolean(mapped.logAutoRefresh)
       : Boolean(existingAppearance.logAutoRefresh),
     logIntervalPreset: String(mapped.logIntervalPreset || existingAppearance.logIntervalPreset || '3'),
+  };
+  mapped.trayMenu = {
+    ...existingTrayMenu,
+    trayMenuChartEnabled: Object.prototype.hasOwnProperty.call(mapped, 'trayMenuChartEnabled')
+      ? Boolean(mapped.trayMenuChartEnabled)
+      : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuChartEnabled')
+        ? Boolean(existingTrayMenu.trayMenuChartEnabled)
+        : Boolean(existingAppearance.trayMenuChartEnabled)),
+    trayMenuTrackersEnabled: Object.prototype.hasOwnProperty.call(mapped, 'trayMenuTrackersEnabled')
+      ? Boolean(mapped.trayMenuTrackersEnabled)
+      : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuTrackersEnabled')
+        ? Boolean(existingTrayMenu.trayMenuTrackersEnabled)
+        : Boolean(existingAppearance.trayMenuTrackersEnabled)),
+    trayMenuFoxboardEnabled: Object.prototype.hasOwnProperty.call(mapped, 'trayMenuFoxboardEnabled')
+      ? Boolean(mapped.trayMenuFoxboardEnabled)
+      : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuFoxboardEnabled')
+        ? Boolean(existingTrayMenu.trayMenuFoxboardEnabled)
+        : Boolean(existingAppearance.trayMenuFoxboardEnabled)),
+    trayMenuKernelManagerEnabled: Object.prototype.hasOwnProperty.call(mapped, 'trayMenuKernelManagerEnabled')
+      ? Boolean(mapped.trayMenuKernelManagerEnabled)
+      : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuKernelManagerEnabled')
+        ? Boolean(existingTrayMenu.trayMenuKernelManagerEnabled)
+        : Boolean(existingAppearance.trayMenuKernelManagerEnabled)),
+    trayMenuDirectoryLocationsEnabled: Object.prototype.hasOwnProperty.call(mapped, 'trayMenuDirectoryLocationsEnabled')
+      ? Boolean(mapped.trayMenuDirectoryLocationsEnabled)
+      : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuDirectoryLocationsEnabled')
+        ? Boolean(existingTrayMenu.trayMenuDirectoryLocationsEnabled)
+        : Boolean(existingAppearance.trayMenuDirectoryLocationsEnabled)),
   };
   const existingPanelManager = mapped.panelManager && typeof mapped.panelManager === 'object'
     ? mapped.panelManager
@@ -1610,6 +1655,9 @@ function mapSettingsForFile(settings) {
   }
   if (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuTrackersEnabled')) {
     delete mapped.trayMenuTrackersEnabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuFoxboardEnabled')) {
+    delete mapped.trayMenuFoxboardEnabled;
   }
   if (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuKernelManagerEnabled')) {
     delete mapped.trayMenuKernelManagerEnabled;
@@ -1736,10 +1784,6 @@ function saveSettings(patch) {
     'debugMode',
     'acceptBeta',
     'githubUser',
-    'trayMenuChartEnabled',
-    'trayMenuTrackersEnabled',
-    'trayMenuKernelManagerEnabled',
-    'trayMenuDirectoryLocationsEnabled',
     'windowWidth',
     'windowHeight',
     'mainWindowClosed',
@@ -1755,6 +1799,26 @@ function saveSettings(patch) {
   });
   if (Object.keys(nextAppearance).length) {
     nextPatch.appearance = nextAppearance;
+  }
+  const nextTrayMenu = {
+    ...((state.settings && state.settings.trayMenu) || {}),
+    ...((state.fileSettings && state.fileSettings.trayMenu) || {}),
+    ...((nextPatch.trayMenu && typeof nextPatch.trayMenu === 'object') ? nextPatch.trayMenu : {}),
+  };
+  const trayMenuKeys = [
+    'trayMenuChartEnabled',
+    'trayMenuTrackersEnabled',
+    'trayMenuFoxboardEnabled',
+    'trayMenuKernelManagerEnabled',
+    'trayMenuDirectoryLocationsEnabled',
+  ];
+  trayMenuKeys.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(nextPatch, key)) {
+      nextTrayMenu[key] = nextPatch[key];
+    }
+  });
+  if (Object.keys(nextTrayMenu).length) {
+    nextPatch.trayMenu = nextTrayMenu;
   }
 
   const nextPanelManager = {
@@ -2101,6 +2165,9 @@ function applySettings(settings) {
   }
   if (settingsTrayMenuTrackers) {
     settingsTrayMenuTrackers.checked = state.settings.trayMenuTrackersEnabled !== false;
+  }
+  if (settingsTrayMenuFoxboard) {
+    settingsTrayMenuFoxboard.checked = state.settings.trayMenuFoxboardEnabled !== false;
   }
   if (settingsTrayMenuKernelManager) {
     settingsTrayMenuKernelManager.checked = state.settings.trayMenuKernelManagerEnabled !== false;
@@ -4740,6 +4807,80 @@ function isTopNavMode() {
   return window.matchMedia && window.matchMedia('(max-width: 980px)').matches;
 }
 
+function insertAfterNode(referenceNode, node) {
+  if (!referenceNode || !referenceNode.parentNode || !node) {
+    return;
+  }
+  referenceNode.parentNode.insertBefore(node, referenceNode.nextSibling);
+}
+
+function syncTopNavMenuLayout() {
+  if (!primaryNav || !topNavMoreMenu) {
+    return;
+  }
+  const bottomNav = document.querySelector('.nav.nav-bottom');
+  const logsBtn = primaryNav.querySelector('.nav-btn[data-page="logs"]');
+  const settingsMainBtn = document.getElementById('navSettingsMain');
+  const helpMainBtn = document.getElementById('navHelpMain');
+  const settingsOverflowBtn = document.getElementById('navSettingsOverflow');
+  const helpOverflowBtn = document.getElementById('navHelpOverflow');
+  const trayButtons = [
+    document.getElementById('navFoxboard'),
+    document.getElementById('navDashboard'),
+    document.getElementById('navTrackers'),
+  ].filter(Boolean);
+
+  if (isTopNavMode()) {
+    const trayAnchor = trayButtons.find((btn) => btn.parentElement === primaryNav) || null;
+    if (settingsMainBtn && settingsMainBtn.parentElement !== primaryNav) {
+      if (trayAnchor) primaryNav.insertBefore(settingsMainBtn, trayAnchor);
+      else primaryNav.appendChild(settingsMainBtn);
+    }
+    if (helpMainBtn && helpMainBtn.parentElement !== primaryNav) {
+      if (trayAnchor) primaryNav.insertBefore(helpMainBtn, trayAnchor);
+      else primaryNav.appendChild(helpMainBtn);
+    }
+    trayButtons.forEach((btn) => {
+      if (btn.parentElement !== topNavMoreMenu) {
+        topNavMoreMenu.appendChild(btn);
+      }
+      btn.classList.add('top-nav-more-item');
+    });
+    if (settingsOverflowBtn) settingsOverflowBtn.style.display = 'none';
+    if (helpOverflowBtn) helpOverflowBtn.style.display = 'none';
+    return;
+  }
+
+  if (bottomNav) {
+    if (settingsMainBtn && settingsMainBtn.parentElement !== bottomNav) {
+      bottomNav.appendChild(settingsMainBtn);
+    }
+    if (helpMainBtn && helpMainBtn.parentElement !== bottomNav) {
+      bottomNav.appendChild(helpMainBtn);
+    }
+  }
+  let insertRef = logsBtn;
+  trayButtons.forEach((btn) => {
+    if (!insertRef || !primaryNav.contains(insertRef)) {
+      if (btn.parentElement !== primaryNav) {
+        primaryNav.appendChild(btn);
+      }
+    } else if (btn.parentElement !== primaryNav || btn.previousElementSibling !== insertRef) {
+      if (btn.parentElement !== primaryNav) {
+        insertAfterNode(insertRef, btn);
+      } else {
+        primaryNav.insertBefore(btn, insertRef.nextSibling);
+      }
+    }
+    btn.classList.remove('top-nav-more-item');
+    if (primaryNav.contains(btn)) {
+      insertRef = btn;
+    }
+  });
+  if (settingsOverflowBtn) settingsOverflowBtn.style.display = '';
+  if (helpOverflowBtn) helpOverflowBtn.style.display = '';
+}
+
 function syncTopNavOverflow() {
   if (!primaryNav) {
     return;
@@ -4779,6 +4920,7 @@ function requestTopNavOverflowSync() {
   }
   topNavOverflowRaf = requestAnimationFrame(() => {
     topNavOverflowRaf = null;
+    syncTopNavMenuLayout();
     syncTopNavOverflow();
   });
 }
@@ -5011,6 +5153,7 @@ function refreshPageRefs() {
   settingsAcceptBeta = document.getElementById('settingsAcceptBeta');
   settingsTrayMenuChart = document.getElementById('settingsTrayMenuChart');
   settingsTrayMenuTrackers = document.getElementById('settingsTrayMenuTrackers');
+  settingsTrayMenuFoxboard = document.getElementById('settingsTrayMenuFoxboard');
   settingsTrayMenuKernelManager = document.getElementById('settingsTrayMenuKernelManager');
   settingsTrayMenuDirectoryLocations = document.getElementById('settingsTrayMenuDirectoryLocations');
   settingsProxyMixedPort = document.getElementById('settingsProxyMixedPort');
@@ -5105,6 +5248,9 @@ function refreshPageView() {
       loadOverviewLite(),
       loadOverviewMemory(),
     ]);
+  }
+  if (currentPage === 'dashboard') {
+    initDashboardFrame();
   }
   if (currentPage === 'settings') {
     invokeHelperPanelRefresh();
@@ -5222,6 +5368,9 @@ async function navigatePage(targetPage, pushState = true) {
   if (!VALID_PAGES.has(normalized)) {
     return;
   }
+  if (currentPage === 'dashboard' && normalized !== 'dashboard' && dashboardLocalModule && typeof dashboardLocalModule.teardownDashboardPanel === 'function') {
+    dashboardLocalModule.teardownDashboardPanel();
+  }
   if (currentPage === 'overview') {
     cacheOverviewNetworkFromState();
     cacheOverviewTrafficFromState();
@@ -5268,6 +5417,9 @@ async function navigatePage(targetPage, pushState = true) {
 }
 
 window.addEventListener('beforeunload', () => {
+  if (dashboardLocalModule && typeof dashboardLocalModule.teardownDashboardPanel === 'function') {
+    dashboardLocalModule.teardownDashboardPanel();
+  }
   if (currentPage === 'overview') {
     cacheOverviewNetworkFromState();
     cacheOverviewTrafficFromState();
@@ -5574,6 +5726,13 @@ if (settingsTrayMenuTrackers) {
   settingsTrayMenuTrackers.addEventListener('change', (event) => {
     const enabled = Boolean(event.target.checked);
     saveSettings({ trayMenuTrackersEnabled: enabled });
+  });
+}
+
+if (settingsTrayMenuFoxboard) {
+  settingsTrayMenuFoxboard.addEventListener('change', (event) => {
+    const enabled = Boolean(event.target.checked);
+    saveSettings({ trayMenuFoxboardEnabled: enabled });
   });
 }
 
@@ -7287,50 +7446,7 @@ function getSelectedPanelName() {
 }
 
 function updateDashboardFrameSrc() {
-  if (!dashboardFrame) {
-    return;
-  }
-  const panelName = getSelectedPanelName();
-  const previousPanel = dashboardFrame.dataset.panelName || '';
-  const themeValue = state.theme === 'night' ? 'dark' : 'light';
-  const token = [
-    state.settings && state.settings.secret,
-    state.fileSettings && state.fileSettings.secret,
-    externalSecretInput && externalSecretInput.value,
-  ].map((value) => (value ? String(value).trim() : '')).find((value) => value);
-  let targetUrl = `http://127.0.0.1:9090/ui/${panelName}/index.html`;
-  if (panelName === 'metacubexd') {
-    const params = new URLSearchParams();
-    params.set('theme', themeValue);
-    if (token) {
-      params.set('token', token);
-      params.set('secret', token);
-    }
-    targetUrl = `${targetUrl}?${params.toString()}`;
-  }
-  const targetKey = `${panelName}:${themeValue}`;
-  if (dashboardFrame.dataset.panel === targetKey) {
-    return;
-  }
-  const applyFrameSrc = () => {
-    const separator = targetUrl.includes('?') ? '&' : '?';
-    const stampedUrl = `${targetUrl}${separator}_ts=${Date.now()}`;
-    dashboardFrame.dataset.panelName = panelName;
-    dashboardFrame.dataset.panel = targetKey;
-    dashboardFrame.src = stampedUrl;
-    if (dashboardHint) {
-      dashboardHint.textContent = stampedUrl;
-    }
-  };
-
-  if (previousPanel && previousPanel !== panelName && window.clashfox && typeof window.clashfox.clearUiStorage === 'function') {
-    window.clashfox.clearUiStorage()
-      .then(applyFrameSrc)
-      .catch(applyFrameSrc);
-    return;
-  }
-
-  applyFrameSrc();
+  // Dashboard has been replaced by a local panel implementation.
 }
 
 async function ensurePanelInstalledAndActivated(preset) {
@@ -7355,37 +7471,22 @@ async function ensurePanelInstalledAndActivated(preset) {
   return { ok: true, installed: true };
 }
 
-function initDashboardFrame() {
-  if (!dashboardFrame || !dashboardEmpty) {
-    return;
+async function initDashboardFrame() {
+  try {
+    if (!dashboardLocalModule) {
+      dashboardLocalModule = await import('./dashboard-local.js');
+    }
+    if (dashboardLocalModule && typeof dashboardLocalModule.initDashboardPanel === 'function') {
+      await dashboardLocalModule.initDashboardPanel();
+      state.dashboardAlerted = false;
+      state.dashboardLoaded = true;
+      return;
+    }
+  } catch (error) {
+    console.warn('[dashboard] init local dashboard failed:', error);
   }
-  updateDashboardFrameSrc();
-  const showEmpty = () => {
-    dashboardEmpty.classList.add('show');
-  };
-  const hideEmpty = () => {
-    dashboardEmpty.classList.remove('show');
-  };
-
-  showEmpty();
-  const timeout = setTimeout(() => {
-    showEmpty();
-    showDashboardAlert();
-  }, 1200);
-
-  dashboardFrame.addEventListener('load', () => {
-    clearTimeout(timeout);
-    hideEmpty();
-    state.dashboardAlerted = false;
-    state.dashboardLoaded = true;
-    sendDashboardTheme();
-  });
-  dashboardFrame.addEventListener('error', () => {
-    clearTimeout(timeout);
-    showEmpty();
-    showDashboardAlert();
-    state.dashboardLoaded = false;
-  });
+  showDashboardAlert();
+  state.dashboardLoaded = false;
 }
 
 async function initApp() {
