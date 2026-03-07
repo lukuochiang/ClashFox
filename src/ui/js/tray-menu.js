@@ -189,6 +189,8 @@ function renderTrafficBars() {
   if (!count) {
     if (Array.isArray(chartBarsEl._barPairs)) {
       chartBarsEl._barPairs.forEach((pair) => {
+        if (pair.downBase) pair.downBase.setAttribute('display', 'none');
+        if (pair.upBase) pair.upBase.setAttribute('display', 'none');
         pair.down.setAttribute('display', 'none');
         pair.up.setAttribute('display', 'none');
       });
@@ -197,10 +199,6 @@ function renderTrafficBars() {
   }
   const maxRx = trafficState.historyRx.length ? Math.max(...trafficState.historyRx, 0) : 0;
   const maxTx = trafficState.historyTx.length ? Math.max(...trafficState.historyTx, 0) : 0;
-  if (!maxRx && !maxTx) {
-    chartBarsEl.innerHTML = '';
-    return;
-  }
   let niceMaxRx = niceMaxValue(maxRx);
   let niceMaxTx = niceMaxValue(maxTx);
   if (niceMaxRx < 8) niceMaxRx = 8;
@@ -208,7 +206,8 @@ function renderTrafficBars() {
   const width = 100;
   const height = 60;
   const baseline = height / 2;
-  const available = baseline - 2.6;
+  const available = baseline;
+  const fixedHeight = available;
   const svgEl = chartBarsEl.ownerSVGElement;
   const svgRect = svgEl ? svgEl.getBoundingClientRect() : null;
   const desiredPx = 5.7;
@@ -219,23 +218,32 @@ function renderTrafficBars() {
   const maxBars = Math.max(1, Math.floor(width / unit));
   const startIndex = Math.max(0, count - maxBars);
   const visibleCount = Math.min(count, maxBars);
-  const startX = width - unit * visibleCount;
+  const startX = 0;
+  const xStep = visibleCount > 1 ? (width - barWidth) / (visibleCount - 1) : 0;
   if (!Array.isArray(chartBarsEl._barPairs)) {
     chartBarsEl._barPairs = [];
   }
   const needed = maxBars;
   while (chartBarsEl._barPairs.length < needed) {
+    const downBase = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    downBase.setAttribute('class', 'chart-bar-bg down');
+    const upBase = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    upBase.setAttribute('class', 'chart-bar-bg up');
     const down = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     down.setAttribute('class', 'chart-bar down');
     const up = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     up.setAttribute('class', 'chart-bar up');
+    chartBarsEl.appendChild(downBase);
+    chartBarsEl.appendChild(upBase);
     chartBarsEl.appendChild(down);
     chartBarsEl.appendChild(up);
-    chartBarsEl._barPairs.push({ down, up });
+    chartBarsEl._barPairs.push({ downBase, upBase, down, up });
   }
   for (let i = 0; i < chartBarsEl._barPairs.length; i += 1) {
     const pair = chartBarsEl._barPairs[i];
     if (i >= visibleCount) {
+      if (pair.downBase) pair.downBase.setAttribute('display', 'none');
+      if (pair.upBase) pair.upBase.setAttribute('display', 'none');
       pair.down.setAttribute('display', 'none');
       pair.up.setAttribute('display', 'none');
       continue;
@@ -245,11 +253,27 @@ function renderTrafficBars() {
     const upValue = trafficState.historyTx[idx] || 0;
     const downHeight = Math.max(0, Math.min(available, (downValue / niceMaxRx) * available));
     const upHeight = Math.max(0, Math.min(available, (upValue / niceMaxTx) * available));
-    const x = startX + i * unit + gap / 2;
+    const x = startX + i * xStep;
+    if (pair.downBase) {
+      pair.downBase.setAttribute('display', '');
+      pair.downBase.setAttribute('x', x.toFixed(2));
+      pair.downBase.setAttribute('y', baseline.toFixed(2));
+      pair.downBase.setAttribute('width', barWidth.toFixed(2));
+      pair.downBase.setAttribute('height', fixedHeight.toFixed(2));
+      pair.downBase.setAttribute('rx', '0.35');
+    }
+    if (pair.upBase) {
+      pair.upBase.setAttribute('display', '');
+      pair.upBase.setAttribute('x', x.toFixed(2));
+      pair.upBase.setAttribute('y', (baseline - fixedHeight).toFixed(2));
+      pair.upBase.setAttribute('width', barWidth.toFixed(2));
+      pair.upBase.setAttribute('height', fixedHeight.toFixed(2));
+      pair.upBase.setAttribute('rx', '0.35');
+    }
     if (downHeight > 0.2) {
       pair.down.setAttribute('display', '');
       pair.down.setAttribute('x', x.toFixed(2));
-      pair.down.setAttribute('y', (baseline + 0.2).toFixed(2));
+      pair.down.setAttribute('y', baseline.toFixed(2));
       pair.down.setAttribute('width', barWidth.toFixed(2));
       pair.down.setAttribute('height', downHeight.toFixed(2));
       pair.down.setAttribute('rx', '0.35');
@@ -259,7 +283,7 @@ function renderTrafficBars() {
     if (upHeight > 0.2) {
       pair.up.setAttribute('display', '');
       pair.up.setAttribute('x', x.toFixed(2));
-      pair.up.setAttribute('y', (baseline - upHeight - 0.2).toFixed(2));
+      pair.up.setAttribute('y', (baseline - upHeight).toFixed(2));
       pair.up.setAttribute('width', barWidth.toFixed(2));
       pair.up.setAttribute('height', upHeight.toFixed(2));
       pair.up.setAttribute('rx', '0.35');
