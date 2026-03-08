@@ -626,11 +626,12 @@ function mergeAppearanceAliases(settings = {}) {
     debugMode: readBoolean('debugMode', false),
     acceptBeta: readBoolean('acceptBeta', false),
     githubUser: readString('githubUser', 'vernesong'),
-    trayMenuChartEnabled: readTrayBoolean('trayMenuChartEnabled', true),
-    trayMenuTrackersEnabled: readTrayBoolean('trayMenuTrackersEnabled', true),
-    trayMenuFoxboardEnabled: readTrayBoolean('trayMenuFoxboardEnabled', true),
-    trayMenuKernelManagerEnabled: readTrayBoolean('trayMenuKernelManagerEnabled', true),
-    trayMenuDirectoryLocationsEnabled: readTrayBoolean('trayMenuDirectoryLocationsEnabled', true),
+    chartEnabled: readTrayBoolean('chartEnabled', readTrayBoolean('trayMenuChartEnabled', true)),
+    providerTrafficEnabled: readTrayBoolean('providerTrafficEnabled', readTrayBoolean('trayMenuProviderTrafficEnabled', true)),
+    trackersEnabled: readTrayBoolean('trackersEnabled', readTrayBoolean('trayMenuTrackersEnabled', true)),
+    foxboardEnabled: readTrayBoolean('foxboardEnabled', readTrayBoolean('trayMenuFoxboardEnabled', true)),
+    kernelManagerEnabled: readTrayBoolean('kernelManagerEnabled', readTrayBoolean('trayMenuKernelManagerEnabled', true)),
+    directoryLocationsEnabled: readTrayBoolean('directoryLocationsEnabled', readTrayBoolean('trayMenuDirectoryLocationsEnabled', true)),
     windowWidth: readNumber('windowWidth', DEFAULT_MAIN_WINDOW_WIDTH),
     windowHeight: readNumber('windowHeight', DEFAULT_MAIN_WINDOW_HEIGHT),
     mainWindowClosed: readBoolean('mainWindowClosed', false),
@@ -816,34 +817,52 @@ function normalizeSettingsForStorage(input = {}) {
     logIntervalPreset: normalizeTextValue(parsed.logIntervalPreset) || '3',
   };
   parsed.trayMenu = {
-    trayMenuChartEnabled: normalizeBool(
-      Object.prototype.hasOwnProperty.call(parsed, 'trayMenuChartEnabled')
-        ? parsed.trayMenuChartEnabled
-        : trayMenuConfig.trayMenuChartEnabled,
+    chartEnabled: normalizeBool(
+      Object.prototype.hasOwnProperty.call(parsed, 'chartEnabled')
+        ? parsed.chartEnabled
+        : (Object.prototype.hasOwnProperty.call(parsed, 'trayMenuChartEnabled')
+          ? parsed.trayMenuChartEnabled
+          : trayMenuConfig.chartEnabled ?? trayMenuConfig.trayMenuChartEnabled),
       true,
     ),
-    trayMenuTrackersEnabled: normalizeBool(
-      Object.prototype.hasOwnProperty.call(parsed, 'trayMenuTrackersEnabled')
-        ? parsed.trayMenuTrackersEnabled
-        : trayMenuConfig.trayMenuTrackersEnabled,
+    providerTrafficEnabled: normalizeBool(
+      Object.prototype.hasOwnProperty.call(parsed, 'providerTrafficEnabled')
+        ? parsed.providerTrafficEnabled
+        : (Object.prototype.hasOwnProperty.call(parsed, 'trayMenuProviderTrafficEnabled')
+          ? parsed.trayMenuProviderTrafficEnabled
+          : trayMenuConfig.providerTrafficEnabled ?? trayMenuConfig.trayMenuProviderTrafficEnabled),
       true,
     ),
-    trayMenuFoxboardEnabled: normalizeBool(
-      Object.prototype.hasOwnProperty.call(parsed, 'trayMenuFoxboardEnabled')
-        ? parsed.trayMenuFoxboardEnabled
-        : trayMenuConfig.trayMenuFoxboardEnabled,
+    trackersEnabled: normalizeBool(
+      Object.prototype.hasOwnProperty.call(parsed, 'trackersEnabled')
+        ? parsed.trackersEnabled
+        : (Object.prototype.hasOwnProperty.call(parsed, 'trayMenuTrackersEnabled')
+          ? parsed.trayMenuTrackersEnabled
+          : trayMenuConfig.trackersEnabled ?? trayMenuConfig.trayMenuTrackersEnabled),
       true,
     ),
-    trayMenuKernelManagerEnabled: normalizeBool(
-      Object.prototype.hasOwnProperty.call(parsed, 'trayMenuKernelManagerEnabled')
-        ? parsed.trayMenuKernelManagerEnabled
-        : trayMenuConfig.trayMenuKernelManagerEnabled,
+    foxboardEnabled: normalizeBool(
+      Object.prototype.hasOwnProperty.call(parsed, 'foxboardEnabled')
+        ? parsed.foxboardEnabled
+        : (Object.prototype.hasOwnProperty.call(parsed, 'trayMenuFoxboardEnabled')
+          ? parsed.trayMenuFoxboardEnabled
+          : trayMenuConfig.foxboardEnabled ?? trayMenuConfig.trayMenuFoxboardEnabled),
       true,
     ),
-    trayMenuDirectoryLocationsEnabled: normalizeBool(
-      Object.prototype.hasOwnProperty.call(parsed, 'trayMenuDirectoryLocationsEnabled')
-        ? parsed.trayMenuDirectoryLocationsEnabled
-        : trayMenuConfig.trayMenuDirectoryLocationsEnabled,
+    kernelManagerEnabled: normalizeBool(
+      Object.prototype.hasOwnProperty.call(parsed, 'kernelManagerEnabled')
+        ? parsed.kernelManagerEnabled
+        : (Object.prototype.hasOwnProperty.call(parsed, 'trayMenuKernelManagerEnabled')
+          ? parsed.trayMenuKernelManagerEnabled
+          : trayMenuConfig.kernelManagerEnabled ?? trayMenuConfig.trayMenuKernelManagerEnabled),
+      true,
+    ),
+    directoryLocationsEnabled: normalizeBool(
+      Object.prototype.hasOwnProperty.call(parsed, 'directoryLocationsEnabled')
+        ? parsed.directoryLocationsEnabled
+        : (Object.prototype.hasOwnProperty.call(parsed, 'trayMenuDirectoryLocationsEnabled')
+          ? parsed.trayMenuDirectoryLocationsEnabled
+          : trayMenuConfig.directoryLocationsEnabled ?? trayMenuConfig.trayMenuDirectoryLocationsEnabled),
       true,
     ),
   };
@@ -852,7 +871,14 @@ function normalizeSettingsForStorage(input = {}) {
   delete parsed.debugMode;
   delete parsed.acceptBeta;
   delete parsed.githubUser;
+  delete parsed.chartEnabled;
+  delete parsed.providerTrafficEnabled;
+  delete parsed.trackersEnabled;
+  delete parsed.foxboardEnabled;
+  delete parsed.kernelManagerEnabled;
+  delete parsed.directoryLocationsEnabled;
   delete parsed.trayMenuChartEnabled;
+  delete parsed.trayMenuProviderTrafficEnabled;
   delete parsed.trayMenuTrackersEnabled;
   delete parsed.trayMenuFoxboardEnabled;
   delete parsed.trayMenuKernelManagerEnabled;
@@ -5457,6 +5483,403 @@ async function buildDashboardSnapshot(options = {}) {
   };
 }
 
+function parseProviderNumber(value) {
+  if (value === null || value === undefined || value === '') {
+    return 0;
+  }
+  const parsed = Number.parseFloat(String(value).trim());
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 0;
+  }
+  return parsed;
+}
+
+function parseProviderExpire(value) {
+  const parsed = Number.parseInt(String(value || '').trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+  // Some variants may return ms timestamps.
+  return parsed > 10_000_000_000 ? Math.floor(parsed / 1000) : parsed;
+}
+
+function parseSubscriptionUserinfo(raw = '') {
+  const source = String(raw || '').trim();
+  if (!source) {
+    return {
+      upload: 0,
+      download: 0,
+      total: 0,
+      expire: 0,
+    };
+  }
+  const result = {
+    upload: 0,
+    download: 0,
+    total: 0,
+    expire: 0,
+  };
+  source.split(';').forEach((segment) => {
+    const [keyRaw, valueRaw] = String(segment || '').split('=');
+    const key = String(keyRaw || '').trim().toLowerCase();
+    if (!key) {
+      return;
+    }
+    let value = String(valueRaw || '').trim();
+    try {
+      value = decodeURIComponent(value);
+    } catch {
+      // ignore decode failures
+    }
+    if (key === 'upload') result.upload = parseProviderNumber(value);
+    if (key === 'download') result.download = parseProviderNumber(value);
+    if (key === 'total') result.total = parseProviderNumber(value);
+    if (key === 'expire') result.expire = parseProviderExpire(value);
+  });
+  return result;
+}
+
+function normalizeProviderVehicleType(value = '') {
+  const text = String(value || '').trim();
+  if (!text) {
+    return 'UNKNOWN';
+  }
+  return text.toUpperCase();
+}
+
+function normalizeProxyProviderRecords(rawData = {}) {
+  const source = rawData && typeof rawData === 'object' ? rawData : {};
+  const providersContainer = source.providers && typeof source.providers === 'object'
+    ? source.providers
+    : source;
+  const records = [];
+  Object.entries(providersContainer).forEach(([key, value]) => {
+    if (!value || typeof value !== 'object') {
+      return;
+    }
+    const entry = value;
+    const name = String(entry.name || key || '').trim() || String(key || '').trim() || 'Provider';
+    const vehicleType = normalizeProviderVehicleType(entry.vehicleType || entry.vehicle || entry.type || '');
+    const subscriptionInfo = (entry.subscriptionInfo && typeof entry.subscriptionInfo === 'object')
+      ? entry.subscriptionInfo
+      : ((entry.subscription && typeof entry.subscription === 'object')
+        ? entry.subscription
+        : ((entry['subscription-info'] && typeof entry['subscription-info'] === 'object')
+          ? entry['subscription-info']
+          : null));
+    const fromHeader = parseSubscriptionUserinfo(
+      entry.subscriptionUserinfo
+      || entry['subscription-userinfo']
+      || entry.userinfo
+      || '',
+    );
+    const upload = parseProviderNumber(
+      (subscriptionInfo && (subscriptionInfo.upload ?? subscriptionInfo.Upload))
+      ?? entry.upload
+      ?? entry.Upload
+      ?? fromHeader.upload,
+    );
+    const download = parseProviderNumber(
+      (subscriptionInfo && (subscriptionInfo.download ?? subscriptionInfo.Download))
+      ?? entry.download
+      ?? entry.Download
+      ?? fromHeader.download,
+    );
+    const total = parseProviderNumber(
+      (subscriptionInfo && (subscriptionInfo.total ?? subscriptionInfo.Total))
+      ?? entry.total
+      ?? entry.Total
+      ?? fromHeader.total,
+    );
+    const expire = parseProviderExpire(
+      (subscriptionInfo && (subscriptionInfo.expire ?? subscriptionInfo.Expire))
+      ?? entry.expire
+      ?? entry.Expire
+      ?? fromHeader.expire,
+    );
+    const proxies = Array.isArray(entry.proxies) ? entry.proxies : [];
+    records.push({
+      key: String(key || '').trim() || name,
+      name,
+      vehicleType,
+      upload,
+      download,
+      total,
+      expire,
+      proxies,
+    });
+  });
+  return records;
+}
+
+function buildProviderSubscriptionOverviewData(rawData = {}) {
+  const now = Date.now();
+  const records = normalizeProxyProviderRecords(rawData);
+  const items = records
+    .filter((record) => {
+      if (record.vehicleType === 'FILE') {
+        return false;
+      }
+      return record.total > 0 || record.upload > 0 || record.download > 0 || record.expire > 0;
+    })
+    .map((record) => {
+      const used = Math.max(0, record.upload + record.download);
+      const total = Math.max(0, record.total);
+      const remaining = Math.max(0, total - used);
+      const usedPercent = total > 0 ? Math.max(0, Math.min(100, (used / total) * 100)) : 0;
+      return {
+        id: record.key,
+        name: record.name,
+        vehicleType: record.vehicleType,
+        totalBytes: total,
+        usedBytes: used,
+        remainingBytes: remaining,
+        usedPercent,
+        expireAt: record.expire > 0 ? (record.expire * 1000) : 0,
+      };
+    })
+    .sort((a, b) => (b.usedPercent - a.usedPercent) || (b.usedBytes - a.usedBytes) || a.name.localeCompare(b.name));
+
+  const summary = items.reduce((acc, item) => {
+    acc.providerCount += 1;
+    acc.totalBytes += Number(item.totalBytes || 0);
+    acc.usedBytes += Number(item.usedBytes || 0);
+    acc.remainingBytes += Number(item.remainingBytes || 0);
+    return acc;
+  }, {
+    providerCount: 0,
+    totalBytes: 0,
+    usedBytes: 0,
+    remainingBytes: 0,
+  });
+  summary.usedPercent = summary.totalBytes > 0 ? Math.max(0, Math.min(100, (summary.usedBytes / summary.totalBytes) * 100)) : 0;
+
+  return {
+    generatedAt: now,
+    summary,
+    items,
+  };
+}
+
+function buildProviderProxyTreeData(rawData = {}) {
+  const now = Date.now();
+  const records = normalizeProxyProviderRecords(rawData);
+  const groupsMap = new Map();
+  records.forEach((record) => {
+    const vehicleType = record.vehicleType || 'UNKNOWN';
+    if (!groupsMap.has(vehicleType)) {
+      groupsMap.set(vehicleType, []);
+    }
+    const providers = groupsMap.get(vehicleType);
+    const proxies = Array.isArray(record.proxies) ? record.proxies.map((item, index) => {
+      if (typeof item === 'string') {
+        return {
+          id: `${record.key}:${index}:${item}`,
+          name: item,
+          type: 'Proxy',
+          alive: null,
+          delay: null,
+        };
+      }
+      const node = item && typeof item === 'object' ? item : {};
+      return {
+        id: `${record.key}:${index}:${String(node.name || item || '').trim() || 'proxy'}`,
+        name: String(node.name || '').trim() || '-',
+        type: String(node.type || '').trim() || 'Proxy',
+        alive: typeof node.alive === 'boolean' ? node.alive : null,
+        delay: Number.isFinite(Number(node.history && node.history[0] && node.history[0].delay))
+          ? Number(node.history[0].delay)
+          : (Number.isFinite(Number(node.delay)) ? Number(node.delay) : null),
+      };
+    }) : [];
+    providers.push({
+      id: record.key,
+      name: record.name,
+      vehicleType,
+      proxyCount: proxies.length,
+      proxies,
+    });
+  });
+  const groups = Array.from(groupsMap.entries())
+    .map(([vehicleType, providers]) => ({
+      vehicleType,
+      providers: providers.sort((a, b) => a.name.localeCompare(b.name)),
+    }))
+    .sort((a, b) => a.vehicleType.localeCompare(b.vehicleType));
+
+  const totalProviders = groups.reduce((sum, group) => sum + group.providers.length, 0);
+  const totalProxies = groups.reduce(
+    (sum, group) => sum + group.providers.reduce((sub, provider) => sub + Number(provider.proxyCount || 0), 0),
+    0,
+  );
+  return {
+    generatedAt: now,
+    totalProviders,
+    totalProxies,
+    groups,
+  };
+}
+
+async function loadProvidersProxiesRaw() {
+  const configPath = getConfigPathFromSettings();
+  const args = [];
+  if (configPath) {
+    args.push('--config', configPath);
+  }
+  args.push(...getControllerArgsFromSettings());
+  const response = await runBridgeWithAutoAuth('providers-proxies', args);
+  if (!response || !response.ok) {
+    return response || { ok: false, error: 'providers_proxies_failed' };
+  }
+  const payload = response.data && typeof response.data === 'object' ? response.data : {};
+  return { ok: true, data: payload };
+}
+
+function parseRuleTimestamp(value) {
+  const parsed = Number.parseInt(String(value || '').trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+  return parsed > 10_000_000_000 ? parsed : parsed * 1000;
+}
+
+function buildRulesOverviewData(rawData = {}) {
+  const payload = rawData && typeof rawData === 'object' ? rawData : {};
+  const rawRules = Array.isArray(payload.rules)
+    ? payload.rules
+    : (Array.isArray(payload) ? payload : []);
+  const typeCounter = new Map();
+  const policyCounter = new Map();
+  rawRules.forEach((rule) => {
+    const entry = rule && typeof rule === 'object' ? rule : {};
+    const type = String(entry.type || entry.ruleType || '').trim().toUpperCase() || 'UNKNOWN';
+    const policy = String(entry.proxy || entry.policy || entry.adapter || '').trim() || 'DIRECT';
+    typeCounter.set(type, (typeCounter.get(type) || 0) + 1);
+    policyCounter.set(policy, (policyCounter.get(policy) || 0) + 1);
+  });
+  const types = Array.from(typeCounter.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, 12);
+  const policies = Array.from(policyCounter.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, 12);
+  const records = rawRules.slice(0, 160).map((rule, index) => {
+    const entry = rule && typeof rule === 'object' ? rule : {};
+    const type = String(entry.type || entry.ruleType || '').trim().toUpperCase() || 'UNKNOWN';
+    const payloadText = String(
+      entry.payload
+      || entry.rule
+      || entry.domain
+      || entry.target
+      || entry.value
+      || '',
+    ).trim();
+    const payload = payloadText || '-';
+    const policy = String(entry.proxy || entry.policy || entry.adapter || '').trim() || 'DIRECT';
+    const provider = String(
+      entry.providerName
+      || entry.provider
+      || entry.source
+      || entry.sourceName
+      || '',
+    ).trim() || '-';
+    return {
+      id: `rule-${index}`,
+      type,
+      payload,
+      policy,
+      provider,
+    };
+  });
+  return {
+    generatedAt: Date.now(),
+    totalRules: rawRules.length,
+    types,
+    policies,
+    records,
+  };
+}
+
+function buildRuleProvidersOverviewData(rawData = {}) {
+  const payload = rawData && typeof rawData === 'object' ? rawData : {};
+  const container = payload.providers && typeof payload.providers === 'object'
+    ? payload.providers
+    : payload;
+  const items = [];
+  const behaviorCounter = new Map();
+  Object.entries(container).forEach(([key, value]) => {
+    if (!value || typeof value !== 'object') {
+      return;
+    }
+    const entry = value;
+    const name = String(entry.name || key || '').trim() || String(key || '').trim() || 'Provider';
+    const behavior = String(entry.behavior || '').trim() || 'Unknown';
+    const vehicleType = String(entry.vehicleType || entry.type || '').trim().toUpperCase() || 'UNKNOWN';
+    const ruleCount = Number.parseInt(String(entry.ruleCount ?? entry.count ?? entry.size ?? 0), 10) || 0;
+    const updatedAt = parseRuleTimestamp(entry.updatedAt || entry.updateTime || entry.updated || entry.lastUpdate || 0);
+    items.push({
+      id: String(key || '').trim() || name,
+      name,
+      behavior,
+      vehicleType,
+      ruleCount,
+      updatedAt,
+    });
+    behaviorCounter.set(behavior, (behaviorCounter.get(behavior) || 0) + 1);
+  });
+  items.sort((a, b) => b.ruleCount - a.ruleCount || a.name.localeCompare(b.name));
+  const behaviors = Array.from(behaviorCounter.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  return {
+    generatedAt: Date.now(),
+    totalProviders: items.length,
+    totalRules: items.reduce((sum, item) => sum + Number(item.ruleCount || 0), 0),
+    behaviors,
+    items,
+    records: items.slice(0, 160).map((item, index) => ({
+      id: `provider-${index}`,
+      name: item.name,
+      behavior: item.behavior,
+      vehicleType: item.vehicleType,
+      ruleCount: item.ruleCount,
+      updatedAt: item.updatedAt,
+    })),
+  };
+}
+
+async function loadRulesRaw() {
+  const configPath = getConfigPathFromSettings();
+  const args = [];
+  if (configPath) {
+    args.push('--config', configPath);
+  }
+  args.push(...getControllerArgsFromSettings());
+  const response = await runBridgeWithAutoAuth('rules', args);
+  if (!response || !response.ok) {
+    return response || { ok: false, error: 'rules_failed' };
+  }
+  const payload = response.data && typeof response.data === 'object' ? response.data : {};
+  return { ok: true, data: payload };
+}
+
+async function loadRuleProvidersRaw() {
+  const configPath = getConfigPathFromSettings();
+  const args = [];
+  if (configPath) {
+    args.push('--config', configPath);
+  }
+  args.push(...getControllerArgsFromSettings());
+  const response = await runBridgeWithAutoAuth('providers-rules', args);
+  if (!response || !response.ok) {
+    return response || { ok: false, error: 'providers_rules_failed' };
+  }
+  const payload = response.data && typeof response.data === 'object' ? response.data : {};
+  return { ok: true, data: payload };
+}
+
 function openWorldwideWindow() {
   try {
     if (worldwideWindow && !worldwideWindow.isDestroyed()) {
@@ -5994,10 +6417,22 @@ async function buildTrayMenuOnce() {
   const trayStatusState = dashboardEnabled ? 'running' : 'stopped';
   const trayStatusLabel = dashboardEnabled ? runningLabel : stoppedLabel;
 
-  const showKernelManager = traySettings ? traySettings.trayMenuKernelManagerEnabled !== false : true;
-  const showDirectoryLocations = traySettings ? traySettings.trayMenuDirectoryLocationsEnabled !== false : true;
-  const showTrackers = traySettings ? traySettings.trayMenuTrackersEnabled !== false : true;
-  const showFoxboard = traySettings ? traySettings.trayMenuFoxboardEnabled !== false : true;
+  const showKernelManager = traySettings ? traySettings.kernelManagerEnabled !== false : true;
+  const showDirectoryLocations = traySettings ? traySettings.directoryLocationsEnabled !== false : true;
+  const showTrackers = traySettings ? traySettings.trackersEnabled !== false : true;
+  const showFoxboard = traySettings ? traySettings.foxboardEnabled !== false : true;
+  const showProviderTraffic = traySettings ? traySettings.providerTrafficEnabled !== false : true;
+  let providerTraffic = null;
+  if (showProviderTraffic) {
+    try {
+      const rawProviders = await loadProvidersProxiesRaw();
+      if (rawProviders && rawProviders.ok) {
+        providerTraffic = buildProviderSubscriptionOverviewData(rawProviders.data || {});
+      }
+    } catch {
+      providerTraffic = null;
+    }
+  }
   const items = [
     { type: 'action', label: labels.showMain, action: 'show-main', rightText: '⌘ 1', shortcut: 'Cmd+1', iconKey: 'showMain' },
     { type: 'separator' },
@@ -6045,6 +6480,7 @@ async function buildTrayMenuOnce() {
       currentOutboundMode,
       submenuSide: 'right',
     },
+    providerTraffic: showProviderTraffic ? providerTraffic : null,
     items,
     submenus: {
       network: [
@@ -7324,6 +7760,82 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.handle('clashfox:providerSubscriptionOverview', async () => {
+    try {
+      const raw = await loadProvidersProxiesRaw();
+      if (!raw || !raw.ok) {
+        return raw || { ok: false, error: 'provider_subscription_overview_failed' };
+      }
+      return {
+        ok: true,
+        data: buildProviderSubscriptionOverviewData(raw.data || {}),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: 'provider_subscription_overview_failed',
+        details: String(error && error.message ? error.message : error || ''),
+      };
+    }
+  });
+
+  ipcMain.handle('clashfox:providerProxyTree', async () => {
+    try {
+      const raw = await loadProvidersProxiesRaw();
+      if (!raw || !raw.ok) {
+        return raw || { ok: false, error: 'provider_proxy_tree_failed' };
+      }
+      return {
+        ok: true,
+        data: buildProviderProxyTreeData(raw.data || {}),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: 'provider_proxy_tree_failed',
+        details: String(error && error.message ? error.message : error || ''),
+      };
+    }
+  });
+
+  ipcMain.handle('clashfox:rulesOverview', async () => {
+    try {
+      const raw = await loadRulesRaw();
+      if (!raw || !raw.ok) {
+        return raw || { ok: false, error: 'rules_overview_failed' };
+      }
+      return {
+        ok: true,
+        data: buildRulesOverviewData(raw.data || {}),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: 'rules_overview_failed',
+        details: String(error && error.message ? error.message : error || ''),
+      };
+    }
+  });
+
+  ipcMain.handle('clashfox:ruleProvidersOverview', async () => {
+    try {
+      const raw = await loadRuleProvidersRaw();
+      if (!raw || !raw.ok) {
+        return raw || { ok: false, error: 'rule_providers_overview_failed' };
+      }
+      return {
+        ok: true,
+        data: buildRuleProvidersOverviewData(raw.data || {}),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: 'rule_providers_overview_failed',
+        details: String(error && error.message ? error.message : error || ''),
+      };
+    }
+  });
+
   ipcMain.handle('clashfox:trayMenu:getData', async () => {
     const data = await createTrayMenu();
     return data || trayMenuData || {};
@@ -7632,11 +8144,12 @@ app.whenReady().then(() => {
           allowLan: true,
           generalPageSize: '10',
           trayMenu: {
-            trayMenuChartEnabled: true,
-            trayMenuTrackersEnabled: true,
-            trayMenuFoxboardEnabled: true,
-            trayMenuKernelManagerEnabled: true,
-            trayMenuDirectoryLocationsEnabled: true,
+            chartEnabled: true,
+            providerTrafficEnabled: true,
+            trackersEnabled: true,
+            foxboardEnabled: true,
+            kernelManagerEnabled: true,
+            directoryLocationsEnabled: true,
           },
           kernel: {},
           device: {
@@ -7730,13 +8243,27 @@ app.whenReady().then(() => {
         }
         changed = true;
       };
+      ensureTrayFlag('chartEnabled');
+      ensureTrayFlag('providerTrafficEnabled');
+      ensureTrayFlag('trackersEnabled');
+      ensureTrayFlag('foxboardEnabled');
+      ensureTrayFlag('kernelManagerEnabled');
+      ensureTrayFlag('directoryLocationsEnabled');
       ensureTrayFlag('trayMenuChartEnabled');
+      ensureTrayFlag('trayMenuProviderTrafficEnabled');
       ensureTrayFlag('trayMenuTrackersEnabled');
       ensureTrayFlag('trayMenuFoxboardEnabled');
       ensureTrayFlag('trayMenuKernelManagerEnabled');
       ensureTrayFlag('trayMenuDirectoryLocationsEnabled');
       [
+        'chartEnabled',
+        'providerTrafficEnabled',
+        'trackersEnabled',
+        'foxboardEnabled',
+        'kernelManagerEnabled',
+        'directoryLocationsEnabled',
         'trayMenuChartEnabled',
+        'trayMenuProviderTrafficEnabled',
         'trayMenuTrackersEnabled',
         'trayMenuFoxboardEnabled',
         'trayMenuKernelManagerEnabled',

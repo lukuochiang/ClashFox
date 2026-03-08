@@ -9,6 +9,7 @@ const chartBottomTotalEl = document.getElementById('menuChartBottomTotal');
 const chartBarsEl = document.getElementById('menuChartBars');
 const chartLeftTimeEl = document.getElementById('menuChartLeftTime');
 const chartRightTimeEl = document.getElementById('menuChartRightTime');
+const providerTrafficEl = document.getElementById('menuProviderTraffic');
 const listEl = document.getElementById('menuList');
 let menuData = null;
 let activeSubmenuKey = null;
@@ -44,6 +45,12 @@ const trafficState = {
   settings: null,
   settingsAt: 0,
   chartEnabled: true,
+};
+const providerTrafficState = {
+  rotateTimer: null,
+  index: 0,
+  paused: false,
+  signature: '',
 };
 
 function persistTrafficCache() {
@@ -179,6 +186,117 @@ function niceMaxValue(value) {
   else if (normalized <= 2) factor = 2;
   else if (normalized <= 5) factor = 5;
   return factor * magnitude;
+}
+
+function formatPercent(value) {
+  const num = Number.parseFloat(value);
+  if (!Number.isFinite(num) || num < 0) {
+    return '-';
+  }
+  return `${num.toFixed(num >= 10 ? 0 : 1)}%`;
+}
+
+function formatExpireAt(value) {
+  const timestamp = Number.parseInt(String(value || ''), 10);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    return '-';
+  }
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return '-';
+  }
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function stopProviderTrafficRotation() {
+  if (providerTrafficState.rotateTimer) {
+    clearInterval(providerTrafficState.rotateTimer);
+    providerTrafficState.rotateTimer = null;
+  }
+}
+
+function startProviderTrafficRotation(totalItems) {
+  stopProviderTrafficRotation();
+  if (!Number.isFinite(totalItems) || totalItems <= 1) {
+    return;
+  }
+  providerTrafficState.rotateTimer = setInterval(() => {
+    if (providerTrafficState.paused) {
+      return;
+    }
+    providerTrafficState.index = (providerTrafficState.index + 1) % totalItems;
+    renderProviderTraffic();
+  }, 2500);
+}
+
+function renderProviderTraffic() {
+  if (!providerTrafficEl) {
+    return;
+  }
+  const payload = menuData && menuData.providerTraffic && typeof menuData.providerTraffic === 'object'
+    ? menuData.providerTraffic
+    : null;
+  const summary = payload && payload.summary && typeof payload.summary === 'object'
+    ? payload.summary
+    : null;
+  const items = payload && Array.isArray(payload.items) ? payload.items : [];
+  if (!payload || !summary || items.length === 0) {
+    providerTrafficEl.innerHTML = '';
+    providerTrafficEl.classList.add('is-hidden');
+    stopProviderTrafficRotation();
+    return;
+  }
+  providerTrafficEl.classList.remove('is-hidden');
+  const totalItems = items.length;
+  const safeIndex = ((providerTrafficState.index % totalItems) + totalItems) % totalItems;
+  const current = items[safeIndex];
+  const signature = items.map((item) => `${item.id}:${item.usedBytes}:${item.remainingBytes}:${item.expireAt}`).join('|');
+  if (providerTrafficState.signature !== signature) {
+    providerTrafficState.signature = signature;
+    providerTrafficState.index = Math.min(safeIndex, Math.max(0, totalItems - 1));
+  }
+  const currentItem = items[providerTrafficState.index] || items[0];
+  const usedBytes = Number.parseFloat(currentItem.usedBytes || 0) || 0;
+  const remainingBytes = Number.parseFloat(currentItem.remainingBytes || 0) || 0;
+  const usedPercent = Number.parseFloat(currentItem.usedPercent || 0) || 0;
+  providerTrafficEl.innerHTML = `
+    <div class="provider-traffic-summary">
+      <div class="provider-traffic-stat">
+        <span class="provider-traffic-stat-label">Providers</span>
+        <span class="provider-traffic-stat-value">${Number.parseInt(String(summary.providerCount || 0), 10) || 0}</span>
+      </div>
+      <div class="provider-traffic-stat">
+        <span class="provider-traffic-stat-label">Used</span>
+        <span class="provider-traffic-stat-value">${formatBytes(summary.usedBytes || 0)}</span>
+      </div>
+      <div class="provider-traffic-stat">
+        <span class="provider-traffic-stat-label">Remaining</span>
+        <span class="provider-traffic-stat-value">${formatBytes(summary.remainingBytes || 0)}</span>
+      </div>
+    </div>
+    <div class="provider-traffic-item">
+      <div class="provider-traffic-item-head">
+        <div class="provider-traffic-item-name">${currentItem.name || '-'}</div>
+        <div class="provider-traffic-item-percent">${formatPercent(usedPercent)}</div>
+      </div>
+      <div class="provider-traffic-progress">
+        <div class="provider-traffic-progress-bar" style="width:${Math.max(0, Math.min(100, usedPercent)).toFixed(2)}%"></div>
+      </div>
+      <div class="provider-traffic-item-meta">
+        <span>${formatBytes(usedBytes)} used</span>
+        <span>${formatBytes(remainingBytes)} left</span>
+      </div>
+      <div class="provider-traffic-item-meta secondary">
+        <span>${currentItem.vehicleType || '-'}</span>
+        <span>Expire ${formatExpireAt(currentItem.expireAt)}</span>
+      </div>
+    </div>
+  `;
+  providerTrafficEl.dataset.hasMultiple = totalItems > 1 ? 'true' : 'false';
+  startProviderTrafficRotation(totalItems);
 }
 
 function renderTrafficBars() {
@@ -444,7 +562,11 @@ async function getTrafficArgs() {
     if (!settings || typeof settings !== 'object') {
       return [];
     }
-    applyChartEnabled(settings.trayMenuChartEnabled !== false);
+    applyChartEnabled(
+      Object.prototype.hasOwnProperty.call(settings, 'chartEnabled')
+        ? settings.chartEnabled !== false
+        : settings.trayMenuChartEnabled !== false,
+    );
     const configFile = String(settings.configFile || settings.configPath || '').trim();
     const controller = String(settings.externalController || '').trim();
     const secret = String(settings.secret || '').trim();
@@ -880,6 +1002,7 @@ function openSubmenu(submenuKey, anchorRow, keepAnchor = false) {
 
 function renderAll() {
   renderHeader();
+  renderProviderTraffic();
   renderMainList();
   hideSubmenu();
   scheduleGeometrySync();
@@ -906,6 +1029,7 @@ async function init() {
         : keepSubmenuKey;
       menuData = payload;
       renderHeader();
+      renderProviderTraffic();
       renderMainList();
       if (keepSubmenuKey && keepSubmenuAnchorKey) {
         const nextAnchor = findMainAnchorBySubmenuKey(keepSubmenuAnchorKey);
@@ -936,6 +1060,14 @@ async function init() {
   }
 
   headerEl.addEventListener('mouseenter', hideSubmenu);
+  if (providerTrafficEl) {
+    providerTrafficEl.addEventListener('mouseenter', () => {
+      providerTrafficState.paused = true;
+    });
+    providerTrafficEl.addEventListener('mouseleave', () => {
+      providerTrafficState.paused = false;
+    });
+  }
 
   startTrafficTimers();
 }

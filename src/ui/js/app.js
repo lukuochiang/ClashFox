@@ -69,6 +69,13 @@ let overviewConnAvg = document.getElementById('overviewConnAvg');
 let overviewConnTrend = document.getElementById('overviewConnTrend');
 let overviewConnLine = document.getElementById('overviewConnLine');
 let overviewConnArea = document.getElementById('overviewConnArea');
+let overviewProviderSubscriptionSummary = document.getElementById('overviewProviderSubscriptionSummary');
+let overviewProviderSubscriptionList = document.getElementById('overviewProviderSubscriptionList');
+let overviewRulesSwitch = document.getElementById('overviewRulesSwitch');
+let overviewRulesMetrics = document.getElementById('overviewRulesMetrics');
+let overviewRulesBehaviors = document.getElementById('overviewRulesBehaviors');
+let overviewRulesChart = document.getElementById('overviewRulesChart');
+let overviewRulesRecords = document.getElementById('overviewRulesRecords');
 let overviewGrids = Array.from(document.querySelectorAll('.overview-drag-grid'));
 let trafficSystemDownloadRate = document.getElementById('trafficSystemDownloadRate');
 let trafficSystemDownloadTotal = document.getElementById('trafficSystemDownloadTotal');
@@ -343,6 +350,7 @@ let settingsWindowWidth = document.getElementById('settingsWindowWidth');
 let settingsWindowHeight = document.getElementById('settingsWindowHeight');
 let settingsAcceptBeta = document.getElementById('settingsAcceptBeta');
 let settingsTrayMenuChart = document.getElementById('settingsTrayMenuChart');
+let settingsTrayMenuProviderTraffic = document.getElementById('settingsTrayMenuProviderTraffic');
 let settingsTrayMenuTrackers = document.getElementById('settingsTrayMenuTrackers');
 let settingsTrayMenuFoxboard = document.getElementById('settingsTrayMenuFoxboard');
 let settingsTrayMenuKernelManager = document.getElementById('settingsTrayMenuKernelManager');
@@ -364,6 +372,8 @@ const SETTINGS_KEY = 'clashfox-settings';
 const KERNEL_UPDATE_CACHE_KEY = 'clashfox-kernel-update-cache-v1';
 const OVERVIEW_NETWORK_CACHE_KEY = 'clashfox-overview-network-cache-v1';
 const OVERVIEW_TRAFFIC_CACHE_KEY = 'clashfox-overview-traffic-cache-v1';
+const OVERVIEW_PROVIDER_SUBSCRIPTION_CACHE_KEY = 'clashfox-overview-provider-subscription-cache-v1';
+const OVERVIEW_RULES_CARD_CACHE_KEY = 'clashfox-overview-rules-card-cache-v1';
 const MAIN_WINDOW_DEFAULT_WIDTH = 980;
 const MAIN_WINDOW_DEFAULT_HEIGHT = 640;
 const MAIN_WINDOW_MIN_WIDTH = 980;
@@ -409,17 +419,19 @@ const DEFAULT_SETTINGS = {
   recommendPageSize: '10',
   acceptBeta: false,
   debugMode: false,
-  trayMenuChartEnabled: true,
-  trayMenuTrackersEnabled: true,
-  trayMenuFoxboardEnabled: true,
-  trayMenuKernelManagerEnabled: true,
-  trayMenuDirectoryLocationsEnabled: true,
+  chartEnabled: true,
+  providerTrafficEnabled: true,
+  trackersEnabled: true,
+  foxboardEnabled: true,
+  kernelManagerEnabled: true,
+  directoryLocationsEnabled: true,
   trayMenu: {
-    trayMenuChartEnabled: true,
-    trayMenuTrackersEnabled: true,
-    trayMenuFoxboardEnabled: true,
-    trayMenuKernelManagerEnabled: true,
-    trayMenuDirectoryLocationsEnabled: true,
+    chartEnabled: true,
+    providerTrafficEnabled: true,
+    trackersEnabled: true,
+    foxboardEnabled: true,
+    kernelManagerEnabled: true,
+    directoryLocationsEnabled: true,
   },
   windowWidth: MAIN_WINDOW_DEFAULT_WIDTH,
   windowHeight: MAIN_WINDOW_DEFAULT_HEIGHT,
@@ -490,6 +502,13 @@ const state = {
   githubSourceManualOverride: false,
   coreVersionRaw: '',
   coreStatusTimer: null,
+  providerSubscriptionTimer: null,
+  providerSubscriptionLoading: false,
+  rulesOverviewTimer: null,
+  rulesOverviewLoading: false,
+  rulesOverviewView: 'rules',
+  rulesOverviewPayload: null,
+  ruleProvidersOverviewPayload: null,
   overviewTimer: null,
   overviewTickTimer: null,
   overviewLoading: false,
@@ -766,6 +785,102 @@ function hydrateOverviewTrafficFromCache() {
   state.trafficHistoryTx = historyTx;
   renderTrafficChart(state.trafficHistoryTx, trafficUploadLine, trafficUploadArea, trafficUploadAxis);
   renderTrafficChart(state.trafficHistoryRx, trafficDownloadLine, trafficDownloadArea, trafficDownloadAxis);
+}
+
+function readOverviewProviderSubscriptionCache() {
+  try {
+    const raw = localStorage.getItem(OVERVIEW_PROVIDER_SUBSCRIPTION_CACHE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeOverviewProviderSubscriptionCache(payload = {}) {
+  try {
+    localStorage.setItem(OVERVIEW_PROVIDER_SUBSCRIPTION_CACHE_KEY, JSON.stringify({
+      ...(payload || {}),
+      updatedAt: new Date().toISOString(),
+    }));
+  } catch {
+    // ignore cache write errors
+  }
+}
+
+function cacheOverviewProviderSubscription(payload = null) {
+  if (!payload || typeof payload !== 'object') {
+    return;
+  }
+  writeOverviewProviderSubscriptionCache(payload);
+}
+
+function hydrateOverviewProviderSubscriptionFromCache() {
+  if (!overviewProviderSubscriptionSummary || !overviewProviderSubscriptionList) {
+    return;
+  }
+  const cached = readOverviewProviderSubscriptionCache();
+  if (!cached || typeof cached !== 'object') {
+    return;
+  }
+  renderProviderSubscriptionOverview(cached);
+}
+
+function readOverviewRulesCardCache() {
+  try {
+    const raw = localStorage.getItem(OVERVIEW_RULES_CARD_CACHE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeOverviewRulesCardCache(payload = {}) {
+  try {
+    localStorage.setItem(OVERVIEW_RULES_CARD_CACHE_KEY, JSON.stringify({
+      ...(payload || {}),
+      updatedAt: new Date().toISOString(),
+    }));
+  } catch {
+    // ignore cache write errors
+  }
+}
+
+function cacheOverviewRulesCard() {
+  writeOverviewRulesCardCache({
+    view: state.rulesOverviewView === 'providers' ? 'providers' : 'rules',
+    rulesOverviewPayload: state.rulesOverviewPayload && typeof state.rulesOverviewPayload === 'object'
+      ? state.rulesOverviewPayload
+      : { totalRules: 0, types: [], records: [] },
+    ruleProvidersOverviewPayload: state.ruleProvidersOverviewPayload && typeof state.ruleProvidersOverviewPayload === 'object'
+      ? state.ruleProvidersOverviewPayload
+      : { totalProviders: 0, totalRules: 0, behaviors: [], items: [], records: [] },
+  });
+}
+
+function hydrateOverviewRulesCardFromCache() {
+  if (!overviewRulesChart || !overviewRulesRecords || !overviewRulesMetrics || !overviewRulesBehaviors) {
+    return;
+  }
+  const cached = readOverviewRulesCardCache();
+  if (!cached || typeof cached !== 'object') {
+    return;
+  }
+  state.rulesOverviewView = cached.view === 'providers' ? 'providers' : 'rules';
+  state.rulesOverviewPayload = cached.rulesOverviewPayload && typeof cached.rulesOverviewPayload === 'object'
+    ? cached.rulesOverviewPayload
+    : { totalRules: 0, types: [], records: [] };
+  state.ruleProvidersOverviewPayload = cached.ruleProvidersOverviewPayload && typeof cached.ruleProvidersOverviewPayload === 'object'
+    ? cached.ruleProvidersOverviewPayload
+    : { totalProviders: 0, totalRules: 0, behaviors: [], items: [], records: [] };
+  renderRulesOverviewCard();
 }
 
 function clamp(value, min, max) {
@@ -1242,7 +1357,13 @@ function applyCardIcons() {
     }
 
     // Respect explicit icon classes to avoid i18n text matching side effects.
-    if (h.classList.contains('outbound-icon') || h.classList.contains('conn-live-icon') || h.classList.contains('quick-actions-icon')) {
+    if (
+      h.classList.contains('outbound-icon')
+      || h.classList.contains('conn-live-icon')
+      || h.classList.contains('quick-actions-icon')
+      || h.classList.contains('provider-subscription-icon')
+      || h.classList.contains('rules-overview-icon')
+    ) {
       h.style.removeProperty('--card-icon-mask');
       h.style.removeProperty('--card-icon-fill');
       return;
@@ -1333,11 +1454,12 @@ function normalizeSettingsForUi(settings) {
   normalized.debugMode = readAppearanceBool('debugMode', false);
   normalized.acceptBeta = readAppearanceBool('acceptBeta', false);
   normalized.githubUser = readAppearanceString('githubUser', 'vernesong');
-  normalized.trayMenuChartEnabled = readTrayMenuBool('trayMenuChartEnabled', true);
-  normalized.trayMenuTrackersEnabled = readTrayMenuBool('trayMenuTrackersEnabled', true);
-  normalized.trayMenuFoxboardEnabled = readTrayMenuBool('trayMenuFoxboardEnabled', true);
-  normalized.trayMenuKernelManagerEnabled = readTrayMenuBool('trayMenuKernelManagerEnabled', true);
-  normalized.trayMenuDirectoryLocationsEnabled = readTrayMenuBool('trayMenuDirectoryLocationsEnabled', true);
+  normalized.chartEnabled = readTrayMenuBool('chartEnabled', readTrayMenuBool('trayMenuChartEnabled', true));
+  normalized.providerTrafficEnabled = readTrayMenuBool('providerTrafficEnabled', readTrayMenuBool('trayMenuProviderTrafficEnabled', true));
+  normalized.trackersEnabled = readTrayMenuBool('trackersEnabled', readTrayMenuBool('trayMenuTrackersEnabled', true));
+  normalized.foxboardEnabled = readTrayMenuBool('foxboardEnabled', readTrayMenuBool('trayMenuFoxboardEnabled', true));
+  normalized.kernelManagerEnabled = readTrayMenuBool('kernelManagerEnabled', readTrayMenuBool('trayMenuKernelManagerEnabled', true));
+  normalized.directoryLocationsEnabled = readTrayMenuBool('directoryLocationsEnabled', readTrayMenuBool('trayMenuDirectoryLocationsEnabled', true));
   normalized.windowWidth = readAppearanceNum('windowWidth', MAIN_WINDOW_DEFAULT_WIDTH);
   normalized.windowHeight = readAppearanceNum('windowHeight', MAIN_WINDOW_DEFAULT_HEIGHT);
   normalized.mainWindowClosed = readAppearanceBool('mainWindowClosed', false);
@@ -1365,11 +1487,12 @@ function normalizeSettingsForUi(settings) {
   };
   normalized.trayMenu = {
     ...trayMenu,
-    trayMenuChartEnabled: normalized.trayMenuChartEnabled,
-    trayMenuTrackersEnabled: normalized.trayMenuTrackersEnabled,
-    trayMenuFoxboardEnabled: normalized.trayMenuFoxboardEnabled,
-    trayMenuKernelManagerEnabled: normalized.trayMenuKernelManagerEnabled,
-    trayMenuDirectoryLocationsEnabled: normalized.trayMenuDirectoryLocationsEnabled,
+    chartEnabled: normalized.chartEnabled,
+    providerTrafficEnabled: normalized.providerTrafficEnabled,
+    trackersEnabled: normalized.trackersEnabled,
+    foxboardEnabled: normalized.foxboardEnabled,
+    kernelManagerEnabled: normalized.kernelManagerEnabled,
+    directoryLocationsEnabled: normalized.directoryLocationsEnabled,
   };
 
   const panelManager = normalized.panelManager && typeof normalized.panelManager === 'object'
@@ -1513,31 +1636,60 @@ function mapSettingsForFile(settings) {
   };
   mapped.trayMenu = {
     ...existingTrayMenu,
-    trayMenuChartEnabled: Object.prototype.hasOwnProperty.call(mapped, 'trayMenuChartEnabled')
-      ? Boolean(mapped.trayMenuChartEnabled)
-      : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuChartEnabled')
-        ? Boolean(existingTrayMenu.trayMenuChartEnabled)
-        : Boolean(existingAppearance.trayMenuChartEnabled)),
-    trayMenuTrackersEnabled: Object.prototype.hasOwnProperty.call(mapped, 'trayMenuTrackersEnabled')
-      ? Boolean(mapped.trayMenuTrackersEnabled)
-      : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuTrackersEnabled')
-        ? Boolean(existingTrayMenu.trayMenuTrackersEnabled)
-        : Boolean(existingAppearance.trayMenuTrackersEnabled)),
-    trayMenuFoxboardEnabled: Object.prototype.hasOwnProperty.call(mapped, 'trayMenuFoxboardEnabled')
-      ? Boolean(mapped.trayMenuFoxboardEnabled)
-      : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuFoxboardEnabled')
-        ? Boolean(existingTrayMenu.trayMenuFoxboardEnabled)
-        : Boolean(existingAppearance.trayMenuFoxboardEnabled)),
-    trayMenuKernelManagerEnabled: Object.prototype.hasOwnProperty.call(mapped, 'trayMenuKernelManagerEnabled')
-      ? Boolean(mapped.trayMenuKernelManagerEnabled)
-      : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuKernelManagerEnabled')
-        ? Boolean(existingTrayMenu.trayMenuKernelManagerEnabled)
-        : Boolean(existingAppearance.trayMenuKernelManagerEnabled)),
-    trayMenuDirectoryLocationsEnabled: Object.prototype.hasOwnProperty.call(mapped, 'trayMenuDirectoryLocationsEnabled')
-      ? Boolean(mapped.trayMenuDirectoryLocationsEnabled)
-      : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuDirectoryLocationsEnabled')
-        ? Boolean(existingTrayMenu.trayMenuDirectoryLocationsEnabled)
-        : Boolean(existingAppearance.trayMenuDirectoryLocationsEnabled)),
+    chartEnabled: Object.prototype.hasOwnProperty.call(mapped, 'chartEnabled')
+      ? Boolean(mapped.chartEnabled)
+      : (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuChartEnabled')
+        ? Boolean(mapped.trayMenuChartEnabled)
+        : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'chartEnabled')
+          ? Boolean(existingTrayMenu.chartEnabled)
+          : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuChartEnabled')
+            ? Boolean(existingTrayMenu.trayMenuChartEnabled)
+            : Boolean(existingAppearance.chartEnabled ?? existingAppearance.trayMenuChartEnabled)))),
+    providerTrafficEnabled: Object.prototype.hasOwnProperty.call(mapped, 'providerTrafficEnabled')
+      ? Boolean(mapped.providerTrafficEnabled)
+      : (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuProviderTrafficEnabled')
+        ? Boolean(mapped.trayMenuProviderTrafficEnabled)
+        : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'providerTrafficEnabled')
+          ? Boolean(existingTrayMenu.providerTrafficEnabled)
+          : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuProviderTrafficEnabled')
+            ? Boolean(existingTrayMenu.trayMenuProviderTrafficEnabled)
+            : Boolean(existingAppearance.providerTrafficEnabled ?? existingAppearance.trayMenuProviderTrafficEnabled)))),
+    trackersEnabled: Object.prototype.hasOwnProperty.call(mapped, 'trackersEnabled')
+      ? Boolean(mapped.trackersEnabled)
+      : (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuTrackersEnabled')
+        ? Boolean(mapped.trayMenuTrackersEnabled)
+        : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trackersEnabled')
+          ? Boolean(existingTrayMenu.trackersEnabled)
+          : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuTrackersEnabled')
+            ? Boolean(existingTrayMenu.trayMenuTrackersEnabled)
+            : Boolean(existingAppearance.trackersEnabled ?? existingAppearance.trayMenuTrackersEnabled)))),
+    foxboardEnabled: Object.prototype.hasOwnProperty.call(mapped, 'foxboardEnabled')
+      ? Boolean(mapped.foxboardEnabled)
+      : (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuFoxboardEnabled')
+        ? Boolean(mapped.trayMenuFoxboardEnabled)
+        : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'foxboardEnabled')
+          ? Boolean(existingTrayMenu.foxboardEnabled)
+          : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuFoxboardEnabled')
+            ? Boolean(existingTrayMenu.trayMenuFoxboardEnabled)
+            : Boolean(existingAppearance.foxboardEnabled ?? existingAppearance.trayMenuFoxboardEnabled)))),
+    kernelManagerEnabled: Object.prototype.hasOwnProperty.call(mapped, 'kernelManagerEnabled')
+      ? Boolean(mapped.kernelManagerEnabled)
+      : (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuKernelManagerEnabled')
+        ? Boolean(mapped.trayMenuKernelManagerEnabled)
+        : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'kernelManagerEnabled')
+          ? Boolean(existingTrayMenu.kernelManagerEnabled)
+          : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuKernelManagerEnabled')
+            ? Boolean(existingTrayMenu.trayMenuKernelManagerEnabled)
+            : Boolean(existingAppearance.kernelManagerEnabled ?? existingAppearance.trayMenuKernelManagerEnabled)))),
+    directoryLocationsEnabled: Object.prototype.hasOwnProperty.call(mapped, 'directoryLocationsEnabled')
+      ? Boolean(mapped.directoryLocationsEnabled)
+      : (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuDirectoryLocationsEnabled')
+        ? Boolean(mapped.trayMenuDirectoryLocationsEnabled)
+        : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'directoryLocationsEnabled')
+          ? Boolean(existingTrayMenu.directoryLocationsEnabled)
+          : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuDirectoryLocationsEnabled')
+            ? Boolean(existingTrayMenu.trayMenuDirectoryLocationsEnabled)
+            : Boolean(existingAppearance.directoryLocationsEnabled ?? existingAppearance.trayMenuDirectoryLocationsEnabled)))),
   };
   const existingPanelManager = mapped.panelManager && typeof mapped.panelManager === 'object'
     ? mapped.panelManager
@@ -1654,8 +1806,29 @@ function mapSettingsForFile(settings) {
   if (Object.prototype.hasOwnProperty.call(mapped, 'githubUser')) {
     delete mapped.githubUser;
   }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'chartEnabled')) {
+    delete mapped.chartEnabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'providerTrafficEnabled')) {
+    delete mapped.providerTrafficEnabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'trackersEnabled')) {
+    delete mapped.trackersEnabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'foxboardEnabled')) {
+    delete mapped.foxboardEnabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'kernelManagerEnabled')) {
+    delete mapped.kernelManagerEnabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'directoryLocationsEnabled')) {
+    delete mapped.directoryLocationsEnabled;
+  }
   if (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuChartEnabled')) {
     delete mapped.trayMenuChartEnabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuProviderTrafficEnabled')) {
+    delete mapped.trayMenuProviderTrafficEnabled;
   }
   if (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuTrackersEnabled')) {
     delete mapped.trayMenuTrackersEnabled;
@@ -1811,10 +1984,17 @@ function saveSettings(patch) {
   };
   const trayMenuKeys = [
     'trayMenuChartEnabled',
+    'trayMenuProviderTrafficEnabled',
     'trayMenuTrackersEnabled',
     'trayMenuFoxboardEnabled',
     'trayMenuKernelManagerEnabled',
     'trayMenuDirectoryLocationsEnabled',
+    'chartEnabled',
+    'providerTrafficEnabled',
+    'trackersEnabled',
+    'foxboardEnabled',
+    'kernelManagerEnabled',
+    'directoryLocationsEnabled',
   ];
   trayMenuKeys.forEach((key) => {
     if (Object.prototype.hasOwnProperty.call(nextPatch, key)) {
@@ -2165,19 +2345,22 @@ function applySettings(settings) {
     settingsAcceptBeta.checked = Boolean(state.settings.acceptBeta);
   }
   if (settingsTrayMenuChart) {
-    settingsTrayMenuChart.checked = state.settings.trayMenuChartEnabled !== false;
+    settingsTrayMenuChart.checked = state.settings.chartEnabled !== false;
+  }
+  if (settingsTrayMenuProviderTraffic) {
+    settingsTrayMenuProviderTraffic.checked = state.settings.providerTrafficEnabled !== false;
   }
   if (settingsTrayMenuTrackers) {
-    settingsTrayMenuTrackers.checked = state.settings.trayMenuTrackersEnabled !== false;
+    settingsTrayMenuTrackers.checked = state.settings.trackersEnabled !== false;
   }
   if (settingsTrayMenuFoxboard) {
-    settingsTrayMenuFoxboard.checked = state.settings.trayMenuFoxboardEnabled !== false;
+    settingsTrayMenuFoxboard.checked = state.settings.foxboardEnabled !== false;
   }
   if (settingsTrayMenuKernelManager) {
-    settingsTrayMenuKernelManager.checked = state.settings.trayMenuKernelManagerEnabled !== false;
+    settingsTrayMenuKernelManager.checked = state.settings.kernelManagerEnabled !== false;
   }
   if (settingsTrayMenuDirectoryLocations) {
-    settingsTrayMenuDirectoryLocations.checked = state.settings.trayMenuDirectoryLocationsEnabled !== false;
+    settingsTrayMenuDirectoryLocations.checked = state.settings.directoryLocationsEnabled !== false;
   }
   if (settingsProxyMixedPort) {
     settingsProxyMixedPort.value = Number.parseInt(String(state.settings.mixedPort ?? 7893), 10) || 7893;
@@ -2231,6 +2414,8 @@ function applySettings(settings) {
   hydrateOverviewIdentityFromSettings();
   hydrateOverviewNetworkFromCache();
   hydrateOverviewTrafficFromCache();
+  hydrateOverviewProviderSubscriptionFromCache();
+  hydrateOverviewRulesCardFromCache();
   applyOverviewOrders();
   if (externalControllerInput) {
     externalControllerInput.value = state.settings.externalController || '';
@@ -3423,6 +3608,202 @@ function formatBitrate(bytesPerSec) {
   return `${value.toFixed(fixed)} ${units[idx]}`;
 }
 
+function formatSimpleDateTime(value) {
+  const parsed = Number.parseInt(String(value || '').trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return '-';
+  }
+  const date = new Date(parsed);
+  if (Number.isNaN(date.getTime())) {
+    return '-';
+  }
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mi = String(date.getMinutes()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+}
+
+function renderProviderSubscriptionOverview(payload = null) {
+  if (!overviewProviderSubscriptionSummary || !overviewProviderSubscriptionList) {
+    return;
+  }
+  const data = payload && typeof payload === 'object' ? payload : {};
+  const summary = data.summary && typeof data.summary === 'object' ? data.summary : {};
+  const items = Array.isArray(data.items) ? data.items : [];
+  const providerCount = Number.parseInt(String(summary.providerCount || 0), 10) || items.length;
+  const totalBytes = Number.parseFloat(summary.totalBytes || 0) || 0;
+  const usedBytes = Number.parseFloat(summary.usedBytes || 0) || 0;
+  const remainingBytes = Number.parseFloat(summary.remainingBytes || 0) || Math.max(0, totalBytes - usedBytes);
+  const usedPercent = totalBytes > 0
+    ? Math.max(0, Math.min(100, (usedBytes / totalBytes) * 100))
+    : 0;
+
+  overviewProviderSubscriptionSummary.innerHTML = `
+    <div class="provider-subscription-stat">
+      <div class="provider-subscription-stat-label">${escapeLogCell(ti('providers.summaryCount', 'Providers'))}</div>
+      <div class="provider-subscription-stat-value">${escapeLogCell(String(providerCount))}</div>
+    </div>
+    <div class="provider-subscription-stat">
+      <div class="provider-subscription-stat-label">${escapeLogCell(ti('providers.summaryUsed', 'Used'))}</div>
+      <div class="provider-subscription-stat-value">${escapeLogCell(formatBytes(usedBytes))}</div>
+    </div>
+    <div class="provider-subscription-stat">
+      <div class="provider-subscription-stat-label">${escapeLogCell(ti('providers.summaryRemain', 'Remaining'))}</div>
+      <div class="provider-subscription-stat-value">${escapeLogCell(formatBytes(remainingBytes))}</div>
+    </div>
+    <div class="provider-subscription-stat">
+      <div class="provider-subscription-stat-label">${escapeLogCell(ti('providers.summaryUsage', 'Usage'))}</div>
+      <div class="provider-subscription-stat-value">${escapeLogCell(`${usedPercent.toFixed(1)}%`)}</div>
+    </div>
+  `;
+
+  if (!items.length) {
+    overviewProviderSubscriptionList.innerHTML = `<div class="provider-subscription-item-empty">${escapeLogCell(ti('providers.empty', 'No provider subscription data.'))}</div>`;
+    return;
+  }
+
+  overviewProviderSubscriptionList.innerHTML = items.map((item) => {
+    const name = String(item.name || '-').trim() || '-';
+    const vehicleType = String(item.vehicleType || '').trim() || 'UNKNOWN';
+    const percentRaw = Number.parseFloat(item.usedPercent || 0);
+    const percent = Number.isFinite(percentRaw) ? Math.max(0, Math.min(100, percentRaw)) : 0;
+    const used = Number.parseFloat(item.usedBytes || 0) || 0;
+    const remaining = Number.parseFloat(item.remainingBytes || 0) || 0;
+    const expireAt = Number.parseInt(String(item.expireAt || 0), 10) || 0;
+    const expireText = expireAt > 0
+      ? formatSimpleDateTime(expireAt)
+      : '-';
+    return `<div class="provider-subscription-item">
+      <div class="provider-subscription-item-head">
+        <div class="provider-subscription-item-name">${escapeLogCell(name)}</div>
+        <div class="provider-subscription-item-percent">${escapeLogCell(`${percent.toFixed(1)}%`)}</div>
+      </div>
+      <div class="provider-subscription-progress">
+        <div class="provider-subscription-progress-bar" style="width:${percent.toFixed(2)}%"></div>
+      </div>
+      <div class="provider-subscription-item-meta">
+        <span>${escapeLogCell(`${ti('providers.remaining', 'Remaining')}: ${formatBytes(remaining)}`)}</span>
+        <span>${escapeLogCell(`${ti('providers.used', 'Used')}: ${formatBytes(used)}`)}</span>
+      </div>
+      <div class="provider-subscription-item-meta">
+        <span>${escapeLogCell(vehicleType)}</span>
+        <span>${escapeLogCell(`${ti('providers.expire', 'Expire')}: ${expireText}`)}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderRulesOverviewCard() {
+  if (!overviewRulesChart || !overviewRulesRecords || !overviewRulesMetrics || !overviewRulesBehaviors) {
+    return;
+  }
+  const currentView = state.rulesOverviewView === 'providers' ? 'providers' : 'rules';
+  if (overviewRulesSwitch) {
+    Array.from(overviewRulesSwitch.querySelectorAll('[data-rules-view]')).forEach((button) => {
+      const view = String(button.dataset.rulesView || '').trim();
+      button.classList.toggle('active', view === currentView);
+    });
+  }
+
+  const renderMetrics = (items = []) => {
+    overviewRulesMetrics.innerHTML = items.map((item) => `
+      <div class="rules-overview-metric">
+        <div class="rules-overview-metric-label">${escapeLogCell(String(item.label || '-'))}</div>
+        <div class="rules-overview-metric-value">${escapeLogCell(String(item.value || '-'))}</div>
+      </div>
+    `).join('');
+  };
+
+  if (currentView === 'providers') {
+    const payload = state.ruleProvidersOverviewPayload && typeof state.ruleProvidersOverviewPayload === 'object'
+      ? state.ruleProvidersOverviewPayload
+      : {};
+    const items = Array.isArray(payload.items) ? payload.items : [];
+    const behaviorStats = Array.isArray(payload.behaviors) ? payload.behaviors : [];
+    const totalProviders = Number.parseInt(String(payload.totalProviders || 0), 10) || items.length;
+    const totalRules = Number.parseInt(String(payload.totalRules || 0), 10) || 0;
+    const behaviorKinds = behaviorStats.length;
+    const maxProviderRules = items.length
+      ? Math.max(...items.map((item) => Number(item.ruleCount || 0)), 0)
+      : 0;
+
+    renderMetrics([
+      { label: ti('providers.summaryCount', 'Providers'), value: totalProviders },
+      { label: ti('rules.total', 'Rules'), value: totalRules },
+      { label: ti('rules.behaviors', 'Behaviors'), value: behaviorKinds },
+      { label: ti('rules.maxPerProvider', 'Max/Provider'), value: maxProviderRules },
+    ]);
+
+    overviewRulesBehaviors.hidden = true;
+    overviewRulesBehaviors.innerHTML = '';
+
+    if (!items.length) {
+      overviewRulesChart.hidden = false;
+      overviewRulesChart.innerHTML = `<div class="rules-overview-empty">${escapeLogCell(ti('rules.emptyProviders', 'No rule provider data.'))}</div>`;
+      overviewRulesRecords.innerHTML = '';
+      overviewRulesRecords.hidden = true;
+      return;
+    }
+    overviewRulesChart.hidden = false;
+    const maxCount = Math.max(...items.map((item) => Number(item.ruleCount || 0)), 1);
+    overviewRulesChart.innerHTML = items.slice(0, 12).map((item) => {
+      const name = String(item.name || '-').trim() || '-';
+      const count = Number.parseInt(String(item.ruleCount || 0), 10) || 0;
+      const ratio = Math.max(0, Math.min(100, (count / maxCount) * 100));
+      return `<div class="rules-overview-row">
+        <div class="rules-overview-row-name">${escapeLogCell(name)}</div>
+        <div class="rules-overview-row-bar"><div class="rules-overview-row-fill" style="width:${ratio.toFixed(2)}%"></div></div>
+        <div class="rules-overview-row-count">${escapeLogCell(String(count))}</div>
+      </div>`;
+    }).join('');
+    overviewRulesRecords.innerHTML = '';
+    overviewRulesRecords.hidden = true;
+    return;
+  }
+
+  const payload = state.rulesOverviewPayload && typeof state.rulesOverviewPayload === 'object'
+    ? state.rulesOverviewPayload
+    : {};
+  const types = Array.isArray(payload.types) ? payload.types : [];
+  const records = Array.isArray(payload.records) ? payload.records : [];
+  const policies = Array.isArray(payload.policies) ? payload.policies : [];
+  const totalRules = Number.parseInt(String(payload.totalRules || 0), 10) || 0;
+  const typeKinds = types.length;
+  const policyKinds = policies.length;
+  const shownRecords = Math.min(records.length, 100);
+  renderMetrics([
+    { label: ti('rules.total', 'Rules'), value: totalRules },
+    { label: ti('rules.typeKinds', 'Type Kinds'), value: typeKinds },
+    { label: ti('rules.policyKinds', 'Policy Kinds'), value: policyKinds },
+    { label: ti('rules.recordsShown', 'Records Shown'), value: shownRecords },
+  ]);
+  overviewRulesBehaviors.hidden = true;
+  overviewRulesBehaviors.innerHTML = '';
+  overviewRulesChart.hidden = true;
+  if (!types.length) {
+    overviewRulesRecords.innerHTML = `<div class="rules-overview-empty">${escapeLogCell(ti('rules.empty', 'No rules data.'))}</div>`;
+    overviewRulesRecords.hidden = false;
+    return;
+  }
+  if (!records.length) {
+    overviewRulesRecords.innerHTML = `<div class="rules-overview-empty">${escapeLogCell(ti('rules.empty', 'No rules data.'))}</div>`;
+  } else {
+    overviewRulesRecords.innerHTML = records.slice(0, 100).map((record) => {
+      const type = String(record.type || '-').trim() || '-';
+      const payloadText = String(record.payload || '-').trim() || '-';
+      const policy = String(record.policy || '-').trim() || '-';
+      return `<div class="rules-overview-record">
+        <span class="rules-overview-record-type">${escapeLogCell(type)}</span>
+        <span class="rules-overview-record-payload">${escapeLogCell(payloadText)}</span>
+        <span class="rules-overview-record-policy">${escapeLogCell(policy)}</span>
+      </div>`;
+    }).join('');
+  }
+  overviewRulesRecords.hidden = false;
+}
+
 const TRAFFIC_HISTORY_POINTS = 26;
 const CONNECTION_HISTORY_MS = 30000;
 
@@ -4158,6 +4539,97 @@ async function loadTraffic() {
     updateProxyTraffic(down, up);
   } finally {
     state.trafficLoading = false;
+  }
+}
+
+async function loadProviderSubscriptionOverview() {
+  if (!overviewProviderSubscriptionSummary || !overviewProviderSubscriptionList) {
+    return;
+  }
+  if (state.providerSubscriptionLoading) {
+    return;
+  }
+  if (!window.clashfox || typeof window.clashfox.providerSubscriptionOverview !== 'function') {
+    return;
+  }
+  state.providerSubscriptionLoading = true;
+  try {
+    const response = await window.clashfox.providerSubscriptionOverview();
+    if (!response || !response.ok || !response.data) {
+      if (!readOverviewProviderSubscriptionCache()) {
+        renderProviderSubscriptionOverview({ items: [], summary: { providerCount: 0 } });
+      } else {
+        hydrateOverviewProviderSubscriptionFromCache();
+      }
+      return;
+    }
+    cacheOverviewProviderSubscription(response.data);
+    renderProviderSubscriptionOverview(response.data);
+  } catch {
+    if (!readOverviewProviderSubscriptionCache()) {
+      renderProviderSubscriptionOverview({ items: [], summary: { providerCount: 0 } });
+    } else {
+      hydrateOverviewProviderSubscriptionFromCache();
+    }
+  } finally {
+    state.providerSubscriptionLoading = false;
+  }
+}
+
+async function loadRulesOverviewCard() {
+  if (!overviewRulesChart || !overviewRulesRecords) {
+    return;
+  }
+  if (state.rulesOverviewLoading) {
+    return;
+  }
+  if (!window.clashfox) {
+    return;
+  }
+  state.rulesOverviewLoading = true;
+  try {
+    const tasks = [];
+    if (typeof window.clashfox.rulesOverview === 'function') {
+      tasks.push(window.clashfox.rulesOverview());
+    } else {
+      tasks.push(Promise.resolve({ ok: false }));
+    }
+    if (typeof window.clashfox.ruleProvidersOverview === 'function') {
+      tasks.push(window.clashfox.ruleProvidersOverview());
+    } else {
+      tasks.push(Promise.resolve({ ok: false }));
+    }
+    const [rulesResp, providerResp] = await Promise.all(tasks);
+    const hasRules = Boolean(rulesResp && rulesResp.ok && rulesResp.data);
+    const hasProviders = Boolean(providerResp && providerResp.ok && providerResp.data);
+    if (!hasRules && !hasProviders) {
+      if (readOverviewRulesCardCache()) {
+        hydrateOverviewRulesCardFromCache();
+        return;
+      }
+    }
+    if (hasRules) {
+      state.rulesOverviewPayload = rulesResp.data;
+    } else {
+      state.rulesOverviewPayload = { totalRules: 0, types: [], records: [] };
+    }
+    if (hasProviders) {
+      state.ruleProvidersOverviewPayload = providerResp.data;
+    } else {
+      state.ruleProvidersOverviewPayload = { totalProviders: 0, totalRules: 0, behaviors: [], items: [], records: [] };
+    }
+    cacheOverviewRulesCard();
+    renderRulesOverviewCard();
+  } catch {
+    if (readOverviewRulesCardCache()) {
+      hydrateOverviewRulesCardFromCache();
+    } else {
+      state.rulesOverviewPayload = { totalRules: 0, types: [], records: [] };
+      state.ruleProvidersOverviewPayload = { totalProviders: 0, totalRules: 0, behaviors: [], items: [], records: [] };
+      renderRulesOverviewCard();
+    }
+  } finally {
+    state.rulesOverviewLoading = false;
   }
 }
 
@@ -5177,6 +5649,13 @@ function refreshPageRefs() {
   overviewConnTrend = document.getElementById('overviewConnTrend');
   overviewConnLine = document.getElementById('overviewConnLine');
   overviewConnArea = document.getElementById('overviewConnArea');
+  overviewProviderSubscriptionSummary = document.getElementById('overviewProviderSubscriptionSummary');
+  overviewProviderSubscriptionList = document.getElementById('overviewProviderSubscriptionList');
+  overviewRulesSwitch = document.getElementById('overviewRulesSwitch');
+  overviewRulesMetrics = document.getElementById('overviewRulesMetrics');
+  overviewRulesBehaviors = document.getElementById('overviewRulesBehaviors');
+  overviewRulesChart = document.getElementById('overviewRulesChart');
+  overviewRulesRecords = document.getElementById('overviewRulesRecords');
   overviewGrids = Array.from(document.querySelectorAll('.overview-drag-grid'));
   trafficSystemDownloadRate = document.getElementById('trafficSystemDownloadRate');
   trafficSystemDownloadTotal = document.getElementById('trafficSystemDownloadTotal');
@@ -5322,6 +5801,7 @@ function refreshPageRefs() {
   settingsWindowHeight = document.getElementById('settingsWindowHeight');
   settingsAcceptBeta = document.getElementById('settingsAcceptBeta');
   settingsTrayMenuChart = document.getElementById('settingsTrayMenuChart');
+  settingsTrayMenuProviderTraffic = document.getElementById('settingsTrayMenuProviderTraffic');
   settingsTrayMenuTrackers = document.getElementById('settingsTrayMenuTrackers');
   settingsTrayMenuFoxboard = document.getElementById('settingsTrayMenuFoxboard');
   settingsTrayMenuKernelManager = document.getElementById('settingsTrayMenuKernelManager');
@@ -5390,6 +5870,8 @@ function bindTopbarActions() {
         loadOverviewLite(),
         loadOverview(),
         loadOverviewMemory(),
+        loadProviderSubscriptionOverview(),
+        loadRulesOverviewCard(),
       ]);
       showToast(t('labels.statusRefreshed'));
     });
@@ -5417,6 +5899,8 @@ function refreshPageView() {
       loadOverview(),
       loadOverviewLite(),
       loadOverviewMemory(),
+      loadProviderSubscriptionOverview(),
+      loadRulesOverviewCard(),
     ]);
   }
   if (currentPage === 'dashboard') {
@@ -5544,6 +6028,7 @@ async function navigatePage(targetPage, pushState = true) {
   if (currentPage === 'overview') {
     cacheOverviewNetworkFromState();
     cacheOverviewTrafficFromState();
+    cacheOverviewRulesCard();
   }
   if (!normalized || normalized === currentPage) {
     return;
@@ -5593,6 +6078,7 @@ window.addEventListener('beforeunload', () => {
   if (currentPage === 'overview') {
     cacheOverviewNetworkFromState();
     cacheOverviewTrafficFromState();
+    cacheOverviewRulesCard();
   }
 });
 
@@ -5888,35 +6374,42 @@ if (settingsAcceptBeta) {
 if (settingsTrayMenuChart) {
   settingsTrayMenuChart.addEventListener('change', (event) => {
     const enabled = Boolean(event.target.checked);
-    saveSettings({ trayMenuChartEnabled: enabled });
+    saveSettings({ chartEnabled: enabled });
+  });
+}
+
+if (settingsTrayMenuProviderTraffic) {
+  settingsTrayMenuProviderTraffic.addEventListener('change', (event) => {
+    const enabled = Boolean(event.target.checked);
+    saveSettings({ providerTrafficEnabled: enabled });
   });
 }
 
 if (settingsTrayMenuTrackers) {
   settingsTrayMenuTrackers.addEventListener('change', (event) => {
     const enabled = Boolean(event.target.checked);
-    saveSettings({ trayMenuTrackersEnabled: enabled });
+    saveSettings({ trackersEnabled: enabled });
   });
 }
 
 if (settingsTrayMenuFoxboard) {
   settingsTrayMenuFoxboard.addEventListener('change', (event) => {
     const enabled = Boolean(event.target.checked);
-    saveSettings({ trayMenuFoxboardEnabled: enabled });
+    saveSettings({ foxboardEnabled: enabled });
   });
 }
 
 if (settingsTrayMenuKernelManager) {
   settingsTrayMenuKernelManager.addEventListener('change', (event) => {
     const enabled = Boolean(event.target.checked);
-    saveSettings({ trayMenuKernelManagerEnabled: enabled });
+    saveSettings({ kernelManagerEnabled: enabled });
   });
 }
 
 if (settingsTrayMenuDirectoryLocations) {
   settingsTrayMenuDirectoryLocations.addEventListener('change', (event) => {
     const enabled = Boolean(event.target.checked);
-    saveSettings({ trayMenuDirectoryLocationsEnabled: enabled });
+    saveSettings({ directoryLocationsEnabled: enabled });
   });
 }
 
@@ -7511,6 +8004,21 @@ if (overviewNetworkRefresh) {
     setTimeout(() => overviewNetworkRefresh.classList.remove('is-loading'), 400);
   });
 }
+if (overviewRulesSwitch && overviewRulesSwitch.dataset.bound !== 'true') {
+  overviewRulesSwitch.dataset.bound = 'true';
+  overviewRulesSwitch.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-rules-view]');
+    if (!button) {
+      return;
+    }
+    const view = String(button.dataset.rulesView || '').trim();
+    if (view !== 'rules' && view !== 'providers') {
+      return;
+    }
+    state.rulesOverviewView = view;
+    renderRulesOverviewCard();
+  });
+}
 }
 
 function startOverviewTimer() {
@@ -7568,6 +8076,26 @@ function startOverviewTimer() {
     const elapsedSec = Math.max(0, Math.floor((Date.now() - state.overviewUptimeAt) / 1000));
     overviewUptime.textContent = formatUptime(state.overviewUptimeBaseSec + elapsedSec);
   }, 1000);
+
+  if (state.providerSubscriptionTimer) {
+    clearInterval(state.providerSubscriptionTimer);
+  }
+  loadProviderSubscriptionOverview();
+  state.providerSubscriptionTimer = setInterval(() => {
+    if (currentPage === 'overview') {
+      loadProviderSubscriptionOverview();
+    }
+  }, 8000);
+
+  if (state.rulesOverviewTimer) {
+    clearInterval(state.rulesOverviewTimer);
+  }
+  loadRulesOverviewCard();
+  state.rulesOverviewTimer = setInterval(() => {
+    if (currentPage === 'overview') {
+      loadRulesOverviewCard();
+    }
+  }, 10000);
 }
 
 function bridgeReady() {
@@ -7731,6 +8259,8 @@ async function initApp() {
       loadOverview(),
       loadOverviewLite(),
       loadOverviewMemory(),
+      loadProviderSubscriptionOverview(),
+      loadRulesOverviewCard(),
     ]);
   }
   updateInstallVersionVisibility();

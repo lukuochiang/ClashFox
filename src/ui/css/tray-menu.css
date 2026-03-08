@@ -289,6 +289,113 @@ body {
   letter-spacing: 0.2px;
 }
 
+.menu-provider-traffic {
+  padding: 8px 12px 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.menu-provider-traffic.is-hidden {
+  display: none;
+}
+
+.provider-traffic-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 7px;
+}
+
+.provider-traffic-stat {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 6px 7px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 171, 197, 0.18);
+  background: rgba(245, 248, 253, 0.92);
+}
+
+.provider-traffic-stat-label {
+  font-size: 9px;
+  line-height: 1;
+  color: rgba(102, 120, 142, 0.84);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.provider-traffic-stat-value {
+  font-size: 11px;
+  line-height: 1.1;
+  color: rgba(31, 42, 54, 0.92);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.provider-traffic-item {
+  display: grid;
+  gap: 5px;
+  min-height: 74px;
+  padding: 7px 8px;
+  border-radius: 9px;
+  border: 1px solid rgba(148, 171, 197, 0.2);
+  background: rgba(250, 251, 253, 0.96);
+}
+
+.provider-traffic-item-head,
+.provider-traffic-item-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.provider-traffic-item-name,
+.provider-traffic-item-percent,
+.provider-traffic-item-meta span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.provider-traffic-item-name {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(31, 42, 54, 0.96);
+}
+
+.provider-traffic-item-percent {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: #d59a55;
+}
+
+.provider-traffic-progress {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(148, 171, 197, 0.2);
+  overflow: hidden;
+}
+
+.provider-traffic-progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(232, 187, 127, 0.96), rgba(210, 154, 88, 0.96));
+}
+
+.provider-traffic-item-meta {
+  font-size: 10px;
+  color: rgba(96, 111, 131, 0.9);
+}
+
+.provider-traffic-item-meta.secondary {
+  color: rgba(114, 126, 145, 0.78);
+}
+
 .menu-list {
   padding: 4px;
 }

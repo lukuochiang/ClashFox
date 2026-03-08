@@ -182,6 +182,34 @@
                 </div>
               </div>
             </div>
+            <div class="card provider-subscription-card" data-module="provider-subscription" draggable="true">
+              <div class="card-header-row">
+                <h3 class="iconized provider-subscription-icon" data-i18n="overview.providerTrafficTitle">Provider Traffic Overview</h3>
+                <button class="icon-btn ghost small overview-drag-handle" type="button">
+                  <span class="sr-only" data-i18n="labels.dragToReorder">Drag to reorder</span>
+                  <span class="drag-grip" aria-hidden="true"></span>
+                </button>
+              </div>
+              <div class="provider-subscription-summary" id="overviewProviderSubscriptionSummary"></div>
+              <div class="provider-subscription-list" id="overviewProviderSubscriptionList"></div>
+            </div>
+            <div class="card rules-overview-card" data-module="rules-overview" draggable="true">
+              <div class="card-header-row">
+                <h3 class="iconized rules-overview-icon" data-i18n="overview.rulesOverviewTitle">Rules Overview</h3>
+                <button class="icon-btn ghost small overview-drag-handle" type="button">
+                  <span class="sr-only" data-i18n="labels.dragToReorder">Drag to reorder</span>
+                  <span class="drag-grip" aria-hidden="true"></span>
+                </button>
+              </div>
+              <div class="rules-overview-switch" id="overviewRulesSwitch">
+                <button class="active" type="button" data-rules-view="rules" data-i18n="overview.rulesSwitchRules">Rules</button>
+                <button type="button" data-rules-view="providers" data-i18n="overview.rulesSwitchProviders">Rule Providers</button>
+              </div>
+              <div class="rules-overview-metrics" id="overviewRulesMetrics"></div>
+              <div class="rules-overview-behaviors" id="overviewRulesBehaviors"></div>
+              <div class="rules-overview-chart" id="overviewRulesChart"></div>
+              <div class="rules-overview-records" id="overviewRulesRecords"></div>
+            </div>
             <div class="card overview-card" data-module="running" data-span="full" draggable="true">
               <div class="card-header-row">
                 <h3 data-i18n="overview.runningTitle">Running Status</h3>

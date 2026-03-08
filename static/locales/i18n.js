@@ -15,6 +15,10 @@ const I18N = {
     "overview": {
       "runningTitle": "Running Status",
       "networkTitle": "Network Status",
+      "providerTrafficTitle": "Provider Traffic Overview",
+      "rulesOverviewTitle": "Rules Overview",
+      "rulesSwitchRules": "Rules",
+      "rulesSwitchProviders": "Rule Providers",
       "uptime": "Uptime",
       "connections": "Connections",
       "memory": "Memory",
@@ -116,6 +120,27 @@ const I18N = {
       "searchPlaceholder": "Search message...",
       "noMatching": "No matching logs.",
       "fileNotFound": "Log file not found."
+    },
+    "providers": {
+      "summaryCount": "Providers",
+      "summaryUsed": "Used",
+      "summaryRemain": "Remaining",
+      "summaryUsage": "Usage",
+      "empty": "No provider subscription data.",
+      "remaining": "Remaining",
+      "used": "Used",
+      "expire": "Expire"
+    },
+    "rules": {
+      "total": "Rules",
+      "empty": "No rules data.",
+      "emptyProviders": "No rule provider data.",
+      "behaviors": "Behaviors",
+      "maxPerProvider": "Max/Provider",
+      "typeKinds": "Type Kinds",
+      "policyKinds": "Policy Kinds",
+      "recordsShown": "Records Shown",
+      "noBehaviorData": "No behavior data"
     },
     "clean": {
       "title": "Clean Logs",
@@ -297,6 +322,8 @@ const I18N = {
       "language": "Language",
       "trayMenuChart": "Statistics",
       "trayMenuChartDesc": "Show live traffic chart in the tray menu.",
+      "trayMenuProviderTraffic": "Provider Traffic",
+      "trayMenuProviderTrafficDesc": "Show provider traffic summary in the tray menu.",
       "menuKernelManager": "Kernel Manager",
       "menuKernelManagerDesc": "Show Kernel Manager in the tray menu.",
       "menuDirectoryLocations": "Directory Locations",
@@ -443,6 +470,10 @@ const I18N = {
     "overview": {
       "runningTitle": "运行状态",
       "networkTitle": "网络状态",
+      "providerTrafficTitle": "订阅流量概览",
+      "rulesOverviewTitle": "规则概览",
+      "rulesSwitchRules": "规则",
+      "rulesSwitchProviders": "规则提供商",
       "uptime": "运行时长",
       "connections": "连接数",
       "memory": "内存",
@@ -544,6 +575,27 @@ const I18N = {
       "searchPlaceholder": "搜索消息...",
       "noMatching": "没有匹配的日志。",
       "fileNotFound": "未找到日志文件。"
+    },
+    "providers": {
+      "summaryCount": "提供商",
+      "summaryUsed": "已用",
+      "summaryRemain": "剩余",
+      "summaryUsage": "用量",
+      "empty": "暂无订阅流量数据。",
+      "remaining": "剩余",
+      "used": "已用",
+      "expire": "到期"
+    },
+    "rules": {
+      "total": "规则总数",
+      "empty": "暂无规则数据。",
+      "emptyProviders": "暂无规则提供商数据。",
+      "behaviors": "行为类型",
+      "maxPerProvider": "单提供商最大",
+      "typeKinds": "规则类型数",
+      "policyKinds": "策略类型数",
+      "recordsShown": "显示记录",
+      "noBehaviorData": "暂无行为数据"
     },
     "clean": {
       "title": "清理日志",
@@ -725,6 +777,8 @@ const I18N = {
       "language": "语言",
       "trayMenuChart": "统计",
       "trayMenuChartDesc": "在托盘菜单中显示实时流量图表。",
+      "trayMenuProviderTraffic": "提供商流量",
+      "trayMenuProviderTrafficDesc": "在托盘菜单中显示提供商流量汇总信息。",
       "menuKernelManager": "内核管理",
       "menuKernelManagerDesc": "在托盘菜单中显示内核管理。",
       "menuDirectoryLocations": "目录位置",
@@ -871,6 +925,10 @@ const I18N = {
     "overview": {
       "runningTitle": "稼働状況",
       "networkTitle": "ネットワーク状況",
+      "providerTrafficTitle": "プロバイダートラフィック概要",
+      "rulesOverviewTitle": "ルール概要",
+      "rulesSwitchRules": "ルール",
+      "rulesSwitchProviders": "ルールプロバイダー",
       "uptime": "稼働時間",
       "connections": "接続数",
       "memory": "メモリ",
@@ -972,6 +1030,27 @@ const I18N = {
       "searchPlaceholder": "メッセージを検索...",
       "noMatching": "一致するログがありません。",
       "fileNotFound": "ログファイルが見つかりません。"
+    },
+    "providers": {
+      "summaryCount": "プロバイダー",
+      "summaryUsed": "使用量",
+      "summaryRemain": "残量",
+      "summaryUsage": "使用率",
+      "empty": "サブスクリプションデータがありません。",
+      "remaining": "残量",
+      "used": "使用済み",
+      "expire": "期限"
+    },
+    "rules": {
+      "total": "ルール",
+      "empty": "ルールデータがありません。",
+      "emptyProviders": "ルールプロバイダーデータがありません。",
+      "behaviors": "挙動タイプ",
+      "maxPerProvider": "最大/プロバイダー",
+      "typeKinds": "タイプ数",
+      "policyKinds": "ポリシー数",
+      "recordsShown": "表示件数",
+      "noBehaviorData": "挙動データなし"
     },
     "clean": {
       "title": "ログの削除",
@@ -1153,6 +1232,8 @@ const I18N = {
       "language": "言語",
       "trayMenuChart": "統計",
       "trayMenuChartDesc": "トレイメニューにリアルタイムのトラフィックチャートを表示します。",
+      "trayMenuProviderTraffic": "プロバイダ通信量",
+      "trayMenuProviderTrafficDesc": "トレイメニューにプロバイダ通信量の概要を表示します。",
       "menuKernelManager": "カーネル管理",
       "menuKernelManagerDesc": "トレイメニューにカーネル管理を表示します。",
       "menuDirectoryLocations": "ディレクトリ場所",
@@ -1293,6 +1374,10 @@ const I18N = {
     "overview": {
       "runningTitle": "실행 상태",
       "networkTitle": "네트워크 상태",
+      "providerTrafficTitle": "프로바이더 트래픽 개요",
+      "rulesOverviewTitle": "규칙 개요",
+      "rulesSwitchRules": "규칙",
+      "rulesSwitchProviders": "규칙 프로바이더",
       "uptime": "가동 시간",
       "connections": "연결 수",
       "memory": "메모리",
@@ -1394,6 +1479,27 @@ const I18N = {
       "searchPlaceholder": "메시지 검색...",
       "noMatching": "일치하는 로그가 없습니다.",
       "fileNotFound": "로그 파일을 찾을 수 없습니다."
+    },
+    "providers": {
+      "summaryCount": "프로바이더",
+      "summaryUsed": "사용량",
+      "summaryRemain": "잔여량",
+      "summaryUsage": "사용률",
+      "empty": "구독 트래픽 데이터가 없습니다.",
+      "remaining": "남은 용량",
+      "used": "사용됨",
+      "expire": "만료"
+    },
+    "rules": {
+      "total": "규칙 수",
+      "empty": "규칙 데이터가 없습니다.",
+      "emptyProviders": "규칙 프로바이더 데이터가 없습니다.",
+      "behaviors": "동작 유형",
+      "maxPerProvider": "프로바이더 최대",
+      "typeKinds": "유형 수",
+      "policyKinds": "정책 수",
+      "recordsShown": "표시 레코드",
+      "noBehaviorData": "동작 데이터 없음"
     },
     "clean": {
       "title": "로그 정리",
@@ -1575,6 +1681,8 @@ const I18N = {
       "language": "언어",
       "trayMenuChart": "통계",
       "trayMenuChartDesc": "트레이 메뉴에 실시간 트래픽 차트를 표시합니다.",
+      "trayMenuProviderTraffic": "제공자 트래픽",
+      "trayMenuProviderTrafficDesc": "트레이 메뉴에 제공자 트래픽 요약을 표시합니다.",
       "menuKernelManager": "커널 관리자",
       "menuKernelManagerDesc": "트레이 메뉴에 커널 관리자를 표시합니다.",
       "menuDirectoryLocations": "디렉터리 위치",
@@ -1715,6 +1823,10 @@ const I18N = {
     "overview": {
       "runningTitle": "Statut d'execution",
       "networkTitle": "Statut du réseau",
+      "providerTrafficTitle": "Aperçu du trafic des fournisseurs",
+      "rulesOverviewTitle": "Aperçu des règles",
+      "rulesSwitchRules": "Règles",
+      "rulesSwitchProviders": "Fournisseurs de règles",
       "uptime": "Temps de fonctionnement",
       "connections": "Connexions",
       "memory": "Mémoire",
@@ -1816,6 +1928,27 @@ const I18N = {
       "searchPlaceholder": "Rechercher un message...",
       "noMatching": "Aucun journal correspondant.",
       "fileNotFound": "Fichier journal introuvable."
+    },
+    "providers": {
+      "summaryCount": "Fournisseurs",
+      "summaryUsed": "Utilisé",
+      "summaryRemain": "Restant",
+      "summaryUsage": "Utilisation",
+      "empty": "Aucune donnée d'abonnement.",
+      "remaining": "Restant",
+      "used": "Utilisé",
+      "expire": "Expiration"
+    },
+    "rules": {
+      "total": "Règles",
+      "empty": "Aucune donnée de règle.",
+      "emptyProviders": "Aucune donnée de fournisseur de règles.",
+      "behaviors": "Comportements",
+      "maxPerProvider": "Max/Fournisseur",
+      "typeKinds": "Types",
+      "policyKinds": "Politiques",
+      "recordsShown": "Enregistrements",
+      "noBehaviorData": "Aucune donnée de comportement"
     },
     "clean": {
       "title": "Nettoyer les journaux",
@@ -1997,6 +2130,8 @@ const I18N = {
       "language": "Langue",
       "trayMenuChart": "Statistiques",
       "trayMenuChartDesc": "Afficher le graphique de trafic en temps réel dans le menu de la barre.",
+      "trayMenuProviderTraffic": "Trafic fournisseur",
+      "trayMenuProviderTrafficDesc": "Afficher le resume du trafic fournisseur dans le menu de la barre.",
       "menuKernelManager": "Gestionnaire du noyau",
       "menuKernelManagerDesc": "Afficher le gestionnaire du noyau dans le menu de la barre.",
       "menuDirectoryLocations": "Emplacements des répertoires",
@@ -2137,6 +2272,10 @@ const I18N = {
     "overview": {
       "runningTitle": "Laufstatus",
       "networkTitle": "Netzwerkstatus",
+      "providerTrafficTitle": "Anbieter-Traffic-Übersicht",
+      "rulesOverviewTitle": "Regelübersicht",
+      "rulesSwitchRules": "Regeln",
+      "rulesSwitchProviders": "Regelanbieter",
       "uptime": "Laufzeit",
       "connections": "Verbindungen",
       "memory": "Speicher",
@@ -2238,6 +2377,27 @@ const I18N = {
       "searchPlaceholder": "Nachricht suchen...",
       "noMatching": "Keine passenden Logs gefunden.",
       "fileNotFound": "Log-Datei nicht gefunden."
+    },
+    "providers": {
+      "summaryCount": "Anbieter",
+      "summaryUsed": "Verbraucht",
+      "summaryRemain": "Verbleibend",
+      "summaryUsage": "Nutzung",
+      "empty": "Keine Abo-Traffic-Daten.",
+      "remaining": "Verbleibend",
+      "used": "Verbraucht",
+      "expire": "Ablauf"
+    },
+    "rules": {
+      "total": "Regeln",
+      "empty": "Keine Regeldaten.",
+      "emptyProviders": "Keine Daten zu Regelanbietern.",
+      "behaviors": "Verhalten",
+      "maxPerProvider": "Max/Anbieter",
+      "typeKinds": "Typen",
+      "policyKinds": "Richtlinien",
+      "recordsShown": "Einträge",
+      "noBehaviorData": "Keine Verhaltensdaten"
     },
     "clean": {
       "title": "Logs bereinigen",
@@ -2419,6 +2579,8 @@ const I18N = {
       "language": "Sprache",
       "trayMenuChart": "Statistiken",
       "trayMenuChartDesc": "Live-Diagramm im Tray-Menü anzeigen.",
+      "trayMenuProviderTraffic": "Provider-Traffic",
+      "trayMenuProviderTrafficDesc": "Zusammenfassung des Provider-Traffics im Tray-Menü anzeigen.",
       "menuKernelManager": "Kernel-Manager",
       "menuKernelManagerDesc": "Kernel-Manager im Tray-Menü anzeigen.",
       "menuDirectoryLocations": "Verzeichnisorte",
@@ -2559,6 +2721,10 @@ const I18N = {
     "overview": {
       "runningTitle": "Состояние работы",
       "networkTitle": "Состояние сети",
+      "providerTrafficTitle": "Обзор трафика провайдеров",
+      "rulesOverviewTitle": "Обзор правил",
+      "rulesSwitchRules": "Правила",
+      "rulesSwitchProviders": "Провайдеры правил",
       "uptime": "Время работы",
       "connections": "Подключения",
       "memory": "Память",
@@ -2660,6 +2826,27 @@ const I18N = {
       "searchPlaceholder": "Поиск по сообщению...",
       "noMatching": "Подходящих журналов нет.",
       "fileNotFound": "Файл журнала не найден."
+    },
+    "providers": {
+      "summaryCount": "Провайдеры",
+      "summaryUsed": "Использовано",
+      "summaryRemain": "Осталось",
+      "summaryUsage": "Использование",
+      "empty": "Нет данных подписки.",
+      "remaining": "Осталось",
+      "used": "Использовано",
+      "expire": "Срок"
+    },
+    "rules": {
+      "total": "Правила",
+      "empty": "Нет данных правил.",
+      "emptyProviders": "Нет данных провайдеров правил.",
+      "behaviors": "Типы поведения",
+      "maxPerProvider": "Макс/провайдер",
+      "typeKinds": "Типов",
+      "policyKinds": "Политик",
+      "recordsShown": "Показано записей",
+      "noBehaviorData": "Нет данных поведения"
     },
     "clean": {
       "title": "Очистка журналов",
@@ -2841,6 +3028,8 @@ const I18N = {
       "language": "Язык",
       "trayMenuChart": "Статистика",
       "trayMenuChartDesc": "Показывать график трафика в меню трея.",
+      "trayMenuProviderTraffic": "Трафик провайдера",
+      "trayMenuProviderTrafficDesc": "Показывать сводку трафика провайдера в меню трея.",
       "menuKernelManager": "Диспетчер ядра",
       "menuKernelManagerDesc": "Показывать диспетчер ядра в меню трея.",
       "menuDirectoryLocations": "Расположения каталогов",

@@ -1212,6 +1212,156 @@ JSON
     print_ok "$data"
 }
 
+handle_providers_proxies() {
+    parse_common_controller_args "$@"
+    local config_path="$CF_ARG_CONFIG_PATH"
+    if [ -z "$config_path" ]; then
+        config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+    fi
+    apply_controller_overrides "$config_path" "$CF_ARG_CONTROLLER_OVERRIDE" "$CF_ARG_SECRET_OVERRIDE"
+
+    if [ -z "$MIHOMO_CONTROLLER" ]; then
+        print_ok '{"providers":{}}'
+        return
+    fi
+    if ! command -v curl >/dev/null 2>&1; then
+        print_ok '{"providers":{}}'
+        return
+    fi
+
+    local api_url="${MIHOMO_CONTROLLER}/providers/proxies"
+    local token=""
+    if [ -n "$MIHOMO_SECRET" ]; then
+        token="$MIHOMO_SECRET"
+    elif [ -n "${CLASHFOX_MIHOMO_TOKEN:-}" ]; then
+        token="$CLASHFOX_MIHOMO_TOKEN"
+    fi
+    local auth_args=()
+    if [ -n "$token" ]; then
+        auth_args=(-H "Authorization: Bearer $token")
+    fi
+
+    local response=""
+    response="$(curl -sS --connect-timeout 1 --max-time 2 "${auth_args[@]}" "$api_url" 2>/dev/null || true)"
+    if [ -z "$response" ]; then
+        response="$(curl -sS --connect-timeout 1 --max-time 4 "${auth_args[@]}" "$api_url" 2>/dev/null || true)"
+    fi
+    if [ -z "$response" ]; then
+        print_ok '{"providers":{}}'
+        return
+    fi
+
+    local normalized="$response"
+    if command -v python3 >/dev/null 2>&1; then
+        normalized="$(CLASHFOX_PROVIDER_RAW="$response" python3 - <<'PY'
+import json
+import os
+
+raw = os.environ.get("CLASHFOX_PROVIDER_RAW", "").strip()
+if not raw:
+    print('{"providers":{}}')
+    raise SystemExit
+try:
+    parsed = json.loads(raw)
+except Exception:
+    print('{"providers":{}}')
+    raise SystemExit
+if isinstance(parsed, dict):
+    print(json.dumps(parsed, ensure_ascii=False, separators=(',', ':')))
+else:
+    print('{"providers":{}}')
+PY
+)"
+    fi
+
+    if [ -z "$normalized" ]; then
+        normalized='{"providers":{}}'
+    fi
+    print_ok "$normalized"
+}
+
+handle_rules() {
+    parse_common_controller_args "$@"
+    local config_path="$CF_ARG_CONFIG_PATH"
+    if [ -z "$config_path" ]; then
+        config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+    fi
+    apply_controller_overrides "$config_path" "$CF_ARG_CONTROLLER_OVERRIDE" "$CF_ARG_SECRET_OVERRIDE"
+
+    if [ -z "$MIHOMO_CONTROLLER" ]; then
+        print_ok '{"rules":[]}'
+        return
+    fi
+    if ! command -v curl >/dev/null 2>&1; then
+        print_ok '{"rules":[]}'
+        return
+    fi
+
+    local api_url="${MIHOMO_CONTROLLER}/rules"
+    local token=""
+    if [ -n "$MIHOMO_SECRET" ]; then
+        token="$MIHOMO_SECRET"
+    elif [ -n "${CLASHFOX_MIHOMO_TOKEN:-}" ]; then
+        token="$CLASHFOX_MIHOMO_TOKEN"
+    fi
+    local auth_args=()
+    if [ -n "$token" ]; then
+        auth_args=(-H "Authorization: Bearer $token")
+    fi
+
+    local response=""
+    response="$(curl -sS --connect-timeout 1 --max-time 2 "${auth_args[@]}" "$api_url" 2>/dev/null || true)"
+    if [ -z "$response" ]; then
+        response="$(curl -sS --connect-timeout 1 --max-time 4 "${auth_args[@]}" "$api_url" 2>/dev/null || true)"
+    fi
+    if [ -z "$response" ]; then
+        print_ok '{"rules":[]}'
+        return
+    fi
+    print_ok "$response"
+}
+
+handle_providers_rules() {
+    parse_common_controller_args "$@"
+    local config_path="$CF_ARG_CONFIG_PATH"
+    if [ -z "$config_path" ]; then
+        config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
+    fi
+    apply_controller_overrides "$config_path" "$CF_ARG_CONTROLLER_OVERRIDE" "$CF_ARG_SECRET_OVERRIDE"
+
+    if [ -z "$MIHOMO_CONTROLLER" ]; then
+        print_ok '{"providers":{}}'
+        return
+    fi
+    if ! command -v curl >/dev/null 2>&1; then
+        print_ok '{"providers":{}}'
+        return
+    fi
+
+    local api_url="${MIHOMO_CONTROLLER}/providers/rules"
+    local token=""
+    if [ -n "$MIHOMO_SECRET" ]; then
+        token="$MIHOMO_SECRET"
+    elif [ -n "${CLASHFOX_MIHOMO_TOKEN:-}" ]; then
+        token="$CLASHFOX_MIHOMO_TOKEN"
+    fi
+    local auth_args=()
+    if [ -n "$token" ]; then
+        auth_args=(-H "Authorization: Bearer $token")
+    fi
+
+    local response=""
+    response="$(curl -sS --connect-timeout 1 --max-time 2 "${auth_args[@]}" "$api_url" 2>/dev/null || true)"
+    if [ -z "$response" ]; then
+        response="$(curl -sS --connect-timeout 1 --max-time 4 "${auth_args[@]}" "$api_url" 2>/dev/null || true)"
+    fi
+    if [ -z "$response" ]; then
+        print_ok '{"providers":{}}'
+        return
+    fi
+    print_ok "$response"
+}
+
 handle_tun_status() {
     parse_common_controller_args "$@"
     local config_path="$CF_ARG_CONFIG_PATH"
@@ -2748,6 +2898,15 @@ case "$command" in
         ;;
     traffic)
         handle_traffic "$@"
+        ;;
+    providers-proxies)
+        handle_providers_proxies "$@"
+        ;;
+    rules)
+        handle_rules "$@"
+        ;;
+    providers-rules)
+        handle_providers_rules "$@"
         ;;
     overview-lite)
         handle_runtime_overview_lite "$@"
