@@ -53,6 +53,46 @@ const providerTrafficState = {
   signature: '',
 };
 
+async function applyTrayTheme() {
+  try {
+    if (!document.body) {
+      return;
+    }
+    let preference = '';
+    if (window.clashfox && typeof window.clashfox.readSettings === 'function') {
+      const response = await window.clashfox.readSettings();
+      const settings = response && response.ok && response.data && typeof response.data === 'object'
+        ? response.data
+        : null;
+      preference = String(
+        (settings && settings.theme)
+        || (settings && settings.appearance && settings.appearance.theme)
+        || '',
+      ).trim().toLowerCase();
+    }
+    let theme = '';
+    if (preference === 'day' || preference === 'light') {
+      theme = 'day';
+    } else if (preference === 'night' || preference === 'dark') {
+      theme = 'night';
+    } else {
+      theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'night'
+        : 'day';
+    }
+    document.body.dataset.theme = theme;
+    document.documentElement.setAttribute('data-theme', theme);
+  } catch {
+    const fallback = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'night'
+      : 'day';
+    if (document.body) {
+      document.body.dataset.theme = fallback;
+      document.documentElement.setAttribute('data-theme', fallback);
+    }
+  }
+}
+
 function persistTrafficCache() {
   try {
     localStorage.setItem(TRAFFIC_CACHE_KEY, JSON.stringify({
@@ -1009,6 +1049,7 @@ function renderAll() {
 }
 
 async function init() {
+  await applyTrayTheme();
   ensureMenuAutoResize();
   if (chartEl) {
     if (!restoreTrafficCache()) {
@@ -1020,6 +1061,7 @@ async function init() {
       if (!payload) {
         return;
       }
+      applyTrayTheme().catch(() => {});
       menuVersion += 1;
       const keepSubmenuKey = activeSubmenuKey;
       const keepSubmenuAnchorKey = activeSubmenuAnchor
@@ -1060,6 +1102,28 @@ async function init() {
   }
 
   headerEl.addEventListener('mouseenter', hideSubmenu);
+  if (window.clashfox && typeof window.clashfox.onSystemThemeChange === 'function') {
+    window.clashfox.onSystemThemeChange(() => {
+      applyTrayTheme().catch(() => {});
+    });
+  }
+  window.addEventListener('storage', (event) => {
+    if (!event || event.key !== 'clashfox.settings') {
+      return;
+    }
+    applyTrayTheme().catch(() => {});
+  });
+  if (window.matchMedia) {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleThemeChange = () => {
+      applyTrayTheme().catch(() => {});
+    };
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', handleThemeChange);
+    } else if (typeof media.addListener === 'function') {
+      media.addListener(handleThemeChange);
+    }
+  }
   if (providerTrafficEl) {
     providerTrafficEl.addEventListener('mouseenter', () => {
       providerTrafficState.paused = true;

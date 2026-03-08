@@ -498,7 +498,7 @@ body[data-theme="day"] .brand-mark .logo-night {
   background: transparent;
   border: 1px solid transparent;
   color: var(--muted);
-  padding: 10px 14px;
+  padding: 8px 14px;
   text-align: left;
   border-radius: 12px;
   cursor: pointer;

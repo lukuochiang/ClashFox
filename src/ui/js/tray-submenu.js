@@ -16,6 +16,46 @@ const ACTION_TIMEOUT_MS = 12000;
 const LOADING_SHOW_DELAY_MS = 180;
 const MIN_LOADING_VISIBLE_MS = 220;
 
+async function applyTrayTheme() {
+  try {
+    if (!document.body) {
+      return;
+    }
+    let preference = '';
+    if (window.clashfox && typeof window.clashfox.readSettings === 'function') {
+      const response = await window.clashfox.readSettings();
+      const settings = response && response.ok && response.data && typeof response.data === 'object'
+        ? response.data
+        : null;
+      preference = String(
+        (settings && settings.theme)
+        || (settings && settings.appearance && settings.appearance.theme)
+        || '',
+      ).trim().toLowerCase();
+    }
+    let theme = '';
+    if (preference === 'day' || preference === 'light') {
+      theme = 'day';
+    } else if (preference === 'night' || preference === 'dark') {
+      theme = 'night';
+    } else {
+      theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'night'
+        : 'day';
+    }
+    document.body.dataset.theme = theme;
+    document.documentElement.setAttribute('data-theme', theme);
+  } catch {
+    const fallback = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'night'
+      : 'day';
+    if (document.body) {
+      document.body.dataset.theme = fallback;
+      document.documentElement.setAttribute('data-theme', fallback);
+    }
+  }
+}
+
 function wait(ms = 0) {
   return new Promise((resolve) => {
     setTimeout(resolve, Math.max(0, Number(ms) || 0));
@@ -302,10 +342,38 @@ function setSubmenu(payload) {
   ensureConnectivityRefresh();
 }
 
+applyTrayTheme().catch(() => {});
+
 if (window.clashfox && typeof window.clashfox.onTraySubmenuUpdate === 'function') {
   window.clashfox.onTraySubmenuUpdate((payload) => {
+    applyTrayTheme().catch(() => {});
     setSubmenu(payload);
   });
+}
+
+if (window.clashfox && typeof window.clashfox.onSystemThemeChange === 'function') {
+  window.clashfox.onSystemThemeChange(() => {
+    applyTrayTheme().catch(() => {});
+  });
+}
+
+window.addEventListener('storage', (event) => {
+  if (!event || event.key !== 'clashfox.settings') {
+    return;
+  }
+  applyTrayTheme().catch(() => {});
+});
+
+if (window.matchMedia) {
+  const media = window.matchMedia('(prefers-color-scheme: dark)');
+  const handleThemeChange = () => {
+    applyTrayTheme().catch(() => {});
+  };
+  if (typeof media.addEventListener === 'function') {
+    media.addEventListener('change', handleThemeChange);
+  } else if (typeof media.addListener === 'function') {
+    media.addListener(handleThemeChange);
+  }
 }
 
 if (window.clashfox && typeof window.clashfox.traySubmenuHover === 'function') {

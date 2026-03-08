@@ -257,25 +257,26 @@ body {
 .menu-chart-label {
   font-size: 10px;
   font-weight: 600;
-  color: rgba(32, 40, 54, 0.9);
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(150, 170, 196, 0.35);
+  color: rgba(225, 232, 240, 0.94);
+  background: rgba(24, 31, 42, 0.86);
+  border: 1px solid rgba(111, 130, 156, 0.3);
   border-radius: 4px;
   padding: 1px 5px;
-  box-shadow: 0 2px 6px rgba(14, 18, 26, 0.08);
+  box-shadow: 0 2px 8px rgba(6, 10, 18, 0.22);
+  backdrop-filter: blur(6px);
 }
 
 .menu-chart-label.top {
-  color: rgba(148, 76, 200, 0.95);
+  color: rgba(220, 159, 255, 0.96);
 }
 
 .menu-chart-label.bottom {
-  color: rgba(33, 110, 196, 0.95);
+  color: rgba(128, 188, 255, 0.98);
 }
 
 .menu-chart-label.total {
-  background: rgba(246, 248, 252, 0.92);
-  border-color: rgba(160, 170, 186, 0.28);
+  background: rgba(31, 39, 52, 0.92);
+  border-color: rgba(117, 135, 160, 0.24);
   font-size: 9px;
   opacity: 0.9;
 }
@@ -285,7 +286,7 @@ body {
   justify-content: space-between;
   margin-top: 4px;
   font-size: 9px;
-  color: rgba(120, 136, 158, 0.9);
+  color: rgba(133, 149, 171, 0.88);
   letter-spacing: 0.2px;
 }
 
@@ -312,13 +313,13 @@ body {
   padding: 6px 7px;
   border-radius: 8px;
   border: 1px solid rgba(148, 171, 197, 0.18);
-  background: rgba(245, 248, 253, 0.92);
+  background: rgba(27, 36, 48, 0.92);
 }
 
 .provider-traffic-stat-label {
   font-size: 9px;
   line-height: 1;
-  color: rgba(102, 120, 142, 0.84);
+  color: rgba(149, 166, 188, 0.82);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   white-space: nowrap;
@@ -327,7 +328,7 @@ body {
 .provider-traffic-stat-value {
   font-size: 11px;
   line-height: 1.1;
-  color: rgba(31, 42, 54, 0.92);
+  color: rgba(233, 238, 243, 0.94);
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
@@ -341,7 +342,7 @@ body {
   padding: 7px 8px;
   border-radius: 9px;
   border: 1px solid rgba(148, 171, 197, 0.2);
-  background: rgba(250, 251, 253, 0.96);
+  background: rgba(23, 31, 42, 0.96);
 }
 
 .provider-traffic-item-head,
@@ -364,7 +365,7 @@ body {
   min-width: 0;
   font-size: 12px;
   font-weight: 700;
-  color: rgba(31, 42, 54, 0.96);
+  color: rgba(236, 240, 245, 0.96);
 }
 
 .provider-traffic-item-percent {
@@ -389,10 +390,38 @@ body {
 
 .provider-traffic-item-meta {
   font-size: 10px;
-  color: rgba(96, 111, 131, 0.9);
+  color: rgba(157, 171, 190, 0.88);
 }
 
 .provider-traffic-item-meta.secondary {
+  color: rgba(129, 144, 164, 0.78);
+}
+
+body[data-theme="day"] .provider-traffic-stat {
+  background: rgba(245, 248, 253, 0.92);
+}
+
+body[data-theme="day"] .provider-traffic-stat-label {
+  color: rgba(102, 120, 142, 0.84);
+}
+
+body[data-theme="day"] .provider-traffic-stat-value {
+  color: rgba(31, 42, 54, 0.92);
+}
+
+body[data-theme="day"] .provider-traffic-item {
+  background: rgba(250, 251, 253, 0.96);
+}
+
+body[data-theme="day"] .provider-traffic-item-name {
+  color: rgba(31, 42, 54, 0.96);
+}
+
+body[data-theme="day"] .provider-traffic-item-meta {
+  color: rgba(96, 111, 131, 0.9);
+}
+
+body[data-theme="day"] .provider-traffic-item-meta.secondary {
   color: rgba(114, 126, 145, 0.78);
 }
 
@@ -623,6 +652,67 @@ body {
   line-height: 1;
   color: var(--muted);
   text-align: right;
+}
+
+body[data-theme="day"] {
+  --bg-1: #f6f1e8;
+  --bg-2: #f1f5fb;
+  --panel: #ffffff;
+  --panel-soft: #f5f7fb;
+  --accent: #f2a13b;
+  --accent-strong: #e56b3b;
+  --mint: #2f8f78;
+  --ink: #1f2a36;
+  --muted: #3a4b5c;
+  --border: rgba(96, 113, 133, 0.25);
+  --line: rgba(96, 113, 133, 0.25);
+  --check: #1ea357;
+  --icon: #273244;
+  --shadow: 0 12px 30px rgba(31, 46, 60, 0.12);
+  --row-hover: rgba(244, 179, 74, 0.16);
+  --row-selected: rgba(234, 162, 67, 0.22);
+  --header-status: #2f8f78;
+  --chart-down: #1b7fd6;
+  --chart-down-glow: rgba(27, 127, 214, 0.2);
+  --chart-up: #b454e0;
+  --chart-up-glow: rgba(180, 84, 224, 0.2);
+  --chart-bar-base: rgba(133, 151, 175, 0.16);
+}
+
+body[data-theme="day"] .menu-header-logo .logo-dark {
+  display: none;
+}
+
+body[data-theme="day"] .menu-header-logo .logo-light {
+  display: block;
+}
+
+body[data-theme="day"] .menu-badge.tone-neutral {
+  background: rgba(107, 119, 141, 0.25);
+  color: #2c3a52;
+}
+
+body[data-theme="day"] .menu-row.selected .menu-label {
+  color: #2f2410;
+}
+
+body[data-theme="day"] .menu-chart-body {
+  background: transparent;
+}
+
+body[data-theme="day"] .menu-chart-label {
+  color: rgba(40, 53, 68, 0.85);
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(121, 138, 160, 0.24);
+  box-shadow: 0 2px 6px rgba(31, 46, 60, 0.08);
+}
+
+body[data-theme="day"] .menu-chart-label.top {
+  color: rgba(148, 76, 200, 0.95);
+}
+
+body[data-theme="day"] .menu-chart-label.bottom {
+  color: rgba(33, 110, 196, 0.95);
 }
 
 @media (prefers-color-scheme: light) {
