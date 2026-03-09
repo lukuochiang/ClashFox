@@ -357,6 +357,12 @@ if (window.clashfox && typeof window.clashfox.onSystemThemeChange === 'function'
   });
 }
 
+if (window.clashfox && typeof window.clashfox.onSettingsUpdated === 'function') {
+  window.clashfox.onSettingsUpdated(() => {
+    applyTrayTheme().catch(() => {});
+  });
+}
+
 window.addEventListener('storage', (event) => {
   if (!event || event.key !== 'clashfox.settings') {
     return;

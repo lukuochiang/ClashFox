@@ -1,3 +1,16 @@
+import TRACKERS_I18N from '../locales/trackers-i18n.js';
+
+const trackersLocaleUtils = globalThis.CLASHFOX_LOCALE_UTILS || {};
+const detectSystemLocale = typeof trackersLocaleUtils.detectSystemLocale === 'function'
+  ? trackersLocaleUtils.detectSystemLocale
+  : (() => 'en');
+const normalizeLocaleCode = typeof trackersLocaleUtils.normalizeLocaleCode === 'function'
+  ? trackersLocaleUtils.normalizeLocaleCode
+  : (value => String(value || 'en').trim().toLowerCase() || 'en');
+const resolveLocaleFromSettings = typeof trackersLocaleUtils.resolveLocaleFromSettings === 'function'
+  ? trackersLocaleUtils.resolveLocaleFromSettings
+  : (() => 'en');
+
 let map = null;
 let localMarker = null;
 let pointsLayer = null;
@@ -105,23 +118,18 @@ const TILE_PROVIDERS = [
   },
 ];
 
-function normalizeLanguageCode(value) {
-  const lang = String(value || '').trim().toLowerCase();
-  if (lang.startsWith('zh')) return 'zh';
-  if (lang.startsWith('ja')) return 'ja';
-  if (lang.startsWith('ko')) return 'ko';
-  if (lang.startsWith('fr')) return 'fr';
-  if (lang.startsWith('de')) return 'de';
-  if (lang.startsWith('ru')) return 'ru';
-  return 'en';
-}
-
-function detectSystemLanguageCode() {
-  return normalizeLanguageCode(navigator.language || 'en');
+function resolveThemePreference(settings = {}) {
+  const appearance = settings && typeof settings.appearance === 'object' ? settings.appearance : {};
+  return String(
+    settings.theme
+    || settings.appearance?.theme
+    || appearance.colorMode
+    || 'auto',
+  ).trim().toLowerCase() || 'auto';
 }
 
 function getI18nValue(path, fallback = '') {
-  const dictionaries = window.CLASHFOX_I18N || {};
+  const dictionaries = TRACKERS_I18N;
   const current = dictionaries[activeLanguage] || dictionaries.en || {};
   const parts = String(path || '').split('.');
   let value = current;
@@ -153,6 +161,17 @@ function applyI18nText() {
   });
 }
 
+function refreshLocalizedUi() {
+  applyI18nText();
+  document.title = `ClashFox | ${getI18nValue('worldwide.title', 'Track the Trackers')}`;
+  if (snapshotState) {
+    scheduleRender(snapshotState);
+    return;
+  }
+  setDetail(null);
+  setStats(getI18nValue('worldwide.loading', 'Loading...'));
+}
+
 function resolveThemeMode(preference) {
   if (preference === 'day' || preference === 'night') {
     return preference;
@@ -175,10 +194,10 @@ function applyThemeMode(preference) {
 
 function syncLanguageFromPreference() {
   activeLanguage = languagePreference === 'auto'
-    ? detectSystemLanguageCode()
-    : normalizeLanguageCode(languagePreference);
+    ? detectSystemLocale()
+    : normalizeLocaleCode(languagePreference);
   document.documentElement.setAttribute('lang', activeLanguage);
-  applyI18nText();
+  refreshLocalizedUi();
 }
 
 async function syncPreferencesFromSettings() {
@@ -192,22 +211,21 @@ async function syncPreferencesFromSettings() {
     const settings = response && response.ok && response.data && typeof response.data === 'object'
       ? response.data
       : {};
-    const nextLang = String(
-      settings.lang
-      || (settings.appearance && settings.appearance.lang)
-      || 'auto',
-    ).trim().toLowerCase() || 'auto';
-    const nextTheme = String(
-      settings.theme
-      || (settings.appearance && settings.appearance.theme)
-      || 'auto',
-    ).trim().toLowerCase() || 'auto';
-    languagePreference = nextLang;
-    themePreference = nextTheme;
+    if (settings && Object.keys(settings).length) {
+      languagePreference = String(resolveLocaleFromSettings(settings) || 'auto');
+      themePreference = resolveThemePreference(settings);
+    }
   } catch {
     languagePreference = 'auto';
     themePreference = 'auto';
   }
+  syncLanguageFromPreference();
+  applyThemeMode(themePreference);
+}
+
+function applySettingsPayload(settings = {}) {
+  languagePreference = String(resolveLocaleFromSettings(settings) || 'auto');
+  themePreference = resolveThemePreference(settings);
   syncLanguageFromPreference();
   applyThemeMode(themePreference);
 }
@@ -229,7 +247,7 @@ function setDetail(point = null) {
   const location = [point.city, point.country].filter(Boolean).join(', ') || point.ipSamples?.[0] || '-';
   const outbounds = Array.isArray(point.outbounds) && point.outbounds.length ? point.outbounds.join(', ') : '-';
   const hosts = Array.isArray(point.hostSamples) && point.hostSamples.length ? point.hostSamples.join(', ') : '-';
-  detailBodyEl.textContent = `${location} | conns: ${Number(point.count || 0)} | outbound: ${outbounds} | host: ${hosts}`;
+  detailBodyEl.textContent = `${location} | ${getI18nValue('worldwide.labels.connections', 'conns')}: ${Number(point.count || 0)} | ${getI18nValue('worldwide.labels.outbound', 'outbound')}: ${outbounds} | ${getI18nValue('worldwide.labels.host', 'host')}: ${hosts}`;
 }
 
 function localLabel(local) {
@@ -553,7 +571,7 @@ function drawSnapshot(snapshot) {
       weight: 2.1,
       renderer: canvasRenderer || undefined,
     });
-    marker.bindTooltip(`${pointLabel(point)} · ${Number(point.count || 0)} conns`, {
+    marker.bindTooltip(`${pointLabel(point)} · ${Number(point.count || 0)} ${getI18nValue('worldwide.labels.connections', 'conns')}`, {
       direction: 'top',
       permanent: false,
       opacity: 0.9,
@@ -720,10 +738,6 @@ function stopPolling() {
   stopFlowAnimation();
 }
 
-window.addEventListener('beforeunload', () => {
-  stopPolling();
-});
-
 function syncPollingWithVisibility() {
   if (document.hidden) {
     stopPolling();
@@ -737,17 +751,18 @@ function syncPollingWithVisibility() {
   }
 }
 
-window.addEventListener('DOMContentLoaded', async () => {
-  await syncPreferencesFromSettings();
-  setDetail(null);
-  if (statsEl) {
-    statsEl.textContent = getI18nValue('worldwide.loading', 'Loading...');
+let trackersBootstrapped = false;
+let trackersSettingsListenerBound = false;
+let unsubscribeSystemTheme = null;
+let unsubscribeSettingsUpdated = null;
+
+function bindSettingsListeners() {
+  if (trackersSettingsListenerBound) {
+    return;
   }
-  if (filterOutboundEl) filterOutboundEl.addEventListener('change', handleFilterChange);
-  if (filterCountryEl) filterCountryEl.addEventListener('change', handleFilterChange);
-  if (filterCityEl) filterCityEl.addEventListener('change', handleFilterChange);
+  trackersSettingsListenerBound = true;
   if (window.clashfox && typeof window.clashfox.onSystemThemeChange === 'function') {
-    window.clashfox.onSystemThemeChange((payload) => {
+    unsubscribeSystemTheme = window.clashfox.onSystemThemeChange((payload) => {
       if (!payload || typeof payload.dark !== 'boolean') {
         return;
       }
@@ -755,6 +770,11 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (themePreference === 'auto') {
         applyThemeMode('auto');
       }
+    });
+  }
+  if (window.clashfox && typeof window.clashfox.onSettingsUpdated === 'function') {
+    unsubscribeSettingsUpdated = window.clashfox.onSettingsUpdated((settings = {}) => {
+      applySettingsPayload(settings);
     });
   }
   if (window.matchMedia) {
@@ -769,8 +789,47 @@ window.addEventListener('DOMContentLoaded', async () => {
   window.addEventListener('focus', () => {
     syncPreferencesFromSettings().catch(() => {});
   });
-  window.addEventListener('visibilitychange', syncPollingWithVisibility);
+  window.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      syncPreferencesFromSettings().catch(() => {});
+    }
+    syncPollingWithVisibility();
+  });
+}
+
+async function bootstrapTrackersPage() {
+  if (trackersBootstrapped) {
+    return;
+  }
+  trackersBootstrapped = true;
+  bindSettingsListeners();
+  await syncPreferencesFromSettings();
+  setDetail(null);
+  if (statsEl) {
+    statsEl.textContent = getI18nValue('worldwide.loading', 'Loading...');
+  }
+  if (filterOutboundEl) filterOutboundEl.addEventListener('change', handleFilterChange);
+  if (filterCountryEl) filterCountryEl.addEventListener('change', handleFilterChange);
+  if (filterCityEl) filterCityEl.addEventListener('change', handleFilterChange);
   if (initMap()) {
     syncPollingWithVisibility();
+  }
+}
+
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', () => {
+    bootstrapTrackersPage().catch(() => {});
+  });
+} else {
+  bootstrapTrackersPage().catch(() => {});
+}
+
+window.addEventListener('beforeunload', () => {
+  stopPolling();
+  if (typeof unsubscribeSystemTheme === 'function') {
+    unsubscribeSystemTheme();
+  }
+  if (typeof unsubscribeSettingsUpdated === 'function') {
+    unsubscribeSettingsUpdated();
   }
 });

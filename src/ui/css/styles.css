@@ -542,7 +542,7 @@ body[data-theme="day"] .brand-mark .logo-night {
 .nav-btn[data-page="config"]::before { mask-image: var(--icon-config); -webkit-mask-image: var(--icon-config); --nav-icon-fill: var(--icon-fill-config); }
 .nav-btn[data-page="logs"]::before { mask-image: var(--icon-doc); -webkit-mask-image: var(--icon-doc); --nav-icon-fill: var(--icon-fill-logs); }
 .nav-btn[data-tray-action="open-foxboard"]::before { mask-image: var(--icon-foxboard); -webkit-mask-image: var(--icon-foxboard); --nav-icon-fill: var(--icon-fill-foxboard); }
-.nav-btn[data-tray-action="open-dashboard"]::before { mask-image: var(--icon-dashboard); -webkit-mask-image: var(--icon-dashboard); --nav-icon-fill: var(--icon-fill-dashboard-tray); }
+.nav-btn[data-tray-action="open-dashboard"]::before { mask-image: var(--icon-dashboard); -webkit-mask-image: var(--icon-dashboard); --nav-icon-fill: var(--icon-fill-dashboard); }
 .nav-btn[data-tray-action="open-worldwide"]::before { mask-image: var(--icon-worldwide); -webkit-mask-image: var(--icon-worldwide); --nav-icon-fill: var(--icon-fill-trackers); }
 .nav-btn[data-page="settings"]::before { mask-image: var(--icon-settings); -webkit-mask-image: var(--icon-settings); --nav-icon-fill: var(--icon-fill-settings); }
 .nav-btn[data-page="help"]::before { mask-image: var(--icon-help); -webkit-mask-image: var(--icon-help); --nav-icon-fill: var(--icon-fill-help); }
@@ -3629,6 +3629,22 @@ body[data-page="settings"] .proxy-config-columns .settings-log-column-right {
 body[data-page="settings"] .proxy-config-columns .form-row > label:first-child {
   white-space: nowrap;
   min-width: 120px;
+}
+
+body[data-page="settings"] .proxy-config-header-actions {
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+body[data-page="settings"] .proxy-config-header-actions .icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+body[data-page="settings"] .proxy-config-header-actions .icon-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 @media (max-width: 900px) {

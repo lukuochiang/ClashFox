@@ -75,6 +75,60 @@ let currentInstallProcess = null; // 仅用于跟踪安装进程，支持取消�
 let globalSettings = {
   debugMode: true, // 是否启用调试模式
 };
+const GUI_MAIN_NOISY_COMMANDS = new Set([
+  'traffic',
+  'overview',
+  'overview-lite',
+  'overview-memory',
+  'track-connections',
+  'tun-status',
+]);
+const GUI_MAIN_SUPPRESSED_LOGS = new Set([
+  'command:ipc command received',
+  'command:ipc command result',
+  'tray:build started',
+  'tray:build completed',
+  'tray:build skipped, pending rerun',
+  'tray:build loop entered',
+  'tray:build loop exited',
+  'tray:action completed',
+]);
+const guiMainLogThrottleState = new Map();
+
+function shouldThrottleGuiMainLog(scope, message, payload = null, level = 'log') {
+  if (level !== 'log' || !payload || typeof payload !== 'object') {
+    return false;
+  }
+  const command = String(
+    payload.cmd
+    || payload.command
+    || '',
+  ).trim().toLowerCase();
+  if (!GUI_MAIN_NOISY_COMMANDS.has(command)) {
+    return false;
+  }
+  if (scope === 'bridge' && (message === 'command start' || message === 'command completed')) {
+    return true;
+  }
+  const ok = Object.prototype.hasOwnProperty.call(payload, 'ok')
+    ? Boolean(payload.ok)
+    : true;
+  if (!ok) {
+    return false;
+  }
+  const key = `${scope}:${message}:${command}`;
+  const now = Date.now();
+  const lastAt = guiMainLogThrottleState.get(key) || 0;
+  if ((now - lastAt) < 5000) {
+    return true;
+  }
+  guiMainLogThrottleState.set(key, now);
+  return false;
+}
+
+function guiMainLog(scope, message, payload = null, level = 'log') {
+  return;
+}
 let isQuitting = false;
 const CORE_STARTUP_ESTIMATE_MIN_MS = 900;
 const CORE_STARTUP_ESTIMATE_MAX_MS = 10000;
@@ -162,33 +216,19 @@ const dnsLookupAsync = dns.promises && dns.promises.lookup
   ? dns.promises.lookup.bind(dns.promises)
   : null;
 
-const I18N = require(path.join(APP_PATH, 'static', 'locales', 'i18n.js'));
-;
+const I18N = require(path.join(APP_PATH, 'src', 'ui', 'locales', 'i18n.js'));
+const {
+  normalizeLocaleCode,
+  resolveLocaleFromSettings,
+} = require(path.join(APP_PATH, 'src', 'ui', 'js', 'locale-utils.js'));
 
 function resolveTrayLang() {
-  try {
-    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
-    if (fs.existsSync(settingsPath)) {
-      const raw = fs.readFileSync(settingsPath, 'utf8');
-      const parsed = JSON.parse(raw);
-      const lang = parsed && typeof parsed === 'object'
-        ? (normalizeTextValue(parsed.lang) || normalizeTextValue(parsed.appearance && parsed.appearance.lang))
-        : '';
-      if (lang && lang !== 'auto') {
-        return I18N[lang] ? lang : 'en';
-      }
-    }
-  } catch {
-    // ignore
-  }
-  const locale = (app.getLocale && app.getLocale()) ? app.getLocale().toLowerCase() : '';
-  if (locale.startsWith('zh')) return 'zh';
-  if (locale.startsWith('ja')) return 'ja';
-  if (locale.startsWith('ko')) return 'ko';
-  if (locale.startsWith('fr')) return 'fr';
-  if (locale.startsWith('de')) return 'de';
-  if (locale.startsWith('ru')) return 'ru';
-  return 'en';
+  const settings = readAppSettings();
+  const resolved = resolveLocaleFromSettings(settings, {
+    systemLocale: (app.getLocale && app.getLocale()) || 'en',
+  });
+  const normalized = normalizeLocaleCode(resolved);
+  return I18N[normalized] ? normalized : 'en';
 }
 
 function getTrayLabels() {
@@ -249,7 +289,7 @@ function refreshTrayMenuLabelsOnly() {
       return { ...item, label: labels.dashboard };
     }
     if (item.action === 'open-worldwide') {
-      return { ...item, label: 'Trackers' };
+      return { ...item, label: labels.trackers || 'Trackers' };
     }
     if (item.action === 'open-foxboard') {
       return { ...item, label: 'Foxboard' };
@@ -978,6 +1018,61 @@ function resolveConfigDirectoryFromSettings() {
     return path.resolve(configured);
   }
   return path.join(APP_DATA_DIR, 'config');
+}
+
+function formatFileModifiedTime(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '-';
+  }
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mi = String(date.getMinutes()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+}
+
+function listConfigFilesFromFs() {
+  try {
+    const configDir = resolveConfigDirectoryFromSettings();
+    fs.mkdirSync(configDir, { recursive: true });
+    const items = fs.readdirSync(configDir, { withFileTypes: true })
+      .filter((entry) => entry && entry.isFile())
+      .filter((entry) => /\.(ya?ml|json)$/i.test(String(entry.name || '')))
+      .map((entry) => {
+        const filePath = path.join(configDir, entry.name);
+        const stat = fs.statSync(filePath);
+        return {
+          name: entry.name,
+          path: filePath,
+          modified: formatFileModifiedTime(stat.mtime),
+          modifiedAt: stat.mtimeMs || stat.mtime.getTime() || 0,
+        };
+      })
+      .sort((a, b) => {
+        const delta = Number(b.modifiedAt || 0) - Number(a.modifiedAt || 0);
+        if (delta !== 0) {
+          return delta;
+        }
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      })
+      .map(({ modifiedAt, ...rest }) => rest);
+    guiMainLog('config', 'listConfigFilesFromFs success', {
+      configDir,
+      count: items.length,
+    });
+    return { ok: true, data: items };
+  } catch (error) {
+    guiMainLog('config', 'listConfigFilesFromFs failed', {
+      message: String(error && error.message ? error.message : error || ''),
+    }, 'error');
+    return {
+      ok: false,
+      error: 'configs_read_failed',
+      details: String(error && error.message ? error.message : error || ''),
+    };
+  }
 }
 
 function buildUniqueFilePath(targetDir, fileName) {
@@ -3649,38 +3744,106 @@ async function runBridgeViaHelperApi(bridgeArgs = []) {
   };
 
   const respondFromHelper = async (pathname, method = 'GET', payload = null) => {
+    guiMainLog('helper', 'request start', {
+      command: commandType,
+      method,
+      path: pathname,
+    });
     const response = await sendHelperRequest(pathname, method, payload);
     if (!response) {
+      guiMainLog('helper', 'request failed', {
+        command: commandType,
+        method,
+        path: pathname,
+        error: 'helper_unreachable',
+      }, 'warn');
       return { ok: false, error: 'helper_unreachable' };
     }
     const statusCode = Number(response.statusCode || 0);
     const isHttpOk = statusCode >= 200 && statusCode < 300;
     const textBody = String(response.body || '').trim();
     if (!textBody) {
+      guiMainLog('helper', 'request completed', {
+        command: commandType,
+        method,
+        path: pathname,
+        statusCode,
+        ok: isHttpOk,
+      });
       return isHttpOk ? { ok: true, data: {} } : { ok: false, error: `http_${statusCode || 0}` };
     }
     try {
       const parsed = parseBridgeOutput(textBody);
       if (!parsed || typeof parsed !== 'object') {
+        guiMainLog('helper', 'request completed', {
+          command: commandType,
+          method,
+          path: pathname,
+          statusCode,
+          ok: isHttpOk,
+          shape: typeof parsed,
+        });
         return isHttpOk ? { ok: true, data: parsed } : { ok: false, error: 'helper_unreachable' };
       }
       if (parsed.ok === true) {
+        guiMainLog('helper', 'request completed', {
+          command: commandType,
+          method,
+          path: pathname,
+          statusCode,
+          ok: true,
+        });
         return parsed;
       }
       if (parsed.ok === false || parsed.error) {
+        guiMainLog('helper', 'request failed', {
+          command: commandType,
+          method,
+          path: pathname,
+          statusCode,
+          error: parsed.error || 'helper_error',
+        }, 'warn');
         return parsed;
       }
       if (parsed.status === 'ok' || parsed.success === true) {
+        guiMainLog('helper', 'request completed', {
+          command: commandType,
+          method,
+          path: pathname,
+          statusCode,
+          ok: true,
+        });
         return {
           ok: true,
           data: Object.prototype.hasOwnProperty.call(parsed, 'data') ? parsed.data : parsed,
         };
       }
       if (isHttpOk) {
+        guiMainLog('helper', 'request completed', {
+          command: commandType,
+          method,
+          path: pathname,
+          statusCode,
+          ok: true,
+        });
         return { ok: true, data: parsed };
       }
+      guiMainLog('helper', 'request failed', {
+        command: commandType,
+        method,
+        path: pathname,
+        statusCode,
+        error: 'helper_unreachable',
+      }, 'warn');
       return parsed;
     } catch {
+      guiMainLog('helper', 'request parse failed', {
+        command: commandType,
+        method,
+        path: pathname,
+        statusCode,
+        ok: isHttpOk,
+      }, isHttpOk ? 'warn' : 'error');
       if (isHttpOk) {
         return { ok: true, data: textBody };
       }
@@ -4013,14 +4176,25 @@ async function runBridgeWithAutoAuth(command, args = [], options = {}) {
     return { ok: false, error: 'unknown_command' };
   }
   const cmdArgs = Array.isArray(args) ? args : [];
+  guiMainLog('bridge', 'command start', {
+    command: cmd,
+    args: cmdArgs,
+  });
   let result = await runBridge([cmd, ...cmdArgs], options);
+  let source = result && result.data && result.data.source
+    ? String(result.data.source).trim()
+    : 'script';
   if (
     result
     && result.error === 'sudo_required'
     && process.platform === 'darwin'
     && PRIVILEGED_COMMANDS.has(cmd)
   ) {
+    guiMainLog('bridge', 'command escalated to system auth', {
+      command: cmd,
+    }, 'warn');
     result = await runBridgeWithSystemAuth([cmd, ...cmdArgs]);
+    source = 'system-auth';
   }
   if (result && result.ok) {
     const cmdLower = cmd.toLowerCase();
@@ -4052,12 +4226,46 @@ async function runBridgeWithAutoAuth(command, args = [], options = {}) {
       }
     }
   }
+  guiMainLog('bridge', 'command completed', {
+    command: cmd,
+    ok: Boolean(result && result.ok),
+    error: result && result.ok ? '' : String((result && result.error) || '').trim(),
+    source,
+  }, result && result.ok ? 'log' : 'warn');
   return result;
 }
 
 function emitTrayRefresh() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('clashfox:trayRefresh');
+  }
+}
+
+function emitSettingsUpdated(settings = {}) {
+  const payload = settings && typeof settings === 'object' ? settings : {};
+  BrowserWindow.getAllWindows().forEach((win) => {
+    if (!win || win.isDestroyed() || !win.webContents) {
+      return;
+    }
+    win.webContents.send('clashfox:settingsUpdated', payload);
+  });
+}
+
+function pushCurrentSettingsToWindow(win) {
+  if (!win || win.isDestroyed() || !win.webContents) {
+    return;
+  }
+  try {
+    const settings = mergeAppearanceAliases(
+      mergePanelManagerAliases(
+        mergeUserDataPathAliases(
+          normalizeSettingsForStorage(readAppSettings()),
+        ),
+      ),
+    );
+    win.webContents.send('clashfox:settingsUpdated', settings);
+  } catch {
+    // ignore settings push failures for auxiliary windows
   }
 }
 
@@ -5885,6 +6093,7 @@ function openWorldwideWindow() {
     if (worldwideWindow && !worldwideWindow.isDestroyed()) {
       worldwideWindow.show();
       worldwideWindow.focus();
+      pushCurrentSettingsToWindow(worldwideWindow);
       return;
     }
     if (worldwidePreloadWindow && !worldwidePreloadWindow.isDestroyed()) {
@@ -5892,6 +6101,7 @@ function openWorldwideWindow() {
       worldwidePreloadWindow = null;
       worldwideWindow.show();
       worldwideWindow.focus();
+      pushCurrentSettingsToWindow(worldwideWindow);
       return;
     }
     worldwideWindow = new BrowserWindow({
@@ -5935,6 +6145,9 @@ function openWorldwideWindow() {
         event.preventDefault();
       }
     });
+    windowRef.webContents.on('did-finish-load', () => {
+      pushCurrentSettingsToWindow(windowRef);
+    });
 
     windowRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'trackers.html'));
   } catch {
@@ -5944,9 +6157,14 @@ function openWorldwideWindow() {
 
 function openFoxboardWindow() {
   try {
+    guiMainLog('foxboard', 'open requested', {
+      hasWindow: Boolean(foxboardWindow && !foxboardWindow.isDestroyed()),
+      hasPreloadWindow: Boolean(foxboardPreloadWindow && !foxboardPreloadWindow.isDestroyed()),
+    });
     if (foxboardWindow && !foxboardWindow.isDestroyed()) {
       foxboardWindow.show();
       foxboardWindow.focus();
+      guiMainLog('foxboard', 'focused existing window');
       return;
     }
     if (foxboardPreloadWindow && !foxboardPreloadWindow.isDestroyed()) {
@@ -5966,6 +6184,7 @@ function openFoxboardWindow() {
       }
       foxboardWindow.show();
       foxboardWindow.focus();
+      guiMainLog('foxboard', 'promoted preload window');
       return;
     }
     foxboardWindow = new BrowserWindow({
@@ -5998,6 +6217,7 @@ function openFoxboardWindow() {
       });
     }
     windowRef.on('closed', () => {
+      guiMainLog('foxboard', 'window closed');
       if (foxboardWindow === windowRef) {
         foxboardWindow = null;
       }
@@ -6021,13 +6241,19 @@ function openFoxboardWindow() {
       }
     });
     windowRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'dashboard.html'));
+    guiMainLog('foxboard', 'window created');
   } catch {
+    guiMainLog('foxboard', 'open failed, fallback to main window', null, 'error');
     showMainWindow();
   }
 }
 
 function preloadFoxboardWindow() {
   try {
+    guiMainLog('foxboard', 'preload requested', {
+      hasWindow: Boolean(foxboardWindow && !foxboardWindow.isDestroyed()),
+      hasPreloadWindow: Boolean(foxboardPreloadWindow && !foxboardPreloadWindow.isDestroyed()),
+    });
     if (
       (foxboardWindow && !foxboardWindow.isDestroyed())
       || (foxboardPreloadWindow && !foxboardPreloadWindow.isDestroyed())
@@ -6052,6 +6278,7 @@ function preloadFoxboardWindow() {
     });
     const preloadRef = foxboardPreloadWindow;
     preloadRef.on('closed', () => {
+      guiMainLog('foxboard', 'preload window closed');
       if (foxboardPreloadWindow === preloadRef) {
         foxboardPreloadWindow = null;
       }
@@ -6075,7 +6302,9 @@ function preloadFoxboardWindow() {
       }
     });
     preloadRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'dashboard.html'));
+    guiMainLog('foxboard', 'preload window created');
   } catch {
+    guiMainLog('foxboard', 'preload failed', null, 'error');
     if (foxboardPreloadWindow && !foxboardPreloadWindow.isDestroyed()) {
       foxboardPreloadWindow.close();
     }
@@ -6154,6 +6383,9 @@ function preloadWorldwideWindow() {
       if (isDevToolsCombo) {
         event.preventDefault();
       }
+    });
+    preloadRef.webContents.on('did-finish-load', () => {
+      pushCurrentSettingsToWindow(preloadRef);
     });
     preloadRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'trackers.html'));
   } catch {
@@ -6282,6 +6514,7 @@ async function buildTrayMenuOnce() {
   if (process.platform !== 'darwin') {
     return;
   }
+  guiMainLog('tray', 'build started');
   if (!tray) {
     const trayIcon = buildTrayIconWithMode(resolveOutboundModeFromSettings());
     tray = new Tray(trayIcon);
@@ -6443,7 +6676,7 @@ async function buildTrayMenuOnce() {
     { type: 'action', label: labels.dashboard, action: 'open-dashboard', enabled: dashboardEnabled, rightText: '⌘ 2', shortcut: 'Cmd+2', iconKey: 'dashboard' },
   ];
   if (showTrackers) {
-    items.push({ type: 'action', label: 'Trackers', action: 'open-worldwide', rightText: '⌘ 3', shortcut: 'Cmd+3', iconKey: 'trackers' });
+    items.push({ type: 'action', label: labels.trackers || 'Trackers', action: 'open-worldwide', rightText: '⌘ 3', shortcut: 'Cmd+3', iconKey: 'trackers' });
   }
   if (showFoxboard) {
     items.push({ type: 'action', label: 'Foxboard', action: 'open-foxboard', rightText: '⌘ 4', shortcut: 'Cmd+4', iconKey: 'foxboard' });
@@ -6543,6 +6776,18 @@ async function buildTrayMenuOnce() {
   };
   trayMenuData = nextMenuData;
   trayMenuLastBuiltAt = Date.now();
+  guiMainLog('tray', 'build completed', {
+    items: Array.isArray(items) ? items.length : 0,
+    showTrackers,
+    showFoxboard,
+    showProviderTraffic,
+    providerCount: providerTraffic && Array.isArray(providerTraffic.items)
+      ? providerTraffic.items.length
+      : 0,
+    dashboardEnabled,
+    networkTakeoverEnabled,
+    tunEnabled,
+  });
   if (trayMenuWindow && !trayMenuWindow.isDestroyed()) {
     trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
   }
@@ -6552,9 +6797,11 @@ async function buildTrayMenuOnce() {
 async function createTrayMenu() {
   if (trayMenuBuildInProgress) {
     trayMenuBuildPending = true;
+    guiMainLog('tray', 'build skipped, pending rerun');
     return trayMenuData;
   }
   trayMenuBuildInProgress = true;
+  guiMainLog('tray', 'build loop entered');
   try {
     do {
       trayMenuBuildPending = false;
@@ -6563,6 +6810,7 @@ async function createTrayMenu() {
     return trayMenuData;
   } finally {
     trayMenuBuildInProgress = false;
+    guiMainLog('tray', 'build loop exited');
   }
 }
 
@@ -6926,6 +7174,10 @@ function toggleTrayMenuWindow() {
 }
 
 async function handleTrayMenuAction(action, payload = {}) {
+  guiMainLog('tray', 'action requested', {
+    action,
+    payload,
+  });
   const labels = getTrayLabels();
   const uiLabels = getUiLabels();
   const configPath = getConfigPathFromSettings();
@@ -7725,9 +7977,20 @@ app.whenReady().then(() => {
   ipcMain.handle('clashfox:command', async (_event, command, args = [], options = {}) => {
     const cmd = String(command || '').trim();
     const cmdArgs = Array.isArray(args) ? args : [];
-    const result = cmd === 'tun'
-      ? await applyTunCommandUnified(cmdArgs, options)
-      : await runBridgeWithAutoAuth(cmd, cmdArgs, options);
+    guiMainLog('command', 'ipc command received', { cmd, args: cmdArgs });
+    let result;
+    if (cmd === 'configs') {
+      result = listConfigFilesFromFs();
+    } else if (cmd === 'tun') {
+      result = await applyTunCommandUnified(cmdArgs, options);
+    } else {
+      result = await runBridgeWithAutoAuth(cmd, cmdArgs, options);
+    }
+    guiMainLog('command', 'ipc command result', {
+      cmd,
+      ok: Boolean(result && result.ok),
+      error: result && result.error ? result.error : '',
+    });
     if (result && result.ok && ['start', 'stop', 'restart', 'mode', 'tun', 'system-proxy-enable', 'system-proxy-disable'].includes(command)) {
       await createTrayMenu();
     }
@@ -7850,6 +8113,11 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:trayMenu:action', async (_event, action, payload = {}) => {
     const result = await handleTrayMenuAction(action, payload);
+    guiMainLog('tray', 'action completed', {
+      action,
+      ok: Boolean(result && result.ok),
+      error: result && result.ok ? '' : String((result && result.error) || '').trim(),
+    }, result && result.ok ? 'log' : 'warn');
     const skipRebuildActions = new Set(['toggle-system-proxy', 'toggle-tun']);
     if (!skipRebuildActions.has(String(action || '').trim())) {
       createTrayMenu().catch(() => {});
@@ -7975,6 +8243,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('clashfox:selectConfig', async () => {
+    guiMainLog('ipc-file', 'selectConfig requested');
     const result = await dialog.showOpenDialog({
       title: 'Select Config File',
       properties: ['openFile'],
@@ -7985,15 +8254,23 @@ app.whenReady().then(() => {
     });
 
     if (result.canceled || result.filePaths.length === 0) {
+      guiMainLog('ipc-file', 'selectConfig cancelled');
       return { ok: false, error: 'cancelled' };
     }
 
+    guiMainLog('ipc-file', 'selectConfig completed', {
+      path: result.filePaths[0],
+    });
     return { ok: true, path: result.filePaths[0] };
   });
 
   ipcMain.handle('clashfox:deleteConfig', async (_event, targetPath) => {
+    guiMainLog('ipc-file', 'deleteConfig requested', {
+      targetPath: String(targetPath || ''),
+    });
     try {
       if (!targetPath || typeof targetPath !== 'string') {
+        guiMainLog('ipc-file', 'deleteConfig failed', { error: 'invalid_path' }, 'warn');
         return { ok: false, error: 'invalid_path' };
       }
       const resolvedTarget = path.resolve(String(targetPath));
@@ -8001,6 +8278,10 @@ app.whenReady().then(() => {
       const normalizedDir = path.resolve(configDir);
       const dirPrefix = `${normalizedDir}${path.sep}`;
       if (!(resolvedTarget === normalizedDir || resolvedTarget.startsWith(dirPrefix))) {
+        guiMainLog('ipc-file', 'deleteConfig failed', {
+          targetPath: resolvedTarget,
+          error: 'outside_config_dir',
+        }, 'warn');
         return { ok: false, error: 'outside_config_dir' };
       }
       const settings = readAppSettings();
@@ -8008,23 +8289,43 @@ app.whenReady().then(() => {
         ? path.resolve(settings.configFile)
         : '';
       if (currentConfig && resolvedTarget === currentConfig) {
+        guiMainLog('ipc-file', 'deleteConfig failed', {
+          targetPath: resolvedTarget,
+          error: 'current_config',
+        }, 'warn');
         return { ok: false, error: 'current_config' };
       }
       if (!fs.existsSync(resolvedTarget)) {
+        guiMainLog('ipc-file', 'deleteConfig failed', {
+          targetPath: resolvedTarget,
+          error: 'not_found',
+        }, 'warn');
         return { ok: false, error: 'not_found' };
       }
       const stat = fs.statSync(resolvedTarget);
       if (!stat.isFile()) {
+        guiMainLog('ipc-file', 'deleteConfig failed', {
+          targetPath: resolvedTarget,
+          error: 'not_file',
+        }, 'warn');
         return { ok: false, error: 'not_file' };
       }
       fs.unlinkSync(resolvedTarget);
+      guiMainLog('ipc-file', 'deleteConfig completed', {
+        targetPath: resolvedTarget,
+      });
       return { ok: true, path: resolvedTarget };
     } catch (err) {
+      guiMainLog('ipc-file', 'deleteConfig threw', {
+        targetPath: String(targetPath || ''),
+        error: err && err.message ? err.message : 'delete_failed',
+      }, 'error');
       return { ok: false, error: err && err.message ? err.message : 'delete_failed' };
     }
   });
 
   ipcMain.handle('clashfox:importConfig', async () => {
+    guiMainLog('ipc-file', 'importConfig requested');
     const selection = await dialog.showOpenDialog({
       title: 'Import Config File',
       properties: ['openFile'],
@@ -8034,6 +8335,7 @@ app.whenReady().then(() => {
       ],
     });
     if (selection.canceled || selection.filePaths.length === 0) {
+      guiMainLog('ipc-file', 'importConfig cancelled');
       return { ok: false, error: 'cancelled' };
     }
     const sourcePath = selection.filePaths[0];
@@ -8044,6 +8346,10 @@ app.whenReady().then(() => {
       const sourceName = path.basename(sourcePath);
       const targetPath = buildUniqueFilePath(targetDir, sourceName);
       fs.copyFileSync(sourcePath, targetPath);
+      guiMainLog('ipc-file', 'importConfig completed', {
+        sourcePath,
+        targetPath,
+      });
       return {
         ok: true,
         data: {
@@ -8054,20 +8360,31 @@ app.whenReady().then(() => {
         },
       };
     } catch (err) {
+      guiMainLog('ipc-file', 'importConfig threw', {
+        sourcePath,
+        error: err && err.message ? err.message : 'import_failed',
+      }, 'error');
       return { ok: false, error: err && err.message ? err.message : 'import_failed' };
     }
   });
 
   ipcMain.handle('clashfox:selectDirectory', async (_event, title) => {
+    guiMainLog('ipc-file', 'selectDirectory requested', {
+      title: String(title || ''),
+    });
     const result = await dialog.showOpenDialog({
       title: title || 'Select Directory',
       properties: ['openDirectory', 'createDirectory'],
     });
 
     if (result.canceled || result.filePaths.length === 0) {
+      guiMainLog('ipc-file', 'selectDirectory cancelled');
       return { ok: false, error: 'cancelled' };
     }
 
+    guiMainLog('ipc-file', 'selectDirectory completed', {
+      path: result.filePaths[0],
+    });
     return { ok: true, path: result.filePaths[0] };
   });
 
@@ -8077,20 +8394,33 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('clashfox:openExternal', async (_event, url) => {
+    guiMainLog('ipc-file', 'openExternal requested', {
+      url: String(url || ''),
+    });
     if (!url || typeof url !== 'string') {
+      guiMainLog('ipc-file', 'openExternal failed', { error: 'invalid_url' }, 'warn');
       return { ok: false };
     }
     try {
       await shell.openExternal(url);
+      guiMainLog('ipc-file', 'openExternal completed', { url });
       return { ok: true };
     } catch (err) {
+      guiMainLog('ipc-file', 'openExternal threw', {
+        url,
+        error: err && err.message ? err.message : '',
+      }, 'error');
       return { ok: false, error: err.message };
     }
   });
 
   ipcMain.handle('clashfox:revealInFinder', (_event, targetPath) => {
+    guiMainLog('ipc-file', 'revealInFinder requested', {
+      targetPath: String(targetPath || ''),
+    });
     try {
       if (!targetPath || typeof targetPath !== 'string') {
+        guiMainLog('ipc-file', 'revealInFinder failed', { error: 'invalid_path' }, 'warn');
         return { ok: false };
       }
       const resolved = path.resolve(String(targetPath));
@@ -8105,10 +8435,32 @@ app.whenReady().then(() => {
       }
       const result = shell.openPath(openTarget);
       if (result && typeof result.then === 'function') {
-        return result.then((err) => (err ? { ok: false, error: err } : { ok: true }));
+        return result.then((err) => {
+          if (err) {
+            guiMainLog('ipc-file', 'revealInFinder failed', {
+              targetPath: resolved,
+              openTarget,
+              error: err,
+            }, 'warn');
+            return { ok: false, error: err };
+          }
+          guiMainLog('ipc-file', 'revealInFinder completed', {
+            targetPath: resolved,
+            openTarget,
+          });
+          return { ok: true };
+        });
       }
+      guiMainLog('ipc-file', 'revealInFinder completed', {
+        targetPath: resolved,
+        openTarget,
+      });
       return { ok: true };
     } catch (err) {
+      guiMainLog('ipc-file', 'revealInFinder threw', {
+        targetPath: String(targetPath || ''),
+        error: err && err.message ? err.message : '',
+      }, 'error');
       return { ok: false, error: err.message };
     }
   });
@@ -8410,6 +8762,11 @@ app.whenReady().then(() => {
       );
       const normalized = normalizeSettingsForStorage(merged);
       writeAppSettings(normalized);
+      const normalizedForUi = mergeAppearanceAliases(
+        mergePanelManagerAliases(
+          mergeUserDataPathAliases(normalized),
+        ),
+      );
       const canApplySizeNow = Boolean(
         mainWindow
         && !mainWindow.isDestroyed()
@@ -8417,11 +8774,11 @@ app.whenReady().then(() => {
         && !mainWindow.webContents.isLoadingMainFrame(),
       );
       if (canApplySizeNow && Date.now() > Number(suppressMainWindowSizeApplyUntil || 0)) {
-        const normalizedWithAliases = mergeAppearanceAliases(normalized);
-        mainWindow.setSize(normalizedWithAliases.windowWidth, normalizedWithAliases.windowHeight);
+        mainWindow.setSize(normalizedForUi.windowWidth, normalizedForUi.windowHeight);
       }
       refreshTrayMenuLabelsOnly();
       createTrayMenu().catch(() => {});
+      emitSettingsUpdated(normalizedForUi);
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err.message };
@@ -8563,16 +8920,29 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('clashfox:openPath', async (_event, targetPath) => {
+    guiMainLog('ipc-file', 'openPath requested', {
+      targetPath: String(targetPath || ''),
+    });
     try {
       if (!targetPath || typeof targetPath !== 'string') {
+        guiMainLog('ipc-file', 'openPath failed', { error: 'invalid_path' }, 'warn');
         return { ok: false };
       }
       const result = await shell.openPath(targetPath);
       if (result) {
+        guiMainLog('ipc-file', 'openPath failed', {
+          targetPath,
+          error: result,
+        }, 'warn');
         return { ok: false, error: result };
       }
+      guiMainLog('ipc-file', 'openPath completed', { targetPath });
       return { ok: true };
     } catch (err) {
+      guiMainLog('ipc-file', 'openPath threw', {
+        targetPath: String(targetPath || ''),
+        error: err && err.message ? err.message : '',
+      }, 'error');
       return { ok: false, error: err.message };
     }
   });

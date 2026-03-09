@@ -1,204 +1,15 @@
-import { initDashboardPanel, teardownDashboardPanel, setDashboardLocale } from './dashboard-local.js';
+import FOXBOARD_I18N from '../locales/foxboard-i18n.js';
+import { initDashboardPanel, teardownDashboardPanel, setDashboardLocale } from './dashboard.js';
 
-const FOXBOARD_TEXTS = {
-  en: {
-    title: 'Foxboard',
-    subtitle: 'Live traffic intelligence with request, DNS, device, and policy views.',
-    tabs: {
-      recent: 'Recent Requests',
-      active: 'Active Connection',
-      dns: 'DNS',
-      devices: 'Devices',
-      traffic: 'Traffic Statistics',
-    },
-    group: {
-      client: 'By Client',
-      host: 'By Host',
-    },
-    sidebarLabel: 'Requests',
-    status: {
-      all: 'All',
-      active: 'Active',
-      completed: 'Completed',
-      failed: 'Failed',
-    },
-    rangeAll: 'All Time',
-    searchPlaceholder: 'Filter client, host, policy',
-  },
-  zh: {
-    title: 'Foxboard',
-    subtitle: '实时流量情报：请求、DNS、设备与策略视图。',
-    tabs: {
-      recent: '近期请求',
-      active: '活动连接',
-      dns: 'DNS',
-      devices: '设备',
-      traffic: '流量统计',
-    },
-    group: {
-      client: '按客户端',
-      host: '按主机',
-    },
-    sidebarLabel: '请求',
-    status: {
-      all: '全部',
-      active: '活跃',
-      completed: '完成',
-      failed: '失败',
-    },
-    rangeAll: '全部时间',
-    searchPlaceholder: '筛选客户端、主机、策略',
-  },
-  ja: {
-    title: 'Foxboard',
-    subtitle: 'リクエスト、DNS、デバイス、ポリシーを含むリアルタイムトラフィック可視化。',
-    tabs: {
-      recent: '最近のリクエスト',
-      active: 'アクティブ接続',
-      dns: 'DNS',
-      devices: 'デバイス',
-      traffic: 'トラフィック統計',
-    },
-    group: {
-      client: 'クライアント別',
-      host: 'ホスト別',
-    },
-    sidebarLabel: 'リクエスト',
-    status: {
-      all: 'すべて',
-      active: 'アクティブ',
-      completed: '完了',
-      failed: '失敗',
-    },
-    rangeAll: '全期間',
-    searchPlaceholder: 'クライアント、ホスト、ポリシーで絞り込み',
-  },
-  ko: {
-    title: 'Foxboard',
-    subtitle: '요청, DNS, 디바이스, 정책을 포함한 실시간 트래픽 인텔리전스.',
-    tabs: {
-      recent: '최근 요청',
-      active: '활성 연결',
-      dns: 'DNS',
-      devices: '디바이스',
-      traffic: '트래픽 통계',
-    },
-    group: {
-      client: '클라이언트별',
-      host: '호스트별',
-    },
-    sidebarLabel: '요청',
-    status: {
-      all: '전체',
-      active: '활성',
-      completed: '완료',
-      failed: '실패',
-    },
-    rangeAll: '전체 기간',
-    searchPlaceholder: '클라이언트, 호스트, 정책 필터',
-  },
-  fr: {
-    title: 'Foxboard',
-    subtitle: 'Vue trafic en direct avec requêtes, DNS, appareils et politiques.',
-    tabs: {
-      recent: 'Requêtes récentes',
-      active: 'Connexions actives',
-      dns: 'DNS',
-      devices: 'Appareils',
-      traffic: 'Statistiques trafic',
-    },
-    group: {
-      client: 'Par client',
-      host: 'Par hôte',
-    },
-    sidebarLabel: 'Requêtes',
-    status: {
-      all: 'Tous',
-      active: 'Actif',
-      completed: 'Terminé',
-      failed: 'Échec',
-    },
-    rangeAll: 'Toute période',
-    searchPlaceholder: 'Filtrer client, hôte, politique',
-  },
-  de: {
-    title: 'Foxboard',
-    subtitle: 'Live‑Traffic mit Anfragen, DNS, Geräten und Richtlinien.',
-    tabs: {
-      recent: 'Letzte Anfragen',
-      active: 'Aktive Verbindungen',
-      dns: 'DNS',
-      devices: 'Geräte',
-      traffic: 'Traffic‑Statistik',
-    },
-    group: {
-      client: 'Nach Client',
-      host: 'Nach Host',
-    },
-    sidebarLabel: 'Anfragen',
-    status: {
-      all: 'Alle',
-      active: 'Aktiv',
-      completed: 'Abgeschlossen',
-      failed: 'Fehlgeschlagen',
-    },
-    rangeAll: 'Gesamter Zeitraum',
-    searchPlaceholder: 'Client, Host, Richtlinie filtern',
-  },
-  ru: {
-    title: 'Foxboard',
-    subtitle: 'Аналитика трафика в реальном времени: запросы, DNS, устройства и правила.',
-    tabs: {
-      recent: 'Последние запросы',
-      active: 'Активные соединения',
-      dns: 'DNS',
-      devices: 'Устройства',
-      traffic: 'Статистика трафика',
-    },
-    group: {
-      client: 'По клиенту',
-      host: 'По хосту',
-    },
-    sidebarLabel: 'Запросы',
-    status: {
-      all: 'Все',
-      active: 'Активные',
-      completed: 'Завершённые',
-      failed: 'С ошибкой',
-    },
-    rangeAll: 'За всё время',
-    searchPlaceholder: 'Фильтр по клиенту, хосту, политике',
-  },
-};
+const foxboardLocaleUtils = globalThis.CLASHFOX_LOCALE_UTILS || {};
+const resolveLocaleFromSettings = typeof foxboardLocaleUtils.resolveLocaleFromSettings === 'function'
+  ? foxboardLocaleUtils.resolveLocaleFromSettings
+  : (() => 'en');
 
-function resolveLocaleFromSettings(settings = {}) {
-  const appearance = settings && typeof settings.appearance === 'object' ? settings.appearance : {};
-  const raw = String(
-    settings.lang
-    || settings.language
-    || settings.locale
-    || appearance.lang
-    || appearance.language
-    || appearance.locale
-    || 'auto',
-  ).trim().toLowerCase();
-  if (raw && raw !== 'auto') {
-    if (raw.startsWith('zh')) return 'zh';
-    if (raw.startsWith('ja')) return 'ja';
-    if (raw.startsWith('ko')) return 'ko';
-    if (raw.startsWith('fr')) return 'fr';
-    if (raw.startsWith('de')) return 'de';
-    if (raw.startsWith('ru')) return 'ru';
-    return 'en';
-  }
-  const system = String(navigator.language || navigator.userLanguage || 'en').toLowerCase();
-  if (system.startsWith('zh')) return 'zh';
-  if (system.startsWith('ja')) return 'ja';
-  if (system.startsWith('ko')) return 'ko';
-  if (system.startsWith('fr')) return 'fr';
-  if (system.startsWith('de')) return 'de';
-  if (system.startsWith('ru')) return 'ru';
-  return 'en';
+let foxboardDebugMode = false;
+
+function foxboardLog(scope, message, payload = null, level = 'log') {
+  return;
 }
 
 function unwrapSettingsPayload(response) {
@@ -230,7 +41,7 @@ function applyTheme(theme = 'auto', dark = false) {
 }
 
 function applyLocaleTexts(locale = 'en') {
-  const text = FOXBOARD_TEXTS[locale] || FOXBOARD_TEXTS.en;
+  const text = FOXBOARD_I18N[locale] || FOXBOARD_I18N.en;
   const title = document.getElementById('foxboardTitle');
   const subtitle = document.getElementById('foxboardSubtitle');
   if (title) title.textContent = text.title;
@@ -261,7 +72,7 @@ function applyLocaleTexts(locale = 'en') {
 
 let currentTheme = 'auto';
 let unsubscribeSystemTheme = null;
-let settingsSyncTimer = null;
+let unsubscribeSettingsUpdated = null;
 
 async function syncSettings() {
   if (!window.clashfox || typeof window.clashfox.readSettings !== 'function') {
@@ -271,8 +82,14 @@ async function syncSettings() {
     const response = await window.clashfox.readSettings();
     const settings = unwrapSettingsPayload(response);
     const appearance = settings && typeof settings.appearance === 'object' ? settings.appearance : {};
+    foxboardDebugMode = Boolean(settings && settings.debugMode);
+    window.__clashfoxFoxboardDebug = foxboardDebugMode;
     currentTheme = String(settings.theme || appearance.theme || 'auto').trim().toLowerCase();
     const locale = resolveLocaleFromSettings(settings);
+    foxboardLog('settings', 'sync completed', {
+      theme: currentTheme,
+      locale,
+    });
     applyLocaleTexts(locale);
     setDashboardLocale(locale);
     const dark = window.matchMedia
@@ -280,27 +97,52 @@ async function syncSettings() {
       : document.documentElement.getAttribute('data-theme') === 'night';
     applyTheme(currentTheme, dark);
   } catch {
-    // ignore settings sync failures
+    foxboardLog('settings', 'sync failed', null, 'warn');
   }
 }
 
 async function bootFoxboard() {
   try {
+    foxboardLog('lifecycle', 'boot started');
     await syncSettings();
     if (window.clashfox && typeof window.clashfox.onSystemThemeChange === 'function') {
       unsubscribeSystemTheme = window.clashfox.onSystemThemeChange((payload = {}) => {
         if (currentTheme === 'auto') {
+          foxboardLog('theme', 'system theme changed', { dark: Boolean(payload.dark) });
           applyTheme('auto', Boolean(payload.dark));
         }
       });
     }
-    settingsSyncTimer = setInterval(() => {
-      syncSettings().catch(() => {});
-    }, 3000);
+    if (window.clashfox && typeof window.clashfox.onSettingsUpdated === 'function') {
+      unsubscribeSettingsUpdated = window.clashfox.onSettingsUpdated((settings = {}) => {
+        try {
+          const appearance = settings && typeof settings.appearance === 'object' ? settings.appearance : {};
+          foxboardDebugMode = Boolean(settings && settings.debugMode);
+          window.__clashfoxFoxboardDebug = foxboardDebugMode;
+          currentTheme = String(settings.theme || appearance.theme || 'auto').trim().toLowerCase();
+          const locale = resolveLocaleFromSettings(settings);
+          foxboardLog('settings', 'event update received', {
+            theme: currentTheme,
+            locale,
+          });
+          applyLocaleTexts(locale);
+          setDashboardLocale(locale);
+          const dark = window.matchMedia
+            ? window.matchMedia('(prefers-color-scheme: dark)').matches
+            : document.documentElement.getAttribute('data-theme') === 'night';
+          applyTheme(currentTheme, dark);
+        } catch {
+          foxboardLog('settings', 'event update failed', null, 'warn');
+        }
+      });
+    }
     await initDashboardPanel();
+    foxboardLog('lifecycle', 'boot completed');
   } catch (error) {
     // Keep standalone window stable even if panel init fails.
-    console.warn('[foxboard] init failed:', error);
+    foxboardLog('lifecycle', 'boot failed', {
+      error: error && error.message ? error.message : String(error || ''),
+    }, 'error');
   }
 }
 
@@ -313,12 +155,12 @@ if (document.readyState === 'loading') {
 }
 
 window.addEventListener('beforeunload', () => {
+  foxboardLog('lifecycle', 'beforeunload');
   if (typeof unsubscribeSystemTheme === 'function') {
     unsubscribeSystemTheme();
   }
-  if (settingsSyncTimer) {
-    clearInterval(settingsSyncTimer);
-    settingsSyncTimer = null;
+  if (typeof unsubscribeSettingsUpdated === 'function') {
+    unsubscribeSettingsUpdated();
   }
   teardownDashboardPanel();
 });

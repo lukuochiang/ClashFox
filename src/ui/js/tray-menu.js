@@ -52,6 +52,11 @@ const providerTrafficState = {
   paused: false,
   signature: '',
 };
+let trayDebugMode = false;
+
+function trayLog(scope, message, payload = null, level = 'log') {
+  return;
+}
 
 async function applyTrayTheme() {
   try {
@@ -64,6 +69,7 @@ async function applyTrayTheme() {
       const settings = response && response.ok && response.data && typeof response.data === 'object'
         ? response.data
         : null;
+      trayDebugMode = Boolean(settings && settings.debugMode);
       preference = String(
         (settings && settings.theme)
         || (settings && settings.appearance && settings.appearance.theme)
@@ -156,7 +162,7 @@ const ICON_SVGS = {
   showMain: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 9h16"/></svg>',
   networkTakeover: '<svg viewBox="0 0 24 24"><path d="M4 10a12 12 0 0 1 16 0"/><path d="M7 13a8 8 0 0 1 10 0"/><path d="M10 16a4 4 0 0 1 4 0"/><circle cx="12" cy="19" r="1"/></svg>',
   outboundMode: '<svg viewBox="0 0 24 24"><path d="M4 8h11"/><path d="M12 5l3 3-3 3"/><path d="M20 16H9"/><path d="M12 13l-3 3 3 3"/></svg>',
-  dashboard: '<svg viewBox="0 0 24 24"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20v-4"/></svg>',
+  dashboard: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8 14.5a4 4 0 0 1 8 0"/><path d="M12 12l3-3"/><circle cx="9" cy="10" r="1" class="menu-icon-fill"/></svg>',
   trackers: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6"/><path d="M3.8 12h16.4"/><path d="M12 3.4c2.7 2.2 2.7 15 0 17.2"/><path d="M12 3.4c-2.7 2.2-2.7 15 0 17.2"/><path d="M6.2 7.1c1.7 1 3.7 1.6 5.8 1.6s4.1-.6 5.8-1.6"/><path d="M6.2 16.9c1.7-1 3.7-1.6 5.8-1.6s4.1.6 5.8 1.6"/></svg>',
   foxboard: '<svg viewBox="0 0 24 24"><path d="M4 13.4a8 8 0 0 1 16 0"/><path d="M12 13l4-4"/><circle cx="12" cy="13" r="1.2"/><path d="M4 15.6h16"/><path d="M5 18h14"/></svg>',
   kernelManager: '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M3 10h2M3 14h2M19 10h2M19 14h2M10 3v2M14 3v2M10 19v2M14 19v2"/></svg>',
@@ -263,11 +269,13 @@ function startProviderTrafficRotation(totalItems) {
   if (!Number.isFinite(totalItems) || totalItems <= 1) {
     return;
   }
+  trayLog('provider-traffic', 'rotation started', { totalItems });
   providerTrafficState.rotateTimer = setInterval(() => {
     if (providerTrafficState.paused) {
       return;
     }
     providerTrafficState.index = (providerTrafficState.index + 1) % totalItems;
+    trayLog('provider-traffic', 'rotation tick', { index: providerTrafficState.index });
     renderProviderTraffic();
   }, 2500);
 }
@@ -287,6 +295,7 @@ function renderProviderTraffic() {
     providerTrafficEl.innerHTML = '';
     providerTrafficEl.classList.add('is-hidden');
     stopProviderTrafficRotation();
+    trayLog('provider-traffic', 'render empty');
     return;
   }
   providerTrafficEl.classList.remove('is-hidden');
@@ -336,6 +345,12 @@ function renderProviderTraffic() {
     </div>
   `;
   providerTrafficEl.dataset.hasMultiple = totalItems > 1 ? 'true' : 'false';
+  trayLog('provider-traffic', 'render completed', {
+    providerCount: Number.parseInt(String(summary.providerCount || 0), 10) || 0,
+    totalItems,
+    index: providerTrafficState.index,
+    current: currentItem && currentItem.name ? currentItem.name : '',
+  });
   startProviderTrafficRotation(totalItems);
 }
 
@@ -344,17 +359,6 @@ function renderTrafficBars() {
     return;
   }
   const count = Math.max(trafficState.historyRx.length, trafficState.historyTx.length, 0);
-  if (!count) {
-    if (Array.isArray(chartBarsEl._barPairs)) {
-      chartBarsEl._barPairs.forEach((pair) => {
-        if (pair.downBase) pair.downBase.setAttribute('display', 'none');
-        if (pair.upBase) pair.upBase.setAttribute('display', 'none');
-        pair.down.setAttribute('display', 'none');
-        pair.up.setAttribute('display', 'none');
-      });
-    }
-    return;
-  }
   const maxRx = trafficState.historyRx.length ? Math.max(...trafficState.historyRx, 0) : 0;
   const maxTx = trafficState.historyTx.length ? Math.max(...trafficState.historyTx, 0) : 0;
   let niceMaxRx = niceMaxValue(maxRx);
@@ -376,8 +380,9 @@ function renderTrafficBars() {
   const maxBars = Math.max(1, Math.floor(width / unit));
   const startIndex = Math.max(0, count - maxBars);
   const visibleCount = Math.min(count, maxBars);
+  const emptySlots = Math.max(0, maxBars - visibleCount);
   const startX = 0;
-  const xStep = visibleCount > 1 ? (width - barWidth) / (visibleCount - 1) : 0;
+  const xStep = maxBars > 1 ? (width - barWidth) / (maxBars - 1) : 0;
   if (!Array.isArray(chartBarsEl._barPairs)) {
     chartBarsEl._barPairs = [];
   }
@@ -399,20 +404,16 @@ function renderTrafficBars() {
   }
   for (let i = 0; i < chartBarsEl._barPairs.length; i += 1) {
     const pair = chartBarsEl._barPairs[i];
-    if (i >= visibleCount) {
-      if (pair.downBase) pair.downBase.setAttribute('display', 'none');
-      if (pair.upBase) pair.upBase.setAttribute('display', 'none');
-      pair.down.setAttribute('display', 'none');
-      pair.up.setAttribute('display', 'none');
-      continue;
-    }
-    const idx = startIndex + i;
-    const downValue = trafficState.historyRx[idx] || 0;
-    const upValue = trafficState.historyTx[idx] || 0;
+    const x = startX + i * xStep;
+    const dataIndex = i - emptySlots;
+    const hasSample = dataIndex >= 0 && dataIndex < visibleCount;
+    const idx = hasSample ? (startIndex + dataIndex) : -1;
+    const downValue = hasSample ? (trafficState.historyRx[idx] || 0) : 0;
+    const upValue = hasSample ? (trafficState.historyTx[idx] || 0) : 0;
     const downHeight = Math.max(0, Math.min(available, (downValue / niceMaxRx) * available));
     const upHeight = Math.max(0, Math.min(available, (upValue / niceMaxTx) * available));
-    const x = startX + i * xStep;
     if (pair.downBase) {
+      pair.downBase.setAttribute('class', hasSample ? 'chart-bar-bg down' : 'chart-bar-bg down is-placeholder');
       pair.downBase.setAttribute('display', '');
       pair.downBase.setAttribute('x', x.toFixed(2));
       pair.downBase.setAttribute('y', baseline.toFixed(2));
@@ -421,6 +422,7 @@ function renderTrafficBars() {
       pair.downBase.setAttribute('rx', '0.35');
     }
     if (pair.upBase) {
+      pair.upBase.setAttribute('class', hasSample ? 'chart-bar-bg up' : 'chart-bar-bg up is-placeholder');
       pair.upBase.setAttribute('display', '');
       pair.upBase.setAttribute('x', x.toFixed(2));
       pair.upBase.setAttribute('y', (baseline - fixedHeight).toFixed(2));
@@ -428,7 +430,7 @@ function renderTrafficBars() {
       pair.upBase.setAttribute('height', fixedHeight.toFixed(2));
       pair.upBase.setAttribute('rx', '0.35');
     }
-    if (downHeight > 0.2) {
+    if (hasSample && downHeight > 0.2) {
       pair.down.setAttribute('display', '');
       pair.down.setAttribute('x', x.toFixed(2));
       pair.down.setAttribute('y', baseline.toFixed(2));
@@ -438,7 +440,7 @@ function renderTrafficBars() {
     } else {
       pair.down.setAttribute('display', 'none');
     }
-    if (upHeight > 0.2) {
+    if (hasSample && upHeight > 0.2) {
       pair.up.setAttribute('display', '');
       pair.up.setAttribute('x', x.toFixed(2));
       pair.up.setAttribute('y', (baseline - upHeight).toFixed(2));
@@ -586,6 +588,11 @@ function applyChartEnabled(enabled) {
     resetTrafficChart();
     syncWindowGeometry();
   }
+}
+
+function invalidateSettingsCache() {
+  trafficState.settings = null;
+  trafficState.settingsAt = 0;
 }
 
 async function getTrafficArgs() {
@@ -1105,6 +1112,28 @@ async function init() {
   if (window.clashfox && typeof window.clashfox.onSystemThemeChange === 'function') {
     window.clashfox.onSystemThemeChange(() => {
       applyTrayTheme().catch(() => {});
+    });
+  }
+  if (window.clashfox && typeof window.clashfox.onSettingsUpdated === 'function') {
+    window.clashfox.onSettingsUpdated(async (settings = {}) => {
+      invalidateSettingsCache();
+      trayDebugMode = Boolean(settings && settings.debugMode);
+      applyChartEnabled(
+        Object.prototype.hasOwnProperty.call(settings || {}, 'chartEnabled')
+          ? settings.chartEnabled !== false
+          : true,
+      );
+      applyTrayTheme().catch(() => {});
+      try {
+        const nextData = await window.clashfox.trayMenuGetData();
+        if (nextData && typeof nextData === 'object') {
+          menuData = nextData;
+          renderAll();
+          scheduleGeometrySync();
+        }
+      } catch {
+        trayLog('settings', 'tray menu refresh after settings update failed', null, 'warn');
+      }
     });
   }
   window.addEventListener('storage', (event) => {

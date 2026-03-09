@@ -1,3 +1,5 @@
+import DASHBOARD_I18N from '../locales/dashboard-i18n.js';
+
 const POLL_MS = 2200;
 const DASHBOARD_PREFS_KEY = 'clashfox.dashboardLocalPrefs.v1';
 
@@ -24,267 +26,6 @@ const state = {
 };
 
 const refs = {};
-const DASHBOARD_TEXTS = {
-  en: {
-    panelRecent: 'Recent Requests',
-    panelActive: 'Active Connection',
-    panelDns: 'DNS',
-    panelDevices: 'Devices',
-    panelTraffic: 'Traffic Statistics',
-    allTime: 'All Time',
-    custom: 'Custom',
-    itemSingular: 'item',
-    itemPlural: 'items',
-    active: 'active',
-    completed: 'completed',
-    failed: 'failed',
-    updated: 'Updated',
-    readDegraded: 'Read degraded',
-    polling: 'Polling',
-    snapshotUnavailable: 'Snapshot unavailable. Kernel may be stopped or bridge data is degraded.',
-    loadingSnapshot: 'Loading live snapshot...',
-    noDns: 'No DNS observations yet.',
-    noDevices: 'No device activity yet.',
-    noTraffic: 'No traffic leaders yet.',
-    noData: 'No data yet.',
-    closeDetail: 'Close detail',
-    copied: 'Copied',
-    syncing: 'Syncing...',
-    idle: 'Idle',
-    snapshotUnavailableShort: 'Snapshot unavailable',
-    waitingFirstSnapshot: 'Waiting for first live snapshot',
-    allHosts: 'All Hosts',
-    allClients: 'All Clients',
-    summaryStatus: 'Status',
-    degraded: 'Degraded',
-    booting: 'Booting',
-    bridgeNotReady: 'Bridge snapshot not ready.',
-    waitingTrafficSamples: 'Waiting for traffic and connection samples.',
-    summaryActiveConnections: 'Active Connections',
-    awaitFirstPoll: 'Awaiting first poll',
-    summaryRecentRequests: 'Recent Requests',
-    sessionCacheEmpty: 'Session cache empty',
-    summaryObservedDevices: 'Observed Devices',
-    noSourceEndpoints: 'No source endpoints yet',
-    summaryUploadRate: 'Upload Rate',
-    summaryDownloadRate: 'Download Rate',
-    liveFeedInactive: 'Live feed inactive',
-    summaryTrafficBalance: 'Traffic Balance',
-    total: 'total',
-    process: 'process',
-    dnsHost: 'DNS host',
-    busiest: 'busiest',
-    awaitingPolicyData: 'Awaiting policy data',
-    liveDown: 'Live',
-  },
-  zh: {
-    panelRecent: '近期请求',
-    panelActive: '活动连接',
-    panelDns: 'DNS',
-    panelDevices: '设备',
-    panelTraffic: '流量统计',
-    allTime: '全部时间',
-    custom: '自定义',
-    itemSingular: '项',
-    itemPlural: '项',
-    active: '活跃',
-    completed: '完成',
-    failed: '失败',
-    updated: '更新于',
-    readDegraded: '读取降级',
-    polling: '轮询',
-    snapshotUnavailable: '快照不可用，内核可能未运行或桥接数据降级。',
-    loadingSnapshot: '正在加载实时快照...',
-    noDns: '暂无 DNS 观测记录。',
-    noDevices: '暂无设备活动。',
-    noTraffic: '暂无流量排行。',
-    noData: '暂无数据。',
-    closeDetail: '关闭详情',
-    copied: '已复制',
-    syncing: '同步中...',
-    idle: '空闲',
-    snapshotUnavailableShort: '快照不可用',
-    waitingFirstSnapshot: '等待首次实时快照',
-    allHosts: '全部主机',
-    allClients: '全部客户端',
-    summaryStatus: '状态',
-    degraded: '降级',
-    booting: '启动中',
-    bridgeNotReady: '桥接快照尚未就绪。',
-    waitingTrafficSamples: '等待流量和连接样本。',
-    summaryActiveConnections: '活动连接',
-    awaitFirstPoll: '等待首次轮询',
-    summaryRecentRequests: '近期请求',
-    sessionCacheEmpty: '会话缓存为空',
-    summaryObservedDevices: '观测设备',
-    noSourceEndpoints: '暂无源端点',
-    summaryUploadRate: '上传速率',
-    summaryDownloadRate: '下载速率',
-    liveFeedInactive: '实时流尚未激活',
-    summaryTrafficBalance: '流量平衡',
-    total: '总量',
-    process: '进程',
-    dnsHost: 'DNS 主机',
-    busiest: '最繁忙',
-    awaitingPolicyData: '等待策略数据',
-    liveDown: '实时',
-  },
-  ja: {
-    panelRecent: '最近のリクエスト',
-    panelActive: 'アクティブ接続',
-    panelDns: 'DNS',
-    panelDevices: 'デバイス',
-    panelTraffic: 'トラフィック統計',
-    allTime: '全期間',
-    custom: 'カスタム',
-    itemSingular: 'item',
-    itemPlural: 'items',
-    active: 'アクティブ',
-    completed: '完了',
-    failed: '失敗',
-    updated: '更新',
-    readDegraded: '読み取り低下',
-    polling: 'ポーリング',
-    snapshotUnavailable: 'スナップショットを取得できません。カーネル停止またはブリッジデータ低下の可能性があります。',
-    loadingSnapshot: 'ライブスナップショットを読み込み中...',
-    noDns: 'DNS 観測データはまだありません。',
-    noDevices: 'デバイスアクティビティはまだありません。',
-    noTraffic: 'トラフィック上位データはまだありません。',
-    noData: 'データがありません。',
-    closeDetail: '詳細を閉じる',
-    copied: 'コピーしました',
-    syncing: '同期中...',
-    idle: '待機中',
-    snapshotUnavailableShort: 'スナップショット利用不可',
-    waitingFirstSnapshot: '最初のライブスナップショットを待機中',
-    allHosts: 'すべてのホスト',
-    allClients: 'すべてのクライアント',
-  },
-  ko: {
-    panelRecent: '최근 요청',
-    panelActive: '활성 연결',
-    panelDns: 'DNS',
-    panelDevices: '디바이스',
-    panelTraffic: '트래픽 통계',
-    allTime: '전체 기간',
-    custom: '사용자 지정',
-    itemSingular: 'item',
-    itemPlural: 'items',
-    active: '활성',
-    completed: '완료',
-    failed: '실패',
-    updated: '업데이트',
-    readDegraded: '읽기 저하',
-    polling: '폴링',
-    snapshotUnavailable: '스냅샷을 사용할 수 없습니다. 커널 중지 또는 브리지 데이터 저하일 수 있습니다.',
-    loadingSnapshot: '실시간 스냅샷 로딩 중...',
-    noDns: '아직 DNS 관측 데이터가 없습니다.',
-    noDevices: '아직 디바이스 활동이 없습니다.',
-    noTraffic: '아직 트래픽 상위 데이터가 없습니다.',
-    noData: '데이터가 없습니다.',
-    closeDetail: '상세 닫기',
-    copied: '복사됨',
-    syncing: '동기화 중...',
-    idle: '유휴',
-    snapshotUnavailableShort: '스냅샷 사용 불가',
-    waitingFirstSnapshot: '첫 실시간 스냅샷 대기 중',
-    allHosts: '전체 호스트',
-    allClients: '전체 클라이언트',
-  },
-  fr: {
-    panelRecent: 'Requêtes récentes',
-    panelActive: 'Connexions actives',
-    panelDns: 'DNS',
-    panelDevices: 'Appareils',
-    panelTraffic: 'Statistiques trafic',
-    allTime: 'Toute période',
-    custom: 'Personnalisé',
-    itemSingular: 'élément',
-    itemPlural: 'éléments',
-    active: 'actif',
-    completed: 'terminé',
-    failed: 'échec',
-    updated: 'Mis à jour',
-    readDegraded: 'Lecture dégradée',
-    polling: 'Interrogation',
-    snapshotUnavailable: 'Instantané indisponible. Le noyau peut être arrêté ou les données bridge dégradées.',
-    loadingSnapshot: 'Chargement de l’instantané en direct...',
-    noDns: 'Aucune observation DNS pour le moment.',
-    noDevices: 'Aucune activité appareil pour le moment.',
-    noTraffic: 'Aucun leader de trafic pour le moment.',
-    noData: 'Aucune donnée.',
-    closeDetail: 'Fermer le détail',
-    copied: 'Copié',
-    syncing: 'Synchronisation...',
-    idle: 'Inactif',
-    snapshotUnavailableShort: 'Instantané indisponible',
-    waitingFirstSnapshot: 'En attente du premier instantané en direct',
-    allHosts: 'Tous les hôtes',
-    allClients: 'Tous les clients',
-  },
-  de: {
-    panelRecent: 'Letzte Anfragen',
-    panelActive: 'Aktive Verbindungen',
-    panelDns: 'DNS',
-    panelDevices: 'Geräte',
-    panelTraffic: 'Traffic-Statistik',
-    allTime: 'Gesamter Zeitraum',
-    custom: 'Benutzerdefiniert',
-    itemSingular: 'Eintrag',
-    itemPlural: 'Einträge',
-    active: 'aktiv',
-    completed: 'abgeschlossen',
-    failed: 'fehlgeschlagen',
-    updated: 'Aktualisiert',
-    readDegraded: 'Eingeschränkt lesbar',
-    polling: 'Abfrage',
-    snapshotUnavailable: 'Snapshot nicht verfügbar. Kernel gestoppt oder Bridge-Daten eingeschränkt.',
-    loadingSnapshot: 'Live-Snapshot wird geladen...',
-    noDns: 'Noch keine DNS-Beobachtungen.',
-    noDevices: 'Noch keine Geräteaktivität.',
-    noTraffic: 'Noch keine Traffic-Spitzenreiter.',
-    noData: 'Noch keine Daten.',
-    closeDetail: 'Detail schließen',
-    copied: 'Kopiert',
-    syncing: 'Synchronisiere...',
-    idle: 'Leerlauf',
-    snapshotUnavailableShort: 'Snapshot nicht verfügbar',
-    waitingFirstSnapshot: 'Warte auf den ersten Live-Snapshot',
-    allHosts: 'Alle Hosts',
-    allClients: 'Alle Clients',
-  },
-  ru: {
-    panelRecent: 'Последние запросы',
-    panelActive: 'Активные соединения',
-    panelDns: 'DNS',
-    panelDevices: 'Устройства',
-    panelTraffic: 'Статистика трафика',
-    allTime: 'За всё время',
-    custom: 'Своя настройка',
-    itemSingular: 'элемент',
-    itemPlural: 'элементов',
-    active: 'активных',
-    completed: 'завершённых',
-    failed: 'с ошибкой',
-    updated: 'Обновлено',
-    readDegraded: 'Данные частично недоступны',
-    polling: 'Опрос',
-    snapshotUnavailable: 'Снимок недоступен. Возможно, ядро остановлено или данные bridge деградированы.',
-    loadingSnapshot: 'Загрузка снимка в реальном времени...',
-    noDns: 'Пока нет DNS-наблюдений.',
-    noDevices: 'Пока нет активности устройств.',
-    noTraffic: 'Пока нет лидеров по трафику.',
-    noData: 'Пока нет данных.',
-    closeDetail: 'Закрыть детали',
-    copied: 'Скопировано',
-    syncing: 'Синхронизация...',
-    idle: 'Ожидание',
-    snapshotUnavailableShort: 'Снимок недоступен',
-    waitingFirstSnapshot: 'Ожидание первого снимка в реальном времени',
-    allHosts: 'Все хосты',
-    allClients: 'Все клиенты',
-  },
-};
 
 function $(id) {
   return document.getElementById(id);
@@ -302,11 +43,11 @@ function normalizeLocale(value) {
 }
 
 function t(key, fallback = '') {
-  const pack = DASHBOARD_TEXTS[state.locale] || DASHBOARD_TEXTS.en;
+  const pack = DASHBOARD_I18N[state.locale] || DASHBOARD_I18N.en;
   if (Object.prototype.hasOwnProperty.call(pack, key)) {
     return pack[key];
   }
-  return fallback || (DASHBOARD_TEXTS.en[key] || key);
+  return fallback || (DASHBOARD_I18N.en[key] || key);
 }
 
 function readPrefs() {
@@ -1063,24 +804,39 @@ function renderAll() {
   renderTable();
 }
 
+function dashboardLog(scope, message, payload = null, level = 'log') {
+  return;
+}
+
 async function refreshSnapshot() {
   if (!window.clashfox || typeof window.clashfox.dashboardSnapshot !== 'function') {
     return;
   }
   state.loading = true;
+  dashboardLog('snapshot', 'refresh started', { tab: state.activeTab, groupBy: state.groupBy });
   renderAll();
   try {
     const result = await window.clashfox.dashboardSnapshot({ limit: 320 });
     if (!result || !result.ok || !result.data) {
       state.lastError = result && result.error ? String(result.error) : 'dashboard_snapshot_failed';
+      dashboardLog('snapshot', 'refresh failed', {
+        error: state.lastError,
+      }, 'warn');
       renderAll();
       return;
     }
     state.snapshot = result.data;
     state.lastError = '';
+    dashboardLog('snapshot', 'refresh completed', {
+      requests: Array.isArray(result.data.requests) ? result.data.requests.length : 0,
+      connections: Array.isArray(result.data.connections) ? result.data.connections.length : 0,
+      dns: Array.isArray(result.data.dns) ? result.data.dns.length : 0,
+      devices: Array.isArray(result.data.devices) ? result.data.devices.length : 0,
+    });
     renderAll();
   } catch {
     state.lastError = 'dashboard_snapshot_failed';
+    dashboardLog('snapshot', 'refresh threw', { error: state.lastError }, 'error');
     renderAll();
   } finally {
     state.loading = false;
@@ -1107,6 +863,7 @@ function bindEvents() {
     const button = event.target.closest('[data-dashboard-tab]');
     if (!button) return;
     state.activeTab = button.dataset.dashboardTab || 'recent';
+    dashboardLog('interaction', 'tab changed', { tab: state.activeTab });
     state.selectedFilter = '';
     writePrefs();
     renderAll();
@@ -1115,6 +872,7 @@ function bindEvents() {
     const button = event.target.closest('[data-dashboard-group]');
     if (!button) return;
     state.groupBy = button.dataset.dashboardGroup || 'client';
+    dashboardLog('interaction', 'group changed', { groupBy: state.groupBy });
     state.selectedFilter = '';
     writePrefs();
     renderAll();
@@ -1123,11 +881,13 @@ function bindEvents() {
     const button = event.target.closest('[data-filter]');
     if (!button) return;
     state.selectedFilter = button.dataset.filter || '';
+    dashboardLog('interaction', 'filter changed', { filter: state.selectedFilter });
     writePrefs();
     renderAll();
   });
   refs.searchInput.addEventListener('input', () => {
     state.query = refs.searchInput.value || '';
+    dashboardLog('interaction', 'search changed', { query: state.query });
     writePrefs();
     renderAll();
   });
@@ -1135,6 +895,7 @@ function bindEvents() {
     const button = event.target.closest('[data-recent-status]');
     if (!button) return;
     state.recentStatus = normalizeRecentStatus(button.dataset.recentStatus);
+    dashboardLog('interaction', 'status filter changed', { recentStatus: state.recentStatus });
     writePrefs();
     renderAll();
   });
@@ -1142,6 +903,7 @@ function bindEvents() {
     const button = event.target.closest('[data-recent-range]');
     if (!button) return;
     state.recentRangeMs = normalizeRecentRange(button.dataset.recentRange);
+    dashboardLog('interaction', 'time range changed', { recentRangeMs: state.recentRangeMs });
     writePrefs();
     renderAll();
   });
@@ -1150,6 +912,7 @@ function bindEvents() {
     if (!row) return;
     state.selectedRowKey = row.dataset.rowKey || '';
     state.detailVisible = true;
+    dashboardLog('interaction', 'table row selected', { rowKey: state.selectedRowKey });
     writePrefs();
     renderAll();
   });
@@ -1158,6 +921,7 @@ function bindEvents() {
     if (!card) return;
     state.selectedRowKey = card.dataset.rowKey || '';
     state.detailVisible = true;
+    dashboardLog('interaction', 'card selected', { rowKey: state.selectedRowKey });
     writePrefs();
     renderAll();
   });
@@ -1165,6 +929,7 @@ function bindEvents() {
     const closeButton = event.target.closest('[data-detail-close]');
     if (closeButton) {
       state.detailVisible = false;
+      dashboardLog('interaction', 'detail closed');
       renderAll();
       return;
     }
@@ -1197,6 +962,7 @@ function bindEvents() {
 }
 
 export async function initDashboardPanel() {
+  dashboardLog('lifecycle', 'init requested');
   state.root = $('dashboardLocalPanel');
   if (!state.root) {
     return;
@@ -1238,6 +1004,10 @@ export async function initDashboardPanel() {
   }
   renderAll();
   startPolling();
+  dashboardLog('lifecycle', 'init completed', {
+    activeTab: state.activeTab,
+    groupBy: state.groupBy,
+  });
 }
 
 export function setDashboardLocale(locale = 'en') {
@@ -1250,6 +1020,7 @@ export function setDashboardLocale(locale = 'en') {
 }
 
 export function teardownDashboardPanel() {
+  dashboardLog('lifecycle', 'teardown');
   if (state.timer) {
     clearInterval(state.timer);
     state.timer = null;

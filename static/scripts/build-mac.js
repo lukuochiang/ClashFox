@@ -148,8 +148,9 @@ function resolveDualArtifactNames(arch) {
   const fallbackPattern = '${productName}-${version}-mac-${arch}.zip';
   const helperPattern = (artifactNameOverride || fallbackPattern).replace(/\.zip$/i, '.zip');
   const helperName = renderArtifactName(helperPattern, arch, 'zip');
-  const normalPattern = helperPattern.replace(/-helper(?=\.zip$)/i, '');
-  const normalName = renderArtifactName(normalPattern, arch, 'zip');
+  const normalName = helperName.includes('-helper.')
+    ? helperName.replace(/-helper(?=\.[^.]+$)/i, '')
+    : renderArtifactName(fallbackPattern, arch, 'zip');
   return { helperName, normalName };
 }
 

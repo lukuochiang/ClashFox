@@ -99,18 +99,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "Checking helper zip outputs..."
-          find dist -type f -name "*-helper.zip" -print
-          if ! find dist -type f -name "*-helper.zip" | grep -q .; then
-            echo "Missing helper artifacts (*-helper.zip)"
-            exit 1
-          fi
-          echo "Checking standard zip outputs..."
-          find dist -type f -name "*.zip" ! -name "*-helper.zip" -print
-          if ! find dist -type f -name "*.zip" ! -name "*-helper.zip" | grep -q .; then
-            echo "Missing standard artifacts (*.zip without -helper)"
-            exit 1
-          fi
+          VERSION="${{ steps.meta.outputs.version }}"
+          EXPECTED=(
+            "ClashFox-${VERSION}-mac-x64.zip"
+            "ClashFox-${VERSION}-mac-arm64.zip"
+            "ClashFox-${VERSION}-mac-universal.zip"
+            "ClashFox-${VERSION}-mac-x64-helper.zip"
+            "ClashFox-${VERSION}-mac-arm64-helper.zip"
+            "ClashFox-${VERSION}-mac-universal-helper.zip"
+          )
+
+          echo "Checking expected zip outputs..."
+          find dist -type f -name "*.zip" -print | sort
+
+          for artifact in "${EXPECTED[@]}"; do
+            if ! find dist -type f -name "$artifact" | grep -q .; then
+              echo "Missing expected artifact: $artifact"
+              exit 1
+            fi
+          done
 
       - name: Prepare artifacts
         shell: bash

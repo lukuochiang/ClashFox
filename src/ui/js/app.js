@@ -1,3 +1,8 @@
+const appLocaleUtils = globalThis.CLASHFOX_LOCALE_UTILS || {};
+const detectSystemLocale = typeof appLocaleUtils.detectSystemLocale === 'function'
+  ? appLocaleUtils.detectSystemLocale
+  : (() => 'en');
+
 // apply last-used theme immediately to avoid flicker on reload
 // this will be overwritten later when settings are applied
 try {
@@ -939,14 +944,7 @@ function normalizeVersionForDisplay(raw = '') {
 }
 
 function getAutoLanguage() {
-  const lang = (navigator.language || '').toLowerCase();
-  if (lang.startsWith('zh')) return 'zh';
-  if (lang.startsWith('ja')) return 'ja';
-  if (lang.startsWith('ko')) return 'ko';
-  if (lang.startsWith('fr')) return 'fr';
-  if (lang.startsWith('de')) return 'de';
-  if (lang.startsWith('ru')) return 'ru';
-  return 'en';
+  return detectSystemLocale();
 }
 
 function applyI18n() {
@@ -1949,6 +1947,7 @@ async function syncSettingsFromFile() {
 }
 
 function saveSettings(patch) {
+  guiLog('settings', 'saveSettings called', patch);
   const nextPatch = { ...(patch || {}) };
   const nextAppearance = {
     ...((state.settings && state.settings.appearance) || {}),
@@ -2036,7 +2035,11 @@ function saveSettings(patch) {
   if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
     const { externalUiUrl, externalUiName, ...restSettings } = state.settings;
     const fileSettings = mapSettingsForFile(restSettings);
-    window.clashfox.writeSettings(fileSettings);
+    Promise.resolve(window.clashfox.writeSettings(fileSettings)).catch((error) => {
+      guiLog('settings', 'writeSettings failed', {
+        error: error && error.message ? error.message : String(error || ''),
+      }, 'error');
+    });
   }
 }
 
@@ -2853,6 +2856,17 @@ function showToast(message, type = 'info') {
   showNoticePop(message, type);
 }
 
+function guiLogEnabled() {
+  return Boolean(
+    (state.settings && state.settings.debugMode)
+    || (state.fileSettings && state.fileSettings.debugMode),
+  );
+}
+
+function guiLog(scope, message, payload = null, level = 'log') {
+  return;
+}
+
 function hideNoticePop() {
   if (!noticePop) {
     return;
@@ -3265,6 +3279,7 @@ function setActiveNav(page) {
 
 async function runCommand(command, args = [], options = {}) {
   if (!window.clashfox || typeof window.clashfox.runCommand !== 'function') {
+    guiLog('command', 'bridge missing', { command, args, options }, 'error');
     return { ok: false, error: 'bridge_missing' };
   }
   const effectiveSettings = { ...(state.fileSettings || {}), ...(state.settings || {}) };
@@ -3278,7 +3293,23 @@ async function runCommand(command, args = [], options = {}) {
   if (effectiveSettings.dataDir) {
     pathArgs.push('--data-dir', effectiveSettings.dataDir);
   }
-  return window.clashfox.runCommand(command, [...pathArgs, ...args], options);
+  const finalArgs = [...pathArgs, ...args];
+  guiLog('command', 'runCommand start', { command, args: finalArgs, options });
+  try {
+    const result = await window.clashfox.runCommand(command, finalArgs, options);
+    guiLog('command', 'runCommand result', {
+      command,
+      ok: Boolean(result && result.ok),
+      error: result && result.error ? result.error : '',
+    });
+    return result;
+  } catch (error) {
+    guiLog('command', 'runCommand threw', {
+      command,
+      message: String(error && error.message ? error.message : error || ''),
+    }, 'error');
+    throw error;
+  }
 }
 
 async function loadStaticConfigs() {
@@ -4323,11 +4354,20 @@ async function probeKernelRunningFromOverviewLite() {
 }
 
 async function loadStatus() {
+  guiLog('status', 'loadStatus started');
   const response = await loadStatusSilently();
   if (!response.ok) {
     const msg = response.error === 'bridge_missing' ? t('labels.bridgeMissing') : (response.error || ti('labels.statusError', 'Status error'));
+    guiLog('status', 'loadStatus failed', {
+      error: response.error || 'unknown_error',
+    }, 'warn');
     showToast(msg, 'error');
+    return;
   }
+  guiLog('status', 'loadStatus completed', {
+    running: Boolean(state.coreRunning),
+    source: response && response.data && response.data.source ? response.data.source : '',
+  });
 }
 
 async function waitForKernelState(expectedRunning, timeoutMs = 12000, intervalMs = 350) {
@@ -4369,6 +4409,9 @@ async function loadOverview(showToastOnSuccess = false) {
     return false;
   }
   state.overviewLoading = true;
+  guiLog('overview', 'loadOverview started', {
+    showToastOnSuccess: Boolean(showToastOnSuccess),
+  });
   try {
     const configPath = getCurrentConfigPath();
     const args = ['--cache-ttl', '1'];
@@ -4378,18 +4421,29 @@ async function loadOverview(showToastOnSuccess = false) {
     args.push(...getControllerArgs());
     const response = await runCommand('overview', args);
     if (!response.ok) {
+      guiLog('overview', 'loadOverview failed', {
+        error: response.error || 'unknown_error',
+      }, 'warn');
       if (showToastOnSuccess) {
         showToast(response.error || ti('labels.overviewError', 'Overview error'), 'error');
       }
       return false;
     }
     updateOverviewUI(response.data);
+    guiLog('overview', 'loadOverview completed', {
+      mode: response.data && response.data.mode ? response.data.mode : '',
+      mixedPort: response.data && response.data.mixedPort ? response.data.mixedPort : '',
+      running: response.data && Object.prototype.hasOwnProperty.call(response.data, 'running')
+        ? Boolean(response.data.running)
+        : Boolean(state.coreRunning),
+    });
     if (showToastOnSuccess) {
       showToast(t('labels.statusRefreshed'));
     }
     loadTunStatus(false);
     return true;
   } catch {
+    guiLog('overview', 'loadOverview threw', null, 'error');
     if (showToastOnSuccess) {
       showToast(ti('labels.overviewError', 'Overview error'), 'error');
     }
@@ -4553,9 +4607,14 @@ async function loadProviderSubscriptionOverview() {
     return;
   }
   state.providerSubscriptionLoading = true;
+  guiLog('provider-traffic', 'load started');
   try {
     const response = await window.clashfox.providerSubscriptionOverview();
     if (!response || !response.ok || !response.data) {
+      guiLog('provider-traffic', 'load failed', {
+        error: response && response.error ? response.error : 'provider_subscription_overview_failed',
+        cacheHit: Boolean(readOverviewProviderSubscriptionCache()),
+      }, 'warn');
       if (!readOverviewProviderSubscriptionCache()) {
         renderProviderSubscriptionOverview({ items: [], summary: { providerCount: 0 } });
       } else {
@@ -4565,7 +4624,16 @@ async function loadProviderSubscriptionOverview() {
     }
     cacheOverviewProviderSubscription(response.data);
     renderProviderSubscriptionOverview(response.data);
+    guiLog('provider-traffic', 'load completed', {
+      providerCount: response.data && response.data.summary
+        ? Number(response.data.summary.providerCount || 0)
+        : 0,
+      itemCount: Array.isArray(response.data && response.data.items) ? response.data.items.length : 0,
+    });
   } catch {
+    guiLog('provider-traffic', 'load threw', {
+      cacheHit: Boolean(readOverviewProviderSubscriptionCache()),
+    }, 'error');
     if (!readOverviewProviderSubscriptionCache()) {
       renderProviderSubscriptionOverview({ items: [], summary: { providerCount: 0 } });
     } else {
@@ -4587,6 +4655,7 @@ async function loadRulesOverviewCard() {
     return;
   }
   state.rulesOverviewLoading = true;
+  guiLog('rules-overview', 'load started');
   try {
     const tasks = [];
     if (typeof window.clashfox.rulesOverview === 'function') {
@@ -4603,6 +4672,11 @@ async function loadRulesOverviewCard() {
     const hasRules = Boolean(rulesResp && rulesResp.ok && rulesResp.data);
     const hasProviders = Boolean(providerResp && providerResp.ok && providerResp.data);
     if (!hasRules && !hasProviders) {
+      guiLog('rules-overview', 'load failed', {
+        rulesError: rulesResp && rulesResp.error ? rulesResp.error : '',
+        providersError: providerResp && providerResp.error ? providerResp.error : '',
+        cacheHit: Boolean(readOverviewRulesCardCache()),
+      }, 'warn');
       if (readOverviewRulesCardCache()) {
         hydrateOverviewRulesCardFromCache();
         return;
@@ -4620,7 +4694,21 @@ async function loadRulesOverviewCard() {
     }
     cacheOverviewRulesCard();
     renderRulesOverviewCard();
+    guiLog('rules-overview', 'load completed', {
+      totalRules: state.rulesOverviewPayload
+        ? Number(state.rulesOverviewPayload.totalRules || 0)
+        : 0,
+      totalRuleProviders: state.ruleProvidersOverviewPayload
+        ? Number(state.ruleProvidersOverviewPayload.totalProviders || 0)
+        : 0,
+      records: state.rulesOverviewPayload && Array.isArray(state.rulesOverviewPayload.records)
+        ? state.rulesOverviewPayload.records.length
+        : 0,
+    });
   } catch {
+    guiLog('rules-overview', 'load threw', {
+      cacheHit: Boolean(readOverviewRulesCardCache()),
+    }, 'error');
     if (readOverviewRulesCardCache()) {
       hydrateOverviewRulesCardFromCache();
     } else {
@@ -5078,12 +5166,15 @@ async function deleteKernelBackupByPath(targetPath, backupName = '') {
 }
 
 async function loadConfigs(showToastOnSuccess = false) {
+  guiLog('config', 'loadConfigs start', { showToastOnSuccess });
   const response = await runCommand('configs');
   if (!response.ok) {
+    guiLog('config', 'loadConfigs failed', response, 'warn');
     showToast(response.error || ti('labels.configsError', 'Configs error'), 'error');
     return;
   }
   state.configs = response.data || [];
+  guiLog('config', 'loadConfigs success', { count: state.configs.length });
   renderConfigTable();
   if (showToastOnSuccess) {
     showToast(t('labels.configsRefreshed'));
@@ -5464,9 +5555,9 @@ function syncTopNavMenuLayout() {
   const settingsOverflowBtn = document.getElementById('navSettingsOverflow');
   const helpOverflowBtn = document.getElementById('navHelpOverflow');
   const trayButtons = [
-    document.getElementById('navFoxboard'),
     document.getElementById('navDashboard'),
     document.getElementById('navTrackers'),
+    document.getElementById('navFoxboard'),
   ].filter(Boolean);
 
   if (isTopNavMode()) {
@@ -6019,6 +6110,7 @@ function preventPageReloadShortcuts() {
 
 async function navigatePage(targetPage, pushState = true) {
   const normalized = String(targetPage || '').trim();
+  guiLog('nav', 'navigatePage called', { targetPage: normalized, currentPage, pushState });
   if (!VALID_PAGES.has(normalized)) {
     return;
   }
@@ -6243,6 +6335,20 @@ function bindPageEvents() {
 if (noticePopClose && noticePopClose.dataset.bound !== 'true') {
   noticePopClose.dataset.bound = 'true';
   noticePopClose.addEventListener('click', hideNoticePop);
+}
+if (document.body && document.body.dataset.proxyConfigActionBound !== 'true') {
+  document.body.dataset.proxyConfigActionBound = 'true';
+  document.addEventListener('click', (event) => {
+    const button = event.target && event.target.closest
+      ? event.target.closest('#proxyConfigReloadCoreBtn, #proxyConfigReloadConfigBtn')
+      : null;
+    if (!button) {
+      return;
+    }
+    const isReloadCore = button.id === 'proxyConfigReloadCoreBtn';
+    guiLog('proxy-config', isReloadCore ? 'reload core requested' : 'reload config requested');
+    showToast(ti('labels.notImplementedYet', 'Not implemented yet'), 'info');
+  });
 }
 const externalLinks = Array.from(document.querySelectorAll('[data-open-external="true"]'));
 externalLinks.forEach((link) => {
@@ -6473,11 +6579,20 @@ async function refreshHelperInstallPath() {
   if (!helperInstallPath || !window.clashfox || typeof window.clashfox.getHelperInstallPath !== 'function') {
     return;
   }
+  guiLog('helper-panel', 'refresh install path started');
   const response = await window.clashfox.getHelperInstallPath();
   if (response && response.ok) {
     helperInstallPath.textContent = response.path || '-';
     helperInstallPath.dataset.exists = response.exists ? 'true' : 'false';
+    guiLog('helper-panel', 'refresh install path completed', {
+      exists: Boolean(response.exists),
+      path: response.path || '',
+    });
+    return;
   }
+  guiLog('helper-panel', 'refresh install path failed', {
+    error: response && response.error ? response.error : 'get_helper_install_path_failed',
+  }, 'warn');
 }
 
 function refreshHelperLogPath() {
@@ -6598,6 +6713,7 @@ function applyHelperStatusSnapshot(snapshot) {
 }
 
 async function refreshHelperStatus(force = false) {
+  guiLog('helper-panel', 'refresh status started', { force: Boolean(force) });
   await hydrateHelperStatusFromFile();
   const cached = getCachedHelperStatus();
   if (cached) {
@@ -6631,25 +6747,36 @@ async function refreshHelperStatus(force = false) {
           state.fileSettings.helperStatus = snapshot;
         }
         applyHelperStatusSnapshot(snapshot);
+        guiLog('helper-panel', 'refresh status completed', {
+          state: snapshot.state,
+          installed: snapshot.installed,
+          running: snapshot.running,
+          updateAvailable: snapshot.helperUpdateAvailable,
+        });
         return;
       }
     }
   } catch (err) {
-    console.warn('[helper] getHelperStatus failed:', err);
+    guiLog('helper-panel', 'refresh status threw', {
+      error: err && err.message ? err.message : String(err || ''),
+    }, 'error');
   }
 }
 
 async function refreshHelperPanel(force = false) {
+  guiLog('helper-panel', 'refresh panel started', { force: Boolean(force) });
   await hydrateHelperStatusFromFile();
   await Promise.all([
     refreshHelperStatus(force),
     refreshHelperInstallPath(),
     Promise.resolve(refreshHelperLogPath()),
   ]);
+  guiLog('helper-panel', 'refresh panel completed');
 }
 window.__refreshHelperPanel = refreshHelperPanel;
 
 async function repairHelperAndRetryTun() {
+  guiLog('helper-panel', 'repair helper prompted');
   const confirmed = await promptConfirm({
     title: ti('settings.helperRepairTitle', 'Helper Unreachable'),
     body: ti('settings.helperRepairBody', 'Privileged Helper is unreachable. Repair helper now and retry TUN?'),
@@ -6657,6 +6784,7 @@ async function repairHelperAndRetryTun() {
     confirmTone: 'primary',
   });
   if (!confirmed) {
+    guiLog('helper-panel', 'repair helper cancelled');
     return false;
   }
   if (!window.clashfox) {
@@ -6673,12 +6801,18 @@ async function repairHelperAndRetryTun() {
     return false;
   }
   if (!response || !response.ok) {
+    guiLog('helper-panel', 'repair helper failed', {
+      error: response && (response.details || response.error)
+        ? String(response.details || response.error)
+        : 'helper_install_failed',
+    }, 'warn');
     const detail = response && (response.details || response.error)
       ? `: ${String(response.details || response.error)}`
       : '';
     showToast(`${ti('settings.helperInstallFailed', 'Helper install failed')}${detail}`, 'error');
     return false;
   }
+  guiLog('helper-panel', 'repair helper completed');
   showToast(ti('settings.helperInstallSuccess', 'Helper installed'), 'info');
   await invokeHelperPanelRefresh(true);
   return true;
@@ -7031,8 +7165,10 @@ if (githubUser) {
 }
 
 async function handleConfigBrowse() {
+  guiLog('config', 'browse requested');
   const result = await window.clashfox.selectConfig();
   if (result.ok) {
+    guiLog('config', 'browse completed', { path: result.path || '' });
     configPathInput.value = result.path;
     if (overviewConfigPath) {
       overviewConfigPath.value = result.path;
@@ -7043,21 +7179,30 @@ async function handleConfigBrowse() {
     saveSettings({ configPath: result.path });
     showToast(t('labels.configNeedsRestart'));
     renderConfigTable();
+    return;
   }
+  guiLog('config', 'browse cancelled or failed', {
+    error: result && result.error ? result.error : '',
+  }, result && result.error && result.error !== 'cancelled' ? 'warn' : 'log');
 }
 
 async function handleConfigImport() {
   if (!window.clashfox || typeof window.clashfox.importConfig !== 'function') {
     return;
   }
+  guiLog('config', 'import requested');
   const result = await window.clashfox.importConfig();
   if (!result || !result.ok) {
+    guiLog('config', 'import failed', {
+      error: result && result.error ? result.error : 'import_config_failed',
+    }, result && result.error && result.error !== 'cancelled' ? 'warn' : 'log');
     if (result && result.error && result.error !== 'cancelled') {
       showToast(`${t('labels.configImportFailed')}: ${result.error}`, 'error');
     }
     return;
   }
   const fileName = result.data && result.data.fileName ? result.data.fileName : '';
+  guiLog('config', 'import completed', { fileName });
   if (fileName) {
     showToast(`${t('labels.configImported')}: ${fileName}`, 'info');
   } else {
@@ -7070,6 +7215,10 @@ async function handleConfigDelete(targetPath, configName = '') {
   if (!targetPath || !window.clashfox || typeof window.clashfox.deleteConfig !== 'function') {
     return;
   }
+  guiLog('config', 'delete requested', {
+    targetPath,
+    configName,
+  });
   const confirmed = await promptConfirm({
     title: ti('confirm.deleteConfigTitle', 'Delete Config?'),
     body: `${ti('confirm.deleteConfigBody', 'This will permanently delete the selected config file.')} ${configName || ''}`.trim(),
@@ -7077,18 +7226,28 @@ async function handleConfigDelete(targetPath, configName = '') {
     confirmTone: 'danger',
   });
   if (!confirmed) {
+    guiLog('config', 'delete cancelled', { targetPath });
     return;
   }
   const response = await window.clashfox.deleteConfig(targetPath);
   if (response && response.ok) {
+    guiLog('config', 'delete completed', { targetPath });
     showToast(ti('labels.configDeleteSuccess', 'Config deleted.'));
     await loadConfigs();
     return;
   }
   if (response && response.error === 'current_config') {
+    guiLog('config', 'delete rejected', {
+      targetPath,
+      error: response.error,
+    }, 'warn');
     showToast(ti('labels.configDeleteCurrent', 'Cannot delete current config.'), 'error');
     return;
   }
+  guiLog('config', 'delete failed', {
+    targetPath,
+    error: response && response.error ? response.error : 'delete_config_failed',
+  }, 'warn');
   showToast(`${ti('labels.configDeleteFailed', 'Delete config failed')}: ${response && response.error ? response.error : ''}`.trim(), 'error');
 }
 
@@ -7328,6 +7487,10 @@ if (settingsBrowseConfig) {
 
 // 统一的核心操作处理函数
 async function handleCoreAction(action, button) {
+  guiLog('core-action', 'requested', {
+    action,
+    button: button && button.id ? button.id : '',
+  });
   // Keep quick actions always responsive.
   setCoreActionState(false);
   const helperStateSnapshot = () => {
@@ -7390,6 +7553,7 @@ async function handleCoreAction(action, button) {
             const message = (tunApply && tunApply.error) || ti('labels.tunUpdateFailed', 'TUN update failed');
             showToast(message, 'warn');
           }
+          guiLog('core-action', 'completed', { action, running: true });
         } else {
           state.coreRunningGuardUntil = 0;
           await loadStatusSilently();
@@ -7397,6 +7561,7 @@ async function handleCoreAction(action, button) {
           if (!helperNotInstalled()) {
             showToast(ti('labels.startFailed', 'Start failed'), 'error');
           }
+          guiLog('core-action', 'failed after wait', { action, reason: 'wait_for_running_timeout' }, 'warn');
         }
       } else if (action === 'restart') {
         const running = await waitForKernelState(true, 15000, 400);
@@ -7411,6 +7576,7 @@ async function handleCoreAction(action, button) {
             const message = (tunApply && tunApply.error) || ti('labels.tunUpdateFailed', 'TUN update failed');
             showToast(message, 'warn');
           }
+          guiLog('core-action', 'completed', { action, running: true });
         } else {
           state.coreRunningGuardUntil = 0;
           await loadStatusSilently();
@@ -7418,6 +7584,7 @@ async function handleCoreAction(action, button) {
           if (!helperNotInstalled()) {
             showToast(ti('labels.restartFailed', 'Restart failed'), 'error');
           }
+          guiLog('core-action', 'failed after wait', { action, reason: 'wait_for_running_timeout' }, 'warn');
         }
       } else {
         const stopped = await waitForKernelState(false, 10000, 300);
@@ -7425,15 +7592,21 @@ async function handleCoreAction(action, button) {
           state.coreRunningGuardUntil = 0;
           setQuickActionRunningState(false);
           showToast(t('labels.stopped'));
+          guiLog('core-action', 'completed', { action, running: false });
         } else {
           state.coreRunningGuardUntil = 0;
           await loadStatusSilently();
           syncQuickActionButtons();
           showToast(ti('labels.stopFailed', 'Stop failed'), 'error');
+          guiLog('core-action', 'failed after wait', { action, reason: 'wait_for_stopped_timeout' }, 'warn');
         }
       }
       loadOverviewLite();
     } else {
+      guiLog('core-action', 'command failed', {
+        action,
+        error: response.error || 'unknown_error',
+      }, 'warn');
       state.coreRunningGuardUntil = 0;
       await loadStatusSilently();
       syncQuickActionButtons();
@@ -7444,6 +7617,10 @@ async function handleCoreAction(action, button) {
     }
     
   } catch (error) {
+    guiLog('core-action', 'threw', {
+      action,
+      error: error && error.message ? error.message : String(error || ''),
+    }, 'error');
     showToast(error.message || ti('labels.unexpectedError', 'An unexpected error occurred'), 'error');
   } finally {
     setCoreActionState(false);
@@ -7481,12 +7658,18 @@ if (proxyModeSelect) {
       }
       const value = getProxyModeValue();
       const previous = (state.settings && state.settings.proxy) || 'rule';
+      guiLog('proxy-config', 'mode change requested', { value, previous });
       saveSettings({ proxy: value });
       const response = await runCommand('mode', ['--mode', value, ...getControllerArgs()]);
       if (response.ok) {
+        guiLog('proxy-config', 'mode change completed', { value });
         showToast(t('labels.proxyModeUpdated'));
         return;
       }
+      guiLog('proxy-config', 'mode change failed', {
+        value,
+        error: response.error || 'unknown_error',
+      }, 'warn');
       setProxyModeValue(previous);
       saveSettings({ proxy: previous });
       const message = response.error === 'controller_missing'
@@ -7501,6 +7684,7 @@ if (tunToggle) {
   tunToggle.addEventListener('change', async () => {
     const enabled = Boolean(tunToggle.checked);
     const previous = !enabled;
+    guiLog('proxy-config', 'tun toggle requested', { enabled, previous });
     if (enabled && !previous && window.clashfox && typeof window.clashfox.detectTunConflict === 'function') {
       try {
         const conflictProbe = await window.clashfox.detectTunConflict();
@@ -7525,6 +7709,7 @@ if (tunToggle) {
     }
     if (!state.coreRunning) {
       saveSettings({ tun: enabled });
+      guiLog('proxy-config', 'tun toggle deferred until next start', { enabled });
       showToast(ti('labels.tunApplyOnStart', 'TUN setting saved, it will be applied on next start.'));
       return;
     }
@@ -7567,10 +7752,16 @@ if (tunToggle) {
         : message;
       const helperState = ((state.settings && state.settings.helperStatus) || (state.fileSettings && state.fileSettings.helperStatus) || {}).state || '';
       const helperMissing = String(helperState || '').trim() === 'not_installed';
+      guiLog('proxy-config', 'tun toggle failed', {
+        enabled,
+        actual,
+        error: response && response.error ? response.error : 'tun_update_failed',
+      }, 'warn');
       showToast(finalMessage, helperMissing ? 'info' : 'error');
       return;
     }
     saveSettings({ tun: actual });
+    guiLog('proxy-config', 'tun toggle completed', { enabled: actual });
     showToast(actual ? t('labels.tunEnabled') : t('labels.tunDisabled'));
   });
 }
@@ -7579,9 +7770,11 @@ if (tunStackSelect) {
   tunStackSelect.addEventListener('change', async () => {
     const previous = normalizeTunStack(state.settings && state.settings.stack);
     const value = normalizeTunStack(tunStackSelect.value);
+    guiLog('proxy-config', 'tun stack change requested', { value, previous });
     tunStackSelect.value = value;
     if (!state.coreRunning) {
       saveSettings({ stack: value });
+      guiLog('proxy-config', 'tun stack deferred until next start', { value });
       showToast(ti('labels.tunApplyOnStart', 'TUN setting saved, it will be applied on next start.'));
       return;
     }
@@ -7614,10 +7807,16 @@ if (tunStackSelect) {
       );
       const helperState = ((state.settings && state.settings.helperStatus) || (state.fileSettings && state.fileSettings.helperStatus) || {}).state || '';
       const helperMissing = String(helperState || '').trim() === 'not_installed';
+      guiLog('proxy-config', 'tun stack change failed', {
+        value,
+        actual,
+        error: response && response.error ? response.error : 'tun_stack_update_failed',
+      }, 'warn');
       showToast(message, helperMissing ? 'info' : 'error');
       return;
     }
     saveSettings({ stack: actual });
+    guiLog('proxy-config', 'tun stack change completed', { value: actual });
   });
 }
 
@@ -7640,6 +7839,10 @@ if (configTable) {
     if (!path || path === getCurrentConfigPath()) {
       return;
     }
+    guiLog('config', 'switch requested', {
+      path,
+      currentPath: getCurrentConfigPath(),
+    });
     // Avoid radio input switching before user confirms.
     event.preventDefault();
     const confirmed = await promptConfirm({
@@ -7649,10 +7852,12 @@ if (configTable) {
       confirmTone: 'primary',
     });
     if (!confirmed) {
+      guiLog('config', 'switch cancelled', { path });
       renderConfigTable();
       return;
     }
     saveSettings({ configPath: path });
+    guiLog('config', 'switch completed', { path });
     showToast(t('labels.configNeedsRestart'));
     renderConfigTable();
   });
@@ -7665,7 +7870,10 @@ if (backupsRefresh) {
   backupsRefresh.addEventListener('click', () => loadBackups(true));
 }
 if (configsRefresh) {
-  configsRefresh.addEventListener('click', () => loadConfigs(true));
+  configsRefresh.addEventListener('click', () => {
+    guiLog('config', 'refresh requested');
+    loadConfigs(true);
+  });
 }
 if (configsImport) {
   configsImport.addEventListener('click', handleConfigImport);
@@ -7904,6 +8112,7 @@ if (backupsDelete) {
 if (switchBtn) {
   switchBtn.addEventListener('click', async () => {
     const index = getSelectedBackupIndex();
+    guiLog('kernel', 'switch backup requested', { index: index || '' });
     await switchKernelByIndex(index);
   });
 }
@@ -8038,14 +8247,18 @@ function startOverviewTimer() {
     if (currentPage === 'overview') {
       loadOverview();
     }
-  }, 1000);
+  }, 1500);
 
   if (state.trafficTimer) {
     clearInterval(state.trafficTimer);
   }
-  loadTraffic();
-  state.trafficTimer = setInterval(() => {
+  if (currentPage === 'overview') {
     loadTraffic();
+  }
+  state.trafficTimer = setInterval(() => {
+    if (currentPage === 'overview') {
+      loadTraffic();
+    }
   }, 500);
 
   if (state.overviewLiteTimer) {
@@ -8064,7 +8277,7 @@ function startOverviewTimer() {
     if (currentPage === 'overview') {
       loadOverviewMemory();
     }
-  }, 1000);
+  }, 2000);
 
   if (state.overviewTickTimer) {
     clearInterval(state.overviewTickTimer);
@@ -8080,7 +8293,9 @@ function startOverviewTimer() {
   if (state.providerSubscriptionTimer) {
     clearInterval(state.providerSubscriptionTimer);
   }
-  loadProviderSubscriptionOverview();
+  if (currentPage === 'overview') {
+    loadProviderSubscriptionOverview();
+  }
   state.providerSubscriptionTimer = setInterval(() => {
     if (currentPage === 'overview') {
       loadProviderSubscriptionOverview();
@@ -8090,7 +8305,9 @@ function startOverviewTimer() {
   if (state.rulesOverviewTimer) {
     clearInterval(state.rulesOverviewTimer);
   }
-  loadRulesOverviewCard();
+  if (currentPage === 'overview') {
+    loadRulesOverviewCard();
+  }
   state.rulesOverviewTimer = setInterval(() => {
     if (currentPage === 'overview') {
       loadRulesOverviewCard();
@@ -8184,7 +8401,7 @@ async function ensurePanelInstalledAndActivated(preset) {
 async function initDashboardFrame() {
   try {
     if (!dashboardLocalModule) {
-      dashboardLocalModule = await import('./dashboard-local.js');
+      dashboardLocalModule = await import('./dashboard.js');
     }
     if (dashboardLocalModule && typeof dashboardLocalModule.initDashboardPanel === 'function') {
       await dashboardLocalModule.initDashboardPanel();
@@ -8283,5 +8500,6 @@ if (document.readyState === 'loading') {
   initApp();
 }
 
-// Common entry: load i18n first, then main app logic
-import '../../../static/locales/i18n.js';
+// Common entry: load tray i18n first, then main i18n map
+import '../locales/tray-i18n.js';
+import '../locales/i18n.js';

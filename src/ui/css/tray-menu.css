@@ -234,7 +234,11 @@ body {
 .chart-bar-bg.down,
 .chart-bar-bg.up {
   fill: var(--chart-bar-base);
-  opacity: 1;
+  opacity: 0.62;
+}
+
+.chart-bar-bg.is-placeholder {
+  opacity: 0.34;
 }
 
 .menu-chart-overlay {
@@ -533,6 +537,11 @@ body[data-theme="day"] .provider-traffic-item-meta.secondary {
   stroke-linejoin: round;
 }
 
+.menu-leading svg .menu-icon-fill {
+  fill: currentColor;
+  stroke: none;
+}
+
 .menu-row.disabled .menu-leading,
 .menu-row.disabled .menu-check {
   color: var(--muted) !important;
@@ -547,7 +556,7 @@ body[data-theme="day"] .provider-traffic-item-meta.secondary {
 }
 
 .menu-row[data-icon-key="showMain"] { --menu-icon-color: #5eb7ff; }
-.menu-row[data-icon-key="dashboard"] { --menu-icon-color: #34d399; }
+.menu-row[data-icon-key="dashboard"] { --menu-icon-color: #58baff; }
 .menu-row[data-icon-key="trackers"] { --menu-icon-color: #3b82f6; }
 .menu-row[data-icon-key="foxboard"] { --menu-icon-color: #ff9a67; }
 .menu-row[data-icon-key="networkTakeover"] { --menu-icon-color: #38bdf8; }
