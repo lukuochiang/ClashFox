@@ -672,6 +672,7 @@ function mergeAppearanceAliases(settings = {}) {
     foxboardEnabled: readTrayBoolean('foxboardEnabled', readTrayBoolean('trayMenuFoxboardEnabled', true)),
     kernelManagerEnabled: readTrayBoolean('kernelManagerEnabled', readTrayBoolean('trayMenuKernelManagerEnabled', true)),
     directoryLocationsEnabled: readTrayBoolean('directoryLocationsEnabled', readTrayBoolean('trayMenuDirectoryLocationsEnabled', true)),
+    copyShellExportCommandEnabled: readTrayBoolean('copyShellExportCommandEnabled', readTrayBoolean('trayMenuCopyShellExportCommandEnabled', true)),
     windowWidth: readNumber('windowWidth', DEFAULT_MAIN_WINDOW_WIDTH),
     windowHeight: readNumber('windowHeight', DEFAULT_MAIN_WINDOW_HEIGHT),
     mainWindowClosed: readBoolean('mainWindowClosed', false),
@@ -905,6 +906,14 @@ function normalizeSettingsForStorage(input = {}) {
           : trayMenuConfig.directoryLocationsEnabled ?? trayMenuConfig.trayMenuDirectoryLocationsEnabled),
       true,
     ),
+    copyShellExportCommandEnabled: normalizeBool(
+      Object.prototype.hasOwnProperty.call(parsed, 'copyShellExportCommandEnabled')
+        ? parsed.copyShellExportCommandEnabled
+        : (Object.prototype.hasOwnProperty.call(parsed, 'trayMenuCopyShellExportCommandEnabled')
+          ? parsed.trayMenuCopyShellExportCommandEnabled
+          : trayMenuConfig.copyShellExportCommandEnabled ?? trayMenuConfig.trayMenuCopyShellExportCommandEnabled),
+      true,
+    ),
   };
   delete parsed.lang;
   delete parsed.theme;
@@ -1020,6 +1029,17 @@ function resolveConfigDirectoryFromSettings() {
   return path.join(APP_DATA_DIR, 'config');
 }
 
+function resolveCoreDirectoryFromSettings() {
+  const settings = readAppSettings();
+  const configured = settings && typeof settings.coreDir === 'string'
+    ? settings.coreDir.trim()
+    : '';
+  if (configured) {
+    return path.resolve(configured);
+  }
+  return path.join(APP_DATA_DIR, 'core');
+}
+
 function formatFileModifiedTime(value) {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -1070,6 +1090,53 @@ function listConfigFilesFromFs() {
     return {
       ok: false,
       error: 'configs_read_failed',
+      details: String(error && error.message ? error.message : error || ''),
+    };
+  }
+}
+
+function listKernelFilesFromFs() {
+  try {
+    const coreDir = resolveCoreDirectoryFromSettings();
+    fs.mkdirSync(coreDir, { recursive: true });
+    const items = fs.readdirSync(coreDir, { withFileTypes: true })
+      .filter((entry) => entry && (entry.isFile() || entry.isSymbolicLink()))
+      .filter((entry) => {
+        const name = String(entry.name || '');
+        return name === 'mihomo'
+          || name.startsWith('mihomo-darwin-')
+          || name.startsWith('mihomo.backup.');
+      })
+      .map((entry) => {
+        const filePath = path.join(coreDir, entry.name);
+        const stat = fs.statSync(filePath);
+        return {
+          name: entry.name,
+          path: filePath,
+          modified: formatFileModifiedTime(stat.mtime),
+          modifiedAt: stat.mtimeMs || stat.mtime.getTime() || 0,
+        };
+      })
+      .sort((a, b) => {
+        const delta = Number(b.modifiedAt || 0) - Number(a.modifiedAt || 0);
+        if (delta !== 0) {
+          return delta;
+        }
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      })
+      .map(({ modifiedAt, ...rest }) => rest);
+    guiMainLog('kernel', 'listKernelFilesFromFs success', {
+      coreDir,
+      count: items.length,
+    });
+    return { ok: true, data: items };
+  } catch (error) {
+    guiMainLog('kernel', 'listKernelFilesFromFs failed', {
+      message: String(error && error.message ? error.message : error || ''),
+    }, 'error');
+    return {
+      ok: false,
+      error: 'kernels_read_failed',
       details: String(error && error.message ? error.message : error || ''),
     };
   }
@@ -6655,6 +6722,7 @@ async function buildTrayMenuOnce() {
   const showTrackers = traySettings ? traySettings.trackersEnabled !== false : true;
   const showFoxboard = traySettings ? traySettings.foxboardEnabled !== false : true;
   const showProviderTraffic = traySettings ? traySettings.providerTrafficEnabled !== false : true;
+  const showCopyShellExportCommand = traySettings ? traySettings.copyShellExportCommandEnabled !== false : true;
   let providerTraffic = null;
   if (showProviderTraffic) {
     try {
@@ -6748,8 +6816,6 @@ async function buildTrayMenuOnce() {
           enabled: false,
           iconKey: 'connectivityQuality',
         },
-        { type: 'separator' },
-        { type: 'action', label: labels.copyShellExportCommand || 'Copy Shell Export Command', action: 'copy-shell-export', rightText: '⌘ C', iconKey: 'copyShellExport' },
       ],
       outbound: [
         { type: 'action', label: labels.modeGlobalTitle || 'Global Proxy', action: 'mode-change', value: 'global', checked: currentOutboundMode === 'global', iconKey: 'modeGlobal' },
@@ -6774,6 +6840,12 @@ async function buildTrayMenuOnce() {
       ],
     },
   };
+  if (showCopyShellExportCommand) {
+    nextMenuData.submenus.network.push(
+      { type: 'separator' },
+      { type: 'action', label: labels.copyShellExportCommand || 'Copy Shell Export Command', action: 'copy-shell-export', rightText: '⌘ C', iconKey: 'copyShellExport' },
+    );
+  }
   trayMenuData = nextMenuData;
   trayMenuLastBuiltAt = Date.now();
   guiMainLog('tray', 'build completed', {
@@ -7981,6 +8053,8 @@ app.whenReady().then(() => {
     let result;
     if (cmd === 'configs') {
       result = listConfigFilesFromFs();
+    } else if (cmd === 'kernels') {
+      result = listKernelFilesFromFs();
     } else if (cmd === 'tun') {
       result = await applyTunCommandUnified(cmdArgs, options);
     } else {
@@ -8502,6 +8576,7 @@ app.whenReady().then(() => {
             foxboardEnabled: true,
             kernelManagerEnabled: true,
             directoryLocationsEnabled: true,
+            copyShellExportCommandEnabled: true,
           },
           kernel: {},
           device: {
@@ -8601,12 +8676,14 @@ app.whenReady().then(() => {
       ensureTrayFlag('foxboardEnabled');
       ensureTrayFlag('kernelManagerEnabled');
       ensureTrayFlag('directoryLocationsEnabled');
+      ensureTrayFlag('copyShellExportCommandEnabled');
       ensureTrayFlag('trayMenuChartEnabled');
       ensureTrayFlag('trayMenuProviderTrafficEnabled');
       ensureTrayFlag('trayMenuTrackersEnabled');
       ensureTrayFlag('trayMenuFoxboardEnabled');
       ensureTrayFlag('trayMenuKernelManagerEnabled');
       ensureTrayFlag('trayMenuDirectoryLocationsEnabled');
+      ensureTrayFlag('trayMenuCopyShellExportCommandEnabled');
       [
         'chartEnabled',
         'providerTrafficEnabled',
@@ -8614,12 +8691,14 @@ app.whenReady().then(() => {
         'foxboardEnabled',
         'kernelManagerEnabled',
         'directoryLocationsEnabled',
+        'copyShellExportCommandEnabled',
         'trayMenuChartEnabled',
         'trayMenuProviderTrafficEnabled',
         'trayMenuTrackersEnabled',
         'trayMenuFoxboardEnabled',
         'trayMenuKernelManagerEnabled',
         'trayMenuDirectoryLocationsEnabled',
+        'trayMenuCopyShellExportCommandEnabled',
       ].forEach((key) => {
         if (Object.prototype.hasOwnProperty.call(parsed, key)) {
           delete parsed[key];
@@ -8776,8 +8855,10 @@ app.whenReady().then(() => {
       if (canApplySizeNow && Date.now() > Number(suppressMainWindowSizeApplyUntil || 0)) {
         mainWindow.setSize(normalizedForUi.windowWidth, normalizedForUi.windowHeight);
       }
+      trayMenuData = null;
+      trayMenuLastBuiltAt = 0;
       refreshTrayMenuLabelsOnly();
-      createTrayMenu().catch(() => {});
+      await createTrayMenu();
       emitSettingsUpdated(normalizedForUi);
       return { ok: true };
     } catch (err) {

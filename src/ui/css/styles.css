@@ -1635,6 +1635,17 @@ body[data-page="help"] .help-stack .card {
   height: 18px;
 }
 
+body[data-page="config"] .control-card .control-actions .icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+}
+
+body[data-page="config"] .control-card .control-actions .icon-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
 .outbound-icon {
   --card-icon-mask: var(--icon-outbound);
   --card-icon-fill: var(--icon-fill-dashboard);
@@ -5610,7 +5621,7 @@ body[data-page="foxboard"] #dashboardLocalPanel {
 }
 
 .dashboard-detail-item strong[data-copy-value] {
-  cursor: copy;
+  cursor: default;
   text-decoration: underline;
   text-decoration-color: rgba(255, 255, 255, 0.22);
   text-underline-offset: 2px;

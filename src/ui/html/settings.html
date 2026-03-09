@@ -213,6 +213,23 @@
                     <span class="toggle-pill"></span>
                   </label>
                 </div>
+                <div class="menu-item-row">
+                  <div class="menu-item-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                      <path d="M9 7.5A2.5 2.5 0 0 1 11.5 5h7A2.5 2.5 0 0 1 21 7.5v7a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 9 14.5v-7Z" fill="none" stroke="currentColor" stroke-width="1.5"></path>
+                      <path d="M15 9.5h-3.5A2.5 2.5 0 0 0 9 12v3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+                      <path d="M5 14.5A2.5 2.5 0 0 1 7.5 12H11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+                    </svg>
+                  </div>
+                  <div class="menu-item-body">
+                    <div class="menu-item-title">Copy Shell Export Command</div>
+                    <div class="menu-item-desc">Show Copy Shell Export Command in the Network submenu.</div>
+                  </div>
+                  <label class="toggle menu-item-toggle">
+                    <input id="settingsTrayMenuCopyShellExport" type="checkbox" />
+                    <span class="toggle-pill"></span>
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -224,8 +241,11 @@
                     class="icon-btn ghost kernel-header-icon-btn"
                     id="proxyConfigReloadCoreBtn"
                     type="button"
-                    aria-label="Reload Core"
-                    title="Reload Core">
+                    data-tip-key="settings.proxyReloadCore"
+                    data-tip-fallback="Reload Core"
+                    data-position="bottom"
+                    data-native-title="false"
+                    aria-label="Reload Core">
                     <svg viewBox="0 0 24 24" role="presentation" focusable="false">
                       <path d="M12 4a8 8 0 1 0 7.2 4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
                       <path d="M19 4v5h-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
@@ -235,8 +255,11 @@
                     class="icon-btn ghost kernel-header-icon-btn"
                     id="proxyConfigReloadConfigBtn"
                     type="button"
-                    aria-label="Reload Config"
-                    title="Reload Config">
+                    data-tip-key="settings.proxyReloadConfig"
+                    data-tip-fallback="Reload Config"
+                    data-position="bottom"
+                    data-native-title="false"
+                    aria-label="Reload Config">
                     <svg viewBox="0 0 24 24" role="presentation" focusable="false">
                       <path d="M6 4h8l4 4v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
                       <path d="M14 4v4h4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>

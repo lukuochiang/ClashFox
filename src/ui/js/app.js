@@ -98,110 +98,23 @@ let tunToggle = document.getElementById('tunToggle');
 let tunStackSelect = document.getElementById('tunStackSelect');
 let tunSynced = false;
 
-async function fetchTunFromController() {
-  try {
-    const controller = (state.fileSettings && state.fileSettings.externalController)
-      || (state.settings && state.settings.externalController)
-      || '127.0.0.1:9090';
-    const secret = (state.fileSettings && state.fileSettings.secret)
-      || (state.settings && state.settings.secret)
-      || 'clashfox';
-    const url = controller.match(/^https?:\/\//) ? controller : `http://${controller}`;
-    const resp = await fetch(`${url.replace(/\/+$/, '')}/configs`, {
-      headers: secret ? { Authorization: `Bearer ${secret}` } : {},
-    });
-    if (!resp.ok) return null;
-    const json = await resp.json();
-    if (!json || !Object.prototype.hasOwnProperty.call(json, 'tun')) return null;
-    const tun = json.tun;
-    let enabled;
-    let stack;
-    if (typeof tun === 'boolean') {
-      enabled = tun;
-    } else if (tun && typeof tun === 'object') {
-      if (typeof tun.enable === 'boolean') {
-        enabled = tun.enable;
-      } else if (typeof tun.enabled === 'boolean') {
-        enabled = tun.enabled;
-      }
-      if (typeof tun.stack === 'string' && tun.stack.trim()) {
-        stack = tun.stack.trim();
-      }
-    }
-    return {
-      enabled,
-      stack,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function resolveControllerAccess() {
-  const controller = (state.fileSettings && state.fileSettings.externalController)
-    || (state.settings && state.settings.externalController)
-    || '127.0.0.1:9090';
-  const secret = (state.fileSettings && state.fileSettings.secret)
-    || (state.settings && state.settings.secret)
-    || 'clashfox';
-  const baseUrl = controller.match(/^https?:\/\//) ? controller : `http://${controller}`;
+function getMihomoApiSource() {
   return {
-    baseUrl: String(baseUrl || '').replace(/\/+$/, ''),
-    secret: String(secret || '').trim(),
+    externalController: (state.fileSettings && state.fileSettings.externalController)
+      || (state.settings && state.settings.externalController)
+      || '127.0.0.1:9090',
+    secret: (state.fileSettings && state.fileSettings.secret)
+      || (state.settings && state.settings.secret)
+      || 'clashfox',
   };
 }
 
+async function fetchTunFromController() {
+  return fetchTunConfigFromController(getMihomoApiSource());
+}
+
 async function updateTunViaController(partialTun = {}) {
-  try {
-    const { baseUrl, secret } = resolveControllerAccess();
-    if (!baseUrl) {
-      return { ok: false, error: 'controller_missing' };
-    }
-    const headers = { 'Content-Type': 'application/json' };
-    if (secret) {
-      headers.Authorization = `Bearer ${secret}`;
-    }
-
-    const tunBody = {};
-    if (Object.prototype.hasOwnProperty.call(partialTun, 'enable')) {
-      tunBody.enable = Boolean(partialTun.enable);
-    }
-    if (Object.prototype.hasOwnProperty.call(partialTun, 'stack') && partialTun.stack) {
-      tunBody.stack = String(partialTun.stack);
-    }
-    if (Object.keys(tunBody).length === 0) {
-      return { ok: false, error: 'invalid_tun' };
-    }
-
-    const candidates = [
-      { method: 'PATCH', payload: { tun: tunBody } },
-      { method: 'PUT', payload: { tun: tunBody } },
-    ];
-    if (Object.prototype.hasOwnProperty.call(tunBody, 'enable')) {
-      const enabledBody = { ...tunBody };
-      enabledBody.enabled = enabledBody.enable;
-      delete enabledBody.enable;
-      candidates.push({ method: 'PATCH', payload: { tun: enabledBody } });
-      candidates.push({ method: 'PUT', payload: { tun: enabledBody } });
-    }
-
-    let lastError = { ok: false, error: 'request_failed' };
-    for (const candidate of candidates) {
-      const resp = await fetch(`${baseUrl}/configs`, {
-        method: candidate.method,
-        headers,
-        body: JSON.stringify(candidate.payload),
-      });
-      if (resp.ok) {
-        return { ok: true };
-      }
-      const details = (await resp.text().catch(() => '')) || `http_status=${resp.status}`;
-      lastError = { ok: false, error: 'request_failed', details };
-    }
-    return lastError;
-  } catch (error) {
-    return { ok: false, error: 'request_failed', details: String(error && error.message ? error.message : error) };
-  }
+  return updateTunConfigViaController(partialTun, getMihomoApiSource());
 }
 let quickHintNodes = [];
 
@@ -360,6 +273,7 @@ let settingsTrayMenuTrackers = document.getElementById('settingsTrayMenuTrackers
 let settingsTrayMenuFoxboard = document.getElementById('settingsTrayMenuFoxboard');
 let settingsTrayMenuKernelManager = document.getElementById('settingsTrayMenuKernelManager');
 let settingsTrayMenuDirectoryLocations = document.getElementById('settingsTrayMenuDirectoryLocations');
+let settingsTrayMenuCopyShellExport = document.getElementById('settingsTrayMenuCopyShellExport');
 let settingsProxyMixedPort = document.getElementById('settingsProxyMixedPort');
 let settingsProxyPort = document.getElementById('settingsProxyPort');
 let settingsProxySocksPort = document.getElementById('settingsProxySocksPort');
@@ -430,6 +344,7 @@ const DEFAULT_SETTINGS = {
   foxboardEnabled: true,
   kernelManagerEnabled: true,
   directoryLocationsEnabled: true,
+  copyShellExportCommandEnabled: true,
   trayMenu: {
     chartEnabled: true,
     providerTrafficEnabled: true,
@@ -437,6 +352,7 @@ const DEFAULT_SETTINGS = {
     foxboardEnabled: true,
     kernelManagerEnabled: true,
     directoryLocationsEnabled: true,
+    copyShellExportCommandEnabled: true,
   },
   windowWidth: MAIN_WINDOW_DEFAULT_WIDTH,
   windowHeight: MAIN_WINDOW_DEFAULT_HEIGHT,
@@ -955,7 +871,8 @@ function applyI18n() {
   });
   document.querySelectorAll('[data-tip-key]').forEach((el) => {
     const key = el.dataset.tipKey || '';
-    const tip = t(key) || '';
+    const fallback = String(el.dataset.tipFallback || '').trim();
+    const tip = t(key) || fallback;
     el.dataset.tip = tip;
     if (el.dataset.nativeTitle === 'false') {
       el.removeAttribute('title');
@@ -1458,6 +1375,7 @@ function normalizeSettingsForUi(settings) {
   normalized.foxboardEnabled = readTrayMenuBool('foxboardEnabled', readTrayMenuBool('trayMenuFoxboardEnabled', true));
   normalized.kernelManagerEnabled = readTrayMenuBool('kernelManagerEnabled', readTrayMenuBool('trayMenuKernelManagerEnabled', true));
   normalized.directoryLocationsEnabled = readTrayMenuBool('directoryLocationsEnabled', readTrayMenuBool('trayMenuDirectoryLocationsEnabled', true));
+  normalized.copyShellExportCommandEnabled = readTrayMenuBool('copyShellExportCommandEnabled', readTrayMenuBool('trayMenuCopyShellExportCommandEnabled', true));
   normalized.windowWidth = readAppearanceNum('windowWidth', MAIN_WINDOW_DEFAULT_WIDTH);
   normalized.windowHeight = readAppearanceNum('windowHeight', MAIN_WINDOW_DEFAULT_HEIGHT);
   normalized.mainWindowClosed = readAppearanceBool('mainWindowClosed', false);
@@ -1491,6 +1409,7 @@ function normalizeSettingsForUi(settings) {
     foxboardEnabled: normalized.foxboardEnabled,
     kernelManagerEnabled: normalized.kernelManagerEnabled,
     directoryLocationsEnabled: normalized.directoryLocationsEnabled,
+    copyShellExportCommandEnabled: normalized.copyShellExportCommandEnabled,
   };
 
   const panelManager = normalized.panelManager && typeof normalized.panelManager === 'object'
@@ -1688,6 +1607,15 @@ function mapSettingsForFile(settings) {
           : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuDirectoryLocationsEnabled')
             ? Boolean(existingTrayMenu.trayMenuDirectoryLocationsEnabled)
             : Boolean(existingAppearance.directoryLocationsEnabled ?? existingAppearance.trayMenuDirectoryLocationsEnabled)))),
+    copyShellExportCommandEnabled: Object.prototype.hasOwnProperty.call(mapped, 'copyShellExportCommandEnabled')
+      ? Boolean(mapped.copyShellExportCommandEnabled)
+      : (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuCopyShellExportCommandEnabled')
+        ? Boolean(mapped.trayMenuCopyShellExportCommandEnabled)
+        : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'copyShellExportCommandEnabled')
+          ? Boolean(existingTrayMenu.copyShellExportCommandEnabled)
+          : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuCopyShellExportCommandEnabled')
+            ? Boolean(existingTrayMenu.trayMenuCopyShellExportCommandEnabled)
+            : Boolean(existingAppearance.copyShellExportCommandEnabled ?? existingAppearance.trayMenuCopyShellExportCommandEnabled)))),
   };
   const existingPanelManager = mapped.panelManager && typeof mapped.panelManager === 'object'
     ? mapped.panelManager
@@ -1840,6 +1768,12 @@ function mapSettingsForFile(settings) {
   if (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuDirectoryLocationsEnabled')) {
     delete mapped.trayMenuDirectoryLocationsEnabled;
   }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'copyShellExportCommandEnabled')) {
+    delete mapped.copyShellExportCommandEnabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuCopyShellExportCommandEnabled')) {
+    delete mapped.trayMenuCopyShellExportCommandEnabled;
+  }
   if (Object.prototype.hasOwnProperty.call(mapped, 'windowWidth')) {
     delete mapped.windowWidth;
   }
@@ -1988,12 +1922,14 @@ function saveSettings(patch) {
     'trayMenuFoxboardEnabled',
     'trayMenuKernelManagerEnabled',
     'trayMenuDirectoryLocationsEnabled',
+    'trayMenuCopyShellExportCommandEnabled',
     'chartEnabled',
     'providerTrafficEnabled',
     'trackersEnabled',
     'foxboardEnabled',
     'kernelManagerEnabled',
     'directoryLocationsEnabled',
+    'copyShellExportCommandEnabled',
   ];
   trayMenuKeys.forEach((key) => {
     if (Object.prototype.hasOwnProperty.call(nextPatch, key)) {
@@ -2364,6 +2300,9 @@ function applySettings(settings) {
   }
   if (settingsTrayMenuDirectoryLocations) {
     settingsTrayMenuDirectoryLocations.checked = state.settings.directoryLocationsEnabled !== false;
+  }
+  if (settingsTrayMenuCopyShellExport) {
+    settingsTrayMenuCopyShellExport.checked = state.settings.copyShellExportCommandEnabled !== false;
   }
   if (settingsProxyMixedPort) {
     settingsProxyMixedPort.value = Number.parseInt(String(state.settings.mixedPort ?? 7893), 10) || 7893;
@@ -2780,15 +2719,12 @@ async function maybeNotifyHelperAuthFallback(command = '') {
   if (!cmd || state.helperAuthFallbackHintShown) {
     return;
   }
-  if (!window.clashfox || typeof window.clashfox.getHelperStatus !== 'function') {
-    return;
-  }
   const privileged = new Set(['install', 'start', 'stop', 'restart', 'delete-backups']);
   if (!privileged.has(cmd)) {
     return;
   }
   try {
-    const response = await window.clashfox.getHelperStatus();
+    const response = await getHelperStatus();
     const running = Boolean(response && response.ok && response.data && response.data.running);
     if (!running) {
       state.helperAuthFallbackHintShown = true;
@@ -4603,13 +4539,10 @@ async function loadProviderSubscriptionOverview() {
   if (state.providerSubscriptionLoading) {
     return;
   }
-  if (!window.clashfox || typeof window.clashfox.providerSubscriptionOverview !== 'function') {
-    return;
-  }
   state.providerSubscriptionLoading = true;
   guiLog('provider-traffic', 'load started');
   try {
-    const response = await window.clashfox.providerSubscriptionOverview();
+    const response = await fetchProviderSubscriptionOverview();
     if (!response || !response.ok || !response.data) {
       guiLog('provider-traffic', 'load failed', {
         error: response && response.error ? response.error : 'provider_subscription_overview_failed',
@@ -4651,24 +4584,10 @@ async function loadRulesOverviewCard() {
   if (state.rulesOverviewLoading) {
     return;
   }
-  if (!window.clashfox) {
-    return;
-  }
   state.rulesOverviewLoading = true;
   guiLog('rules-overview', 'load started');
   try {
-    const tasks = [];
-    if (typeof window.clashfox.rulesOverview === 'function') {
-      tasks.push(window.clashfox.rulesOverview());
-    } else {
-      tasks.push(Promise.resolve({ ok: false }));
-    }
-    if (typeof window.clashfox.ruleProvidersOverview === 'function') {
-      tasks.push(window.clashfox.ruleProvidersOverview());
-    } else {
-      tasks.push(Promise.resolve({ ok: false }));
-    }
-    const [rulesResp, providerResp] = await Promise.all(tasks);
+    const { rules: rulesResp, providers: providerResp } = await fetchRulesOverviewBundle();
     const hasRules = Boolean(rulesResp && rulesResp.ok && rulesResp.data);
     const hasProviders = Boolean(providerResp && providerResp.ok && providerResp.data);
     if (!hasRules && !hasProviders) {
@@ -5897,6 +5816,7 @@ function refreshPageRefs() {
   settingsTrayMenuFoxboard = document.getElementById('settingsTrayMenuFoxboard');
   settingsTrayMenuKernelManager = document.getElementById('settingsTrayMenuKernelManager');
   settingsTrayMenuDirectoryLocations = document.getElementById('settingsTrayMenuDirectoryLocations');
+  settingsTrayMenuCopyShellExport = document.getElementById('settingsTrayMenuCopyShellExport');
   settingsProxyMixedPort = document.getElementById('settingsProxyMixedPort');
   settingsProxyPort = document.getElementById('settingsProxyPort');
   settingsProxySocksPort = document.getElementById('settingsProxySocksPort');
@@ -6338,7 +6258,7 @@ if (noticePopClose && noticePopClose.dataset.bound !== 'true') {
 }
 if (document.body && document.body.dataset.proxyConfigActionBound !== 'true') {
   document.body.dataset.proxyConfigActionBound = 'true';
-  document.addEventListener('click', (event) => {
+  document.addEventListener('click', async (event) => {
     const button = event.target && event.target.closest
       ? event.target.closest('#proxyConfigReloadCoreBtn, #proxyConfigReloadConfigBtn')
       : null;
@@ -6347,7 +6267,37 @@ if (document.body && document.body.dataset.proxyConfigActionBound !== 'true') {
     }
     const isReloadCore = button.id === 'proxyConfigReloadCoreBtn';
     guiLog('proxy-config', isReloadCore ? 'reload core requested' : 'reload config requested');
-    showToast(ti('labels.notImplementedYet', 'Not implemented yet'), 'info');
+    button.disabled = true;
+    try {
+      const response = isReloadCore
+        ? await reloadMihomoCore(getMihomoApiSource())
+        : await reloadMihomoConfig(getMihomoApiSource());
+      if (!response || !response.ok) {
+        const detail = response && (response.details || response.error)
+          ? `: ${String(response.details || response.error)}`
+          : '';
+        showToast(
+          `${isReloadCore
+            ? ti('settings.proxyReloadCoreFailed', 'Reload core failed')
+            : ti('settings.proxyReloadConfigFailed', 'Reload config failed')}${detail}`,
+          'error',
+        );
+        return;
+      }
+      showToast(
+        isReloadCore
+          ? ti('settings.proxyReloadCoreSuccess', 'Core reloaded')
+          : ti('settings.proxyReloadConfigSuccess', 'Config reloaded'),
+        'info',
+      );
+      loadStatus();
+      loadTunStatus(false);
+      if (currentPage === 'overview') {
+        loadOverviewLite();
+      }
+    } finally {
+      button.disabled = false;
+    }
   });
 }
 const externalLinks = Array.from(document.querySelectorAll('[data-open-external="true"]'));
@@ -6519,6 +6469,13 @@ if (settingsTrayMenuDirectoryLocations) {
   });
 }
 
+if (settingsTrayMenuCopyShellExport) {
+  settingsTrayMenuCopyShellExport.addEventListener('change', (event) => {
+    const enabled = Boolean(event.target.checked);
+    saveSettings({ copyShellExportCommandEnabled: enabled });
+  });
+}
+
 const normalizeProxyPortSetting = (input, fallback) => {
   const parsed = Number.parseInt(String(input ?? ''), 10);
   if (!Number.isFinite(parsed) || parsed < 1 || parsed > 65535) {
@@ -6576,11 +6533,11 @@ const getRevealPath = (inputEl) => {
 };
 
 async function refreshHelperInstallPath() {
-  if (!helperInstallPath || !window.clashfox || typeof window.clashfox.getHelperInstallPath !== 'function') {
+  if (!helperInstallPath) {
     return;
   }
   guiLog('helper-panel', 'refresh install path started');
-  const response = await window.clashfox.getHelperInstallPath();
+  const response = await getHelperInstallPath();
   if (response && response.ok) {
     helperInstallPath.textContent = response.path || '-';
     helperInstallPath.dataset.exists = response.exists ? 'true' : 'false';
@@ -6597,7 +6554,7 @@ async function refreshHelperInstallPath() {
 
 function refreshHelperLogPath() {
   if (helperLogsPath) {
-    helperLogsPath.textContent = '/var/log/clashfox-helper.log';
+    helperLogsPath.textContent = DEFAULT_HELPER_LOG_PATH;
   }
 }
 
@@ -6659,11 +6616,8 @@ function getCachedHelperStatus() {
 }
 
 async function hydrateHelperStatusFromFile() {
-  if (!window.clashfox || typeof window.clashfox.readSettings !== 'function') {
-    return;
-  }
   try {
-    const response = await window.clashfox.readSettings();
+    const response = await readHelperSettings();
     if (!response || !response.ok || !response.data || typeof response.data !== 'object') {
       return;
     }
@@ -6695,7 +6649,7 @@ function applyHelperStatusSnapshot(snapshot) {
       helperVersionText.textContent = `Version: ${version || '-'}`;
     }
   }
-  const logPath = snapshot.logPath || '/var/log/clashfox-helper.log';
+  const logPath = snapshot.logPath || DEFAULT_HELPER_LOG_PATH;
   if (helperLogsPath) {
     helperLogsPath.textContent = logPath;
   }
@@ -6721,40 +6675,25 @@ async function refreshHelperStatus(force = false) {
   }
 
   try {
-    if (window.clashfox && typeof window.clashfox.getHelperStatus === 'function') {
-      const response = await window.clashfox.getHelperStatus();
-      if (response && response.ok && response.data) {
-        const snapshot = {
-          state: String(response.data.state || 'unknown'),
-          installed: Boolean(response.data.installed),
-          running: Boolean(response.data.running),
-          binaryExists: Boolean(response.data.binaryExists),
-          plistExists: Boolean(response.data.plistExists),
-          launchdLoaded: Boolean(response.data.launchdLoaded),
-          socketExists: Boolean(response.data.socketExists),
-          socketPingOk: Boolean(response.data.socketPingOk),
-          httpPingOk: Boolean(response.data.httpPingOk),
-          helperVersion: String(response.data.helperVersion || ''),
-          helperTargetVersion: String(response.data.helperTargetVersion || ''),
-          helperUpdateAvailable: Boolean(response.data.helperUpdateAvailable),
-          logPath: String(response.data.logPath || '/var/log/clashfox-helper.log'),
-          updatedAt: new Date().toISOString(),
-        };
-        if (state.settings) {
-          state.settings.helperStatus = snapshot;
-        }
-        if (state.fileSettings) {
-          state.fileSettings.helperStatus = snapshot;
-        }
-        applyHelperStatusSnapshot(snapshot);
-        guiLog('helper-panel', 'refresh status completed', {
-          state: snapshot.state,
-          installed: snapshot.installed,
-          running: snapshot.running,
-          updateAvailable: snapshot.helperUpdateAvailable,
-        });
-        return;
+    const response = await getHelperStatus();
+    if (response && response.ok && response.data) {
+      const snapshot = buildHelperStatusSnapshot(response.data, {
+        defaultLogPath: DEFAULT_HELPER_LOG_PATH,
+      });
+      if (state.settings) {
+        state.settings.helperStatus = snapshot;
       }
+      if (state.fileSettings) {
+        state.fileSettings.helperStatus = snapshot;
+      }
+      applyHelperStatusSnapshot(snapshot);
+      guiLog('helper-panel', 'refresh status completed', {
+        state: snapshot.state,
+        installed: snapshot.installed,
+        running: snapshot.running,
+        updateAvailable: snapshot.helperUpdateAvailable,
+      });
+      return;
     }
   } catch (err) {
     guiLog('helper-panel', 'refresh status threw', {
@@ -6787,16 +6726,8 @@ async function repairHelperAndRetryTun() {
     guiLog('helper-panel', 'repair helper cancelled');
     return false;
   }
-  if (!window.clashfox) {
-    showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
-    return false;
-  }
-  let response = null;
-  if (typeof window.clashfox.doctorHelper === 'function') {
-    response = await window.clashfox.doctorHelper({ repair: true });
-  } else if (typeof window.clashfox.installHelper === 'function') {
-    response = await window.clashfox.installHelper();
-  } else {
+  const response = await repairHelper();
+  if (response && response.error === 'bridge_missing') {
     showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
     return false;
   }
@@ -6851,19 +6782,15 @@ if (helperInstallBtn) {
     helperInstallBtn.addEventListener('click', async () => {
       const isUninstall = helperPrimaryAction === 'uninstall';
       const isUpdate = helperPrimaryAction === 'update';
-      if (!window.clashfox) {
-        showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
-        return;
-      }
       helperInstallBtn.disabled = true;
-      let response = null;
-      const actionFn = isUninstall ? 'uninstallHelper' : 'installHelper';
-      if (typeof window.clashfox[actionFn] !== 'function') {
+      const response = isUninstall
+        ? await uninstallHelper()
+        : await installHelper();
+      if (response && response.error === 'bridge_missing') {
         helperInstallBtn.disabled = false;
         showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
         return;
       }
-      response = await window.clashfox[actionFn]();
       helperInstallBtn.disabled = false;
       if (response && response.ok) {
         showToast(
@@ -6908,17 +6835,9 @@ if (helperRepairBtn) {
   if (helperRepairBtn.dataset.bound !== 'true') {
     helperRepairBtn.dataset.bound = 'true';
     helperRepairBtn.addEventListener('click', async () => {
-      if (!window.clashfox) {
-        showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
-        return;
-      }
       helperRepairBtn.disabled = true;
-      let response = null;
-      if (typeof window.clashfox.doctorHelper === 'function') {
-        response = await window.clashfox.doctorHelper({ repair: true });
-      } else if (typeof window.clashfox.installHelper === 'function') {
-        response = await window.clashfox.installHelper();
-      } else {
+      const response = await repairHelper();
+      if (response && response.error === 'bridge_missing') {
         helperRepairBtn.disabled = false;
         showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
         return;
@@ -6939,13 +6858,13 @@ if (helperRepairBtn) {
 
 if (helperInstallTerminalBtn) {
   helperInstallTerminalBtn.addEventListener('click', async () => {
-    if (!window.clashfox || typeof window.clashfox.runHelperInstallInTerminal !== 'function') {
+    helperInstallTerminalBtn.disabled = true;
+    const response = await runHelperInstallInTerminal();
+    helperInstallTerminalBtn.disabled = false;
+    if (response && response.error === 'bridge_missing') {
       showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
       return;
     }
-    helperInstallTerminalBtn.disabled = true;
-    const response = await window.clashfox.runHelperInstallInTerminal();
-    helperInstallTerminalBtn.disabled = false;
     if (response && response.ok) {
       showToast(ti('settings.helperInstallTerminalLaunched', 'Opened Terminal'), 'info');
       refreshHelperInstallPath();
@@ -6965,9 +6884,7 @@ if (helperInstallPathBtn) {
     if (!pathValue || pathValue === '-') {
       return;
     }
-    if (window.clashfox && typeof window.clashfox.revealInFinder === 'function') {
-      await window.clashfox.revealInFinder(pathValue);
-    }
+    await revealInFinder(pathValue);
   });
 }
 
@@ -6983,13 +6900,13 @@ if (helperCheckUpdateBtn) {
   if (helperCheckUpdateBtn.dataset.bound !== 'true') {
     helperCheckUpdateBtn.dataset.bound = 'true';
     helperCheckUpdateBtn.addEventListener('click', async () => {
-      if (!window.clashfox || typeof window.clashfox.checkHelperUpdates !== 'function') {
-        showToast(ti('settings.helperUpdateCheckFailed', 'Failed to check helper updates'), 'error');
-        return;
-      }
       helperCheckUpdateBtn.disabled = true;
       try {
-        const result = await window.clashfox.checkHelperUpdates({ force: true });
+        const result = await checkHelperUpdates({ force: true });
+        if (result && result.error === 'bridge_missing') {
+          showToast(ti('settings.helperUpdateCheckFailed', 'Failed to check helper updates'), 'error');
+          return;
+        }
         if (!result || !result.ok) {
           const detail = result && result.error ? `: ${String(result.error)}` : '';
           showToast(`${ti('settings.helperUpdateCheckFailed', 'Failed to check helper updates')}${detail}`, 'error');
@@ -7027,33 +6944,19 @@ if (helperLogsOpenBtn) {
   if (helperLogsOpenBtn.dataset.bound !== 'true') {
     helperLogsOpenBtn.dataset.bound = 'true';
     helperLogsOpenBtn.addEventListener('click', async () => {
-    try {
-      if (window.clashfox && typeof window.clashfox.openHelperLogs === 'function') {
-        const response = await window.clashfox.openHelperLogs();
+      try {
+        const response = await openHelperLogsWithFallback(DEFAULT_HELPER_LOG_PATH);
         if (!response || !response.ok) {
-          console.warn('[helper] open logs failed: openHelperLogs returned not ok');
+          console.warn('[helper] open logs failed');
         }
-        return;
-      }
-      if (window.clashfox && typeof window.clashfox.openPath === 'function') {
-        const response = await window.clashfox.openPath('/var/log/clashfox-helper.log');
-        if (!response || !response.ok) {
-          console.warn('[helper] open logs failed: openPath returned not ok');
-        }
-      }
-    } catch (err) {
-      console.warn('[helper] open logs failed:', err);
-      if (window.clashfox && typeof window.clashfox.openPath === 'function') {
+      } catch (err) {
+        console.warn('[helper] open logs failed:', err);
         try {
-          const fallback = await window.clashfox.openPath('/var/log/clashfox-helper.log');
-          if (fallback && fallback.ok) {
-            return;
-          }
+          await openPath(DEFAULT_HELPER_LOG_PATH);
         } catch {
           // ignore
         }
       }
-    }
     });
   }
 }
@@ -7062,13 +6965,11 @@ if (helperLogsRevealBtn) {
   if (helperLogsRevealBtn.dataset.bound !== 'true') {
     helperLogsRevealBtn.dataset.bound = 'true';
     helperLogsRevealBtn.addEventListener('click', async () => {
-    const logPath = helperLogsPath ? helperLogsPath.textContent.trim() : '';
-    if (!logPath || logPath === '-') {
-      return;
-    }
-    if (window.clashfox && typeof window.clashfox.revealInFinder === 'function') {
-      await window.clashfox.revealInFinder(logPath);
-    }
+      const logPath = helperLogsPath ? helperLogsPath.textContent.trim() : '';
+      if (!logPath || logPath === '-') {
+        return;
+      }
+      await revealInFinder(logPath);
     });
   }
 }
@@ -8501,5 +8402,28 @@ if (document.readyState === 'loading') {
 }
 
 // Common entry: load tray i18n first, then main i18n map
+import {
+  fetchProviderSubscriptionOverview,
+  fetchRulesOverviewBundle,
+  fetchTunConfigFromController,
+  reloadMihomoConfig,
+  reloadMihomoCore,
+  updateTunConfigViaController,
+} from './mihomo-api.js';
+import {
+  DEFAULT_HELPER_LOG_PATH,
+  buildHelperStatusSnapshot,
+  checkHelperUpdates,
+  getHelperInstallPath,
+  getHelperStatus,
+  installHelper,
+  openHelperLogsWithFallback,
+  openPath,
+  readHelperSettings,
+  repairHelper,
+  revealInFinder,
+  runHelperInstallInTerminal,
+  uninstallHelper,
+} from './helper-api.js';
 import '../locales/tray-i18n.js';
 import '../locales/i18n.js';
