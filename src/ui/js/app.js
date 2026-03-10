@@ -99,14 +99,7 @@ let tunStackSelect = document.getElementById('tunStackSelect');
 let tunSynced = false;
 
 function getMihomoApiSource() {
-  return {
-    externalController: (state.fileSettings && state.fileSettings.externalController)
-      || (state.settings && state.settings.externalController)
-      || '127.0.0.1:9090',
-    secret: (state.fileSettings && state.fileSettings.secret)
-      || (state.settings && state.settings.secret)
-      || 'clashfox',
-  };
+  return resolveMihomoApiSourceFromState(state);
 }
 
 async function fetchTunFromController() {
@@ -4322,13 +4315,7 @@ async function waitForKernelState(expectedRunning, timeoutMs = 12000, intervalMs
 async function applyTunSettingsAfterStart() {
   const enabled = Boolean(state.settings && state.settings.tun);
   const stack = normalizeTunStack(state.settings && state.settings.stack);
-  let response = await updateTunViaController({ enable: enabled, stack });
-  if (!response || !response.ok) {
-    const configPath = getCurrentConfigPath();
-    const args = configPath ? ['--config', configPath] : [];
-    args.push('--enable', enabled ? 'true' : 'false', '--stack', stack);
-    response = await runCommand('tun', args);
-  }
+  const response = await updateTunViaController({ enable: enabled, stack });
   if (!response || !response.ok) {
     return response || { ok: false, error: 'tun_update_failed' };
   }
@@ -4466,11 +4453,6 @@ function formatTunUpdateError(response, statusResponse, fallbackLabel) {
     return ti('labels.tunConflictHint', 'TUN conflict detected. Turn off TUN mode in other proxy apps, then try again.');
   }
   const mergedError = (response && response.error) || (statusResponse && statusResponse.error) || '';
-  const helperState = ((state.settings && state.settings.helperStatus) || (state.fileSettings && state.fileSettings.helperStatus) || {}).state || '';
-  const helperMissing = String(helperState || '').trim() === 'not_installed';
-  if (helperMissing && new Set(['unexpected_error', 'helper_unreachable', 'socket_missing']).has(String(mergedError || '').trim())) {
-    return ti('labels.helperNotInstalledHint', 'Privileged Helper is not installed. Please install it in Settings first.');
-  }
   if (mergedError === 'controller_missing') {
     return t('labels.controllerMissing');
   }
@@ -6485,35 +6467,96 @@ const normalizeProxyPortSetting = (input, fallback) => {
 };
 
 if (settingsProxyMixedPort) {
-  settingsProxyMixedPort.addEventListener('change', (event) => {
+  settingsProxyMixedPort.addEventListener('change', async (event) => {
     const fallback = Number.parseInt(String(state.settings.mixedPort ?? 7893), 10) || 7893;
     const next = normalizeProxyPortSetting(event.target.value, fallback);
+    const previous = fallback;
     event.target.value = next;
-    saveSettings({ mixedPort: next });
+    event.target.disabled = true;
+    try {
+      const response = await updateMihomoConfigViaController({ 'mixed-port': next }, getMihomoApiSource());
+      if (!response || !response.ok) {
+        event.target.value = previous;
+        const detail = response && (response.details || response.error)
+          ? `: ${String(response.details || response.error)}`
+          : '';
+        showToast(`${ti('settings.proxyMixedPortUpdateFailed', 'Mixed port update failed')}${detail}`, 'error');
+        return;
+      }
+      saveSettings({ mixedPort: next });
+    } finally {
+      event.target.disabled = false;
+    }
   });
 }
 
 if (settingsProxyPort) {
-  settingsProxyPort.addEventListener('change', (event) => {
+  settingsProxyPort.addEventListener('change', async (event) => {
     const fallback = Number.parseInt(String(state.settings.port ?? 7890), 10) || 7890;
     const next = normalizeProxyPortSetting(event.target.value, fallback);
+    const previous = fallback;
     event.target.value = next;
-    saveSettings({ port: next });
+    event.target.disabled = true;
+    try {
+      const response = await updateMihomoConfigViaController({ port: next }, getMihomoApiSource());
+      if (!response || !response.ok) {
+        event.target.value = previous;
+        const detail = response && (response.details || response.error)
+          ? `: ${String(response.details || response.error)}`
+          : '';
+        showToast(`${ti('settings.proxyPortUpdateFailed', 'Port update failed')}${detail}`, 'error');
+        return;
+      }
+      saveSettings({ port: next });
+    } finally {
+      event.target.disabled = false;
+    }
   });
 }
 
 if (settingsProxySocksPort) {
-  settingsProxySocksPort.addEventListener('change', (event) => {
+  settingsProxySocksPort.addEventListener('change', async (event) => {
     const fallback = Number.parseInt(String(state.settings.socksPort ?? 7891), 10) || 7891;
     const next = normalizeProxyPortSetting(event.target.value, fallback);
+    const previous = fallback;
     event.target.value = next;
-    saveSettings({ socksPort: next });
+    event.target.disabled = true;
+    try {
+      const response = await updateMihomoConfigViaController({ 'socks-port': next }, getMihomoApiSource());
+      if (!response || !response.ok) {
+        event.target.value = previous;
+        const detail = response && (response.details || response.error)
+          ? `: ${String(response.details || response.error)}`
+          : '';
+        showToast(`${ti('settings.proxySocksPortUpdateFailed', 'Socks port update failed')}${detail}`, 'error');
+        return;
+      }
+      saveSettings({ socksPort: next });
+    } finally {
+      event.target.disabled = false;
+    }
   });
 }
 
 if (settingsProxyAllowLan) {
-  settingsProxyAllowLan.addEventListener('change', (event) => {
-    saveSettings({ allowLan: Boolean(event.target.checked) });
+  settingsProxyAllowLan.addEventListener('change', async (event) => {
+    const nextChecked = Boolean(event.target.checked);
+    const previousChecked = Boolean(state.settings.allowLan);
+    event.target.disabled = true;
+    try {
+      const response = await updateAllowLanViaController(nextChecked, getMihomoApiSource());
+      if (!response || !response.ok) {
+        event.target.checked = previousChecked;
+        const detail = response && (response.details || response.error)
+          ? `: ${String(response.details || response.error)}`
+          : '';
+        showToast(`${ti('settings.proxyAllowLanUpdateFailed', 'Allow LAN update failed')}${detail}`, 'error');
+        return;
+      }
+      saveSettings({ allowLan: nextChecked });
+    } finally {
+      event.target.disabled = false;
+    }
   });
 }
 
@@ -6713,41 +6756,6 @@ async function refreshHelperPanel(force = false) {
   guiLog('helper-panel', 'refresh panel completed');
 }
 window.__refreshHelperPanel = refreshHelperPanel;
-
-async function repairHelperAndRetryTun() {
-  guiLog('helper-panel', 'repair helper prompted');
-  const confirmed = await promptConfirm({
-    title: ti('settings.helperRepairTitle', 'Helper Unreachable'),
-    body: ti('settings.helperRepairBody', 'Privileged Helper is unreachable. Repair helper now and retry TUN?'),
-    confirmLabel: ti('settings.helperRepairConfirm', 'Repair and Retry'),
-    confirmTone: 'primary',
-  });
-  if (!confirmed) {
-    guiLog('helper-panel', 'repair helper cancelled');
-    return false;
-  }
-  const response = await repairHelper();
-  if (response && response.error === 'bridge_missing') {
-    showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
-    return false;
-  }
-  if (!response || !response.ok) {
-    guiLog('helper-panel', 'repair helper failed', {
-      error: response && (response.details || response.error)
-        ? String(response.details || response.error)
-        : 'helper_install_failed',
-    }, 'warn');
-    const detail = response && (response.details || response.error)
-      ? `: ${String(response.details || response.error)}`
-      : '';
-    showToast(`${ti('settings.helperInstallFailed', 'Helper install failed')}${detail}`, 'error');
-    return false;
-  }
-  guiLog('helper-panel', 'repair helper completed');
-  showToast(ti('settings.helperInstallSuccess', 'Helper installed'), 'info');
-  await invokeHelperPanelRefresh(true);
-  return true;
-}
 
 if (settingsConfigDirReveal) {
   settingsConfigDirReveal.addEventListener('click', async () => {
@@ -7561,7 +7569,7 @@ if (proxyModeSelect) {
       const previous = (state.settings && state.settings.proxy) || 'rule';
       guiLog('proxy-config', 'mode change requested', { value, previous });
       saveSettings({ proxy: value });
-      const response = await runCommand('mode', ['--mode', value, ...getControllerArgs()]);
+      const response = await updateModeViaController(value, getMihomoApiSource());
       if (response.ok) {
         guiLog('proxy-config', 'mode change completed', { value });
         showToast(t('labels.proxyModeUpdated'));
@@ -7573,9 +7581,10 @@ if (proxyModeSelect) {
       }, 'warn');
       setProxyModeValue(previous);
       saveSettings({ proxy: previous });
+      const details = response && response.details ? `: ${String(response.details)}` : '';
       const message = response.error === 'controller_missing'
         ? t('labels.controllerMissing')
-        : (response.error || ti('labels.modeUpdateFailed', 'Mode update failed'));
+        : `${ti('labels.modeUpdateFailed', 'Mode update failed')}${details}`;
       showToast(message, 'error');
     });
   });
@@ -7614,19 +7623,7 @@ if (tunToggle) {
       showToast(ti('labels.tunApplyOnStart', 'TUN setting saved, it will be applied on next start.'));
       return;
     }
-    const configPath = getCurrentConfigPath();
-    const args = configPath ? ['--config', configPath] : [];
-    args.push('--enable', enabled ? 'true' : 'false');
-    let response = await updateTunViaController({ enable: enabled });
-    if (!response || !response.ok) {
-      response = await runCommand('tun', args);
-    }
-    if (response && !response.ok && response.error === 'helper_unreachable') {
-      const repaired = await repairHelperAndRetryTun();
-      if (repaired) {
-        response = await runCommand('tun', args);
-      }
-    }
+    const response = await updateTunViaController({ enable: enabled });
     // /configs patch may return OK first, while runtime TUN can fail shortly after.
     // Wait a short window and validate final TUN state before showing success.
     const waitResult = await waitForTunState(enabled, 3000, 350);
@@ -7651,14 +7648,12 @@ if (tunToggle) {
           'TUN update failed. Turn off TUN mode in other proxy apps, then try again.',
         )
         : message;
-      const helperState = ((state.settings && state.settings.helperStatus) || (state.fileSettings && state.fileSettings.helperStatus) || {}).state || '';
-      const helperMissing = String(helperState || '').trim() === 'not_installed';
       guiLog('proxy-config', 'tun toggle failed', {
         enabled,
         actual,
         error: response && response.error ? response.error : 'tun_update_failed',
       }, 'warn');
-      showToast(finalMessage, helperMissing ? 'info' : 'error');
+      showToast(finalMessage, 'error');
       return;
     }
     saveSettings({ tun: actual });
@@ -7679,19 +7674,7 @@ if (tunStackSelect) {
       showToast(ti('labels.tunApplyOnStart', 'TUN setting saved, it will be applied on next start.'));
       return;
     }
-    const configPath = getCurrentConfigPath();
-    const args = configPath ? ['--config', configPath] : [];
-    args.push('--stack', value);
-    let response = await updateTunViaController({ stack: value });
-    if (!response || !response.ok) {
-      response = await runCommand('tun', args);
-    }
-    if (response && !response.ok && response.error === 'helper_unreachable') {
-      const repaired = await repairHelperAndRetryTun();
-      if (repaired) {
-        response = await runCommand('tun', args);
-      }
-    }
+    const response = await updateTunViaController({ stack: value });
     const statusResponse = await loadTunStatus(false);
     const actual = normalizeTunStack(tunStackSelect.value);
     const statusOk = statusResponse && statusResponse.ok && statusResponse.data;
@@ -7706,14 +7689,12 @@ if (tunStackSelect) {
           ? ti('labels.tunStatusFailed', 'TUN status unavailable')
           : ti('labels.tunStackUpdateFailed', 'TUN stack update failed'),
       );
-      const helperState = ((state.settings && state.settings.helperStatus) || (state.fileSettings && state.fileSettings.helperStatus) || {}).state || '';
-      const helperMissing = String(helperState || '').trim() === 'not_installed';
       guiLog('proxy-config', 'tun stack change failed', {
         value,
         actual,
         error: response && response.error ? response.error : 'tun_stack_update_failed',
       }, 'warn');
-      showToast(message, helperMissing ? 'info' : 'error');
+      showToast(message, 'error');
       return;
     }
     saveSettings({ stack: actual });
@@ -8408,6 +8389,10 @@ import {
   fetchTunConfigFromController,
   reloadMihomoConfig,
   reloadMihomoCore,
+  resolveMihomoApiSourceFromState,
+  updateAllowLanViaController,
+  updateModeViaController,
+  updateMihomoConfigViaController,
   updateTunConfigViaController,
 } from './mihomo-api.js';
 import {

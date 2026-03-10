@@ -86,6 +86,8 @@ const GUI_MAIN_NOISY_COMMANDS = new Set([
 const GUI_MAIN_SUPPRESSED_LOGS = new Set([
   'command:ipc command received',
   'command:ipc command result',
+  'bridge:command start',
+  'bridge:command completed',
   'tray:build started',
   'tray:build completed',
   'tray:build skipped, pending rerun',
@@ -127,8 +129,85 @@ function shouldThrottleGuiMainLog(scope, message, payload = null, level = 'log')
 }
 
 function guiMainLog(scope, message, payload = null, level = 'log') {
-  return;
+  if (!globalSettings.debugMode) {
+    return;
+  }
+  const scopeText = String(scope || '').trim();
+  const messageText = String(message || '').trim();
+  const suppressionKey = `${scopeText}:${messageText}`;
+  if (level === 'log' && GUI_MAIN_SUPPRESSED_LOGS.has(suppressionKey)) {
+    return;
+  }
+  if (shouldThrottleGuiMainLog(scopeText, messageText, payload, level)) {
+    return;
+  }
+  const method = level === 'error'
+    ? 'error'
+    : level === 'warn'
+      ? 'warn'
+      : 'log';
+  const prefix = `[gui-main:${scopeText}] ${messageText}`;
+  if (payload === null || payload === undefined) {
+    console[method](prefix);
+    return;
+  }
+  console[method](prefix, payload);
 }
+
+function truncateLogPayload(value, maxLength = 1200) {
+  const text = String(value === undefined || value === null ? '' : value);
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return `${text.slice(0, maxLength)}...[truncated ${text.length - maxLength} chars]`;
+}
+
+let helperRequestSeq = 0;
+
+function nextHelperRequestId() {
+  helperRequestSeq += 1;
+  return `helper-${Date.now()}-${helperRequestSeq}`;
+}
+
+function resolveHelperRequestKind(command = '', method = 'GET', path = '') {
+  const normalizedCommand = String(command || '').trim().toLowerCase();
+  const normalizedMethod = String(method || '').trim().toUpperCase();
+  const normalizedPath = String(path || '').trim();
+  if (normalizedCommand === 'status' && normalizedMethod === 'GET' && normalizedPath === '/v1/core/status') {
+    return 'auto';
+  }
+  if (normalizedCommand === 'ping' && normalizedMethod === 'GET' && normalizedPath === '/health') {
+    return 'auto';
+  }
+  return 'manual';
+}
+
+function shouldSuppressHelperRequestLog(command = '', method = 'GET', path = '', level = 'log', ok = true) {
+  if (level !== 'log') {
+    return false;
+  }
+  if (resolveHelperRequestKind(command, method, path) === 'auto' && ok) {
+    return true;
+  }
+  return false;
+}
+
+function resolveMihomoRequestKind(method = 'GET', url = '') {
+  const normalizedMethod = String(method || '').trim().toUpperCase();
+  const normalizedUrl = String(url || '').trim();
+  if (normalizedMethod === 'GET' && /\/configs(?:\?|$)/i.test(normalizedUrl)) {
+    return 'auto';
+  }
+  return 'manual';
+}
+
+function shouldSuppressMihomoRequestLog(method = 'GET', url = '', level = 'log', ok = true) {
+  if (level !== 'log') {
+    return false;
+  }
+  return resolveMihomoRequestKind(method, url) === 'auto' && ok;
+}
+
 let isQuitting = false;
 const CORE_STARTUP_ESTIMATE_MIN_MS = 900;
 const CORE_STARTUP_ESTIMATE_MAX_MS = 10000;
@@ -142,7 +221,6 @@ const PRIVILEGED_COMMANDS = new Set([
   'system-proxy-enable',
   'system-proxy-disable',
   'system-proxy-status',
-  'tun',
 ]);
 const HELPER_SOCKET_PATH = '/var/run/com.clashfox.helper.sock';
 const HELPER_APP_BUNDLE_DIR = '/Applications/ClashFox.app/Contents/Resources/helper';
@@ -3811,17 +3889,27 @@ async function runBridgeViaHelperApi(bridgeArgs = []) {
   };
 
   const respondFromHelper = async (pathname, method = 'GET', payload = null) => {
-    guiMainLog('helper', 'request start', {
-      command: commandType,
-      method,
-      path: pathname,
-    });
-    const response = await sendHelperRequest(pathname, method, payload);
-    if (!response) {
-      guiMainLog('helper', 'request failed', {
-        command: commandType,
+    const requestId = nextHelperRequestId();
+    const kind = resolveHelperRequestKind(commandType, method, pathname);
+    if (!shouldSuppressHelperRequestLog(commandType, method, pathname, 'log', true)) {
+      guiMainLog('helper-api', 'request', {
+        requestId,
+        kind,
         method,
         path: pathname,
+        command: commandType,
+        payload: truncateLogPayload(payload ? JSON.stringify(payload) : ''),
+      });
+    }
+    const response = await sendHelperRequest(pathname, method, payload);
+    if (!response) {
+      guiMainLog('helper-api', 'response', {
+        requestId,
+        kind,
+        method,
+        path: pathname,
+        command: commandType,
+        ok: false,
         error: 'helper_unreachable',
       }, 'warn');
       return { ok: false, error: 'helper_unreachable' };
@@ -3830,86 +3918,123 @@ async function runBridgeViaHelperApi(bridgeArgs = []) {
     const isHttpOk = statusCode >= 200 && statusCode < 300;
     const textBody = String(response.body || '').trim();
     if (!textBody) {
-      guiMainLog('helper', 'request completed', {
-        command: commandType,
-        method,
-        path: pathname,
-        statusCode,
-        ok: isHttpOk,
-      });
+      if (!shouldSuppressHelperRequestLog(commandType, method, pathname, 'log', isHttpOk)) {
+        guiMainLog('helper-api', 'response', {
+          requestId,
+          kind,
+          method,
+          path: pathname,
+          command: commandType,
+          statusCode,
+          ok: isHttpOk,
+          body: '',
+        });
+      }
       return isHttpOk ? { ok: true, data: {} } : { ok: false, error: `http_${statusCode || 0}` };
     }
     try {
       const parsed = parseBridgeOutput(textBody);
       if (!parsed || typeof parsed !== 'object') {
-        guiMainLog('helper', 'request completed', {
-          command: commandType,
-          method,
-          path: pathname,
-          statusCode,
-          ok: isHttpOk,
-          shape: typeof parsed,
-        });
+        if (!shouldSuppressHelperRequestLog(commandType, method, pathname, 'log', isHttpOk)) {
+          guiMainLog('helper-api', 'response', {
+            requestId,
+            kind,
+            method,
+            path: pathname,
+            command: commandType,
+            statusCode,
+            ok: isHttpOk,
+            shape: typeof parsed,
+            body: truncateLogPayload(textBody),
+          });
+        }
         return isHttpOk ? { ok: true, data: parsed } : { ok: false, error: 'helper_unreachable' };
       }
       if (parsed.ok === true) {
-        guiMainLog('helper', 'request completed', {
-          command: commandType,
-          method,
-          path: pathname,
-          statusCode,
-          ok: true,
-        });
+        if (!shouldSuppressHelperRequestLog(commandType, method, pathname, 'log', true)) {
+          guiMainLog('helper-api', 'response', {
+            requestId,
+            kind,
+            method,
+            path: pathname,
+            command: commandType,
+            statusCode,
+            ok: true,
+            body: truncateLogPayload(JSON.stringify(parsed)),
+          });
+        }
         return parsed;
       }
       if (parsed.ok === false || parsed.error) {
-        guiMainLog('helper', 'request failed', {
-          command: commandType,
+        guiMainLog('helper-api', 'response', {
+          requestId,
+          kind,
           method,
           path: pathname,
+          command: commandType,
           statusCode,
+          ok: false,
           error: parsed.error || 'helper_error',
+          body: truncateLogPayload(JSON.stringify(parsed)),
         }, 'warn');
         return parsed;
       }
       if (parsed.status === 'ok' || parsed.success === true) {
-        guiMainLog('helper', 'request completed', {
-          command: commandType,
-          method,
-          path: pathname,
-          statusCode,
-          ok: true,
-        });
+        if (!shouldSuppressHelperRequestLog(commandType, method, pathname, 'log', true)) {
+          guiMainLog('helper-api', 'response', {
+            requestId,
+            kind,
+            method,
+            path: pathname,
+            command: commandType,
+            statusCode,
+            ok: true,
+            body: truncateLogPayload(JSON.stringify(parsed)),
+          });
+        }
         return {
           ok: true,
           data: Object.prototype.hasOwnProperty.call(parsed, 'data') ? parsed.data : parsed,
         };
       }
       if (isHttpOk) {
-        guiMainLog('helper', 'request completed', {
-          command: commandType,
-          method,
-          path: pathname,
-          statusCode,
-          ok: true,
-        });
+        if (!shouldSuppressHelperRequestLog(commandType, method, pathname, 'log', true)) {
+          guiMainLog('helper-api', 'response', {
+            requestId,
+            kind,
+            method,
+            path: pathname,
+            command: commandType,
+            statusCode,
+            ok: true,
+            body: truncateLogPayload(JSON.stringify(parsed)),
+          });
+        }
         return { ok: true, data: parsed };
       }
-      guiMainLog('helper', 'request failed', {
-        command: commandType,
+      guiMainLog('helper-api', 'response', {
+        requestId,
+        kind,
         method,
         path: pathname,
+        command: commandType,
         statusCode,
+        ok: false,
         error: 'helper_unreachable',
+        body: truncateLogPayload(JSON.stringify(parsed)),
       }, 'warn');
       return parsed;
     } catch {
-      guiMainLog('helper', 'request parse failed', {
-        command: commandType,
+      guiMainLog('helper-api', 'response', {
+        requestId,
+        kind,
         method,
         path: pathname,
+        command: commandType,
         statusCode,
         ok: isHttpOk,
+        error: isHttpOk ? 'parse_warning' : 'parse_error',
+        body: truncateLogPayload(textBody),
       }, isHttpOk ? 'warn' : 'error');
       if (isHttpOk) {
         return { ok: true, data: textBody };
@@ -4015,8 +4140,6 @@ async function runBridgeViaHelperApi(bridgeArgs = []) {
           configPath: configFileName,
         });
       }
-      // Current helper API does not expose TUN endpoints.
-      // Keep TUN operations on the script path (gui_bridge.sh) only.
       case 'tun-status':
         return { ok: false, error: 'unsupported_command' };
       case 'tun':
@@ -4237,6 +4360,52 @@ async function checkHelperOnStartup() {
   );
 }
 
+function resolveBridgeResultSource(result) {
+  return result && result.data && result.data.source
+    ? String(result.data.source).trim()
+    : 'script';
+}
+
+async function syncBridgeResultToSettings(command, result) {
+  if (!(result && result.ok)) {
+    return;
+  }
+  const cmdLower = String(command || '').trim().toLowerCase();
+  if (cmdLower === 'status') {
+    const runningValue = result.data && Object.prototype.hasOwnProperty.call(result.data, 'running')
+      ? result.data.running
+      : null;
+    persistMihomoStatusToSettings(runningValue, 'status');
+    const versionValue = result.data && Object.prototype.hasOwnProperty.call(result.data, 'version')
+      ? result.data.version
+      : '';
+    persistKernelVersionToSettings(versionValue, 'status');
+    return;
+  }
+  if (cmdLower === 'overview') {
+    persistOverviewSystemToSettings(result.data || {}, 'overview');
+    return;
+  }
+  if (!['start', 'stop', 'restart', 'switch'].includes(cmdLower)) {
+    return;
+  }
+  const runningValue = result.data && Object.prototype.hasOwnProperty.call(result.data, 'running')
+    ? result.data.running
+    : normalizeMihomoRunningValue(null, cmdLower);
+  persistMihomoStatusToSettings(runningValue, cmdLower);
+  if (!['start', 'restart', 'switch'].includes(cmdLower)) {
+    return;
+  }
+  const versionValue = result.data && Object.prototype.hasOwnProperty.call(result.data, 'version')
+    ? result.data.version
+    : '';
+  if (normalizeKernelVersionValue(versionValue)) {
+    persistKernelVersionToSettings(versionValue, cmdLower);
+    return;
+  }
+  await persistKernelVersionFromStatus(cmdLower);
+}
+
 async function runBridgeWithAutoAuth(command, args = [], options = {}) {
   const cmd = String(command || '').trim();
   if (!cmd) {
@@ -4248,9 +4417,7 @@ async function runBridgeWithAutoAuth(command, args = [], options = {}) {
     args: cmdArgs,
   });
   let result = await runBridge([cmd, ...cmdArgs], options);
-  let source = result && result.data && result.data.source
-    ? String(result.data.source).trim()
-    : 'script';
+  let source = resolveBridgeResultSource(result);
   if (
     result
     && result.error === 'sudo_required'
@@ -4263,36 +4430,7 @@ async function runBridgeWithAutoAuth(command, args = [], options = {}) {
     result = await runBridgeWithSystemAuth([cmd, ...cmdArgs]);
     source = 'system-auth';
   }
-  if (result && result.ok) {
-    const cmdLower = cmd.toLowerCase();
-    if (cmdLower === 'status') {
-      const runningValue = result.data && Object.prototype.hasOwnProperty.call(result.data, 'running')
-        ? result.data.running
-        : null;
-      persistMihomoStatusToSettings(runningValue, 'status');
-      const versionValue = result.data && Object.prototype.hasOwnProperty.call(result.data, 'version')
-        ? result.data.version
-        : '';
-      persistKernelVersionToSettings(versionValue, 'status');
-    } else if (cmdLower === 'overview') {
-      persistOverviewSystemToSettings(result.data || {}, 'overview');
-    } else if (cmdLower === 'start' || cmdLower === 'stop' || cmdLower === 'restart' || cmdLower === 'switch') {
-      const runningValue = result.data && Object.prototype.hasOwnProperty.call(result.data, 'running')
-        ? result.data.running
-        : normalizeMihomoRunningValue(null, cmdLower);
-      persistMihomoStatusToSettings(runningValue, cmdLower);
-      if (cmdLower === 'start' || cmdLower === 'restart' || cmdLower === 'switch') {
-        const versionValue = result.data && Object.prototype.hasOwnProperty.call(result.data, 'version')
-          ? result.data.version
-          : '';
-        if (normalizeKernelVersionValue(versionValue)) {
-          persistKernelVersionToSettings(versionValue, cmdLower);
-        } else {
-          await persistKernelVersionFromStatus(cmdLower);
-        }
-      }
-    }
-  }
+  await syncBridgeResultToSettings(cmd, result);
   guiMainLog('bridge', 'command completed', {
     command: cmd,
     ok: Boolean(result && result.ok),
@@ -4512,95 +4650,6 @@ function resolveSystemProxyEnabledFromPayload(payload = null) {
   return null;
 }
 
-async function readTunEnabledSnapshot(configPath = '', controllerOverride = '', secretOverride = '') {
-  const statusArgs = ['tun-status'];
-  if (configPath) {
-    statusArgs.push('--config', configPath);
-  }
-  if (controllerOverride) {
-    statusArgs.push('--controller', controllerOverride);
-  }
-  if (secretOverride) {
-    statusArgs.push('--secret', secretOverride);
-  }
-  const statusResp = await runBridge(statusArgs);
-  if (!(statusResp && statusResp.ok && statusResp.data)) {
-    return { ok: false, enabled: null };
-  }
-  const enabledRaw = Object.prototype.hasOwnProperty.call(statusResp.data, 'enabled')
-    ? statusResp.data.enabled
-    : statusResp.data.enable;
-  return {
-    ok: true,
-    enabled: enabledRaw === true || enabledRaw === 'true' || enabledRaw === 1,
-  };
-}
-
-async function waitForTunEnabledState(
-  targetEnabled,
-  configPath = '',
-  timeoutMs = 3200,
-  intervalMs = 220,
-  controllerOverride = '',
-  secretOverride = '',
-) {
-  const expected = Boolean(targetEnabled);
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() <= deadline) {
-    const snapshot = await readTunEnabledSnapshot(configPath, controllerOverride, secretOverride);
-    if (snapshot.ok && snapshot.enabled === expected) {
-      return snapshot;
-    }
-    await sleep(intervalMs);
-  }
-  return readTunEnabledSnapshot(configPath, controllerOverride, secretOverride);
-}
-
-function readArgValueFromList(args = [], name = '') {
-  if (!Array.isArray(args) || !name) {
-    return '';
-  }
-  for (let index = 0; index < args.length; index += 1) {
-    if (args[index] !== name) {
-      continue;
-    }
-    const value = args[index + 1];
-    if (typeof value === 'string') {
-      return value.trim();
-    }
-    return '';
-  }
-  return '';
-}
-
-function parseEnableFlagValue(value = '') {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (!normalized) {
-    return null;
-  }
-  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
-    return true;
-  }
-  if (['0', 'false', 'no', 'off'].includes(normalized)) {
-    return false;
-  }
-  return null;
-}
-
-function buildTunPatchPayloadFromArgs(args = []) {
-  const payload = {};
-  const enableRaw = readArgValueFromList(args, '--enable');
-  const stackRaw = readArgValueFromList(args, '--stack');
-  const enable = parseEnableFlagValue(enableRaw);
-  if (enable !== null) {
-    payload.enable = enable;
-  }
-  if (stackRaw) {
-    payload.stack = String(stackRaw);
-  }
-  return payload;
-}
-
 function resolveControllerAccessFromSettings(controllerOverride = '', secretOverride = '') {
   const settings = readAppSettings();
   const controllerRaw = settings && Object.prototype.hasOwnProperty.call(settings, 'externalController')
@@ -4617,48 +4666,87 @@ function resolveControllerAccessFromSettings(controllerOverride = '', secretOver
   };
 }
 
-async function applyTunViaControllerMain(partialTun = {}, controllerOverride = '', secretOverride = '') {
+async function runControllerConfigRequestMain(source = {}, candidates = []) {
   try {
+    const normalizedSource = source && typeof source === 'object' ? source : {};
+    const controllerOverride = String(
+      normalizedSource.controller || normalizedSource.externalController || '',
+    ).trim();
+    const secretOverride = String(normalizedSource.secret || '').trim();
     const { baseUrl, secret } = resolveControllerAccessFromSettings(controllerOverride, secretOverride);
     if (!baseUrl) {
       return { ok: false, error: 'controller_missing' };
     }
-    const tunBody = {};
-    if (Object.prototype.hasOwnProperty.call(partialTun, 'enable')) {
-      tunBody.enable = Boolean(partialTun.enable);
-    }
-    if (Object.prototype.hasOwnProperty.call(partialTun, 'stack') && partialTun.stack) {
-      tunBody.stack = String(partialTun.stack);
-    }
-    if (!Object.keys(tunBody).length) {
-      return { ok: false, error: 'invalid_tun' };
-    }
-    const headers = { 'Content-Type': 'application/json' };
-    if (secret) {
-      headers.Authorization = `Bearer ${secret}`;
-    }
-    const candidates = [
-      { method: 'PATCH', payload: { tun: tunBody } },
-      { method: 'PUT', payload: { tun: tunBody } },
-    ];
-    if (Object.prototype.hasOwnProperty.call(tunBody, 'enable')) {
-      const enabledBody = { ...tunBody, enabled: tunBody.enable };
-      delete enabledBody.enable;
-      candidates.push({ method: 'PATCH', payload: { tun: enabledBody } });
-      candidates.push({ method: 'PUT', payload: { tun: enabledBody } });
-    }
     let lastError = { ok: false, error: 'request_failed' };
-    for (const candidate of candidates) {
-      const resp = await fetch(`${baseUrl}/configs`, {
-        method: candidate.method,
-        headers,
-        body: JSON.stringify(candidate.payload),
-      });
-      if (resp.ok) {
-        return { ok: true };
+    for (const candidate of Array.isArray(candidates) ? candidates : []) {
+      const headers = candidate && candidate.headers && typeof candidate.headers === 'object'
+        ? { ...candidate.headers }
+        : {};
+      if (secret) {
+        headers.Authorization = `Bearer ${secret}`;
       }
-      const details = (await resp.text().catch(() => '')) || `http_status=${resp.status}`;
-      lastError = { ok: false, error: 'request_failed', details };
+      const requestUrl = `${baseUrl}${candidate.path || '/configs'}`;
+      const requestId = `main-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const kind = resolveMihomoRequestKind(candidate.method || 'GET', requestUrl);
+      const logHeaders = { ...headers };
+      if (Object.prototype.hasOwnProperty.call(logHeaders, 'Authorization')) {
+        logHeaders.Authorization = '[redacted]';
+      }
+      if (!shouldSuppressMihomoRequestLog(candidate.method || 'GET', requestUrl, 'log', true)) {
+        guiMainLog('mihomo-api', 'request', {
+          requestId,
+          kind,
+          method: candidate.method || 'GET',
+          url: requestUrl,
+          headers: logHeaders,
+          body: truncateLogPayload(candidate.body === undefined ? '' : JSON.stringify(candidate.body)),
+        });
+      }
+      try {
+        const resp = await fetch(requestUrl, {
+          method: candidate.method || 'GET',
+          headers,
+          body: candidate.body === undefined ? undefined : JSON.stringify(candidate.body),
+        });
+        if (resp.ok) {
+          if (!shouldSuppressMihomoRequestLog(candidate.method || 'GET', requestUrl, 'log', true)) {
+            guiMainLog('mihomo-api', 'response', {
+              requestId,
+              kind,
+              method: candidate.method || 'GET',
+              url: requestUrl,
+              ok: true,
+              status: resp.status,
+            });
+          }
+          return { ok: true };
+        }
+        const details = (await resp.text().catch(() => '')) || `http_status=${resp.status}`;
+        guiMainLog('mihomo-api', 'response', {
+          requestId,
+          kind,
+          method: candidate.method || 'GET',
+          url: requestUrl,
+          ok: false,
+          status: resp.status,
+          details: truncateLogPayload(details),
+        }, 'warn');
+        lastError = { ok: false, error: 'request_failed', details };
+      } catch (error) {
+        guiMainLog('mihomo-api', 'response', {
+          requestId,
+          kind,
+          method: candidate.method || 'GET',
+          url: requestUrl,
+          ok: false,
+          error: truncateLogPayload(String((error && error.message) || error || 'request_failed')),
+        }, 'warn');
+        lastError = {
+          ok: false,
+          error: 'request_failed',
+          details: String((error && error.message) || error || 'request_failed'),
+        };
+      }
     }
     return lastError;
   } catch (error) {
@@ -4670,83 +4758,103 @@ async function applyTunViaControllerMain(partialTun = {}, controllerOverride = '
   }
 }
 
-async function applyTunCommandUnified(commandArgs = [], options = {}) {
-  const args = Array.isArray(commandArgs) ? commandArgs : [];
-  const enableRaw = readArgValueFromList(args, '--enable');
-  const hasEnableTarget = enableRaw !== '';
-  const targetEnabled = hasEnableTarget ? parseEnableFlagValue(enableRaw) : null;
-  const configPath = readArgValueFromList(args, '--config') || getConfigPathFromSettings();
-  const controllerOverride = readArgValueFromList(args, '--controller');
-  const secretOverride = readArgValueFromList(args, '--secret');
-  const tunPatchPayload = buildTunPatchPayloadFromArgs(args);
-
-  let response = null;
-  if (Object.keys(tunPatchPayload).length > 0) {
-    const controllerApply = await applyTunViaControllerMain(
-      tunPatchPayload,
-      controllerOverride,
-      secretOverride,
-    );
-    if (controllerApply && controllerApply.ok) {
-      response = { ok: true, source: 'controller' };
+async function getControllerConfigsMain(source = {}) {
+  const requestId = `main-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const kind = 'auto';
+  try {
+    const normalizedSource = source && typeof source === 'object' ? source : {};
+    const controllerOverride = String(
+      normalizedSource.controller || normalizedSource.externalController || '',
+    ).trim();
+    const secretOverride = String(normalizedSource.secret || '').trim();
+    const { baseUrl, secret } = resolveControllerAccessFromSettings(controllerOverride, secretOverride);
+    if (!baseUrl) {
+      return { ok: false, error: 'controller_missing' };
     }
-  }
-  if (!(response && response.ok)) {
-    response = await runBridgeWithAutoAuth('tun', args, options);
-  }
-  if (!(response && response.ok)) {
-    if (hasEnableTarget && targetEnabled !== null) {
-      const fallbackTunSnapshot = await readTunEnabledSnapshot(configPath, controllerOverride, secretOverride);
-      const fallbackSettings = readAppSettings();
-      const fallbackEnabled = fallbackTunSnapshot.ok
-        ? Boolean(fallbackTunSnapshot.enabled)
-        : Boolean(
-          fallbackSettings
-          && Object.prototype.hasOwnProperty.call(fallbackSettings, 'tun')
-            ? fallbackSettings.tun
-            : false
-        );
-      persistTunEnabledToSettings(fallbackEnabled);
-      patchTrayMenuNetworkState({ tunEnabled: fallbackEnabled });
+    const headers = {};
+    if (secret) {
+      headers.Authorization = `Bearer ${secret}`;
     }
-    return response;
-  }
-
-  if (!hasEnableTarget || targetEnabled === null) {
-    return response;
-  }
-
-  const tunSnapshot = await waitForTunEnabledState(
-    targetEnabled,
-    configPath,
-    3200,
-    220,
-    controllerOverride,
-    secretOverride,
-  );
-  let actualEnabled = tunSnapshot.ok
-    ? Boolean(tunSnapshot.enabled)
-    : targetEnabled;
-  let mismatch = tunSnapshot.ok && actualEnabled !== targetEnabled;
-  if (mismatch) {
-    await sleep(600);
-    const retrySnapshot = await readTunEnabledSnapshot(configPath, controllerOverride, secretOverride);
-    if (retrySnapshot.ok) {
-      actualEnabled = Boolean(retrySnapshot.enabled);
-      mismatch = actualEnabled !== targetEnabled;
+    const requestUrl = `${baseUrl}/configs`;
+    const logHeaders = { ...headers };
+    if (Object.prototype.hasOwnProperty.call(logHeaders, 'Authorization')) {
+      logHeaders.Authorization = '[redacted]';
     }
+    if (!shouldSuppressMihomoRequestLog('GET', requestUrl, 'log', true)) {
+      guiMainLog('mihomo-api', 'request', {
+        requestId,
+        kind,
+        method: 'GET',
+        url: requestUrl,
+        headers: logHeaders,
+        body: '',
+      });
+    }
+    const resp = await fetch(requestUrl, {
+      method: 'GET',
+      headers,
+    });
+    if (!resp.ok) {
+      const details = (await resp.text().catch(() => '')) || `http_status=${resp.status}`;
+      guiMainLog('mihomo-api', 'response', {
+        requestId,
+        method: 'GET',
+        url: requestUrl,
+        ok: false,
+        status: resp.status,
+        details: truncateLogPayload(details),
+      }, 'warn');
+      return { ok: false, error: 'request_failed', details };
+    }
+    const data = await resp.json();
+    if (!shouldSuppressMihomoRequestLog('GET', requestUrl, 'log', true)) {
+      guiMainLog('mihomo-api', 'response', {
+        requestId,
+        kind,
+        method: 'GET',
+        url: requestUrl,
+        ok: true,
+        status: resp.status,
+        data: truncateLogPayload(JSON.stringify(data)),
+      });
+    }
+    return { ok: true, data };
+  } catch (error) {
+    guiMainLog('mihomo-api', 'response', {
+      requestId,
+      kind,
+      method: 'GET',
+      url: 'unknown',
+      ok: false,
+      error: truncateLogPayload(String((error && error.message) || error || 'request_failed')),
+    }, 'warn');
+    return {
+      ok: false,
+      error: 'request_failed',
+      details: String((error && error.message) || error || 'request_failed'),
+    };
   }
-  persistTunEnabledToSettings(actualEnabled);
-  patchTrayMenuNetworkState({ tunEnabled: actualEnabled });
-  return {
-    ...response,
-    data: {
-      ...(response && response.data && typeof response.data === 'object' ? response.data : {}),
-      requestedEnabled: targetEnabled,
-      enabled: actualEnabled,
-      mismatched: Boolean(mismatch),
+}
+
+async function updateMihomoConfigMain(patch = {}, source = {}) {
+  const configPatch = patch && typeof patch === 'object' && !Array.isArray(patch) ? patch : {};
+  if (!Object.keys(configPatch).length) {
+    return { ok: false, error: 'invalid_config_patch' };
+  }
+  return runControllerConfigRequestMain(source, [
+    {
+      method: 'PATCH',
+      path: '/configs',
+      headers: { 'Content-Type': 'application/json' },
+      body: configPatch,
     },
-  };
+    {
+      method: 'PUT',
+      path: '/configs',
+      headers: { 'Content-Type': 'application/json' },
+      body: configPatch,
+    },
+  ]);
 }
 
 function detectTunConflictLikely() {
@@ -7340,9 +7448,11 @@ async function handleTrayMenuAction(action, payload = {}) {
     }
     case 'toggle-tun': {
       const targetEnabled = Boolean(payload && payload.checked);
-      const target = targetEnabled ? 'true' : 'false';
-      const tunArgs = ['--config', configPath, '--enable', target, ...getControllerArgsFromSettings()];
-      const tunResult = await applyTunCommandUnified(tunArgs, {});
+      const tunResult = await updateMihomoConfigMain({ tun: { enable: targetEnabled } });
+      if (tunResult && tunResult.ok) {
+        persistTunEnabledToSettings(targetEnabled);
+        patchTrayMenuNetworkState({ tunEnabled: targetEnabled });
+      }
       if (!(tunResult && tunResult.ok)) {
         const message = (tunResult && (tunResult.details || tunResult.error || tunResult.message))
           ? String(tunResult.details || tunResult.error || tunResult.message)
@@ -7370,7 +7480,7 @@ async function handleTrayMenuAction(action, payload = {}) {
       if (!OUTBOUND_MODE_BADGE[nextMode]) {
         return { ok: false };
       }
-      const response = await runTrayCommand('mode', ['--mode', nextMode, ...getControllerArgsFromSettings()], labels);
+      const response = await updateMihomoConfigMain({ mode: nextMode });
       if (response.ok) {
         persistOutboundModeToSettings(nextMode);
         patchTrayMenuOutboundMode(nextMode);
@@ -8055,8 +8165,6 @@ app.whenReady().then(() => {
       result = listConfigFilesFromFs();
     } else if (cmd === 'kernels') {
       result = listKernelFilesFromFs();
-    } else if (cmd === 'tun') {
-      result = await applyTunCommandUnified(cmdArgs, options);
     } else {
       result = await runBridgeWithAutoAuth(cmd, cmdArgs, options);
     }
@@ -8065,7 +8173,7 @@ app.whenReady().then(() => {
       ok: Boolean(result && result.ok),
       error: result && result.error ? result.error : '',
     });
-    if (result && result.ok && ['start', 'stop', 'restart', 'mode', 'tun', 'system-proxy-enable', 'system-proxy-disable'].includes(command)) {
+    if (result && result.ok && ['start', 'stop', 'restart', 'system-proxy-enable', 'system-proxy-disable'].includes(command)) {
       await createTrayMenu();
     }
     return result;
@@ -8096,6 +8204,60 @@ app.whenReady().then(() => {
       };
     }
   });
+
+  ipcMain.handle('clashfox:reloadMihomoCore', async (_event, source = {}) => runControllerConfigRequestMain(source, [
+    {
+      method: 'POST',
+      path: '/restart',
+    },
+  ]));
+
+  ipcMain.handle('clashfox:getMihomoConfigs', async (_event, source = {}) => getControllerConfigsMain(source));
+
+  ipcMain.handle('clashfox:reloadMihomoConfig', async (_event, source = {}) => runControllerConfigRequestMain(source, [
+    {
+      method: 'PUT',
+      path: '/configs?reload=true',
+      headers: { 'Content-Type': 'application/json' },
+      body: { path: '', payload: '' },
+    },
+  ]));
+
+  ipcMain.handle('clashfox:updateMihomoConfig', async (_event, patch = {}, source = {}) => {
+    const configPatch = patch && typeof patch === 'object' && !Array.isArray(patch) ? patch : {};
+    if (!Object.keys(configPatch).length) {
+      return { ok: false, error: 'invalid_config_patch' };
+    }
+    return runControllerConfigRequestMain(source, [
+      {
+        method: 'PATCH',
+        path: '/configs',
+        headers: { 'Content-Type': 'application/json' },
+        body: configPatch,
+      },
+      {
+        method: 'PUT',
+        path: '/configs',
+        headers: { 'Content-Type': 'application/json' },
+        body: configPatch,
+      },
+    ]);
+  });
+
+  ipcMain.handle('clashfox:updateMihomoAllowLan', async (_event, enabled, source = {}) => runControllerConfigRequestMain(source, [
+    {
+      method: 'PATCH',
+      path: '/configs',
+      headers: { 'Content-Type': 'application/json' },
+      body: { 'allow-lan': Boolean(enabled) },
+    },
+    {
+      method: 'PUT',
+      path: '/configs',
+      headers: { 'Content-Type': 'application/json' },
+      body: { 'allow-lan': Boolean(enabled) },
+    },
+  ]));
 
   ipcMain.handle('clashfox:providerSubscriptionOverview', async () => {
     try {

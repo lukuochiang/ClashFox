@@ -5,6 +5,19 @@ function normalizeControllerSource(source = {}) {
   };
 }
 
+export function resolveMihomoApiSourceFromState(state = {}) {
+  const settings = state && typeof state === 'object' ? (state.settings || {}) : {};
+  const fileSettings = state && typeof state === 'object' ? (state.fileSettings || {}) : {};
+  return {
+    externalController: String(
+      fileSettings.externalController
+      || settings.externalController
+      || '127.0.0.1:9090',
+    ).trim(),
+    secret: String(fileSettings.secret || settings.secret || 'clashfox').trim(),
+  };
+}
+
 function getBridge(bridge = globalThis.window && window.clashfox) {
   return bridge && typeof bridge === 'object' ? bridge : null;
 }
@@ -13,7 +26,7 @@ export function resolveMihomoControllerAccess(source = {}) {
   const normalized = normalizeControllerSource(source);
   const controller = normalized.controller || '127.0.0.1:9090';
   const secret = normalized.secret || 'clashfox';
-  const baseUrl = /^https?:\/\//.test(controller) ? controller : `http://${controller}`;
+  const baseUrl = /^https?:\/\//i.test(controller) ? controller : `http://${controller}`;
   return {
     baseUrl: String(baseUrl || '').replace(/\/+$/, ''),
     secret,
@@ -28,51 +41,145 @@ function buildAuthHeaders(secret, headers = {}) {
   return nextHeaders;
 }
 
-async function runConfigRequestCandidates(source = {}, candidates = []) {
-  const { baseUrl, secret } = resolveMihomoControllerAccess(source);
-  if (!baseUrl) {
-    return { ok: false, error: 'controller_missing' };
+function normalizeConfigPatch(patch = {}) {
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+    return {};
   }
-  let lastError = { ok: false, error: 'request_failed' };
-  for (const candidate of candidates) {
-    const headers = buildAuthHeaders(secret, candidate.headers || {});
-    try {
-      const resp = await fetch(`${baseUrl}${candidate.path || '/configs'}`, {
-        method: candidate.method || 'GET',
-        headers,
-        body: candidate.body === undefined ? undefined : JSON.stringify(candidate.body),
-      });
-      if (resp.ok) {
-        return { ok: true };
-      }
-      const details = (await resp.text().catch(() => '')) || `http_status=${resp.status}`;
-      lastError = { ok: false, error: 'request_failed', details };
-    } catch (error) {
-      lastError = {
-        ok: false,
-        error: 'request_failed',
-        details: String(error && error.message ? error.message : error || ''),
-      };
-    }
-  }
-  return lastError;
+  return { ...patch };
 }
 
-export async function fetchMihomoConfigs(source = {}) {
+function normalizeModeValue(mode = 'rule') {
+  const normalized = String(mode || '').trim().toLowerCase();
+  if (normalized === 'direct' || normalized === 'global' || normalized === 'rule') {
+    return normalized;
+  }
+  return 'rule';
+}
+
+function sanitizeHeadersForLog(headers = {}) {
+  const nextHeaders = { ...(headers || {}) };
+  if (Object.prototype.hasOwnProperty.call(nextHeaders, 'Authorization')) {
+    nextHeaders.Authorization = '[redacted]';
+  }
+  return nextHeaders;
+}
+
+function safeSerializeForLog(value) {
+  if (value === undefined) {
+    return '';
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function truncateLogValue(value, maxLength = 1200) {
+  const text = String(value === undefined || value === null ? '' : value);
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return `${text.slice(0, maxLength)}...[truncated ${text.length - maxLength} chars]`;
+}
+
+function resolveMihomoRequestKind(method = 'GET', url = '') {
+  const normalizedMethod = String(method || '').trim().toUpperCase();
+  const normalizedUrl = String(url || '').trim();
+  if (normalizedMethod === 'GET' && /\/configs(?:\?|$)/i.test(normalizedUrl)) {
+    return 'auto';
+  }
+  return 'manual';
+}
+
+function shouldSuppressMihomoRequestLog(method = 'GET', url = '', ok = true) {
+  return ok && resolveMihomoRequestKind(method, url) === 'auto';
+}
+
+function logMihomoApi(event, payload = {}) {
+  console.log(`[mihomo-api] ${event}`, payload);
+}
+
+let mihomoRequestSeq = 0;
+
+function nextMihomoRequestId() {
+  mihomoRequestSeq += 1;
+  return `renderer-${Date.now()}-${mihomoRequestSeq}`;
+}
+
+async function fetchJsonThroughController(source = {}, path = '/configs', init = {}) {
   const { baseUrl, secret } = resolveMihomoControllerAccess(source);
   if (!baseUrl) {
     return { ok: false, error: 'controller_missing' };
   }
+  const method = init.method || 'GET';
+  const headers = buildAuthHeaders(secret, init.headers || {});
+  const requestUrl = `${baseUrl}${path}`;
+  const requestId = nextMihomoRequestId();
+  const kind = resolveMihomoRequestKind(method, requestUrl);
+  if (!shouldSuppressMihomoRequestLog(method, requestUrl, true)) {
+    logMihomoApi('request', {
+      requestId,
+      kind,
+      method,
+      url: requestUrl,
+      headers: sanitizeHeadersForLog(headers),
+      body: truncateLogValue(safeSerializeForLog(init.body)),
+    });
+  }
   try {
-    const resp = await fetch(`${baseUrl}/configs`, {
-      headers: buildAuthHeaders(secret),
+    const resp = await fetch(requestUrl, {
+      method,
+      headers,
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
     });
     if (!resp.ok) {
       const details = (await resp.text().catch(() => '')) || `http_status=${resp.status}`;
+      logMihomoApi('response', {
+        requestId,
+        kind,
+        method,
+        url: requestUrl,
+        ok: false,
+        status: resp.status,
+        details: truncateLogValue(details),
+      });
       return { ok: false, error: 'request_failed', details };
     }
-    return { ok: true, data: await resp.json() };
+    if (resp.status === 204) {
+      logMihomoApi('response', {
+        requestId,
+        kind,
+        method,
+        url: requestUrl,
+        ok: true,
+        status: resp.status,
+        data: '',
+      });
+      return { ok: true };
+    }
+    const data = await resp.json();
+    if (!shouldSuppressMihomoRequestLog(method, requestUrl, true)) {
+      logMihomoApi('response', {
+        requestId,
+        kind,
+        method,
+        url: requestUrl,
+        ok: true,
+        status: resp.status,
+        data: truncateLogValue(safeSerializeForLog(data)),
+      });
+    }
+    return { ok: true, data };
   } catch (error) {
+    logMihomoApi('response', {
+      requestId,
+      kind,
+      method,
+      url: requestUrl,
+      ok: false,
+      error: truncateLogValue(String(error && error.message ? error.message : error || '')),
+    });
     return {
       ok: false,
       error: 'request_failed',
@@ -81,8 +188,81 @@ export async function fetchMihomoConfigs(source = {}) {
   }
 }
 
-export async function fetchTunConfigFromController(source = {}) {
-  const response = await fetchMihomoConfigs(source);
+async function runConfigRequestCandidates(source = {}, candidates = []) {
+  let lastError = { ok: false, error: 'request_failed' };
+  for (const candidate of Array.isArray(candidates) ? candidates : []) {
+    const response = await fetchJsonThroughController(source, candidate.path || '/configs', {
+      method: candidate.method || 'GET',
+      headers: candidate.headers || {},
+      body: candidate.body,
+    });
+    if (response && response.ok) {
+      return response;
+    }
+    lastError = response || lastError;
+  }
+  return lastError;
+}
+
+function callBridge(bridge, methodName, ...args) {
+  const api = getBridge(bridge);
+  if (!api || typeof api[methodName] !== 'function') {
+    return null;
+  }
+  return api[methodName](...args);
+}
+
+// All /configs reads and writes should go through these helpers first so
+// renderer callers do not need to care whether the data comes from IPC or fetch.
+async function getConfigsViaBridgeOrFetch(source = {}, bridge) {
+  const bridged = callBridge(bridge, 'getMihomoConfigs', source);
+  if (bridged) {
+    return bridged;
+  }
+  return fetchJsonThroughController(source, '/configs');
+}
+
+async function patchConfigsViaBridgeOrFetch(patch = {}, source = {}, bridge) {
+  const configPatch = normalizeConfigPatch(patch);
+  if (!Object.keys(configPatch).length) {
+    return { ok: false, error: 'invalid_config_patch' };
+  }
+  const bridged = callBridge(bridge, 'updateMihomoConfig', configPatch, source);
+  if (bridged) {
+    return bridged;
+  }
+  const allowLanOnly = Object.keys(configPatch).length === 1
+    && Object.prototype.hasOwnProperty.call(configPatch, 'allow-lan');
+  if (allowLanOnly) {
+    const legacyBridge = callBridge(bridge, 'updateMihomoAllowLan', Boolean(configPatch['allow-lan']), source);
+    if (legacyBridge) {
+      return legacyBridge;
+    }
+  }
+  return runConfigRequestCandidates(source, [
+    {
+      method: 'PATCH',
+      path: '/configs',
+      headers: { 'Content-Type': 'application/json' },
+      body: configPatch,
+    },
+    {
+      method: 'PUT',
+      path: '/configs',
+      headers: { 'Content-Type': 'application/json' },
+      body: configPatch,
+    },
+  ]);
+}
+
+export async function fetchMihomoConfigs(source = {}, bridge) {
+  return getConfigsViaBridgeOrFetch(source, bridge);
+}
+
+// Mihomo returns tun either as a boolean or as an object. Normalize that once
+// here so the UI can consume a stable shape.
+export async function fetchTunConfigFromController(source = {}, bridge) {
+  const response = await fetchMihomoConfigs(source, bridge);
   if (!response.ok || !response.data || !Object.prototype.hasOwnProperty.call(response.data, 'tun')) {
     return null;
   }
@@ -101,129 +281,90 @@ export async function fetchTunConfigFromController(source = {}) {
       stack = tun.stack.trim();
     }
   }
-  return {
-    enabled,
-    stack,
-  };
+  return { enabled, stack };
 }
 
-export async function updateTunConfigViaController(partialTun = {}, source = {}) {
-  try {
-    const { baseUrl, secret } = resolveMihomoControllerAccess(source);
-    if (!baseUrl) {
-      return { ok: false, error: 'controller_missing' };
-    }
-    const headers = buildAuthHeaders(secret, { 'Content-Type': 'application/json' });
+export async function updateMihomoConfigViaController(patch = {}, source = {}, bridge) {
+  return patchConfigsViaBridgeOrFetch(patch, source, bridge);
+}
 
-    const tunBody = {};
-    if (Object.prototype.hasOwnProperty.call(partialTun, 'enable')) {
-      tunBody.enable = Boolean(partialTun.enable);
-    }
-    if (Object.prototype.hasOwnProperty.call(partialTun, 'stack') && partialTun.stack) {
-      tunBody.stack = String(partialTun.stack);
-    }
-    if (Object.keys(tunBody).length === 0) {
-      return { ok: false, error: 'invalid_tun' };
-    }
-
-    const candidates = [
-      { method: 'PATCH', payload: { tun: tunBody } },
-      { method: 'PUT', payload: { tun: tunBody } },
-    ];
-    if (Object.prototype.hasOwnProperty.call(tunBody, 'enable')) {
-      const enabledBody = { ...tunBody };
-      enabledBody.enabled = enabledBody.enable;
-      delete enabledBody.enable;
-      candidates.push({ method: 'PATCH', payload: { tun: enabledBody } });
-      candidates.push({ method: 'PUT', payload: { tun: enabledBody } });
-    }
-
-    let lastError = { ok: false, error: 'request_failed' };
-    for (const candidate of candidates) {
-      const resp = await fetch(`${baseUrl}/configs`, {
-        method: candidate.method,
-        headers,
-        body: JSON.stringify(candidate.payload),
-      });
-      if (resp.ok) {
-        return { ok: true };
-      }
-      const details = (await resp.text().catch(() => '')) || `http_status=${resp.status}`;
-      lastError = { ok: false, error: 'request_failed', details };
-    }
-    return lastError;
-  } catch (error) {
-    return {
-      ok: false,
-      error: 'request_failed',
-      details: String(error && error.message ? error.message : error || ''),
-    };
+export async function updateTunConfigViaController(partialTun = {}, source = {}, bridge) {
+  const tunBody = {};
+  if (Object.prototype.hasOwnProperty.call(partialTun, 'enable')) {
+    tunBody.enable = Boolean(partialTun.enable);
   }
+  if (Object.prototype.hasOwnProperty.call(partialTun, 'stack') && partialTun.stack) {
+    tunBody.stack = String(partialTun.stack).trim();
+  }
+  if (!Object.keys(tunBody).length) {
+    return { ok: false, error: 'invalid_tun' };
+  }
+  return updateMihomoConfigViaController({ tun: tunBody }, source, bridge);
 }
 
-export async function reloadMihomoCore(source = {}) {
+export async function updateAllowLanViaController(enabled, source = {}, bridge) {
+  return updateMihomoConfigViaController({ 'allow-lan': Boolean(enabled) }, source, bridge);
+}
+
+export async function updateModeViaController(mode = 'rule', source = {}, bridge) {
+  return updateMihomoConfigViaController({ mode: normalizeModeValue(mode) }, source, bridge);
+}
+
+export async function reloadMihomoCore(source = {}, bridge) {
+  const bridged = callBridge(bridge, 'reloadMihomoCore', source);
+  if (bridged) {
+    return bridged;
+  }
   return runConfigRequestCandidates(source, [
     {
-      method: 'PUT',
-      path: '/configs?force=true',
-      headers: { 'Content-Type': 'application/json' },
-      body: {},
-    },
-    {
-      method: 'PUT',
-      path: '/configs?force=true',
-    },
-    {
-      method: 'PATCH',
-      path: '/configs?force=true',
-      headers: { 'Content-Type': 'application/json' },
-      body: {},
+      method: 'POST',
+      path: '/restart',
     },
   ]);
 }
 
-export async function reloadMihomoConfig(source = {}) {
+export async function reloadMihomoConfig(source = {}, bridge) {
+  const bridged = callBridge(bridge, 'reloadMihomoConfig', source);
+  if (bridged) {
+    return bridged;
+  }
   return runConfigRequestCandidates(source, [
     {
-      method: 'PATCH',
-      path: '/configs',
-      headers: { 'Content-Type': 'application/json' },
-      body: {},
-    },
-    {
       method: 'PUT',
-      path: '/configs',
+      path: '/configs?reload=true',
       headers: { 'Content-Type': 'application/json' },
-      body: {},
-    },
-    {
-      method: 'PATCH',
-      path: '/configs?force=true',
-      headers: { 'Content-Type': 'application/json' },
-      body: {},
+      body: { path: '', payload: '' },
     },
   ]);
+}
+
+function requireBridgeMethod(bridge, methodName) {
+  const api = getBridge(bridge);
+  if (!api || typeof api[methodName] !== 'function') {
+    return null;
+  }
+  return api;
 }
 
 export async function fetchProviderSubscriptionOverview(bridge) {
-  const api = getBridge(bridge);
-  if (!api || typeof api.providerSubscriptionOverview !== 'function') {
+  const api = requireBridgeMethod(bridge, 'providerSubscriptionOverview');
+  if (!api) {
     return { ok: false, error: 'bridge_missing' };
   }
   return api.providerSubscriptionOverview();
 }
 
 export async function fetchRulesOverview(bridge) {
-  const api = getBridge(bridge);
-  if (!api || typeof api.rulesOverview !== 'function') {
+  const api = requireBridgeMethod(bridge, 'rulesOverview');
+  if (!api) {
     return { ok: false, error: 'bridge_missing' };
   }
   return api.rulesOverview();
 }
 
 export async function fetchRuleProvidersOverview(bridge) {
-  const api = getBridge(bridge);
-  if (!api || typeof api.ruleProvidersOverview !== 'function') {
+  const api = requireBridgeMethod(bridge, 'ruleProvidersOverview');
+  if (!api) {
     return { ok: false, error: 'bridge_missing' };
   }
   return api.ruleProvidersOverview();
@@ -231,10 +372,9 @@ export async function fetchRuleProvidersOverview(bridge) {
 
 export async function fetchRulesOverviewBundle(bridge) {
   const api = getBridge(bridge);
-  const tasks = [
+  const [rules, providers] = await Promise.all([
     fetchRulesOverview(api),
     fetchRuleProvidersOverview(api),
-  ];
-  const [rules, providers] = await Promise.all(tasks);
+  ]);
   return { rules, providers };
 }

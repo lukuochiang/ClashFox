@@ -2374,6 +2374,8 @@ body[data-theme="day"] .mode-row {
 .provider-subscription-stat {
   display: grid;
   gap: 4px;
+  min-height: 58px;
+  height: 58px;
   padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid rgba(148, 171, 197, 0.2);
@@ -2397,6 +2399,7 @@ body[data-theme="day"] .mode-row {
   display: grid;
   gap: 8px;
   max-height: 220px;
+  height: 220px;
   overflow: auto;
 }
 
