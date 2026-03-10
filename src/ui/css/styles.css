@@ -39,6 +39,7 @@
   --icon-doc: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11.2 2.2 15.8 6.8c.3.3.4.6.4 1v8.5a1.5 1.5 0 0 1-1.5 1.5h-9a1.5 1.5 0 0 1-1.5-1.5v-14A1.5 1.5 0 0 1 5.2 1h5c.4 0 .7.1 1 .4ZM11 3.9V6a1 1 0 0 0 1 1h2.1L11 3.9ZM6 9.5a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H7a1 1 0 0 1-1-1Zm0 3a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H7a1 1 0 0 1-1-1Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-sliders: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 4.5a1.5 1.5 0 1 1 3 0V5h8a1 1 0 1 1 0 2H7v.5a1.5 1.5 0 1 1-3 0V7H3a1 1 0 0 1 0-2h1V4.5ZM13 10.5a1.5 1.5 0 1 1 3 0V11h1a1 1 0 1 1 0 2h-1v.5a1.5 1.5 0 1 1-3 0V13H3a1 1 0 1 1 0-2h10v-.5Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-help: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16Zm0 11.8a1.05 1.05 0 1 0 0 2.1 1.05 1.05 0 0 0 0-2.1Zm.12-8c-1.32 0-2.37.82-2.37 2.08a1 1 0 0 0 2 0c0-.12.11-.08.26-.08.32 0 .62.1.78.3.2.2.21.55-.1.92l-.34.36c-.48.5-.75 1-.75 1.76V11a1 1 0 1 0 2 0v-.56c0-.24.05-.36.24-.56l.34-.35c.7-.73.96-1.66.7-2.55-.37-1.21-1.48-1.9-2.46-1.9Z' fill='%23000'/%3E%3C/svg%3E");
+  --icon-copyright: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='10' cy='10' r='7.25' stroke='%23000' stroke-width='1.7'/%3E%3Cpath d='M12.65 12.45a3.4 3.4 0 1 1 0-4.9' stroke='%23000' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --icon-settings: var(--icon-gear);
   --icon-clock: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 1.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17Zm0 2a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13Zm-.75 2.25a.75.75 0 0 1 1.5 0V10c0 .2-.08.39-.22.53l-2.5 2.5a.75.75 0 1 1-1.06-1.06l2.28-2.28V5.75Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-activity: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2.5 10a.75.75 0 0 1 .75-.75h2.62l1.08-3.24A1.25 1.25 0 0 1 8.16 5h.08c.53 0 1 .34 1.18.84l1.64 4.53 1.17-2.34A1.25 1.25 0 0 1 13.99 8h2.76a.75.75 0 1 1 0 1.5h-2.5l-1.72 3.43a1.25 1.25 0 0 1-2.26-.1L8.7 8.73 7.77 11.5c-.18.54-.67.9-1.24.9H3.25A.75.75 0 0 1 2.5 10Z' fill='%23000'/%3E%3C/svg%3E");
@@ -1554,6 +1555,155 @@ body[data-page="help"] .help-stack .card {
 
 .help-card {
   margin-bottom: 0;
+}
+
+.help-about-card {
+  display: grid;
+  gap: 14px;
+}
+
+.help-about-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.help-about-action-btn {
+  width: 30px;
+  height: 30px;
+  min-width: 28px;
+  padding: 0;
+}
+
+.help-about-action-btn svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.help-about-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.help-about-team-block {
+  display: grid;
+  gap: 8px;
+}
+
+.help-about-team-name {
+  font-family: var(--font-display);
+  font-size: 28px;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+
+.help-about-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.help-about-item {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--card) 78%, var(--accent) 22%);
+  border: 1px solid color-mix(in srgb, var(--line) 76%, var(--accent) 24%);
+}
+
+body[data-theme="night"] .help-about-item {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02));
+  border-color: rgba(148, 171, 197, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.help-about-label {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.help-about-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.help-about-desc {
+  display: grid;
+  gap: 10px;
+}
+
+.help-about-desc-lead {
+  margin: 0;
+  /*max-width: 62ch;*/
+  color: color-mix(in srgb, var(--muted) 88%, var(--ink) 12%);
+  line-height: 1.75;
+}
+
+.help-about-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.help-about-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--line) 74%, var(--accent) 26%);
+  background: color-mix(in srgb, var(--panel-soft) 84%, var(--accent) 16%);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+body[data-theme="night"] .help-about-tag {
+  border-color: rgba(244, 179, 74, 0.22);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(233, 238, 243, 0.92);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.help-about-status {
+  min-height: 22px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel-soft) 86%, var(--accent) 14%);
+  border: 1px solid color-mix(in srgb, var(--line) 80%, var(--accent) 20%);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.help-about-status[data-state="checking"] {
+  color: var(--ink);
+}
+
+.help-about-status[data-state="success"] {
+  color: #6fe7d2;
+}
+
+.help-about-status[data-state="warning"] {
+  color: #f4b34a;
+}
+
+.help-about-status[data-state="error"] {
+  color: #ff8f6a;
 }
 
 .help-link {
@@ -4703,6 +4853,19 @@ body[data-page="logs"] .logs-clean-action {
   font-style: italic;
 }
 
+@media (max-width: 760px) {
+  .help-about-head {
+    flex-direction: column;
+  }
+  .help-about-grid {
+    grid-template-columns: 1fr;
+  }
+  .help-about-header-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
 .dashboard-panel-local {
   min-height: 0;
 }
@@ -6161,6 +6324,69 @@ body[data-theme="day"] .modal {
 .modal-hint {
   font-size: 11px;
   color: var(--muted);
+}
+
+.update-guide-card {
+  width: min(392px, calc(100vw - 32px));
+  gap: 14px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.update-guide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 0;
+}
+
+.update-guide-close {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.update-guide-close:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+}
+
+.update-guide-body {
+  padding: 0 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.update-guide-actions {
+  display: grid;
+  gap: 10px;
+  padding: 8px 18px 18px;
+}
+
+.update-guide-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+body[data-theme="night"] .update-guide-card {
+  background:
+    linear-gradient(180deg, rgba(126, 108, 255, 0.18), rgba(126, 108, 255, 0) 56px),
+    var(--panel);
+  border-color: rgba(126, 108, 255, 0.24);
+}
+
+body[data-theme="day"] .update-guide-card {
+  background:
+    linear-gradient(180deg, rgba(96, 114, 255, 0.12), rgba(96, 114, 255, 0) 56px),
+    var(--panel);
 }
 
 @keyframes fadeUp {

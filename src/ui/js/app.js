@@ -221,6 +221,12 @@ let confirmTitle = document.getElementById('confirmTitle');
 let confirmBody = document.getElementById('confirmBody');
 let confirmCancel = document.getElementById('confirmCancel');
 let confirmOk = document.getElementById('confirmOk');
+let updateGuideModal = document.getElementById('updateGuideModal');
+let updateGuideTitle = document.getElementById('updateGuideTitle');
+let updateGuideBody = document.getElementById('updateGuideBody');
+let updateGuideClose = document.getElementById('updateGuideClose');
+let updateGuideReleaseBtn = document.getElementById('updateGuideReleaseBtn');
+let updateGuideAlphaBtn = document.getElementById('updateGuideAlphaBtn');
 let appName = document.getElementById('appName');
 let appVersion = document.getElementById('appVersion');
 let themeToggle = document.getElementById('themeToggle');
@@ -251,6 +257,12 @@ let helperLogsOpenBtn = document.getElementById('helperLogsOpenBtn');
 let helperLogsRevealBtn = document.getElementById('helperLogsRevealBtn');
 let helperLogsPath = document.getElementById('helperLogsPath');
 let helperVersionText = document.getElementById('helperVersionText');
+let helpAboutVersion = document.getElementById('helpAboutVersion');
+let helpAboutBuild = document.getElementById('helpAboutBuild');
+let helpAboutStatus = document.getElementById('helpAboutStatus');
+let helpCheckAppUpdateBtn = document.getElementById('helpCheckAppUpdateBtn');
+let helpCheckKernelUpdateBtn = document.getElementById('helpCheckKernelUpdateBtn');
+let helpCheckHelperUpdateBtn = document.getElementById('helpCheckHelperUpdateBtn');
 let helperPrimaryAction = 'install';
 let settingsLogLines = document.getElementById('settingsLogLines');
 let settingsLogAutoRefresh = document.getElementById('settingsLogAutoRefresh');
@@ -292,6 +304,7 @@ const MAIN_WINDOW_MIN_WIDTH = 980;
 const MAIN_WINDOW_MIN_HEIGHT = 640;
 const MAIN_WINDOW_MAX_WIDTH = 4096;
 const MAIN_WINDOW_MAX_HEIGHT = 2160;
+const APP_RELEASES_URL = 'https://github.com/lukuochiang/ClashFox/releases';
 const DEFAULT_SETTINGS = {
   lang: 'auto',
   theme: 'auto',
@@ -2621,6 +2634,82 @@ function promptConfirm({ title, body, confirmLabel, confirmTone = 'danger' }) {
   });
 }
 
+function promptUpdateGuide({
+  title,
+  body,
+  releaseLabel = '',
+  alphaLabel = '',
+}) {
+  if (!updateGuideModal || !updateGuideTitle || !updateGuideBody || !updateGuideClose || !updateGuideReleaseBtn || !updateGuideAlphaBtn) {
+    return Promise.resolve(null);
+  }
+  updateGuideTitle.textContent = title || ti('help.appUpdateChoicesTitle', 'Update Options');
+  updateGuideBody.textContent = body || ti('help.updateGuideHint', 'Choose a version channel to continue.');
+  updateGuideReleaseBtn.textContent = releaseLabel || ti('help.appUpdateReleaseAction', 'Update Release');
+  updateGuideAlphaBtn.textContent = alphaLabel || ti('help.appUpdateAlphaAction', 'Update to Alpha');
+  updateGuideReleaseBtn.classList.toggle('is-hidden', !releaseLabel);
+  updateGuideAlphaBtn.classList.toggle('is-hidden', !alphaLabel);
+  updateGuideModal.classList.add('show');
+  updateGuideModal.setAttribute('aria-hidden', 'false');
+
+  return new Promise((resolve) => {
+    const cleanup = () => {
+      updateGuideModal.classList.remove('show');
+      updateGuideModal.setAttribute('aria-hidden', 'true');
+      updateGuideClose.removeEventListener('click', onClose);
+      updateGuideReleaseBtn.removeEventListener('click', onRelease);
+      updateGuideAlphaBtn.removeEventListener('click', onAlpha);
+      updateGuideModal.removeEventListener('keydown', onKeydown);
+      updateGuideModal.removeEventListener('click', onBackdrop);
+    };
+
+    const onClose = () => {
+      cleanup();
+      resolve(null);
+    };
+
+    const onRelease = () => {
+      cleanup();
+      resolve('release');
+    };
+
+    const onAlpha = () => {
+      cleanup();
+      resolve('alpha');
+    };
+
+    const onKeydown = (event) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    const onBackdrop = (event) => {
+      if (event.target === updateGuideModal) {
+        onClose();
+      }
+    };
+
+    updateGuideClose.addEventListener('click', onClose);
+    if (!updateGuideReleaseBtn.classList.contains('is-hidden')) {
+      updateGuideReleaseBtn.addEventListener('click', onRelease);
+    }
+    if (!updateGuideAlphaBtn.classList.contains('is-hidden')) {
+      updateGuideAlphaBtn.addEventListener('click', onAlpha);
+    }
+    updateGuideModal.addEventListener('keydown', onKeydown);
+    updateGuideModal.addEventListener('click', onBackdrop);
+
+    if (!updateGuideReleaseBtn.classList.contains('is-hidden')) {
+      updateGuideReleaseBtn.focus();
+    } else if (!updateGuideAlphaBtn.classList.contains('is-hidden')) {
+      updateGuideAlphaBtn.focus();
+    } else {
+      updateGuideClose.focus();
+    }
+  });
+}
+
 function getProxyModeInputs() {
   if (!proxyModeSelect) {
     return [];
@@ -3292,6 +3381,171 @@ async function loadAppInfo() {
     const displayVersion = `v${version}`;
     if (appVersion) {
       appVersion.textContent = displayVersion;
+    }
+    if (helpAboutVersion) {
+      helpAboutVersion.textContent = displayVersion;
+    }
+    if (helpAboutBuild) {
+      helpAboutBuild.textContent = response.data.buildNumber || '-';
+    }
+  }
+}
+
+function setHelpAboutStatus(text = '', stateName = 'idle') {
+  if (!helpAboutStatus) {
+    return;
+  }
+  helpAboutStatus.textContent = text || ti('help.updateEntryHint', 'Use the buttons below to check app, kernel, and helper updates.');
+  helpAboutStatus.dataset.state = stateName || 'idle';
+}
+
+async function handleHelpAppUpdateCheck() {
+  if (!window.clashfox || typeof window.clashfox.checkUpdates !== 'function') {
+    setHelpAboutStatus(ti('help.updateCheckBridgeMissing', 'Update check is unavailable.'), 'error');
+    return;
+  }
+  if (helpCheckAppUpdateBtn) {
+    helpCheckAppUpdateBtn.disabled = true;
+  }
+  setHelpAboutStatus(ti('help.checkingAppUpdate', 'Checking app updates...'), 'checking');
+  try {
+    const [stableResult, alphaResult] = await Promise.all([
+      window.clashfox.checkUpdates({ manual: true, acceptBeta: false }),
+      window.clashfox.checkUpdates({ manual: true, acceptBeta: true }),
+    ]);
+    const stableAvailable = Boolean(stableResult && stableResult.ok && stableResult.status === 'update_available' && !stableResult.prerelease);
+    const alphaAvailable = Boolean(alphaResult && alphaResult.ok && alphaResult.status === 'update_available' && alphaResult.prerelease);
+    if (!stableAvailable && !alphaAvailable) {
+      setHelpAboutStatus(ti('help.appAlreadyLatest', 'App is up to date.'), 'success');
+      return;
+    }
+    const stableVersion = normalizeVersionForDisplay(stableResult && stableResult.latestVersion ? stableResult.latestVersion : '');
+    const alphaVersion = normalizeVersionForDisplay(alphaResult && alphaResult.latestVersion ? alphaResult.latestVersion : '');
+    const bodyParts = [];
+    if (alphaAvailable) {
+      bodyParts.push(
+        alphaVersion
+          ? ti('help.appUpdateAlphaBodyVersion', 'A newer alpha version v{version} is available. Open the latest beta tag page?').replace('{version}', alphaVersion)
+          : ti('help.appUpdateAlphaBody', 'A newer alpha version is available. Open the latest beta tag page?'),
+      );
+    }
+    if (stableAvailable) {
+      bodyParts.push(
+        stableVersion
+          ? ti('help.appUpdateReleaseBodyVersion', 'A newer stable version v{version} is available. Open the stable release tag page?').replace('{version}', stableVersion)
+          : ti('help.appUpdateReleaseBody', 'A newer stable version is available. Open the stable release tag page?'),
+      );
+    }
+    const choice = await promptUpdateGuide({
+      title: ti('help.appUpdateChoicesTitle', 'Update Options'),
+      body: bodyParts.join(' '),
+      releaseLabel: stableAvailable ? ti('help.appUpdateReleaseAction', 'Update Release') : '',
+      alphaLabel: alphaAvailable ? ti('help.appUpdateAlphaAction', 'Update to Alpha') : '',
+    });
+    if (choice === 'release' && window.clashfox && typeof window.clashfox.openExternal === 'function') {
+      await window.clashfox.openExternal((stableResult && stableResult.releaseUrl) || APP_RELEASES_URL);
+    } else if (choice === 'alpha' && window.clashfox && typeof window.clashfox.openExternal === 'function') {
+      await window.clashfox.openExternal((alphaResult && alphaResult.releaseUrl) || APP_RELEASES_URL);
+    }
+    const statusParts = [];
+    if (stableAvailable) {
+      statusParts.push(
+        stableVersion
+          ? `${ti('help.appUpdateReleaseAvailable', 'Release update available')}: v${stableVersion}`
+          : ti('help.appUpdateReleaseAvailable', 'Release update available'),
+      );
+    }
+    if (alphaAvailable) {
+      statusParts.push(
+        alphaVersion
+          ? `${ti('help.appUpdateAlphaAvailable', 'Alpha update available')}: v${alphaVersion}`
+          : ti('help.appUpdateAlphaAvailable', 'Alpha update available'),
+      );
+    }
+    setHelpAboutStatus(statusParts.join(' · '), 'warning');
+  } catch (err) {
+    setHelpAboutStatus(ti('help.updateEntryHint', 'Use the buttons below to check app, kernel, and helper updates.'), 'idle');
+  } finally {
+    if (helpCheckAppUpdateBtn) {
+      helpCheckAppUpdateBtn.disabled = false;
+    }
+  }
+}
+
+async function handleHelpKernelUpdateCheck() {
+  if (!window.clashfox || typeof window.clashfox.checkKernelUpdates !== 'function') {
+    setHelpAboutStatus(ti('help.updateCheckBridgeMissing', 'Update check is unavailable.'), 'error');
+    return;
+  }
+  if (helpCheckKernelUpdateBtn) {
+    helpCheckKernelUpdateBtn.disabled = true;
+  }
+  setHelpAboutStatus(ti('help.checkingKernelUpdate', 'Checking kernel updates...'), 'checking');
+  try {
+    const selectedSource = (githubUser && githubUser.value)
+      || (state.settings && state.settings.githubUser)
+      || 'vernesong';
+    const source = normalizeKernelSource(selectedSource)
+      || resolveKernelUpdateSourceByVersion(state.coreVersionRaw || '', selectedSource);
+    const currentVersion = String(state.coreVersionRaw || '').trim();
+    const result = await window.clashfox.checkKernelUpdates({ source, currentVersion });
+    state.kernelUpdateInfo = result || null;
+    state.kernelUpdateCheckedAt = Date.now();
+    if (result && typeof result === 'object') {
+      setCachedKernelUpdateResult(source, currentVersion, result);
+    }
+    applyKernelUpdateInstallHint();
+    if (!result || !result.ok) {
+      const detail = result && result.error ? ` (${String(result.error)})` : '';
+      setHelpAboutStatus(`${ti('help.kernelUpdateCheckFailed', 'Kernel update check failed')}${detail}`, 'error');
+    } else if (result.status === 'update_available') {
+      const latest = formatKernelVersionForDisplay(result.latestVersion, source, Boolean(result.prerelease));
+      setHelpAboutStatus(`${ti('help.kernelUpdateAvailable', 'Kernel update available')}: ${latest}`, 'warning');
+    } else {
+      setHelpAboutStatus(ti('help.kernelAlreadyLatest', 'Kernel is up to date.'), 'success');
+    }
+  } catch (err) {
+    const detail = err && err.message ? ` (${String(err.message)})` : '';
+    setHelpAboutStatus(`${ti('help.kernelUpdateCheckFailed', 'Kernel update check failed')}${detail}`, 'error');
+  } finally {
+    if (helpCheckKernelUpdateBtn) {
+      helpCheckKernelUpdateBtn.disabled = false;
+    }
+  }
+}
+
+async function handleHelpHelperUpdateCheck() {
+  if (helpCheckHelperUpdateBtn) {
+    helpCheckHelperUpdateBtn.disabled = true;
+  }
+  setHelpAboutStatus(ti('help.checkingHelperUpdate', 'Checking helper updates...'), 'checking');
+  try {
+    const result = await checkHelperUpdates({ force: true });
+    if (result && result.error === 'bridge_missing') {
+      setHelpAboutStatus(ti('help.updateCheckBridgeMissing', 'Update check is unavailable.'), 'error');
+      return;
+    }
+    if (!result || !result.ok) {
+      const detail = result && result.error ? ` (${String(result.error)})` : '';
+      setHelpAboutStatus(`${ti('help.helperUpdateCheckFailed', 'Helper update check failed')}${detail}`, 'error');
+    } else if (result.updateAvailable) {
+      const targetVersion = normalizeVersionForDisplay(result.targetVersion || result.onlineVersion || '');
+      setHelpAboutStatus(
+        targetVersion
+          ? `${ti('help.helperUpdateAvailable', 'Helper update available')}: v${targetVersion}`
+          : ti('help.helperUpdateAvailable', 'Helper update available'),
+        'warning',
+      );
+    } else {
+      setHelpAboutStatus(ti('help.helperAlreadyLatest', 'Helper is up to date.'), 'success');
+    }
+  } catch (err) {
+    const detail = err && err.message ? ` (${String(err.message)})` : '';
+    setHelpAboutStatus(`${ti('help.helperUpdateCheckFailed', 'Helper update check failed')}${detail}`, 'error');
+  } finally {
+    await refreshHelperPanel(true);
+    if (helpCheckHelperUpdateBtn) {
+      helpCheckHelperUpdateBtn.disabled = false;
     }
   }
 }
@@ -5754,6 +6008,12 @@ function refreshPageRefs() {
   confirmBody = document.getElementById('confirmBody');
   confirmCancel = document.getElementById('confirmCancel');
   confirmOk = document.getElementById('confirmOk');
+  updateGuideModal = document.getElementById('updateGuideModal');
+  updateGuideTitle = document.getElementById('updateGuideTitle');
+  updateGuideBody = document.getElementById('updateGuideBody');
+  updateGuideClose = document.getElementById('updateGuideClose');
+  updateGuideReleaseBtn = document.getElementById('updateGuideReleaseBtn');
+  updateGuideAlphaBtn = document.getElementById('updateGuideAlphaBtn');
   appName = document.getElementById('appName');
   appVersion = document.getElementById('appVersion');
   themeToggle = document.getElementById('themeToggle');
@@ -5784,6 +6044,12 @@ function refreshPageRefs() {
   helperLogsRevealBtn = document.getElementById('helperLogsRevealBtn');
   helperLogsPath = document.getElementById('helperLogsPath');
   helperVersionText = document.getElementById('helperVersionText');
+  helpAboutVersion = document.getElementById('helpAboutVersion');
+  helpAboutBuild = document.getElementById('helpAboutBuild');
+  helpAboutStatus = document.getElementById('helpAboutStatus');
+  helpCheckAppUpdateBtn = document.getElementById('helpCheckAppUpdateBtn');
+  helpCheckKernelUpdateBtn = document.getElementById('helpCheckKernelUpdateBtn');
+  helpCheckHelperUpdateBtn = document.getElementById('helpCheckHelperUpdateBtn');
   settingsLogLines = document.getElementById('settingsLogLines');
   settingsLogAutoRefresh = document.getElementById('settingsLogAutoRefresh');
   settingsLogIntervalPreset = document.getElementById('settingsLogIntervalPreset');
@@ -6186,6 +6452,7 @@ async function loadLayoutParts() {
 
   const sudoRoot = document.getElementById('sudoRoot');
   const confirmRoot = document.getElementById('confirmRoot');
+  const updateGuideRoot = document.getElementById('updateGuideRoot');
   const fragmentTasks = [];
   if (sudoRoot) {
     fragmentTasks.push(
@@ -6212,6 +6479,22 @@ async function loadLayoutParts() {
             confirmRoot.innerHTML = html;
             try {
               sessionStorage.setItem(layoutKey('confirm'), html);
+            } catch {
+              // Ignore cache errors
+            }
+          }
+        })
+    );
+  }
+  if (updateGuideRoot) {
+    fragmentTasks.push(
+      fetch('update-guide.html')
+        .then((res) => (res.ok ? res.text() : ''))
+        .then((html) => {
+          if (html) {
+            updateGuideRoot.innerHTML = html;
+            try {
+              sessionStorage.setItem(layoutKey('updateGuide'), html);
             } catch {
               // Ignore cache errors
             }
@@ -6967,6 +7250,27 @@ if (helperLogsOpenBtn) {
       }
     });
   }
+}
+
+if (helpCheckAppUpdateBtn && helpCheckAppUpdateBtn.dataset.bound !== 'true') {
+  helpCheckAppUpdateBtn.dataset.bound = 'true';
+  helpCheckAppUpdateBtn.addEventListener('click', async () => {
+    await handleHelpAppUpdateCheck();
+  });
+}
+
+if (helpCheckKernelUpdateBtn && helpCheckKernelUpdateBtn.dataset.bound !== 'true') {
+  helpCheckKernelUpdateBtn.dataset.bound = 'true';
+  helpCheckKernelUpdateBtn.addEventListener('click', async () => {
+    await handleHelpKernelUpdateCheck();
+  });
+}
+
+if (helpCheckHelperUpdateBtn && helpCheckHelperUpdateBtn.dataset.bound !== 'true') {
+  helpCheckHelperUpdateBtn.dataset.bound = 'true';
+  helpCheckHelperUpdateBtn.addEventListener('click', async () => {
+    await handleHelpHelperUpdateCheck();
+  });
 }
 
 if (helperLogsRevealBtn) {

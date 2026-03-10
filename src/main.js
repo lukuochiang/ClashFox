@@ -2296,19 +2296,21 @@ async function checkKernelUpdates({ source = 'vernesong', currentVersion = '', a
   }
 }
 
-async function checkForUpdates({ manual = false } = {}) {
+async function checkForUpdates({ manual = false, acceptBeta } = {}) {
   const settings = readAppSettings();
-  const acceptBeta = Boolean(settings && settings.acceptBeta);
+  const allowBeta = typeof acceptBeta === 'boolean'
+    ? acceptBeta
+    : Boolean(settings && settings.acceptBeta);
   const currentVersion = normalizeVersionTag(app.getVersion());
   try {
     const releases = await fetchJson(CHECK_UPDATE_API_URL);
-    const latest = pickLatestRelease(releases, acceptBeta);
+    const latest = pickLatestRelease(releases, allowBeta);
     if (!latest || !latest.tag_name) {
       return {
         ok: false,
         status: 'error',
         manual,
-        acceptBeta,
+        acceptBeta: allowBeta,
         currentVersion,
         error: 'NO_RELEASE_FOUND',
       };
@@ -2319,7 +2321,7 @@ async function checkForUpdates({ manual = false } = {}) {
       ok: true,
       status: compare > 0 ? 'update_available' : 'up_to_date',
       manual,
-      acceptBeta,
+      acceptBeta: allowBeta,
       currentVersion,
       latestVersion,
       releaseUrl: latest.html_url || resolveCheckUpdateUrlFromSettings(),
@@ -2332,7 +2334,7 @@ async function checkForUpdates({ manual = false } = {}) {
       ok: false,
       status: 'error',
       manual,
-      acceptBeta,
+      acceptBeta: allowBeta,
       currentVersion,
       error: err && err.message ? err.message : 'CHECK_UPDATE_FAILED',
     };
@@ -9063,8 +9065,11 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:checkUpdates', async (_event, options = {}) => {
     const manual = Boolean(options && options.manual);
-    const result = await checkForUpdates({ manual });
-    if (manual) {
+    const acceptBeta = typeof (options && options.acceptBeta) === 'boolean'
+      ? Boolean(options.acceptBeta)
+      : undefined;
+    const result = await checkForUpdates({ manual, acceptBeta });
+    if (manual && typeof acceptBeta !== 'boolean') {
       if (!result.ok) {
         const reason = String(result.error || 'unknown_error');
         emitMainToast(`Check for updates failed (${reason}).`, 'error');

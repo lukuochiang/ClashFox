@@ -29,6 +29,81 @@
 
         <div id="contentRoot" class="content-root">
           <section id="help" class="panel active help-stack">
+          <div class="card help-about-card">
+            <div class="card-header-row">
+              <h3 data-i18n="help.aboutTitle" data-card-icon="copyright">About ClashFox</h3>
+              <div class="help-about-header-actions" aria-label="About ClashFox Actions">
+                <button
+                  class="icon-btn ghost small help-about-action-btn"
+                  id="helpCheckAppUpdateBtn"
+                  type="button"
+                  data-tip-key="help.checkAppUpdate"
+                  data-position="bottom"
+                  data-native-title="false"
+                  aria-label="Check App Updates">
+                  <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                    <path d="M12 4v8"></path>
+                    <path d="M8.5 9.5 12 13l3.5-3.5"></path>
+                    <path d="M5 18h14"></path>
+                  </svg>
+                </button>
+<!--                <button-->
+<!--                  class="icon-btn ghost small help-about-action-btn"-->
+<!--                  id="helpCheckKernelUpdateBtn"-->
+<!--                  type="button"-->
+<!--                  data-tip-key="help.checkKernelUpdate"-->
+<!--                  data-position="bottom"-->
+<!--                  data-native-title="false"-->
+<!--                  aria-label="Check Kernel Updates">-->
+<!--                  <svg viewBox="0 0 24 24" role="presentation" focusable="false">-->
+<!--                    <rect x="7" y="7" width="10" height="10" rx="2"></rect>-->
+<!--                    <path d="M3 10h2M3 14h2M19 10h2M19 14h2M10 3v2M14 3v2M10 19v2M14 19v2"></path>-->
+<!--                  </svg>-->
+<!--                </button>-->
+<!--                <button-->
+<!--                  class="icon-btn ghost small help-about-action-btn"-->
+<!--                  id="helpCheckHelperUpdateBtn"-->
+<!--                  type="button"-->
+<!--                  data-tip-key="help.checkHelperUpdate"-->
+<!--                  data-position="bottom"-->
+<!--                  data-native-title="false"-->
+<!--                  aria-label="Check Helper Updates">-->
+<!--                  <svg viewBox="0 0 24 24" role="presentation" focusable="false">-->
+<!--                    <path d="M12 3 6 5.6v5.3c0 4.1 2.4 7.9 6 9.6 3.6-1.7 6-5.5 6-9.6V5.6L12 3Z"></path>-->
+<!--                    <path d="m9.2 12 1.8 1.8 3.8-3.8"></path>-->
+<!--                  </svg>-->
+<!--                </button>-->
+              </div>
+            </div>
+            <div class="help-about-head">
+              <div class="help-about-team-block">
+<!--                <div class="help-about-team-name" data-i18n="help.aboutTeamValue">ClashFox Team</div>-->
+                <p class="help-about-desc-lead" data-i18n="help.aboutDescLead">ClashFox Team builds and maintains the product experience around ClashFox.</p>
+              </div>
+            </div>
+            <div class="help-about-grid">
+              <div class="help-about-item">
+                <span class="help-about-label" data-i18n="help.aboutVersionLabel">Version</span>
+                <span class="help-about-value" id="helpAboutVersion">v0.0.0</span>
+              </div>
+              <div class="help-about-item">
+                <span class="help-about-label" data-i18n="help.aboutBuildLabel">Build</span>
+                <span class="help-about-value" id="helpAboutBuild">-</span>
+              </div>
+              <div class="help-about-item">
+                <span class="help-about-label" data-i18n="help.aboutTeamLabel">Team</span>
+                <span class="help-about-value" data-i18n="help.aboutTeamValue">ClashFox Team</span>
+              </div>
+            </div>
+            <div class="help-about-desc">
+              <div class="help-about-tags" aria-label="About ClashFox capabilities">
+                <span class="help-about-tag" data-i18n="help.aboutTagDesktop">Desktop GUI</span>
+                <span class="help-about-tag" data-i18n="help.aboutTagTray">Tray Integration</span>
+                <span class="help-about-tag" data-i18n="help.aboutTagMihomo">Mihomo Workflow</span>
+              </div>
+            </div>
+            <div class="help-about-status" id="helpAboutStatus" data-state="idle" data-i18n="help.updateEntryHint">Use the buttons below to check app, kernel, and helper updates.</div>
+          </div>
           <div class="card help-card">
             <h3 data-i18n="help.title">Help & Notes</h3>
             <ul class="help-list">
