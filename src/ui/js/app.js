@@ -92,6 +92,20 @@ let trafficUploadLine = document.getElementById('trafficUploadLine');
 let trafficUploadArea = document.getElementById('trafficUploadArea');
 let trafficDownloadLine = document.getElementById('trafficDownloadLine');
 let trafficDownloadArea = document.getElementById('trafficDownloadArea');
+let overviewTopologyStage = document.getElementById('overviewTopologyStage');
+let overviewTopologySurface = document.getElementById('overviewTopologySurface');
+let overviewTopologySvg = document.getElementById('overviewTopologySvg');
+let overviewTopologyColumns = document.getElementById('overviewTopologyColumns');
+let overviewTopologyEmpty = document.getElementById('overviewTopologyEmpty');
+let overviewTopologyZoomBtn = document.getElementById('overviewTopologyZoomBtn');
+let topologyZoomModal = document.getElementById('topologyZoomModal');
+let topologyZoomClose = document.getElementById('topologyZoomClose');
+let topologyZoomStage = document.getElementById('topologyZoomStage');
+let topologyZoomSurface = document.getElementById('topologyZoomSurface');
+let topologyZoomSvg = document.getElementById('topologyZoomSvg');
+let topologyZoomColumns = document.getElementById('topologyZoomColumns');
+let topologyZoomEmpty = document.getElementById('topologyZoomEmpty');
+let topologyTooltip = null;
 let trafficUploadAxis = [];
 let trafficDownloadAxis = [];
 let tunToggle = document.getElementById('tunToggle');
@@ -100,6 +114,1516 @@ let tunSynced = false;
 
 function getMihomoApiSource() {
   return resolveMihomoApiSourceFromState(state);
+}
+
+function stopMihomoConnectionsReconnect() {
+  if (state.mihomoConnectionsReconnectTimer) {
+    clearTimeout(state.mihomoConnectionsReconnectTimer);
+    state.mihomoConnectionsReconnectTimer = null;
+  }
+}
+
+function closeMihomoConnectionsSocket() {
+  stopMihomoConnectionsReconnect();
+  const socket = state.mihomoConnectionsSocket;
+  state.mihomoConnectionsSocket = null;
+  state.mihomoConnectionsLive = false;
+  state.mihomoConnectionsSocketUrl = '';
+  if (!socket) {
+    return;
+  }
+  try {
+    socket.onopen = null;
+    socket.onmessage = null;
+    socket.onerror = null;
+    socket.onclose = null;
+    socket.close();
+  } catch {
+    // ignore socket close failures
+  }
+}
+
+function scheduleMihomoConnectionsReconnect() {
+  if (currentPage !== 'overview') {
+    return;
+  }
+  stopMihomoConnectionsReconnect();
+  const attempt = Math.max(0, Number(state.mihomoConnectionsReconnectAttempts || 0));
+  const delay = Math.min(
+    MIHOMO_CONNECTIONS_RECONNECT_MAX_MS,
+    MIHOMO_CONNECTIONS_RECONNECT_BASE_MS * Math.max(1, 2 ** attempt),
+  );
+  state.mihomoConnectionsReconnectTimer = setTimeout(() => {
+    state.mihomoConnectionsReconnectTimer = null;
+    connectMihomoConnectionsStream();
+  }, delay);
+}
+
+function shouldUseOverviewConnectionsFallback() {
+  return !state.mihomoConnectionsLive;
+}
+
+function stopMihomoTrafficReconnect() {
+  if (state.mihomoTrafficReconnectTimer) {
+    clearTimeout(state.mihomoTrafficReconnectTimer);
+    state.mihomoTrafficReconnectTimer = null;
+  }
+}
+
+function closeMihomoTrafficSocket() {
+  stopMihomoTrafficReconnect();
+  const socket = state.mihomoTrafficSocket;
+  state.mihomoTrafficSocket = null;
+  state.mihomoTrafficLive = false;
+  state.mihomoTrafficSocketUrl = '';
+  if (!socket) {
+    return;
+  }
+  try {
+    socket.onopen = null;
+    socket.onmessage = null;
+    socket.onerror = null;
+    socket.onclose = null;
+    socket.close();
+  } catch {
+    // ignore socket close failures
+  }
+}
+
+function scheduleMihomoTrafficReconnect() {
+  if (currentPage !== 'overview') {
+    return;
+  }
+  stopMihomoTrafficReconnect();
+  const attempt = Math.max(0, Number(state.mihomoTrafficReconnectAttempts || 0));
+  const delay = Math.min(
+    MIHOMO_TRAFFIC_RECONNECT_MAX_MS,
+    MIHOMO_TRAFFIC_RECONNECT_BASE_MS * Math.max(1, 2 ** attempt),
+  );
+  state.mihomoTrafficReconnectTimer = setTimeout(() => {
+    state.mihomoTrafficReconnectTimer = null;
+    connectMihomoTrafficStream();
+  }, delay);
+}
+
+function shouldUseOverviewTrafficFallback() {
+  return !state.mihomoTrafficLive;
+}
+
+function stopMihomoMemoryReconnect() {
+  if (state.mihomoMemoryReconnectTimer) {
+    clearTimeout(state.mihomoMemoryReconnectTimer);
+    state.mihomoMemoryReconnectTimer = null;
+  }
+}
+
+function closeMihomoMemorySocket() {
+  stopMihomoMemoryReconnect();
+  const socket = state.mihomoMemorySocket;
+  state.mihomoMemorySocket = null;
+  state.mihomoMemorySocketUrl = '';
+  state.mihomoMemoryLive = false;
+  if (!socket) {
+    return;
+  }
+  try {
+    socket.onopen = null;
+    socket.onmessage = null;
+    socket.onerror = null;
+    socket.onclose = null;
+    socket.close();
+  } catch {
+    // ignore socket close failures
+  }
+}
+
+function scheduleMihomoMemoryReconnect() {
+  if (currentPage !== 'overview') {
+    return;
+  }
+  stopMihomoMemoryReconnect();
+  const attempt = Math.max(0, Number(state.mihomoMemoryReconnectAttempts || 0));
+  const delay = Math.min(
+    MIHOMO_MEMORY_RECONNECT_MAX_MS,
+    MIHOMO_MEMORY_RECONNECT_BASE_MS * Math.max(1, 2 ** attempt),
+  );
+  state.mihomoMemoryReconnectTimer = setTimeout(() => {
+    state.mihomoMemoryReconnectTimer = null;
+    connectMihomoMemoryStream();
+  }, delay);
+}
+
+function shouldUseOverviewMemoryFallback() {
+  return !state.mihomoMemoryLive;
+}
+
+function updateOverviewMemoryValue(inUseBytes) {
+  const inUse = Number.parseFloat(inUseBytes);
+  if (!overviewMemory) {
+    return;
+  }
+  setNodeTextIfChanged(overviewMemory, Number.isFinite(inUse) && inUse >= 0
+    ? formatBytes(inUse)
+    : '-');
+}
+
+function escapeTopologyText(value = '') {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeTopologyXml(value = '') {
+  return escapeTopologyText(value);
+}
+
+function truncateTopologyLabel(value = '', maxLength = 24) {
+  const text = String(value || '').trim();
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return `${text.slice(0, Math.max(1, maxLength - 1))}…`;
+}
+
+function clampTopologyNumber(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function estimateTopologyNodeWidth(columnKey = '', title = '', subtitle = '') {
+  const basis = Math.max(String(title || '').length, Math.round(String(subtitle || '').length * 0.82));
+  if (columnKey === 'source') {
+    return clampTopologyNumber(84 + (basis * 5.5), 118, 220);
+  }
+  if (columnKey === 'rule') {
+    return clampTopologyNumber(76 + (basis * 4.8), 100, 172);
+  }
+  if (columnKey === 'outbound') {
+    return clampTopologyNumber(72 + (basis * 4.5), 92, 148);
+  }
+  return clampTopologyNumber(68 + (basis * 4.2), 86, 126);
+}
+
+function estimateTopologyNodeHeight(columnKey = '', title = '', subtitle = '', fallback = 22) {
+  const titleLen = String(title || '').length;
+  const subtitleLen = String(subtitle || '').length;
+  const titleLines = columnKey === 'target'
+    ? 1
+    : Math.max(1, Math.min(2, Math.ceil(titleLen / (columnKey === 'source' ? 22 : 16))));
+  const hasSubtitle = Boolean(String(subtitle || '').trim());
+  const subtitleLines = hasSubtitle
+    ? Math.max(1, Math.min(2, Math.ceil(subtitleLen / (columnKey === 'source' ? 20 : 18))))
+    : 0;
+  const vertical = 10 + (titleLines * 14) + (subtitleLines ? ((subtitleLines * 11) + 4) : 0) + 8;
+  const minHeight = columnKey === 'target' ? 18 : fallback;
+  const maxHeight = columnKey === 'source' ? 96 : (columnKey === 'rule' ? 86 : 72);
+  return clampTopologyNumber(vertical, minHeight, maxHeight);
+}
+
+function pruneTopologyEvents(now = Date.now()) {
+  const next = (Array.isArray(state.topologyEvents) ? state.topologyEvents : [])
+    .filter((item) => item && (now - Number(item.at || 0)) <= TOPOLOGY_EVENT_TTL_MS)
+    .slice(0, TOPOLOGY_EVENT_LIMIT);
+  state.topologyEvents = next;
+  return next;
+}
+
+function computeTopologyAgeOpacity(timestamp = 0, now = Date.now()) {
+  const age = Math.max(0, now - Number(timestamp || 0));
+  const ratio = Math.max(0, Math.min(1, 1 - (age / TOPOLOGY_EVENT_TTL_MS)));
+  return 0.18 + ratio * 0.72;
+}
+
+function buildTopologyColumnLayout(rows = [], columnKey = '', height = 286, gap = 6) {
+  const normalizedWeights = rows.map((row) => Math.max(0.4, Math.pow(Math.max(1, Number(row.weight || 0)), 1.05)));
+  const total = normalizedWeights.reduce((sum, weight) => sum + weight, 0) || rows.length || 1;
+  const minHeight = columnKey === 'target' ? 14 : 22;
+  const measuredHeights = rows.map((row) => estimateTopologyNodeHeight(columnKey, row.label || '', row.subLabel || '', minHeight));
+  const fixedHeight = measuredHeights.reduce((sum, item) => sum + item, 0) + (Math.max(0, rows.length - 1) * gap);
+  const availableHeight = Math.max(minHeight, height - Math.max(0, rows.length - 1) * gap);
+  const totalNodeHeight = measuredHeights.reduce((sum, item) => sum + item, 0) + (Math.max(0, rows.length - 1) * gap);
+  let cursorY = Math.max(0, Math.round((height - totalNodeHeight) / 2));
+  return rows.map((row, index) => {
+    const ratio = normalizedWeights[index] / total;
+    const weightedHeight = Math.max(minHeight, Math.round(availableHeight * ratio));
+    const measuredHeight = measuredHeights[index] || minHeight;
+    const nodeHeight = fixedHeight <= height ? measuredHeight : Math.max(minHeight, Math.min(weightedHeight, measuredHeight));
+    const nodeWidth = estimateTopologyNodeWidth(columnKey, row.label || '', row.subLabel || '');
+    const next = {
+      ...row,
+      columnKey,
+      top: cursorY,
+      height: nodeHeight,
+      centerY: cursorY + (nodeHeight / 2),
+      boxWidth: nodeWidth,
+    };
+    cursorY += nodeHeight + gap;
+    return next;
+  });
+}
+
+function buildTopologyBandPathFromAnchors(fromX, toX, fromCenterY, toCenterY) {
+  const x1 = fromX;
+  const y1 = fromCenterY;
+  const x2 = toX;
+  const y2 = toCenterY;
+  const dx = Math.max(18, (x2 - x1) * 0.34);
+  return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+}
+
+function aggregateTopologyStageLinks(rows = [], fromKey = '', toKey = '') {
+  const map = new Map();
+  rows.forEach((row) => {
+    const fromId = String(row?.[fromKey] || '');
+    const toId = String(row?.[toKey] || '');
+    if (!fromId || !toId) return;
+    const aggregateKey = `${fromId}=>${toId}`;
+    const next = map.get(aggregateKey) || {
+      key: aggregateKey,
+      fromId,
+      toId,
+      hits: 0,
+      at: 0,
+    };
+    next.hits += Math.max(1, Number(row.hits || 1));
+    next.at = Math.max(next.at, Number(row.at || 0));
+    map.set(aggregateKey, next);
+  });
+  return Array.from(map.values());
+}
+
+function allocateTopologyLinkSlots(links = [], nodes = [], nodeField = '') {
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const allocations = new Map();
+  const groups = new Map();
+  links.forEach((link) => {
+    const nodeId = String(link?.[nodeField] || '');
+    if (!nodeId) return;
+    const bucket = groups.get(nodeId) || [];
+    bucket.push(link);
+    groups.set(nodeId, bucket);
+  });
+  groups.forEach((groupLinks, nodeId) => {
+    const node = nodeMap.get(nodeId);
+    if (!node) return;
+    const sorted = groupLinks.slice().sort((a, b) => {
+      const aSort = Number(a.sortCenterY ?? 0);
+      const bSort = Number(b.sortCenterY ?? 0);
+      if (aSort !== bSort) return aSort - bSort;
+      const aHits = Number(a.hits || 0);
+      const bHits = Number(b.hits || 0);
+      if (aHits !== bHits) return bHits - aHits;
+      return String(a.key || '').localeCompare(String(b.key || ''));
+    });
+    const padding = clampTopologyNumber(Math.round(node.height * 0.14), 2, 8);
+    const startY = node.top + padding;
+    const endY = node.top + node.height - padding;
+    const usableSpan = Math.max(2, endY - startY);
+    const slotStep = sorted.length > 1 ? usableSpan / (sorted.length - 1) : 0;
+    sorted.forEach((link, index) => {
+      const centerY = sorted.length === 1
+        ? node.centerY
+        : clampTopologyNumber(startY + (slotStep * index), node.top + 1.5, node.top + node.height - 1.5);
+      allocations.set(link.key, { centerY });
+    });
+  });
+  return allocations;
+}
+
+function ensureTopologySvgLayers(svgEl = overviewTopologySvg) {
+  if (!svgEl) {
+    return null;
+  }
+  let staticDefs = svgEl.querySelector('defs[data-topology-static="true"]');
+  if (!staticDefs) {
+    staticDefs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    staticDefs.setAttribute('data-topology-static', 'true');
+    staticDefs.innerHTML = '<filter id="topologyGlow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="3" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>';
+    svgEl.appendChild(staticDefs);
+  }
+  let dynamicDefs = svgEl.querySelector('defs[data-topology-dynamic="true"]');
+  if (!dynamicDefs) {
+    dynamicDefs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    dynamicDefs.setAttribute('data-topology-dynamic', 'true');
+    svgEl.appendChild(dynamicDefs);
+  }
+  let linksLayer = svgEl.querySelector('g[data-topology-links="true"]');
+  if (!linksLayer) {
+    linksLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    linksLayer.setAttribute('data-topology-links', 'true');
+    svgEl.appendChild(linksLayer);
+  }
+  return { dynamicDefs, linksLayer };
+}
+
+function setTopologyLinksMarkup(payload = '', svgEl = overviewTopologySvg) {
+  if (!svgEl) {
+    return;
+  }
+  const layers = ensureTopologySvgLayers(svgEl);
+  if (!layers) {
+    return;
+  }
+  const { dynamicDefs, linksLayer } = layers;
+  if (!payload) {
+    dynamicDefs.innerHTML = '';
+    linksLayer.innerHTML = '';
+    bindTopologySurfaceInteractions(svgEl);
+    return;
+  }
+  if (typeof payload === 'string') {
+    dynamicDefs.innerHTML = '';
+    linksLayer.innerHTML = payload;
+    bindTopologySurfaceInteractions(svgEl);
+    return;
+  }
+  dynamicDefs.innerHTML = String(payload.defsMarkup || '');
+  linksLayer.innerHTML = String(payload.pathsMarkup || '');
+  bindTopologySurfaceInteractions(svgEl);
+}
+
+function setTopologyColumnsMarkup(columnsMarkup = '', columnsEl = overviewTopologyColumns) {
+  if (columnsEl) {
+    columnsEl.innerHTML = columnsMarkup;
+    bindTopologySurfaceInteractions(columnsEl);
+  }
+}
+
+function buildTopologySurfaceSignature(columns = {}, tooltipMap = new Map()) {
+  const columnKeys = ['source', 'rule', 'outbound', 'target'];
+  return columnKeys.map((columnKey) => {
+    const items = Array.isArray(columns[columnKey]) ? columns[columnKey] : [];
+    return `${columnKey}:${items.map((item) => {
+      const tooltipData = tooltipMap.get(`${columnKey}:${item.id}`);
+      const tooltip = tooltipData
+        ? formatTopologyTooltipText(tooltipData.from, tooltipData.to, tooltipData.hits)
+        : [String(item.label || '').trim(), String(item.subLabel || '').trim()].filter(Boolean).join(' · ');
+      return [
+        item.id,
+        item.top,
+        item.height,
+        item.boxWidth,
+        item.label || '',
+        item.subLabel || '',
+        item.primaryKey || '',
+        tooltip || '',
+      ].join('|');
+    }).join(';')}`;
+  }).join('#');
+}
+
+function buildTopologyLinkSignature({
+  measured = null,
+  sourceRuleLinks = [],
+  ruleOutboundLinks = [],
+  outboundTargetLinks = [],
+  activeState = null,
+} = {}) {
+  const encodeNodeMap = (items = []) => items.map((item) => [
+    item.id,
+    Math.round(Number(item.top || 0)),
+    Math.round(Number(item.height || 0)),
+    Math.round(Number(item.leftAnchorX || 0)),
+    Math.round(Number(item.rightAnchorX || 0)),
+  ].join('|')).join(';');
+  const encodeLinks = (items = []) => items.map((item) => [
+    item.key,
+    Number(item.hits || 0),
+    Math.round(Number(item.sortCenterY || 0)),
+    Math.round(Number(item.at || 0) / 1000),
+  ].join('|')).join(';');
+  const activeLinkKeys = Array.from(activeState?.activeLinkKeys || []).sort().join(',');
+  return [
+    encodeNodeMap(measured?.columns?.source || []),
+    encodeNodeMap(measured?.columns?.rule || []),
+    encodeNodeMap(measured?.columns?.outbound || []),
+    encodeNodeMap(measured?.columns?.target || []),
+    encodeLinks(sourceRuleLinks),
+    encodeLinks(ruleOutboundLinks),
+    encodeLinks(outboundTargetLinks),
+    String(activeState?.activeKey || ''),
+    activeLinkKeys,
+    activeState?.hasActive ? '1' : '0',
+  ].join('#');
+}
+
+function applyTopologyNodeActiveState(columnsEl = overviewTopologyColumns, activeState = null) {
+  if (!columnsEl) {
+    return;
+  }
+  const activeRows = Array.isArray(activeState?.rows) ? activeState.rows : [];
+  const activeNodeIds = activeState?.nodeIds || null;
+  const hasActive = Boolean(activeState?.hasActive);
+  columnsEl.querySelectorAll('.topology-node-card[data-column-key][data-node-id]').forEach((nodeEl) => {
+    const columnKey = String(nodeEl.getAttribute('data-column-key') || '');
+    const nodeId = String(nodeEl.getAttribute('data-node-id') || '');
+    const nodeIsActive = activeRows.some((row) => (
+      columnKey === 'target'
+        ? row.targetId === nodeId
+        : row[`${columnKey}Id`] === nodeId
+    )) || (activeNodeIds ? activeNodeIds.has(nodeId) : false);
+    nodeEl.classList.toggle('is-active', hasActive && nodeIsActive);
+    nodeEl.classList.toggle('is-dimmed', hasActive && !nodeIsActive);
+  });
+}
+
+function setTopologyMarkup({ linksMarkup = '', columnsMarkup = '' } = {}, hasData = false, targets = {}) {
+  const {
+    svgEl = overviewTopologySvg,
+    columnsEl = overviewTopologyColumns,
+    emptyEl = overviewTopologyEmpty,
+  } = targets;
+  setTopologyLinksMarkup(linksMarkup, svgEl);
+  setTopologyColumnsMarkup(columnsMarkup, columnsEl);
+  if (emptyEl) {
+    emptyEl.hidden = hasData;
+    if (!hasData) {
+      emptyEl.textContent = ti('status.topologyEmpty', 'No live request path yet');
+    }
+  }
+}
+
+function setTopologyHoverKey(nextKey = '') {
+  const normalized = String(nextKey || '');
+  if (String(state.topologyHoverKey || '') === normalized) {
+    return;
+  }
+  state.topologyHoverKey = normalized;
+  renderTopologyCard();
+}
+
+function ensureTopologyTooltip() {
+  if (topologyTooltip && document.body && document.body.contains(topologyTooltip)) {
+    return topologyTooltip;
+  }
+  if (!document.body) {
+    return null;
+  }
+  topologyTooltip = document.createElement('div');
+  topologyTooltip.className = 'topology-hover-tooltip';
+  topologyTooltip.hidden = true;
+  document.body.appendChild(topologyTooltip);
+  return topologyTooltip;
+}
+
+function closeTopologyZoomModal() {
+  if (!topologyZoomModal) return;
+  topologyZoomModal.hidden = true;
+  document.body.classList.remove('topology-zoom-open');
+}
+
+function openTopologyZoomModal() {
+  if (!topologyZoomModal) return;
+  topologyZoomModal.hidden = false;
+  document.body.classList.add('topology-zoom-open');
+  renderTopologyCard();
+}
+
+function bindTopologyZoomModal() {
+  if (overviewTopologyZoomBtn && overviewTopologyZoomBtn.dataset.bound !== 'true') {
+    overviewTopologyZoomBtn.dataset.bound = 'true';
+    overviewTopologyZoomBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openTopologyZoomModal();
+    });
+  }
+  if (topologyZoomClose && topologyZoomClose.dataset.bound !== 'true') {
+    topologyZoomClose.dataset.bound = 'true';
+    topologyZoomClose.addEventListener('click', (event) => {
+      event.preventDefault();
+      closeTopologyZoomModal();
+    });
+  }
+  if (topologyZoomModal && topologyZoomModal.dataset.bound !== 'true') {
+    topologyZoomModal.dataset.bound = 'true';
+    topologyZoomModal.addEventListener('click', (event) => {
+      if (event.target === topologyZoomModal || event.target.classList.contains('topology-zoom-backdrop')) {
+        closeTopologyZoomModal();
+      }
+    });
+  }
+  if (document.body && document.body.dataset.topologyZoomBound !== 'true') {
+    document.body.dataset.topologyZoomBound = 'true';
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && topologyZoomModal && !topologyZoomModal.hidden) {
+        closeTopologyZoomModal();
+      }
+    });
+  }
+}
+
+function hideTopologyTooltip() {
+  const tip = ensureTopologyTooltip();
+  if (!tip) return;
+  tip.hidden = true;
+  tip.textContent = '';
+}
+
+function positionTopologyTooltip(clientX, clientY) {
+  const tip = ensureTopologyTooltip();
+  if (!tip || tip.hidden) return;
+  const gap = 14;
+  const rect = tip.getBoundingClientRect();
+  const maxLeft = Math.max(12, window.innerWidth - rect.width - 12);
+  const maxTop = Math.max(12, window.innerHeight - rect.height - 12);
+  const left = Math.min(maxLeft, Math.max(12, clientX + gap));
+  const top = clientY + rect.height + gap > window.innerHeight
+    ? Math.max(12, clientY - rect.height - gap)
+    : Math.min(maxTop, Math.max(12, clientY + gap));
+  tip.style.left = `${Math.round(left)}px`;
+  tip.style.top = `${Math.round(top)}px`;
+}
+
+function showTopologyTooltip(text = '', clientX = 0, clientY = 0) {
+  const value = String(text || '').trim();
+  const tip = ensureTopologyTooltip();
+  if (!tip || !value) {
+    hideTopologyTooltip();
+    return;
+  }
+  tip.textContent = value;
+  tip.hidden = false;
+  positionTopologyTooltip(clientX, clientY);
+}
+
+function bindTopologySurfaceInteractions(surface) {
+  if (!surface || surface.dataset.boundTopologyHover === 'true') {
+    return;
+  }
+  surface.dataset.boundTopologyHover = 'true';
+  surface.addEventListener('mouseover', (event) => {
+    const hoverTarget = event.target && typeof event.target.closest === 'function'
+      ? event.target.closest('[data-topology-tooltip]')
+      : null;
+    if (hoverTarget) {
+      showTopologyTooltip(
+        hoverTarget.getAttribute('data-topology-tooltip') || '',
+        Number(event.clientX || 0),
+        Number(event.clientY || 0),
+      );
+    }
+    const node = event.target && typeof event.target.closest === 'function'
+      ? event.target.closest('.topology-node-card[data-column-key][data-node-id]')
+      : null;
+    if (node) {
+      const columnKey = String(node.getAttribute('data-column-key') || '');
+      const nodeId = String(node.getAttribute('data-node-id') || '');
+      if (columnKey && nodeId) {
+        setTopologyHoverKey(`node:${columnKey}:${nodeId}`);
+        return;
+      }
+    }
+    const target = event.target && typeof event.target.closest === 'function'
+      ? event.target.closest('[data-topology-key]')
+      : null;
+    if (target) {
+      setTopologyHoverKey(`link:${target.getAttribute('data-topology-key') || ''}`);
+    }
+  });
+  surface.addEventListener('mousemove', (event) => {
+    const hoverTarget = event.target && typeof event.target.closest === 'function'
+      ? event.target.closest('[data-topology-tooltip]')
+      : null;
+    if (!hoverTarget) {
+      hideTopologyTooltip();
+      return;
+    }
+    showTopologyTooltip(
+      hoverTarget.getAttribute('data-topology-tooltip') || '',
+      Number(event.clientX || 0),
+      Number(event.clientY || 0),
+    );
+  });
+  surface.addEventListener('focusin', (event) => {
+    const hoverTarget = event.target && typeof event.target.closest === 'function'
+      ? event.target.closest('[data-topology-tooltip]')
+      : null;
+    if (hoverTarget) {
+      const rect = hoverTarget.getBoundingClientRect();
+      showTopologyTooltip(
+        hoverTarget.getAttribute('data-topology-tooltip') || '',
+        rect.left + (rect.width / 2),
+        rect.top + (rect.height / 2),
+      );
+    }
+    const node = event.target && typeof event.target.closest === 'function'
+      ? event.target.closest('.topology-node-card[data-column-key][data-node-id]')
+      : null;
+    if (node) {
+      const columnKey = String(node.getAttribute('data-column-key') || '');
+      const nodeId = String(node.getAttribute('data-node-id') || '');
+      if (columnKey && nodeId) {
+        setTopologyHoverKey(`node:${columnKey}:${nodeId}`);
+        return;
+      }
+    }
+    const target = event.target && typeof event.target.closest === 'function'
+      ? event.target.closest('[data-topology-key]')
+      : null;
+    if (target) {
+      setTopologyHoverKey(`link:${target.getAttribute('data-topology-key') || ''}`);
+    }
+  });
+  surface.addEventListener('mouseleave', () => {
+    hideTopologyTooltip();
+    setTopologyHoverKey('');
+  });
+  surface.addEventListener('focusout', (event) => {
+    if (!surface.contains(event.relatedTarget)) {
+      hideTopologyTooltip();
+      setTopologyHoverKey('');
+    }
+  });
+}
+
+function measureTopologyDomGeometry(svgEl = overviewTopologySvg, columnsEl = overviewTopologyColumns) {
+  if (!svgEl || !columnsEl) {
+    return null;
+  }
+  const svgRect = svgEl.getBoundingClientRect();
+  if (!svgRect.width || !svgRect.height) {
+    return null;
+  }
+  svgEl.setAttribute('viewBox', `0 0 ${Math.round(svgRect.width)} ${Math.round(svgRect.height)}`);
+  const columns = {
+    source: [],
+    rule: [],
+    outbound: [],
+    target: [],
+  };
+  columnsEl.querySelectorAll('.topology-node-card[data-column-key][data-node-id]').forEach((nodeEl) => {
+    const columnKey = String(nodeEl.getAttribute('data-column-key') || '');
+    const nodeId = String(nodeEl.getAttribute('data-node-id') || '');
+    if (!columns[columnKey] || !nodeId) {
+      return;
+    }
+    const rect = nodeEl.getBoundingClientRect();
+    const top = rect.top - svgRect.top;
+    const height = rect.height;
+    columns[columnKey].push({
+      id: nodeId,
+      top,
+      height,
+      centerY: top + (height / 2),
+      leftAnchorX: (rect.left - svgRect.left) + 3,
+      rightAnchorX: (rect.right - svgRect.left) - 3,
+    });
+  });
+  return {
+    width: svgRect.width,
+    height: svgRect.height,
+    columns,
+  };
+}
+
+function buildTopologyViewModel(events = []) {
+  const rows = Array.isArray(events) ? events.slice(0, TOPOLOGY_EVENT_LIMIT) : [];
+  if (!rows.length) {
+    return null;
+  }
+  const sourceMap = new Map();
+  const ruleMap = new Map();
+  const outboundMap = new Map();
+  const targetMap = new Map();
+  const inc = (map, id, label, subLabel, weight) => {
+    const existing = map.get(id) || { id, label, subLabel, weight: 0 };
+    existing.weight += weight;
+    if (!existing.label && label) existing.label = label;
+    if (!existing.subLabel && subLabel) existing.subLabel = subLabel;
+    map.set(id, existing);
+  };
+  rows.forEach((row) => {
+    const weight = Number(row.hits || 1) || 1;
+    inc(sourceMap, row.sourceId, row.sourceMain, row.sourceSub, weight);
+    inc(ruleMap, row.ruleId, row.ruleLabel, row.ruleSub, weight);
+    inc(outboundMap, row.outboundId, row.outboundMain, row.outboundSub, weight);
+    inc(targetMap, row.targetId, row.destinationMain, row.destinationSub, weight);
+  });
+  const sortByWeight = (a, b) => Number(b.weight || 0) - Number(a.weight || 0);
+  const sourceNodes = Array.from(sourceMap.values()).sort(sortByWeight);
+  const ruleNodes = Array.from(ruleMap.values()).sort(sortByWeight);
+  const outboundNodes = Array.from(outboundMap.values()).sort(sortByWeight);
+  const targetNodes = Array.from(targetMap.values()).sort(sortByWeight);
+  return { rows, sourceNodes, ruleNodes, outboundNodes, targetNodes };
+}
+
+function buildTopologyNodeTooltipMap(model = null) {
+  const tips = new Map();
+  if (!model || !Array.isArray(model.rows)) {
+    return tips;
+  }
+  const bestBy = (rows, fromKey, toMainKey, getMapKey) => {
+    const grouped = new Map();
+    rows.forEach((row) => {
+      const mapKey = getMapKey(row);
+      if (!mapKey) return;
+      const current = grouped.get(mapKey);
+      const nextHits = Math.max(1, Number(row.hits || 1));
+      if (!current || nextHits > current.hits) {
+        grouped.set(mapKey, {
+          from: row[fromKey] || '',
+          to: row[toMainKey] || '',
+          hits: nextHits,
+        });
+      }
+    });
+    return grouped;
+  };
+  const sourceTips = bestBy(model.rows, 'sourceMain', 'ruleLabel', (row) => `source:${row.sourceId}`);
+  const ruleTips = bestBy(model.rows, 'ruleLabel', 'outboundMain', (row) => `rule:${row.ruleId}`);
+  const outboundTips = bestBy(model.rows, 'outboundMain', 'destinationMain', (row) => `outbound:${row.outboundId}`);
+  const targetTips = bestBy(model.rows, 'outboundMain', 'destinationMain', (row) => `target:${row.targetId}`);
+  [sourceTips, ruleTips, outboundTips, targetTips].forEach((grouped) => {
+    grouped.forEach((value, key) => tips.set(key, value));
+  });
+  return tips;
+}
+
+function formatTopologyTooltipText(fromLabel = '', toLabel = '', hits = 0) {
+  const from = String(fromLabel || '').trim();
+  const to = String(toLabel || '').trim();
+  void hits;
+  return `${from} \u2192 ${to}`;
+}
+
+function buildTopologyRealtimeCountMaps(connections = []) {
+  const maps = {
+    sourceRule: new Map(),
+    ruleOutbound: new Map(),
+    outboundTarget: new Map(),
+  };
+  if (!Array.isArray(connections) || !connections.length) {
+    return maps;
+  }
+  connections.forEach((item) => {
+    const metadata = item && item.metadata ? item.metadata : {};
+    const processName = String(metadata.process || '').trim();
+    const sourceIp = String(metadata.sourceIP || '').trim();
+    const sourceId = processName || sourceIp || 'source';
+    const ruleId = String(item.rule || '').trim() || String(metadata.specialRules || '').trim() || 'rule';
+    const chains = Array.isArray(item.chains) ? item.chains.filter(Boolean).map((value) => String(value).trim()).filter(Boolean) : [];
+    const outboundId = chains.length ? chains[chains.length - 1] : 'outbound';
+    const host = String(metadata.host || '').trim();
+    const port = String(metadata.destinationPort || '').trim();
+    const targetId = host ? `${host}${port ? `:${port}` : ''}` : String(metadata.remoteDestination || '').trim() || 'destination';
+    const pairs = [
+      [maps.sourceRule, `${sourceId}=>${ruleId}`],
+      [maps.ruleOutbound, `${ruleId}=>${outboundId}`],
+      [maps.outboundTarget, `${outboundId}=>${targetId}`],
+    ];
+    pairs.forEach(([map, key]) => {
+      map.set(key, Number(map.get(key) || 0) + 1);
+    });
+  });
+  return maps;
+}
+
+function buildTopologyColumnsMarkup(columns = {}, activeState = null, tooltipMap = new Map()) {
+  const columnDefs = [
+    { key: 'source', title: ti('status.topologySource', 'Source') },
+    { key: 'rule', title: ti('status.topologyRuleMatch', 'Rule Match') },
+    { key: 'outbound', title: ti('status.topologyOutbound', 'Outbound') },
+    { key: 'target', title: ti('status.topologyDestination', 'Destination') },
+  ];
+  return columnDefs.map((column) => {
+    const items = Array.isArray(columns[column.key]) ? columns[column.key] : [];
+    const nodesMarkup = items.map((item) => {
+      const activeRows = Array.isArray(activeState?.rows) ? activeState.rows : [];
+      const activeNodeIds = activeState?.nodeIds || null;
+      const nodeIsActive = activeRows.some((row) => (
+        column.key === 'target'
+          ? row.targetId === item.id
+          : row[`${column.key}Id`] === item.id
+      )) || (activeNodeIds ? activeNodeIds.has(item.id) : false);
+      const nodeClass = activeState?.hasActive ? (nodeIsActive ? ' is-active' : ' is-dimmed') : '';
+      const title = truncateTopologyLabel(item.label || '-', column.key === 'target' ? 34 : 24);
+      const subtitle = truncateTopologyLabel(item.subLabel || '', column.key === 'target' ? 16 : 18);
+      const showSub = Boolean(subtitle) && item.height >= (column.key === 'target' ? 22 : 40);
+      const tooltipData = tooltipMap.get(`${column.key}:${item.id}`);
+      const tooltip = tooltipData
+        ? formatTopologyTooltipText(tooltipData.from, tooltipData.to, tooltipData.hits)
+        : [String(item.label || '').trim(), String(item.subLabel || '').trim()].filter(Boolean).join(' · ');
+      return `<div class="topology-node-card ${column.key}${nodeClass}" data-column-key="${escapeTopologyXml(column.key)}" data-node-id="${escapeTopologyXml(item.id)}" data-topology-tooltip="${escapeTopologyXml(tooltip || item.label || '-')}" style="top:${item.top}px;height:${item.height}px;width:${item.boxWidth}px;"${item.primaryKey ? ` data-topology-key="${escapeTopologyXml(item.primaryKey)}"` : ''}>
+        <div class="topology-node-title">${escapeTopologyXml(title)}</div>
+        ${showSub ? `<div class="topology-node-subtitle">${escapeTopologyXml(subtitle)}</div>` : ''}
+      </div>`;
+    }).join('');
+    return `<section class="topology-column ${column.key}">
+      <div class="topology-column-header">${escapeTopologyXml(column.title)}</div>
+      <div class="topology-column-body">${nodesMarkup}</div>
+    </section>`;
+  }).join('');
+}
+
+function renderTopologySurface(model, activeState, targets = {}) {
+  const {
+    svgEl = overviewTopologySvg,
+    columnsEl = overviewTopologyColumns,
+    emptyEl = overviewTopologyEmpty,
+  } = targets;
+  if (!svgEl || !columnsEl) {
+    return;
+  }
+  const surfaceHeight = Math.round(columnsEl.getBoundingClientRect().height || 0);
+  const chartHeight = Math.max(286, surfaceHeight - 30);
+  const gap = 6;
+  columnsEl.style.setProperty('--topology-body-height', `${chartHeight}px`);
+  const nodeTooltipMap = buildTopologyNodeTooltipMap(model);
+  const columns = {
+    source: buildTopologyColumnLayout(model.sourceNodes, 'source', chartHeight, gap)
+      .map((item) => ({ ...item, primaryKey: model.rows.find((row) => row.sourceId === item.id)?.key || '' })),
+    rule: buildTopologyColumnLayout(model.ruleNodes, 'rule', chartHeight, gap)
+      .map((item) => ({ ...item, primaryKey: model.rows.find((row) => row.ruleId === item.id)?.key || '' })),
+    outbound: buildTopologyColumnLayout(model.outboundNodes, 'outbound', chartHeight, gap)
+      .map((item) => ({ ...item, primaryKey: model.rows.find((row) => row.outboundId === item.id)?.key || '' })),
+    target: buildTopologyColumnLayout(model.targetNodes, 'target', chartHeight, 4)
+      .map((item) => ({ ...item, primaryKey: model.rows.find((row) => row.targetId === item.id)?.key || '' })),
+  };
+  const surfaceKey = String(svgEl.id || columnsEl.id || 'topology-surface');
+  const signature = buildTopologySurfaceSignature(columns, nodeTooltipMap);
+  const expectedNodeCount = Object.values(columns).reduce((sum, items) => sum + (Array.isArray(items) ? items.length : 0), 0);
+  const actualNodeCount = columnsEl.querySelectorAll('.topology-node-card[data-column-key][data-node-id]').length;
+  const columnsChanged = state.topologySurfaceSignatures[surfaceKey] !== signature || actualNodeCount !== expectedNodeCount;
+  if (columnsChanged) {
+    const columnsMarkup = buildTopologyColumnsMarkup(columns, activeState, nodeTooltipMap);
+    setTopologyColumnsMarkup(columnsMarkup, columnsEl);
+    state.topologySurfaceSignatures[surfaceKey] = signature;
+  } else {
+    applyTopologyNodeActiveState(columnsEl, activeState);
+  }
+  const measured = measureTopologyDomGeometry(svgEl, columnsEl);
+  if (!measured) {
+    setTopologyLinksMarkup('', svgEl);
+    if (emptyEl) emptyEl.hidden = true;
+    return;
+  }
+  const now = Date.now();
+  const sourceRuleLinks = aggregateTopologyStageLinks(model.rows, 'sourceId', 'ruleId');
+  const ruleOutboundLinks = aggregateTopologyStageLinks(model.rows, 'ruleId', 'outboundId');
+  const outboundTargetLinks = aggregateTopologyStageLinks(model.rows, 'outboundId', 'targetId');
+  const realtimeCounts = buildTopologyRealtimeCountMaps(state.mihomoConnectionsSnapshot || []);
+  sourceRuleLinks.forEach((link) => {
+    link.hits = Math.max(1, Number(realtimeCounts.sourceRule.get(link.key) || link.hits || 1));
+  });
+  ruleOutboundLinks.forEach((link) => {
+    link.hits = Math.max(1, Number(realtimeCounts.ruleOutbound.get(link.key) || link.hits || 1));
+  });
+  outboundTargetLinks.forEach((link) => {
+    link.hits = Math.max(1, Number(realtimeCounts.outboundTarget.get(link.key) || link.hits || 1));
+  });
+  const sourceMap = new Map(measured.columns.source.map((item) => [item.id, item]));
+  const ruleMap = new Map(measured.columns.rule.map((item) => [item.id, item]));
+  const outboundMap = new Map(measured.columns.outbound.map((item) => [item.id, item]));
+  const targetMap = new Map(measured.columns.target.map((item) => [item.id, item]));
+  sourceRuleLinks.forEach((link) => {
+    link.sortCenterY = ruleMap.get(link.toId)?.centerY ?? sourceMap.get(link.fromId)?.centerY ?? 0;
+  });
+  ruleOutboundLinks.forEach((link) => {
+    link.sortCenterY = outboundMap.get(link.toId)?.centerY ?? ruleMap.get(link.fromId)?.centerY ?? 0;
+  });
+  outboundTargetLinks.forEach((link) => {
+    link.sortCenterY = targetMap.get(link.toId)?.centerY ?? outboundMap.get(link.fromId)?.centerY ?? 0;
+  });
+  const sourceRuleFromSlots = allocateTopologyLinkSlots(sourceRuleLinks, measured.columns.source, 'fromId');
+  const sourceRuleToSlots = allocateTopologyLinkSlots(sourceRuleLinks, measured.columns.rule, 'toId');
+  const ruleOutboundFromSlots = allocateTopologyLinkSlots(ruleOutboundLinks, measured.columns.rule, 'fromId');
+  const ruleOutboundToSlots = allocateTopologyLinkSlots(ruleOutboundLinks, measured.columns.outbound, 'toId');
+  const outboundTargetFromSlots = allocateTopologyLinkSlots(outboundTargetLinks, measured.columns.outbound, 'fromId');
+  const outboundTargetToSlots = allocateTopologyLinkSlots(outboundTargetLinks, measured.columns.target, 'toId');
+  const linkSignature = buildTopologyLinkSignature({
+    measured,
+    sourceRuleLinks,
+    ruleOutboundLinks,
+    outboundTargetLinks,
+    activeState,
+  });
+  if (state.topologyLinkSignatures[surfaceKey] === linkSignature) {
+    if (emptyEl) {
+      emptyEl.hidden = true;
+    }
+    return;
+  }
+  const defs = [];
+  const paths = [];
+  const activeKey = activeState?.activeKey || '';
+  const activeLinkKeys = activeState?.activeLinkKeys || new Set();
+  const hasActiveSelection = Boolean(activeState?.hasActive);
+  const pushAggregatedBand = (links, fromMap, toMap, fromSlots, toSlots, stageClass, fromColor, toColor) => {
+    links.forEach((link, index) => {
+      const fromNode = fromMap.get(link.fromId);
+      const toNode = toMap.get(link.toId);
+      const fromSlot = fromSlots.get(link.key);
+      const toSlot = toSlots.get(link.key);
+      if (!fromNode || !toNode || !fromSlot || !toSlot) return;
+      const fromY = fromSlot.centerY;
+      const toY = toSlot.centerY;
+      const width = Math.max(1.25, Math.min(16, 1 + (Math.log2(Math.max(1, link.hits)) * 2.4)));
+      const opacity = computeTopologyAgeOpacity(link.at, now);
+      const isActive = activeLinkKeys.has(link.key);
+      const rowClass = hasActiveSelection ? (isActive ? ' is-active' : ' is-dimmed') : '';
+      const visibleOpacity = hasActiveSelection ? (isActive ? Math.max(0.74, opacity) : Math.max(0.08, opacity * 0.18)) : opacity;
+      const fromX = fromNode.rightAnchorX;
+      const toX = toNode.leftAnchorX;
+      const d = buildTopologyBandPathFromAnchors(fromX, toX, fromY, toY);
+      const gradientId = `topologyStroke-${stageClass}-${index}-${svgEl.id || 'surface'}`;
+      const fromLabel = String((model.rows.find((row) => (
+        row[stageClass === 'source' ? 'sourceId' : stageClass === 'rule' ? 'ruleId' : 'outboundId'] === link.fromId
+      ))?.[stageClass === 'source' ? 'sourceMain' : stageClass === 'rule' ? 'ruleLabel' : 'outboundMain']) || link.fromId);
+      const toLabel = String((model.rows.find((row) => (
+        row[stageClass === 'source' ? 'ruleId' : stageClass === 'rule' ? 'outboundId' : 'targetId'] === link.toId
+      ))?.[stageClass === 'source' ? 'ruleLabel' : stageClass === 'rule' ? 'outboundMain' : 'destinationMain']) || link.toId);
+      const tooltip = formatTopologyTooltipText(fromLabel, toLabel, link.hits);
+      defs.push(`<linearGradient id="${gradientId}" gradientUnits="userSpaceOnUse" x1="${fromX.toFixed(2)}" y1="${fromY.toFixed(2)}" x2="${toX.toFixed(2)}" y2="${toY.toFixed(2)}"><stop offset="0%" stop-color="${fromColor}" stop-opacity="${visibleOpacity.toFixed(3)}"/><stop offset="100%" stop-color="${toColor}" stop-opacity="${visibleOpacity.toFixed(3)}"/></linearGradient>`);
+      paths.push(`<path class="topology-link ${stageClass}${rowClass}" data-topology-key="${escapeTopologyXml(link.key)}" d="${d}" style="stroke:url(#${gradientId})" stroke-width="${width.toFixed(2)}" ${activeKey === link.key ? 'filter="url(#topologyGlow)"' : ''}/><path class="topology-link-hit" data-topology-key="${escapeTopologyXml(link.key)}" data-topology-tooltip="${escapeTopologyXml(tooltip)}" d="${d}" stroke-width="${Math.max(10, width + 5).toFixed(2)}" />`);
+    });
+  };
+  pushAggregatedBand(sourceRuleLinks, sourceMap, ruleMap, sourceRuleFromSlots, sourceRuleToSlots, 'source', '#5978ff', '#9ec782');
+  pushAggregatedBand(ruleOutboundLinks, ruleMap, outboundMap, ruleOutboundFromSlots, ruleOutboundToSlots, 'rule', '#9ec782', '#efcd69');
+  pushAggregatedBand(outboundTargetLinks, outboundMap, targetMap, outboundTargetFromSlots, outboundTargetToSlots, 'outbound', '#efcd69', '#f29a9a');
+  setTopologyLinksMarkup({
+    defsMarkup: defs.join(''),
+    pathsMarkup: paths.join(''),
+  }, svgEl);
+  state.topologyLinkSignatures[surfaceKey] = linkSignature;
+  if (emptyEl) {
+    emptyEl.hidden = true;
+  }
+}
+
+function performTopologyRender() {
+  if (!overviewTopologySvg || !overviewTopologyEmpty || !overviewTopologyColumns) {
+    return;
+  }
+  const now = Date.now();
+  const model = buildTopologyViewModel(pruneTopologyEvents(now));
+  if (!model) {
+    state.topologyHoverKey = '';
+    state.topologySurfaceSignatures = {};
+    state.topologyLinkSignatures = {};
+    setTopologyMarkup({ linksMarkup: '', columnsMarkup: '' }, false, {
+      svgEl: overviewTopologySvg,
+      columnsEl: overviewTopologyColumns,
+      emptyEl: overviewTopologyEmpty,
+    });
+    if (topologyZoomSvg && topologyZoomColumns && topologyZoomEmpty) {
+      setTopologyMarkup({ linksMarkup: '', columnsMarkup: '' }, false, {
+        svgEl: topologyZoomSvg,
+        columnsEl: topologyZoomColumns,
+        emptyEl: topologyZoomEmpty,
+      });
+    }
+    return;
+  }
+  const hoverValue = String(state.topologyHoverKey || '');
+  const isLinkHover = hoverValue.startsWith('link:');
+  const isNodeHover = hoverValue.startsWith('node:');
+  const activeKey = isLinkHover ? hoverValue.slice(5) : '';
+  const activeLinkNodeIds = activeKey.includes('=>') ? activeKey.split('=>').filter(Boolean) : [];
+  const hoveredNodeParts = isNodeHover ? hoverValue.split(':') : [];
+  const hoveredColumnKey = hoveredNodeParts[1] || '';
+  const hoveredNodeId = hoveredNodeParts.slice(2).join(':') || '';
+  const activeRow = activeKey ? model.rows.find((row) => row.key === activeKey) : null;
+  const activeRows = activeRow
+    ? [activeRow]
+    : (hoveredColumnKey && hoveredNodeId
+      ? model.rows.filter((row) => {
+        if (hoveredColumnKey === 'target') return row.targetId === hoveredNodeId;
+        return row[`${hoveredColumnKey}Id`] === hoveredNodeId;
+      })
+      : []);
+  const activeLinkKeys = new Set();
+  const activeNodeIds = new Set(activeLinkNodeIds);
+  activeRows.forEach((row) => {
+    activeNodeIds.add(row.sourceId);
+    activeNodeIds.add(row.ruleId);
+    activeNodeIds.add(row.outboundId);
+    activeNodeIds.add(row.targetId);
+    activeLinkKeys.add(`${row.sourceId}=>${row.ruleId}`);
+    activeLinkKeys.add(`${row.ruleId}=>${row.outboundId}`);
+    activeLinkKeys.add(`${row.outboundId}=>${row.targetId}`);
+  });
+  if (activeKey) {
+    activeLinkKeys.add(activeKey);
+  }
+  const hasActiveSelection = Boolean(activeRows.length || activeLinkKeys.size);
+  const activeState = {
+    rows: activeRows,
+    nodeIds: activeNodeIds,
+    hasActive: hasActiveSelection,
+    activeKey,
+    activeLinkKeys,
+  };
+  renderTopologySurface(model, activeState, {
+    svgEl: overviewTopologySvg,
+    columnsEl: overviewTopologyColumns,
+    emptyEl: overviewTopologyEmpty,
+  });
+  if (topologyZoomModal && !topologyZoomModal.hidden) {
+    renderTopologySurface(model, activeState, {
+      svgEl: topologyZoomSvg,
+      columnsEl: topologyZoomColumns,
+      emptyEl: topologyZoomEmpty,
+    });
+  }
+}
+
+function renderTopologyCard(options = {}) {
+  const immediate = Boolean(options && options.immediate);
+  const delayMs = Number.isFinite(Number(options && options.delayMs)) ? Number(options.delayMs) : 240;
+  if (immediate) {
+    if (state.topologyRenderTimer) {
+      clearTimeout(state.topologyRenderTimer);
+      state.topologyRenderTimer = null;
+    }
+    if (state.topologyRenderRaf) {
+      cancelAnimationFrame(state.topologyRenderRaf);
+      state.topologyRenderRaf = null;
+    }
+    performTopologyRender();
+    return;
+  }
+  if (state.topologyRenderTimer) {
+    clearTimeout(state.topologyRenderTimer);
+  }
+  state.topologyRenderTimer = setTimeout(() => {
+    state.topologyRenderTimer = null;
+    if (state.topologyRenderRaf) {
+      cancelAnimationFrame(state.topologyRenderRaf);
+    }
+    state.topologyRenderRaf = requestAnimationFrame(() => {
+      state.topologyRenderRaf = null;
+      performTopologyRender();
+    });
+  }, Math.max(120, delayMs));
+}
+
+function parseTopologyLogPayload(payload = '') {
+  const text = String(payload || '').trim();
+  if (!text) {
+    return null;
+  }
+  const match = text.match(/^\[(?<network>[A-Z]+)\]\s+(?<source>[^ ]+?)(?:\((?<process>[^)]+)\))?\s+-->\s+(?<destination>[^ ]+)\s+match\s+(?<rule>.+?)\s+using\s+(?<outbound>.+)$/);
+  if (!match || !match.groups) {
+    return null;
+  }
+  const sourceEndpoint = String(match.groups.source || '').trim();
+  const sourceProcess = String(match.groups.process || '').trim();
+  const destination = String(match.groups.destination || '').trim();
+  const outbound = String(match.groups.outbound || '').trim();
+  const rule = String(match.groups.rule || '').trim();
+  const network = String(match.groups.network || '').trim();
+  const outboundGroupMatch = outbound.match(/^(.+?)\[(.+)\]$/);
+  const outboundMain = outboundGroupMatch ? String(outboundGroupMatch[1] || '').trim() : outbound;
+  const outboundLeaf = outboundGroupMatch ? String(outboundGroupMatch[2] || '').trim() : outbound;
+  return {
+    key: `${sourceEndpoint}|${sourceProcess}|${destination}|${outbound}`,
+    sourceId: sourceProcess || sourceEndpoint || 'source',
+    sourceMain: sourceProcess || sourceEndpoint || '-',
+    sourceSub: sourceProcess ? sourceEndpoint : network || '-',
+    ruleId: rule || 'rule',
+    ruleLabel: rule || 'Match',
+    ruleSub: network || '-',
+    outboundId: outboundMain || outbound || 'outbound',
+    outboundMain: outboundMain || outbound || '-',
+    outboundSub: outboundLeaf && outboundLeaf !== outboundMain ? outboundLeaf : '',
+    outbound: outbound || '-',
+    targetId: destination || 'destination',
+    destinationMain: destination || '-',
+    destinationSub: network || '-',
+    hits: 1,
+    at: Date.now(),
+  };
+}
+
+function stopMihomoLogsReconnect() {
+  if (state.mihomoLogsReconnectTimer) {
+    clearTimeout(state.mihomoLogsReconnectTimer);
+    state.mihomoLogsReconnectTimer = null;
+  }
+}
+
+function closeMihomoLogsSocket() {
+  stopMihomoLogsReconnect();
+  const socket = state.mihomoLogsSocket;
+  state.mihomoLogsSocket = null;
+  state.mihomoLogsSocketUrl = '';
+  if (!socket) {
+    return;
+  }
+  try {
+    socket.onopen = null;
+    socket.onmessage = null;
+    socket.onerror = null;
+    socket.onclose = null;
+    socket.close();
+  } catch {
+    // ignore socket close failures
+  }
+}
+
+function scheduleMihomoLogsReconnect() {
+  if (currentPage !== 'overview') {
+    return;
+  }
+  stopMihomoLogsReconnect();
+  const attempt = Math.max(0, Number(state.mihomoLogsReconnectAttempts || 0));
+  const delay = Math.min(
+    MIHOMO_LOGS_RECONNECT_MAX_MS,
+    MIHOMO_LOGS_RECONNECT_BASE_MS * Math.max(1, 2 ** attempt),
+  );
+  state.mihomoLogsReconnectTimer = setTimeout(() => {
+    state.mihomoLogsReconnectTimer = null;
+    connectMihomoLogsStream();
+  }, delay);
+}
+
+function startTopologyTicker() {
+  if (state.topologyTickTimer) {
+    clearInterval(state.topologyTickTimer);
+  }
+  state.topologyTickTimer = setInterval(() => {
+    if (currentPage !== 'overview') {
+      return;
+    }
+    const before = Array.isArray(state.topologyEvents) ? state.topologyEvents.length : 0;
+    const after = pruneTopologyEvents(Date.now()).length;
+    if (before !== after || after > 0) {
+      renderTopologyCard({ immediate: true });
+    }
+  }, 1000);
+}
+
+function stopTopologyTicker() {
+  if (state.topologyTickTimer) {
+    clearInterval(state.topologyTickTimer);
+    state.topologyTickTimer = null;
+  }
+  if (state.topologyRenderTimer) {
+    clearTimeout(state.topologyRenderTimer);
+    state.topologyRenderTimer = null;
+  }
+  if (state.topologyRenderRaf) {
+    cancelAnimationFrame(state.topologyRenderRaf);
+    state.topologyRenderRaf = null;
+  }
+}
+
+function handleMihomoLogsPayload(payload = '') {
+  const parsed = parseTopologyLogPayload(payload);
+  if (!parsed) {
+    return;
+  }
+  state.mihomoLogsReconnectAttempts = 0;
+  const existing = Array.isArray(state.topologyEvents)
+    ? state.topologyEvents.find((item) => item && item.key === parsed.key)
+    : null;
+  if (existing) {
+    existing.hits = Number(existing.hits || 1) + 1;
+    existing.at = Date.now();
+    existing.ruleLabel = parsed.ruleLabel;
+    existing.ruleSub = parsed.ruleSub;
+    existing.outboundMain = parsed.outboundMain;
+    existing.outboundSub = parsed.outboundSub;
+    existing.destinationMain = parsed.destinationMain;
+    existing.destinationSub = parsed.destinationSub;
+  } else {
+    state.topologyEvents = [parsed, ...(state.topologyEvents || [])].slice(0, TOPOLOGY_EVENT_LIMIT);
+  }
+  state.topologyEvents = (state.topologyEvents || [])
+    .slice()
+    .sort((a, b) => Number(b.at || 0) - Number(a.at || 0))
+    .slice(0, TOPOLOGY_EVENT_LIMIT);
+  renderTopologyCard();
+}
+
+function connectMihomoLogsStream() {
+  if (currentPage !== 'overview' || typeof WebSocket !== 'function') {
+    return;
+  }
+  const nextUrl = resolveMihomoLogsWebSocketUrl(getMihomoApiSource(), 'info');
+  if (!nextUrl) {
+    closeMihomoLogsSocket();
+    return;
+  }
+  const existing = state.mihomoLogsSocket;
+  if (
+    existing
+    && state.mihomoLogsSocketUrl === nextUrl
+    && (
+      existing.readyState === WebSocket.OPEN
+      || existing.readyState === WebSocket.CONNECTING
+    )
+  ) {
+    return;
+  }
+  closeMihomoLogsSocket();
+  let socket = null;
+  try {
+    socket = new WebSocket(nextUrl);
+  } catch {
+    state.mihomoLogsReconnectAttempts += 1;
+    scheduleMihomoLogsReconnect();
+    return;
+  }
+  state.mihomoLogsSocket = socket;
+  state.mihomoLogsSocketUrl = nextUrl;
+  socket.onopen = () => {
+    state.mihomoLogsReconnectAttempts = 0;
+  };
+  socket.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(String(event && event.data ? event.data : '{}'));
+      handleMihomoLogsPayload(payload && payload.payload ? payload.payload : '');
+    } catch {
+      // ignore malformed websocket frames
+    }
+  };
+  socket.onerror = () => {};
+  socket.onclose = () => {
+    const currentSocket = state.mihomoLogsSocket;
+    if (currentSocket !== socket) {
+      return;
+    }
+    state.mihomoLogsSocket = null;
+    state.mihomoLogsSocketUrl = '';
+    state.mihomoLogsReconnectAttempts += 1;
+    scheduleMihomoLogsReconnect();
+  };
+}
+
+function handleMihomoMemoryPayload(payload = {}) {
+  state.mihomoMemoryLive = true;
+  state.mihomoMemoryReconnectAttempts = 0;
+  updateOverviewMemoryValue(payload.inuse);
+}
+
+function connectMihomoMemoryStream() {
+  if (currentPage !== 'overview' || typeof WebSocket !== 'function') {
+    return;
+  }
+  const nextUrl = resolveMihomoMemoryWebSocketUrl(getMihomoApiSource());
+  if (!nextUrl) {
+    closeMihomoMemorySocket();
+    return;
+  }
+  const existing = state.mihomoMemorySocket;
+  if (
+    existing
+    && state.mihomoMemorySocketUrl === nextUrl
+    && (
+      existing.readyState === WebSocket.OPEN
+      || existing.readyState === WebSocket.CONNECTING
+    )
+  ) {
+    return;
+  }
+  closeMihomoMemorySocket();
+  let socket = null;
+  try {
+    socket = new WebSocket(nextUrl);
+  } catch {
+    state.mihomoMemoryLive = false;
+    state.mihomoMemoryReconnectAttempts += 1;
+    scheduleMihomoMemoryReconnect();
+    return;
+  }
+  state.mihomoMemorySocket = socket;
+  state.mihomoMemorySocketUrl = nextUrl;
+  socket.onopen = () => {
+    state.mihomoMemoryReconnectAttempts = 0;
+  };
+  socket.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(String(event && event.data ? event.data : '{}'));
+      handleMihomoMemoryPayload(payload);
+    } catch {
+      // ignore malformed websocket frames
+    }
+  };
+  socket.onerror = () => {
+    state.mihomoMemoryLive = false;
+  };
+  socket.onclose = () => {
+    const currentSocket = state.mihomoMemorySocket;
+    if (currentSocket !== socket) {
+      return;
+    }
+    state.mihomoMemorySocket = null;
+    state.mihomoMemorySocketUrl = '';
+    state.mihomoMemoryLive = false;
+    state.mihomoMemoryReconnectAttempts += 1;
+    scheduleMihomoMemoryReconnect();
+  };
+}
+
+function updateProxyTrafficSnapshot(downRate, upRate, downTotal, upTotal) {
+  const down = Number.parseFloat(downRate);
+  const up = Number.parseFloat(upRate);
+  const rxTotal = Number.parseFloat(downTotal);
+  const txTotal = Number.parseFloat(upTotal);
+  if (!Number.isFinite(down) || !Number.isFinite(up) || down < 0 || up < 0) {
+    return;
+  }
+  if (trafficSystemDownloadRate) {
+    trafficSystemDownloadRate.textContent = formatBitrate(down);
+  }
+  if (trafficSystemUploadRate) {
+    trafficSystemUploadRate.textContent = formatBitrate(up);
+  }
+  if (Number.isFinite(rxTotal) && rxTotal >= 0) {
+    if (trafficSystemDownloadTotal) {
+      trafficSystemDownloadTotal.textContent = `${t('status.trafficTotal')}: ${formatBytes(rxTotal)}`;
+    }
+    if (trafficTotalDownload) {
+      trafficTotalDownload.textContent = formatBytes(rxTotal);
+    }
+  }
+  if (Number.isFinite(txTotal) && txTotal >= 0) {
+    if (trafficSystemUploadTotal) {
+      trafficSystemUploadTotal.textContent = `${t('status.trafficTotal')}: ${formatBytes(txTotal)}`;
+    }
+    if (trafficTotalUpload) {
+      trafficTotalUpload.textContent = formatBytes(txTotal);
+    }
+  }
+  state.lastProxyTrafficAt = Date.now();
+  updateTrafficHistory(down, up);
+}
+
+function handleMihomoTrafficPayload(payload = {}) {
+  state.mihomoTrafficLive = true;
+  state.mihomoTrafficReconnectAttempts = 0;
+  updateProxyTrafficSnapshot(payload.down, payload.up, payload.downTotal, payload.upTotal);
+}
+
+function connectMihomoTrafficStream() {
+  if (currentPage !== 'overview' || typeof WebSocket !== 'function') {
+    return;
+  }
+  const nextUrl = resolveMihomoTrafficWebSocketUrl(getMihomoApiSource());
+  if (!nextUrl) {
+    closeMihomoTrafficSocket();
+    return;
+  }
+  const existing = state.mihomoTrafficSocket;
+  if (
+    existing
+    && state.mihomoTrafficSocketUrl === nextUrl
+    && (
+      existing.readyState === WebSocket.OPEN
+      || existing.readyState === WebSocket.CONNECTING
+    )
+  ) {
+    return;
+  }
+  closeMihomoTrafficSocket();
+  let socket = null;
+  try {
+    socket = new WebSocket(nextUrl);
+  } catch {
+    state.mihomoTrafficLive = false;
+    state.mihomoTrafficReconnectAttempts += 1;
+    scheduleMihomoTrafficReconnect();
+    return;
+  }
+  state.mihomoTrafficSocket = socket;
+  state.mihomoTrafficSocketUrl = nextUrl;
+  socket.onopen = () => {
+    state.mihomoTrafficReconnectAttempts = 0;
+  };
+  socket.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(String(event && event.data ? event.data : '{}'));
+      handleMihomoTrafficPayload(payload);
+    } catch {
+      // ignore malformed websocket frames
+    }
+  };
+  socket.onerror = () => {
+    state.mihomoTrafficLive = false;
+  };
+  socket.onclose = () => {
+    const currentSocket = state.mihomoTrafficSocket;
+    if (currentSocket !== socket) {
+      return;
+    }
+    state.mihomoTrafficSocket = null;
+    state.mihomoTrafficLive = false;
+    state.mihomoTrafficSocketUrl = '';
+    state.mihomoTrafficReconnectAttempts += 1;
+    scheduleMihomoTrafficReconnect();
+  };
+}
+
+function handleMihomoConnectionsPayload(payload = {}) {
+  const connections = Array.isArray(payload && payload.connections) ? payload.connections : [];
+  state.mihomoConnectionsLive = true;
+  state.mihomoConnectionsReconnectAttempts = 0;
+  state.mihomoConnectionsSnapshot = connections;
+  updateRealtimeConnections(connections.length);
+  renderTopologyCard();
+}
+
+function connectMihomoConnectionsStream() {
+  if (currentPage !== 'overview' || typeof WebSocket !== 'function') {
+    return;
+  }
+  const nextUrl = resolveMihomoConnectionsWebSocketUrl(getMihomoApiSource());
+  if (!nextUrl) {
+    closeMihomoConnectionsSocket();
+    return;
+  }
+  const existing = state.mihomoConnectionsSocket;
+  if (
+    existing
+    && state.mihomoConnectionsSocketUrl === nextUrl
+    && (
+      existing.readyState === WebSocket.OPEN
+      || existing.readyState === WebSocket.CONNECTING
+    )
+  ) {
+    return;
+  }
+  closeMihomoConnectionsSocket();
+  let socket = null;
+  try {
+    socket = new WebSocket(nextUrl);
+  } catch {
+    state.mihomoConnectionsLive = false;
+    state.mihomoConnectionsReconnectAttempts += 1;
+    scheduleMihomoConnectionsReconnect();
+    return;
+  }
+  state.mihomoConnectionsSocket = socket;
+  state.mihomoConnectionsSocketUrl = nextUrl;
+  socket.onopen = () => {
+    state.mihomoConnectionsReconnectAttempts = 0;
+  };
+  socket.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(String(event && event.data ? event.data : '{}'));
+      handleMihomoConnectionsPayload(payload);
+    } catch {
+      // ignore malformed websocket frames
+    }
+  };
+  socket.onerror = () => {
+    state.mihomoConnectionsLive = false;
+  };
+  socket.onclose = () => {
+    const currentSocket = state.mihomoConnectionsSocket;
+    if (currentSocket !== socket) {
+      return;
+    }
+    state.mihomoConnectionsSocket = null;
+    state.mihomoConnectionsLive = false;
+    state.mihomoConnectionsSocketUrl = '';
+    state.mihomoConnectionsReconnectAttempts += 1;
+    scheduleMihomoConnectionsReconnect();
+  };
 }
 
 async function fetchTunFromController() {
@@ -203,10 +1727,6 @@ let logLevelFilter = document.getElementById('logLevelFilter');
 let logMessageFilter = document.getElementById('logMessageFilter');
 let logTableBody = document.getElementById('logTableBody');
 
-const LAYOUT_CACHE_VERSION = 'v3';
-const PAGE_TEMPLATE_CACHE_VERSION = 'v2';
-const PAGE_TEMPLATE_CACHE_PREFIX = `page:${PAGE_TEMPLATE_CACHE_VERSION}:`;
-const pageTemplateCache = new Map();
 let cleanBtn = document.getElementById('cleanBtn');
 let dashboardFrame = document.getElementById('dashboardFrame');
 let dashboardEmpty = document.getElementById('dashboardEmpty');
@@ -293,11 +1813,6 @@ const I18N = window.CLASHFOX_I18N || {};
 ;
 
 const SETTINGS_KEY = 'clashfox-settings';
-const KERNEL_UPDATE_CACHE_KEY = 'clashfox-kernel-update-cache-v1';
-const OVERVIEW_NETWORK_CACHE_KEY = 'clashfox-overview-network-cache-v1';
-const OVERVIEW_TRAFFIC_CACHE_KEY = 'clashfox-overview-traffic-cache-v1';
-const OVERVIEW_PROVIDER_SUBSCRIPTION_CACHE_KEY = 'clashfox-overview-provider-subscription-cache-v1';
-const OVERVIEW_RULES_CARD_CACHE_KEY = 'clashfox-overview-rules-card-cache-v1';
 const MAIN_WINDOW_DEFAULT_WIDTH = 980;
 const MAIN_WINDOW_DEFAULT_HEIGHT = 640;
 const MAIN_WINDOW_MIN_WIDTH = 980;
@@ -467,10 +1982,45 @@ const state = {
   connSamples: [],
   connPeak: 0,
   connLast: null,
+  mihomoConnectionsSocket: null,
+  mihomoConnectionsSocketUrl: '',
+  mihomoConnectionsReconnectTimer: null,
+  mihomoConnectionsReconnectAttempts: 0,
+  mihomoConnectionsLive: false,
+  mihomoConnectionsSnapshot: [],
+  mihomoTrafficSocket: null,
+  mihomoTrafficSocketUrl: '',
+  mihomoTrafficReconnectTimer: null,
+  mihomoTrafficReconnectAttempts: 0,
+  mihomoTrafficLive: false,
+  mihomoMemorySocket: null,
+  mihomoMemorySocketUrl: '',
+  mihomoMemoryReconnectTimer: null,
+  mihomoMemoryReconnectAttempts: 0,
+  mihomoMemoryLive: false,
+  mihomoLogsSocket: null,
+  mihomoLogsSocketUrl: '',
+  mihomoLogsReconnectTimer: null,
+  mihomoLogsReconnectAttempts: 0,
+  topologyTickTimer: null,
+  topologyRenderTimer: null,
+  topologyRenderRaf: null,
+  topologySurfaceSignatures: {},
+  topologyLinkSignatures: {},
+  topologyEvents: [],
+  topologyHoverKey: '',
   overviewLatencySnapshot: {
     internet: '',
     dns: '',
     router: '',
+  },
+  providerSubscriptionRenderSignature: '',
+  rulesOverviewRenderSignatures: {
+    metrics: '',
+    chart: '',
+    records: '',
+    behaviors: '',
+    switchView: '',
   },
   overviewIpRaw: {
     local: '',
@@ -484,26 +2034,23 @@ const state = {
 
 const CORE_STARTUP_ESTIMATE_MIN_MS = 900;
 const CORE_STARTUP_ESTIMATE_MAX_MS = 10000;
+const MIHOMO_CONNECTIONS_RECONNECT_BASE_MS = 1500;
+const MIHOMO_CONNECTIONS_RECONNECT_MAX_MS = 12000;
+const MIHOMO_TRAFFIC_RECONNECT_BASE_MS = 1500;
+const MIHOMO_TRAFFIC_RECONNECT_MAX_MS = 12000;
+const MIHOMO_MEMORY_RECONNECT_BASE_MS = 1500;
+const MIHOMO_MEMORY_RECONNECT_MAX_MS = 12000;
+const MIHOMO_LOGS_RECONNECT_BASE_MS = 1500;
+const MIHOMO_LOGS_RECONNECT_MAX_MS = 12000;
+const TOPOLOGY_EVENT_LIMIT = 8;
+const TOPOLOGY_EVENT_TTL_MS = 20000;
 
 function readKernelUpdateCacheStore() {
-  try {
-    const raw = localStorage.getItem(KERNEL_UPDATE_CACHE_KEY);
-    if (!raw) {
-      return {};
-    }
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
+  return {};
 }
 
 function writeKernelUpdateCacheStore(store = {}) {
-  try {
-    localStorage.setItem(KERNEL_UPDATE_CACHE_KEY, JSON.stringify(store));
-  } catch {
-    // ignore cache write errors
-  }
+  return store;
 }
 
 function buildKernelUpdateCacheKey(source = '', currentVersion = '') {
@@ -511,303 +2058,79 @@ function buildKernelUpdateCacheKey(source = '', currentVersion = '') {
 }
 
 function getCachedKernelUpdateResult(source = '', currentVersion = '') {
-  const key = buildKernelUpdateCacheKey(source, currentVersion);
-  if (!key || key === '::') {
-    return null;
-  }
-  if (!state.kernelUpdateCache || typeof state.kernelUpdateCache !== 'object') {
-    state.kernelUpdateCache = readKernelUpdateCacheStore();
-  }
-  const cached = state.kernelUpdateCache[key];
-  if (!cached || typeof cached !== 'object' || !cached.result || typeof cached.result !== 'object') {
-    return null;
-  }
-  return cached.result;
+  void source;
+  void currentVersion;
+  return null;
 }
 
 function setCachedKernelUpdateResult(source = '', currentVersion = '', result = null) {
-  const key = buildKernelUpdateCacheKey(source, currentVersion);
-  if (
-    !key
-    || key === '::'
-    || !result
-    || typeof result !== 'object'
-    || !result.ok
-    || !String(result.latestVersion || '').trim()
-  ) {
-    return;
-  }
-  if (!state.kernelUpdateCache || typeof state.kernelUpdateCache !== 'object') {
-    state.kernelUpdateCache = readKernelUpdateCacheStore();
-  }
-  state.kernelUpdateCache[key] = {
-    result,
-    cachedAt: new Date().toISOString(),
-  };
-  writeKernelUpdateCacheStore(state.kernelUpdateCache);
+  void source;
+  void currentVersion;
+  void result;
 }
 
 function readOverviewNetworkCache() {
-  try {
-    const raw = localStorage.getItem(OVERVIEW_NETWORK_CACHE_KEY);
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 function writeOverviewNetworkCache(payload = {}) {
-  try {
-    localStorage.setItem(OVERVIEW_NETWORK_CACHE_KEY, JSON.stringify({
-      ...(payload || {}),
-      updatedAt: new Date().toISOString(),
-    }));
-  } catch {
-    // ignore cache write errors
-  }
+  return payload;
 }
 
 function cacheOverviewNetworkFromState() {
-  const snapshot = {
-    internet: overviewInternet ? String(overviewInternet.textContent || '').trim() : '',
-    dns: overviewDns ? String(overviewDns.textContent || '').trim() : '',
-    router: overviewRouter ? String(overviewRouter.textContent || '').trim() : '',
-    network: overviewNetwork ? String(overviewNetwork.textContent || '').trim() : '',
-    localIp: state.overviewIpRaw.local || '',
-    proxyIp: state.overviewIpRaw.proxy || '',
-    internetIp: state.overviewIpRaw.internet || '',
-  };
-  writeOverviewNetworkCache(snapshot);
+  return;
 }
 
 function hydrateOverviewNetworkFromCache() {
-  const cached = readOverviewNetworkCache();
-  if (!cached) {
-    return;
-  }
-  const internet = String(cached.internet || '').trim();
-  const dns = String(cached.dns || '').trim();
-  const router = String(cached.router || '').trim();
-  const network = String(cached.network || '').trim();
-  const localIpRaw = String(cached.localIp || '').trim();
-  const proxyIpRaw = String(cached.proxyIp || '').trim();
-  const internetIpRaw = String(cached.internetIp || '').trim();
-
-  if (overviewInternet) {
-    overviewInternet.textContent = internet || '-';
-  }
-  if (overviewDns) {
-    overviewDns.textContent = dns || '-';
-  }
-  if (overviewRouter) {
-    overviewRouter.textContent = router || '-';
-  }
-  if (overviewNetwork) {
-    overviewNetwork.textContent = network || '-';
-  }
-
-  state.overviewIpRaw.local = localIpRaw;
-  state.overviewIpRaw.proxy = proxyIpRaw;
-  state.overviewIpRaw.internet = internetIpRaw;
-
-  if (overviewLocalIp) {
-    overviewLocalIp.textContent = localIpRaw || '-';
-    setOverviewCopyButtonVisible(overviewLocalIpCopy, Boolean(localIpRaw));
-  }
-  if (overviewProxyIp) {
-    overviewProxyIp.textContent = maskIpAddress(proxyIpRaw) || '-';
-    setOverviewCopyButtonVisible(overviewProxyIpCopy, Boolean(proxyIpRaw));
-  }
-  if (overviewInternetIp) {
-    overviewInternetIp.textContent = maskIpAddress(internetIpRaw) || '-';
-    setOverviewCopyButtonVisible(overviewInternetIpCopy, Boolean(internetIpRaw));
-  }
+  return;
 }
 
 function readOverviewTrafficCache() {
-  try {
-    const raw = localStorage.getItem(OVERVIEW_TRAFFIC_CACHE_KEY);
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 function writeOverviewTrafficCache(payload = {}) {
-  try {
-    localStorage.setItem(OVERVIEW_TRAFFIC_CACHE_KEY, JSON.stringify({
-      ...(payload || {}),
-      updatedAt: new Date().toISOString(),
-    }));
-  } catch {
-    // ignore cache write errors
-  }
+  return payload;
 }
 
 function cacheOverviewTrafficFromState() {
-  writeOverviewTrafficCache({
-    downloadRate: trafficSystemDownloadRate ? String(trafficSystemDownloadRate.textContent || '').trim() : '',
-    uploadRate: trafficSystemUploadRate ? String(trafficSystemUploadRate.textContent || '').trim() : '',
-    downloadTotalLabel: trafficSystemDownloadTotal ? String(trafficSystemDownloadTotal.textContent || '').trim() : '',
-    uploadTotalLabel: trafficSystemUploadTotal ? String(trafficSystemUploadTotal.textContent || '').trim() : '',
-    downloadTotal: trafficTotalDownload ? String(trafficTotalDownload.textContent || '').trim() : '',
-    uploadTotal: trafficTotalUpload ? String(trafficTotalUpload.textContent || '').trim() : '',
-    historyRx: Array.isArray(state.trafficHistoryRx) ? state.trafficHistoryRx.slice(-TRAFFIC_HISTORY_POINTS) : [],
-    historyTx: Array.isArray(state.trafficHistoryTx) ? state.trafficHistoryTx.slice(-TRAFFIC_HISTORY_POINTS) : [],
-  });
+  return;
 }
 
 function hydrateOverviewTrafficFromCache() {
-  const cached = readOverviewTrafficCache();
-  if (!cached) {
-    return;
-  }
-  const downloadRate = String(cached.downloadRate || '').trim();
-  const uploadRate = String(cached.uploadRate || '').trim();
-  const downloadTotalLabel = String(cached.downloadTotalLabel || '').trim();
-  const uploadTotalLabel = String(cached.uploadTotalLabel || '').trim();
-  const downloadTotal = String(cached.downloadTotal || '').trim();
-  const uploadTotal = String(cached.uploadTotal || '').trim();
-  const historyRx = Array.isArray(cached.historyRx)
-    ? cached.historyRx
-      .map((item) => Number.parseFloat(item))
-      .filter((item) => Number.isFinite(item) && item >= 0)
-      .slice(-TRAFFIC_HISTORY_POINTS)
-    : [];
-  const historyTx = Array.isArray(cached.historyTx)
-    ? cached.historyTx
-      .map((item) => Number.parseFloat(item))
-      .filter((item) => Number.isFinite(item) && item >= 0)
-      .slice(-TRAFFIC_HISTORY_POINTS)
-    : [];
-
-  if (trafficSystemDownloadRate) {
-    trafficSystemDownloadRate.textContent = downloadRate || '-';
-  }
-  if (trafficSystemUploadRate) {
-    trafficSystemUploadRate.textContent = uploadRate || '-';
-  }
-  if (trafficSystemDownloadTotal) {
-    trafficSystemDownloadTotal.textContent = downloadTotalLabel || '-';
-  }
-  if (trafficSystemUploadTotal) {
-    trafficSystemUploadTotal.textContent = uploadTotalLabel || '-';
-  }
-  if (trafficTotalDownload) {
-    trafficTotalDownload.textContent = downloadTotal || '-';
-  }
-  if (trafficTotalUpload) {
-    trafficTotalUpload.textContent = uploadTotal || '-';
-  }
-
-  state.trafficHistoryRx = historyRx;
-  state.trafficHistoryTx = historyTx;
-  renderTrafficChart(state.trafficHistoryTx, trafficUploadLine, trafficUploadArea, trafficUploadAxis);
-  renderTrafficChart(state.trafficHistoryRx, trafficDownloadLine, trafficDownloadArea, trafficDownloadAxis);
+  return;
 }
 
 function readOverviewProviderSubscriptionCache() {
-  try {
-    const raw = localStorage.getItem(OVERVIEW_PROVIDER_SUBSCRIPTION_CACHE_KEY);
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 function writeOverviewProviderSubscriptionCache(payload = {}) {
-  try {
-    localStorage.setItem(OVERVIEW_PROVIDER_SUBSCRIPTION_CACHE_KEY, JSON.stringify({
-      ...(payload || {}),
-      updatedAt: new Date().toISOString(),
-    }));
-  } catch {
-    // ignore cache write errors
-  }
+  return payload;
 }
 
 function cacheOverviewProviderSubscription(payload = null) {
-  if (!payload || typeof payload !== 'object') {
-    return;
-  }
-  writeOverviewProviderSubscriptionCache(payload);
+  void payload;
 }
 
 function hydrateOverviewProviderSubscriptionFromCache() {
-  if (!overviewProviderSubscriptionSummary || !overviewProviderSubscriptionList) {
-    return;
-  }
-  const cached = readOverviewProviderSubscriptionCache();
-  if (!cached || typeof cached !== 'object') {
-    return;
-  }
-  renderProviderSubscriptionOverview(cached);
+  return;
 }
 
 function readOverviewRulesCardCache() {
-  try {
-    const raw = localStorage.getItem(OVERVIEW_RULES_CARD_CACHE_KEY);
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 function writeOverviewRulesCardCache(payload = {}) {
-  try {
-    localStorage.setItem(OVERVIEW_RULES_CARD_CACHE_KEY, JSON.stringify({
-      ...(payload || {}),
-      updatedAt: new Date().toISOString(),
-    }));
-  } catch {
-    // ignore cache write errors
-  }
+  return payload;
 }
 
 function cacheOverviewRulesCard() {
-  writeOverviewRulesCardCache({
-    view: state.rulesOverviewView === 'providers' ? 'providers' : 'rules',
-    rulesOverviewPayload: state.rulesOverviewPayload && typeof state.rulesOverviewPayload === 'object'
-      ? state.rulesOverviewPayload
-      : { totalRules: 0, types: [], records: [] },
-    ruleProvidersOverviewPayload: state.ruleProvidersOverviewPayload && typeof state.ruleProvidersOverviewPayload === 'object'
-      ? state.ruleProvidersOverviewPayload
-      : { totalProviders: 0, totalRules: 0, behaviors: [], items: [], records: [] },
-  });
+  return;
 }
 
 function hydrateOverviewRulesCardFromCache() {
-  if (!overviewRulesChart || !overviewRulesRecords || !overviewRulesMetrics || !overviewRulesBehaviors) {
-    return;
-  }
-  const cached = readOverviewRulesCardCache();
-  if (!cached || typeof cached !== 'object') {
-    return;
-  }
-  state.rulesOverviewView = cached.view === 'providers' ? 'providers' : 'rules';
-  state.rulesOverviewPayload = cached.rulesOverviewPayload && typeof cached.rulesOverviewPayload === 'object'
-    ? cached.rulesOverviewPayload
-    : { totalRules: 0, types: [], records: [] };
-  state.ruleProvidersOverviewPayload = cached.ruleProvidersOverviewPayload && typeof cached.ruleProvidersOverviewPayload === 'object'
-    ? cached.ruleProvidersOverviewPayload
-    : { totalProviders: 0, totalRules: 0, behaviors: [], items: [], records: [] };
-  renderRulesOverviewCard();
+  return;
 }
 
 function clamp(value, min, max) {
@@ -1193,6 +2516,7 @@ function applyCardIcons() {
     if (key === 'status.proxyMode') return 'var(--icon-outbound)';
     if (key === 'status.connLiveTitle') return 'var(--icon-connections)';
     if (key === 'status.trafficTitle') return 'var(--icon-clock)';
+    if (key === 'status.topologyTitle') return 'var(--icon-topology)';
     if (key === 'settings.appearance') return 'var(--icon-palette)';
     if (key === 'settings.panelManager') return 'var(--icon-panels)';
     if (key === 'settings.paths') return 'var(--icon-folders)';
@@ -1207,6 +2531,7 @@ function applyCardIcons() {
     if (key === 'status.proxyMode') return 'var(--icon-fill-dashboard)';
     if (key === 'status.connLiveTitle') return 'var(--icon-fill-connections)';
     if (key === 'status.trafficTitle') return 'var(--icon-fill-clock)';
+    if (key === 'status.topologyTitle') return 'var(--icon-fill-topology)';
     if (key === 'settings.panelManager') return 'var(--icon-fill-overview)';
     if (key === 'settings.paths') return 'var(--icon-fill-worldwide)';
     if (key === 'settings.proxyConfigTitle') return 'var(--icon-fill-config)';
@@ -1281,6 +2606,7 @@ function applyCardIcons() {
     if (
       h.classList.contains('outbound-icon')
       || h.classList.contains('conn-live-icon')
+      || h.classList.contains('topology-icon')
       || h.classList.contains('quick-actions-icon')
       || h.classList.contains('provider-subscription-icon')
       || h.classList.contains('rules-overview-icon')
@@ -2438,6 +3764,20 @@ function applySettings(settings) {
     settingsBackupsPageSize.value = state.settings.generalPageSize || unifiedPageSize;
   }
   applyPersistedMihomoStatus();
+  if (currentPage === 'overview') {
+    connectMihomoConnectionsStream();
+    connectMihomoTrafficStream();
+    connectMihomoMemoryStream();
+    connectMihomoLogsStream();
+    startTopologyTicker();
+  } else {
+    closeMihomoConnectionsSocket();
+    closeMihomoTrafficSocket();
+    closeMihomoMemorySocket();
+    closeMihomoLogsSocket();
+    stopTopologyTicker();
+  }
+  renderTopologyCard();
   renderRecommendTable();
 }
 
@@ -3066,8 +4406,34 @@ function setOverviewCopyButtonVisible(button, visible) {
     return;
   }
   const show = Boolean(visible);
+  const hiddenNow = button.classList.contains('is-hidden');
+  if (hiddenNow === !show && button.disabled === !show) {
+    return;
+  }
   button.classList.toggle('is-hidden', !show);
   button.disabled = !show;
+}
+
+function setNodeTextIfChanged(node, value) {
+  if (!node) {
+    return;
+  }
+  const next = String(value ?? '');
+  if (node.textContent === next) {
+    return;
+  }
+  node.textContent = next;
+}
+
+function setNodeHtmlIfChanged(node, value) {
+  if (!node) {
+    return;
+  }
+  const next = String(value ?? '');
+  if (node.innerHTML === next) {
+    return;
+  }
+  node.innerHTML = next;
 }
 
 function hydrateOverviewIdentityFromSettings() {
@@ -3082,7 +4448,11 @@ function hydrateOverviewIdentityFromSettings() {
     overviewSystem.textContent = persistedDevice.os || '-';
   }
   if (overviewVersion) {
-    overviewVersion.textContent = persistedDevice.version || '-';
+    const versionRaw = String(persistedDevice.version || '').trim();
+    const buildRaw = String(persistedDevice.build || '').trim();
+    overviewVersion.textContent = versionRaw
+      ? (buildRaw ? `${versionRaw} (${buildRaw})` : versionRaw)
+      : '-';
   }
   const persistedMihomoStatus = (state.settings && state.settings.mihomoStatus)
     || (state.fileSettings && state.fileSettings.mihomoStatus)
@@ -3854,7 +5224,7 @@ function renderProviderSubscriptionOverview(payload = null) {
     ? Math.max(0, Math.min(100, (usedBytes / totalBytes) * 100))
     : 0;
 
-  overviewProviderSubscriptionSummary.innerHTML = `
+  const summaryMarkup = `
     <div class="provider-subscription-stat">
       <div class="provider-subscription-stat-label">${escapeLogCell(ti('providers.summaryCount', 'Providers'))}</div>
       <div class="provider-subscription-stat-value">${escapeLogCell(String(providerCount))}</div>
@@ -3872,41 +5242,48 @@ function renderProviderSubscriptionOverview(payload = null) {
       <div class="provider-subscription-stat-value">${escapeLogCell(`${usedPercent.toFixed(1)}%`)}</div>
     </div>
   `;
+  let listMarkup = '';
 
   if (!items.length) {
-    overviewProviderSubscriptionList.innerHTML = `<div class="provider-subscription-item-empty">${escapeLogCell(ti('providers.empty', 'No provider subscription data.'))}</div>`;
+    listMarkup = `<div class="provider-subscription-item-empty">${escapeLogCell(ti('providers.empty', 'No provider subscription data.'))}</div>`;
+  } else {
+    listMarkup = items.map((item) => {
+      const name = String(item.name || '-').trim() || '-';
+      const vehicleType = String(item.vehicleType || '').trim() || 'UNKNOWN';
+      const percentRaw = Number.parseFloat(item.usedPercent || 0);
+      const percent = Number.isFinite(percentRaw) ? Math.max(0, Math.min(100, percentRaw)) : 0;
+      const used = Number.parseFloat(item.usedBytes || 0) || 0;
+      const remaining = Number.parseFloat(item.remainingBytes || 0) || 0;
+      const expireAt = Number.parseInt(String(item.expireAt || 0), 10) || 0;
+      const expireText = expireAt > 0
+        ? formatSimpleDateTime(expireAt)
+        : '-';
+      return `<div class="provider-subscription-item">
+        <div class="provider-subscription-item-head">
+          <div class="provider-subscription-item-name">${escapeLogCell(name)}</div>
+          <div class="provider-subscription-item-percent">${escapeLogCell(`${percent.toFixed(1)}%`)}</div>
+        </div>
+        <div class="provider-subscription-progress">
+          <div class="provider-subscription-progress-bar" style="width:${percent.toFixed(2)}%"></div>
+        </div>
+        <div class="provider-subscription-item-meta">
+          <span>${escapeLogCell(`${ti('providers.remaining', 'Remaining')}: ${formatBytes(remaining)}`)}</span>
+          <span>${escapeLogCell(`${ti('providers.used', 'Used')}: ${formatBytes(used)}`)}</span>
+        </div>
+        <div class="provider-subscription-item-meta">
+          <span>${escapeLogCell(vehicleType)}</span>
+          <span>${escapeLogCell(`${ti('providers.expire', 'Expire')}: ${expireText}`)}</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  const renderSignature = JSON.stringify([summaryMarkup, listMarkup]);
+  if (state.providerSubscriptionRenderSignature === renderSignature) {
     return;
   }
-
-  overviewProviderSubscriptionList.innerHTML = items.map((item) => {
-    const name = String(item.name || '-').trim() || '-';
-    const vehicleType = String(item.vehicleType || '').trim() || 'UNKNOWN';
-    const percentRaw = Number.parseFloat(item.usedPercent || 0);
-    const percent = Number.isFinite(percentRaw) ? Math.max(0, Math.min(100, percentRaw)) : 0;
-    const used = Number.parseFloat(item.usedBytes || 0) || 0;
-    const remaining = Number.parseFloat(item.remainingBytes || 0) || 0;
-    const expireAt = Number.parseInt(String(item.expireAt || 0), 10) || 0;
-    const expireText = expireAt > 0
-      ? formatSimpleDateTime(expireAt)
-      : '-';
-    return `<div class="provider-subscription-item">
-      <div class="provider-subscription-item-head">
-        <div class="provider-subscription-item-name">${escapeLogCell(name)}</div>
-        <div class="provider-subscription-item-percent">${escapeLogCell(`${percent.toFixed(1)}%`)}</div>
-      </div>
-      <div class="provider-subscription-progress">
-        <div class="provider-subscription-progress-bar" style="width:${percent.toFixed(2)}%"></div>
-      </div>
-      <div class="provider-subscription-item-meta">
-        <span>${escapeLogCell(`${ti('providers.remaining', 'Remaining')}: ${formatBytes(remaining)}`)}</span>
-        <span>${escapeLogCell(`${ti('providers.used', 'Used')}: ${formatBytes(used)}`)}</span>
-      </div>
-      <div class="provider-subscription-item-meta">
-        <span>${escapeLogCell(vehicleType)}</span>
-        <span>${escapeLogCell(`${ti('providers.expire', 'Expire')}: ${expireText}`)}</span>
-      </div>
-    </div>`;
-  }).join('');
+  state.providerSubscriptionRenderSignature = renderSignature;
+  setNodeHtmlIfChanged(overviewProviderSubscriptionSummary, summaryMarkup);
+  setNodeHtmlIfChanged(overviewProviderSubscriptionList, listMarkup);
 }
 
 function renderRulesOverviewCard() {
@@ -3915,19 +5292,27 @@ function renderRulesOverviewCard() {
   }
   const currentView = state.rulesOverviewView === 'providers' ? 'providers' : 'rules';
   if (overviewRulesSwitch) {
-    Array.from(overviewRulesSwitch.querySelectorAll('[data-rules-view]')).forEach((button) => {
-      const view = String(button.dataset.rulesView || '').trim();
-      button.classList.toggle('active', view === currentView);
-    });
+    const switchSignature = `view:${currentView}`;
+    if (state.rulesOverviewRenderSignatures.switchView !== switchSignature) {
+      Array.from(overviewRulesSwitch.querySelectorAll('[data-rules-view]')).forEach((button) => {
+        const view = String(button.dataset.rulesView || '').trim();
+        button.classList.toggle('active', view === currentView);
+      });
+      state.rulesOverviewRenderSignatures.switchView = switchSignature;
+    }
   }
 
   const renderMetrics = (items = []) => {
-    overviewRulesMetrics.innerHTML = items.map((item) => `
+    const markup = items.map((item) => `
       <div class="rules-overview-metric">
         <div class="rules-overview-metric-label">${escapeLogCell(String(item.label || '-'))}</div>
         <div class="rules-overview-metric-value">${escapeLogCell(String(item.value || '-'))}</div>
       </div>
     `).join('');
+    if (state.rulesOverviewRenderSignatures.metrics !== markup) {
+      state.rulesOverviewRenderSignatures.metrics = markup;
+      setNodeHtmlIfChanged(overviewRulesMetrics, markup);
+    }
   };
 
   if (currentView === 'providers') {
@@ -3951,18 +5336,28 @@ function renderRulesOverviewCard() {
     ]);
 
     overviewRulesBehaviors.hidden = true;
-    overviewRulesBehaviors.innerHTML = '';
+    if (state.rulesOverviewRenderSignatures.behaviors !== '') {
+      state.rulesOverviewRenderSignatures.behaviors = '';
+      setNodeHtmlIfChanged(overviewRulesBehaviors, '');
+    }
 
     if (!items.length) {
       overviewRulesChart.hidden = false;
-      overviewRulesChart.innerHTML = `<div class="rules-overview-empty">${escapeLogCell(ti('rules.emptyProviders', 'No rule provider data.'))}</div>`;
-      overviewRulesRecords.innerHTML = '';
+      const emptyMarkup = `<div class="rules-overview-empty">${escapeLogCell(ti('rules.emptyProviders', 'No rule provider data.'))}</div>`;
+      if (state.rulesOverviewRenderSignatures.chart !== emptyMarkup) {
+        state.rulesOverviewRenderSignatures.chart = emptyMarkup;
+        setNodeHtmlIfChanged(overviewRulesChart, emptyMarkup);
+      }
+      if (state.rulesOverviewRenderSignatures.records !== '') {
+        state.rulesOverviewRenderSignatures.records = '';
+        setNodeHtmlIfChanged(overviewRulesRecords, '');
+      }
       overviewRulesRecords.hidden = true;
       return;
     }
     overviewRulesChart.hidden = false;
     const maxCount = Math.max(...items.map((item) => Number(item.ruleCount || 0)), 1);
-    overviewRulesChart.innerHTML = items.slice(0, 12).map((item) => {
+    const chartMarkup = items.slice(0, 12).map((item) => {
       const name = String(item.name || '-').trim() || '-';
       const count = Number.parseInt(String(item.ruleCount || 0), 10) || 0;
       const ratio = Math.max(0, Math.min(100, (count / maxCount) * 100));
@@ -3972,7 +5367,14 @@ function renderRulesOverviewCard() {
         <div class="rules-overview-row-count">${escapeLogCell(String(count))}</div>
       </div>`;
     }).join('');
-    overviewRulesRecords.innerHTML = '';
+    if (state.rulesOverviewRenderSignatures.chart !== chartMarkup) {
+      state.rulesOverviewRenderSignatures.chart = chartMarkup;
+      setNodeHtmlIfChanged(overviewRulesChart, chartMarkup);
+    }
+    if (state.rulesOverviewRenderSignatures.records !== '') {
+      state.rulesOverviewRenderSignatures.records = '';
+      setNodeHtmlIfChanged(overviewRulesRecords, '');
+    }
     overviewRulesRecords.hidden = true;
     return;
   }
@@ -3994,17 +5396,28 @@ function renderRulesOverviewCard() {
     { label: ti('rules.recordsShown', 'Records Shown'), value: shownRecords },
   ]);
   overviewRulesBehaviors.hidden = true;
-  overviewRulesBehaviors.innerHTML = '';
+  if (state.rulesOverviewRenderSignatures.behaviors !== '') {
+    state.rulesOverviewRenderSignatures.behaviors = '';
+    setNodeHtmlIfChanged(overviewRulesBehaviors, '');
+  }
   overviewRulesChart.hidden = true;
   if (!types.length) {
-    overviewRulesRecords.innerHTML = `<div class="rules-overview-empty">${escapeLogCell(ti('rules.empty', 'No rules data.'))}</div>`;
+    const emptyMarkup = `<div class="rules-overview-empty">${escapeLogCell(ti('rules.empty', 'No rules data.'))}</div>`;
+    if (state.rulesOverviewRenderSignatures.records !== emptyMarkup) {
+      state.rulesOverviewRenderSignatures.records = emptyMarkup;
+      setNodeHtmlIfChanged(overviewRulesRecords, emptyMarkup);
+    }
     overviewRulesRecords.hidden = false;
     return;
   }
   if (!records.length) {
-    overviewRulesRecords.innerHTML = `<div class="rules-overview-empty">${escapeLogCell(ti('rules.empty', 'No rules data.'))}</div>`;
+    const emptyMarkup = `<div class="rules-overview-empty">${escapeLogCell(ti('rules.empty', 'No rules data.'))}</div>`;
+    if (state.rulesOverviewRenderSignatures.records !== emptyMarkup) {
+      state.rulesOverviewRenderSignatures.records = emptyMarkup;
+      setNodeHtmlIfChanged(overviewRulesRecords, emptyMarkup);
+    }
   } else {
-    overviewRulesRecords.innerHTML = records.slice(0, 100).map((record) => {
+    const recordsMarkup = records.slice(0, 100).map((record) => {
       const type = String(record.type || '-').trim() || '-';
       const payloadText = String(record.payload || '-').trim() || '-';
       const policy = String(record.policy || '-').trim() || '-';
@@ -4014,6 +5427,10 @@ function renderRulesOverviewCard() {
         <span class="rules-overview-record-policy">${escapeLogCell(policy)}</span>
       </div>`;
     }).join('');
+    if (state.rulesOverviewRenderSignatures.records !== recordsMarkup) {
+      state.rulesOverviewRenderSignatures.records = recordsMarkup;
+      setNodeHtmlIfChanged(overviewRulesRecords, recordsMarkup);
+    }
   }
   overviewRulesRecords.hidden = false;
 }
@@ -4219,19 +5636,7 @@ function updateSystemTraffic(rxBytes, txBytes) {
 }
 
 function updateProxyTraffic(rxBytes, txBytes) {
-  const downRate = Number.parseFloat(rxBytes);
-  const upRate = Number.parseFloat(txBytes);
-  if (!Number.isFinite(downRate) || !Number.isFinite(upRate) || downRate < 0 || upRate < 0) {
-    return;
-  }
-  if (trafficSystemDownloadRate) {
-    trafficSystemDownloadRate.textContent = formatBitrate(downRate);
-  }
-  if (trafficSystemUploadRate) {
-    trafficSystemUploadRate.textContent = formatBitrate(upRate);
-  }
-  state.lastProxyTrafficAt = Date.now();
-  updateTrafficHistory(downRate, upRate);
+  updateProxyTrafficSnapshot(rxBytes, txBytes, null, null);
 }
 
 function formatKernelDisplay(value) {
@@ -4307,10 +5712,13 @@ function updateRealtimeConnections(value) {
   }
   const current = parseConnectionCount(value);
   if (current === null) {
-    overviewConnCurrent.textContent = '-';
-    overviewConnPeak.textContent = '-';
-    overviewConnAvg.textContent = '-';
-    overviewConnTrend.textContent = '-';
+    if (overviewConnections) {
+      setNodeTextIfChanged(overviewConnections, '-');
+    }
+    setNodeTextIfChanged(overviewConnCurrent, '-');
+    setNodeTextIfChanged(overviewConnPeak, '-');
+    setNodeTextIfChanged(overviewConnAvg, '-');
+    setNodeTextIfChanged(overviewConnTrend, '-');
     overviewConnTrend.dataset.trend = 'flat';
     state.connSamples = [];
     state.connPeak = 0;
@@ -4330,18 +5738,21 @@ function updateRealtimeConnections(value) {
   const delta = state.connLast === null ? 0 : (current - state.connLast);
   state.connLast = current;
 
-  overviewConnCurrent.textContent = String(current);
-  overviewConnPeak.textContent = String(state.connPeak);
-  overviewConnAvg.textContent = String(avg);
+  if (overviewConnections) {
+    setNodeTextIfChanged(overviewConnections, String(current));
+  }
+  setNodeTextIfChanged(overviewConnCurrent, String(current));
+  setNodeTextIfChanged(overviewConnPeak, String(state.connPeak));
+  setNodeTextIfChanged(overviewConnAvg, String(avg));
 
   if (delta > 0) {
-    overviewConnTrend.textContent = `▲ +${delta}`;
+    setNodeTextIfChanged(overviewConnTrend, `▲ +${delta}`);
     overviewConnTrend.dataset.trend = 'up';
   } else if (delta < 0) {
-    overviewConnTrend.textContent = `▼ ${delta}`;
+    setNodeTextIfChanged(overviewConnTrend, `▼ ${delta}`);
     overviewConnTrend.dataset.trend = 'down';
   } else {
-    overviewConnTrend.textContent = '• 0';
+    setNodeTextIfChanged(overviewConnTrend, '• 0');
     overviewConnTrend.dataset.trend = 'flat';
   }
 
@@ -4352,53 +5763,22 @@ function updateOverviewUI(data) {
   if (!data) {
     return;
   }
-  const overviewKernelRaw = String(data.kernelVersion || '').trim();
-  if (overviewKernelRaw) {
-    syncKernelVersionInState(overviewKernelRaw);
-    state.coreVersionRaw = overviewKernelRaw;
-  }
-  state.overviewRunning = Boolean(data.running);
+  const running = Boolean(data.running);
+  state.overviewRunning = running;
   state.overviewRunningUpdatedAt = Date.now();
-  // Keep overview runtime data independent; running indicator is driven by status probe.
-  if (overviewKernel) {
-    const persistedVersion = readKernelVersionFromSettings();
-    const kernelDisplay = formatKernelDisplay(persistedVersion);
-    overviewKernel.textContent = kernelDisplay;
-    setOverviewCopyButtonVisible(overviewKernelCopy, Boolean(kernelDisplay && kernelDisplay !== '-'));
-  }
-  const persistedDevice = readDeviceFromSettings();
-  if (overviewSystem) {
-    overviewSystem.textContent = persistedDevice.os || data.systemName || '-';
-  }
-  if (overviewVersion) {
-    const versionRaw = String(data.systemVersion || persistedDevice.version || '').trim();
-    const buildRaw = String(data.systemBuild || persistedDevice.build || '').trim();
-    if (versionRaw) {
-      overviewVersion.textContent = buildRaw ? `${versionRaw} (${buildRaw})` : versionRaw;
-    } else {
-      overviewVersion.textContent = '-';
+  const uptimeSec = Number.parseFloat(data.uptimeSec);
+  if (running && Number.isFinite(uptimeSec) && uptimeSec >= 0) {
+    state.overviewUptimeBaseSec = uptimeSec;
+    state.overviewUptimeAt = Date.now();
+    if (overviewUptime) {
+      setNodeTextIfChanged(overviewUptime, formatUptime(uptimeSec));
     }
-  }
-  
-  const parsedUptime = Number.parseInt(data.uptimeSec, 10);
-  state.overviewUptimeBaseSec = Number.isFinite(parsedUptime) ? parsedUptime : 0;
-  state.overviewUptimeAt = Date.now();
-  
-  if (overviewUptime) {
-    overviewUptime.textContent = state.overviewRunning
-      ? formatUptime(state.overviewUptimeBaseSec)
-      : '-';
-  }
-  if (overviewConnections) {
-    overviewConnections.textContent = data.connections === '' || data.connections === null || data.connections === undefined
-      ? '-'
-      : data.connections;
-  }
-  updateRealtimeConnections(data.connections);
-  if (overviewMemory) {
-    overviewMemory.textContent = data.memory === '' || data.memory === null || data.memory === undefined
-      ? '-'
-      : data.memory;
+  } else if (!running) {
+    state.overviewUptimeBaseSec = 0;
+    state.overviewUptimeAt = 0;
+    if (overviewUptime) {
+      setNodeTextIfChanged(overviewUptime, '-');
+    }
   }
   const internetLatency = formatLatency(data.internetMs ?? data.internet ?? data.internetLatency);
   const dnsLatency = formatLatency(data.dnsMs ?? data.dns ?? data.dnsLatency);
@@ -4415,35 +5795,35 @@ function updateOverviewUI(data) {
   }
 
   if (overviewInternet) {
-    overviewInternet.textContent = internetLatency !== '-'
+    setNodeTextIfChanged(overviewInternet, internetLatency !== '-'
       ? internetLatency
-      : (state.overviewLatencySnapshot.internet || '-');
+      : (state.overviewLatencySnapshot.internet || '-'));
   }
   if (overviewDns) {
-    overviewDns.textContent = dnsLatency !== '-'
+    setNodeTextIfChanged(overviewDns, dnsLatency !== '-'
       ? dnsLatency
-      : (state.overviewLatencySnapshot.dns || '-');
+      : (state.overviewLatencySnapshot.dns || '-'));
   }
   if (overviewRouter) {
-    overviewRouter.textContent = routerLatency !== '-'
+    setNodeTextIfChanged(overviewRouter, routerLatency !== '-'
       ? routerLatency
-      : (state.overviewLatencySnapshot.router || '-');
+      : (state.overviewLatencySnapshot.router || '-'));
   }
   if (overviewNetwork) {
-    overviewNetwork.textContent = data.networkName || '-';
+    setNodeTextIfChanged(overviewNetwork, data.networkName || '-');
   }
   if (overviewLocalIp) {
     const rawLocalIp = String(data.localIp || '').trim();
     state.overviewIpRaw.local = rawLocalIp;
     const text = rawLocalIp || '-';
-    overviewLocalIp.textContent = text;
+    setNodeTextIfChanged(overviewLocalIp, text);
     setOverviewCopyButtonVisible(overviewLocalIpCopy, Boolean(text && text !== '-'));
   }
   if (overviewProxyIp) {
     const rawProxyIp = String(data.proxyIp || '').trim();
     const text = maskIpAddress(rawProxyIp) || '-';
     state.overviewIpRaw.proxy = text !== '-' ? rawProxyIp : '';
-    overviewProxyIp.textContent = text;
+    setNodeTextIfChanged(overviewProxyIp, text);
     setOverviewCopyButtonVisible(overviewProxyIpCopy, Boolean(text && text !== '-'));
   }
   if (overviewInternetIp) {
@@ -4451,54 +5831,10 @@ function updateOverviewUI(data) {
     const rawInternetIp = String(ipValue || '').trim();
     const text = maskIpAddress(rawInternetIp) || '-';
     state.overviewIpRaw.internet = text !== '-' ? rawInternetIp : '';
-    overviewInternetIp.textContent = text;
+    setNodeTextIfChanged(overviewInternetIp, text);
     setOverviewCopyButtonVisible(overviewInternetIpCopy, Boolean(text && text !== '-'));
   }
   cacheOverviewNetworkFromState();
-  // Prefer /traffic realtime stream. If it stalls, fallback to /overview byte counters.
-  if (!state.lastProxyTrafficAt || (Date.now() - state.lastProxyTrafficAt) > 1500) {
-    updateSystemTraffic(data.rxBytes, data.txBytes);
-  }
-}
-
-function updateOverviewRuntimeUI(data) {
-  if (!data) {
-    return;
-  }
-  state.overviewRunning = Boolean(data.running);
-  state.overviewRunningUpdatedAt = Date.now();
-  // 运行状态统一由 updateStatusUI 管理，避免并发刷新不同步
-  if (state.overviewRunning) {
-    const parsedUptime = Number.parseInt(data.uptimeSec, 10);
-    if (Number.isFinite(parsedUptime)) {
-      if (parsedUptime >= state.overviewUptimeBaseSec) {
-        state.overviewUptimeBaseSec = parsedUptime;
-        state.overviewUptimeAt = Date.now();
-      }
-    }
-    if (overviewUptime) {
-      overviewUptime.textContent = formatUptime(state.overviewUptimeBaseSec);
-    }
-  } else {
-    state.overviewUptimeBaseSec = 0;
-    state.overviewUptimeAt = 0;
-    if (overviewUptime) {
-      overviewUptime.textContent = '-';
-    }
-  }
-  
-  if (overviewConnections) {
-    overviewConnections.textContent = data.connections === '' || data.connections === null || data.connections === undefined
-      ? '-'
-      : data.connections;
-  }
-  updateRealtimeConnections(data.connections);
-  
-  if (overviewMemory) {
-    overviewMemory.textContent = data.memory === '' || data.memory === null || data.memory === undefined
-      ? '-'
-      : data.memory;
-  }
 }
 
 async function loadStatusSilently() {
@@ -4506,12 +5842,12 @@ async function loadStatusSilently() {
   // Status should reflect actual kernel process state.
   const response = await runCommand('status');
   if (!response.ok) {
-    const fallbackOk = await probeKernelRunningFromOverviewLite();
+    const fallbackOk = probeKernelRunningFromLocalGuard();
     if (fallbackOk) {
       return {
         ok: true,
         data: { running: state.coreRunning },
-        fallback: 'overview-lite',
+        fallback: 'local-guard',
       };
     }
     return response;
@@ -4521,19 +5857,19 @@ async function loadStatusSilently() {
   return response;
 }
 
-async function probeKernelRunningFromOverviewLite() {
-  const configPath = getCurrentConfigPath();
-  const args = configPath ? ['--config', configPath] : [];
-  args.push(...getControllerArgs());
-  const response = await runCommand('overview-lite', args);
-  if (!response.ok || !response.data || typeof response.data.running !== 'boolean') {
-    return false;
+function probeKernelRunningFromLocalGuard() {
+  const now = Date.now();
+  const recentCoreRunning = Boolean(state.coreRunning) && (now - Number(state.coreRunningUpdatedAt || 0) <= 15000);
+  if (recentCoreRunning) {
+    applyKernelRunningState(true, 'local-guard');
+    return true;
   }
-  const running = Boolean(response.data.running);
-  state.overviewRunning = running;
-  state.overviewRunningUpdatedAt = Date.now();
-  applyKernelRunningState(running, 'overview-lite');
-  return true;
+  const recentOverviewRunning = Boolean(state.overviewRunning) && (now - Number(state.overviewRunningUpdatedAt || 0) <= 15000);
+  if (recentOverviewRunning) {
+    applyKernelRunningState(true, 'local-guard');
+    return true;
+  }
+  return false;
 }
 
 async function loadStatus() {
@@ -4617,7 +5953,6 @@ async function loadOverview(showToastOnSuccess = false) {
     if (showToastOnSuccess) {
       showToast(t('labels.statusRefreshed'));
     }
-    loadTunStatus(false);
     return true;
   } catch {
     guiLog('overview', 'loadOverview threw', null, 'error');
@@ -4719,29 +6054,10 @@ function formatTunUpdateError(response, statusResponse, fallbackLabel) {
   return mergedError || fallbackLabel;
 }
 
-async function loadOverviewLite() {
-  if (state.overviewLiteLoading) {
-    return false;
-  }
-  state.overviewLiteLoading = true;
-  try {
-    const configPath = getCurrentConfigPath();
-    const args = configPath ? ['--config', configPath] : [];
-    args.push(...getControllerArgs());
-    const response = await runCommand('overview-lite', args);
-    if (!response.ok) {
-      return false;
-    }
-    updateOverviewRuntimeUI(response.data);
-    return true;
-  } catch {
-    return false;
-  } finally {
-    state.overviewLiteLoading = false;
-  }
-}
-
 async function loadTraffic() {
+  if (state.mihomoTrafficLive) {
+    return;
+  }
   if (state.trafficLoading) {
     return;
   }
@@ -4877,6 +6193,9 @@ async function loadRulesOverviewCard() {
 }
 
 async function loadOverviewMemory() {
+  if (state.mihomoMemoryLive) {
+    return false;
+  }
   if (state.overviewMemoryLoading) {
     return false;
   }
@@ -5902,6 +7221,20 @@ function refreshPageRefs() {
   overviewRulesBehaviors = document.getElementById('overviewRulesBehaviors');
   overviewRulesChart = document.getElementById('overviewRulesChart');
   overviewRulesRecords = document.getElementById('overviewRulesRecords');
+  overviewTopologyStage = document.getElementById('overviewTopologyStage');
+  overviewTopologySurface = document.getElementById('overviewTopologySurface');
+  overviewTopologySvg = document.getElementById('overviewTopologySvg');
+  overviewTopologyColumns = document.getElementById('overviewTopologyColumns');
+  overviewTopologyEmpty = document.getElementById('overviewTopologyEmpty');
+  overviewTopologyZoomBtn = document.getElementById('overviewTopologyZoomBtn');
+  topologyZoomModal = document.getElementById('topologyZoomModal');
+  topologyZoomClose = document.getElementById('topologyZoomClose');
+  topologyZoomStage = document.getElementById('topologyZoomStage');
+  topologyZoomSurface = document.getElementById('topologyZoomSurface');
+  topologyZoomSvg = document.getElementById('topologyZoomSvg');
+  topologyZoomColumns = document.getElementById('topologyZoomColumns');
+  topologyZoomEmpty = document.getElementById('topologyZoomEmpty');
+  bindTopologyZoomModal();
   overviewGrids = Array.from(document.querySelectorAll('.overview-drag-grid'));
   trafficSystemDownloadRate = document.getElementById('trafficSystemDownloadRate');
   trafficSystemDownloadTotal = document.getElementById('trafficSystemDownloadTotal');
@@ -6126,9 +7459,7 @@ function bindTopbarActions() {
     refreshStatusBtn.addEventListener('click', async () => {
       await Promise.all([
         loadStatus(),
-        loadOverviewLite(),
         loadOverview(),
-        loadOverviewMemory(),
         loadProviderSubscriptionOverview(),
         loadRulesOverviewCard(),
       ]);
@@ -6156,8 +7487,6 @@ function refreshPageView() {
   if (currentPage === 'overview') {
     Promise.all([
       loadOverview(),
-      loadOverviewLite(),
-      loadOverviewMemory(),
       loadProviderSubscriptionOverview(),
       loadRulesOverviewCard(),
     ]);
@@ -6188,10 +7517,6 @@ function getPageFromLocation() {
   return VALID_PAGES.has(page) ? page : currentPage;
 }
 
-function pageTemplateStorageKey(page) {
-  return `${PAGE_TEMPLATE_CACHE_PREFIX}${page}`;
-}
-
 function extractPageSectionHtml(pageHtml = '') {
   if (!pageHtml) {
     return '';
@@ -6203,34 +7528,12 @@ function extractPageSectionHtml(pageHtml = '') {
 }
 
 function savePageTemplateCache(page, sectionHtml) {
-  if (!page || !sectionHtml) {
-    return;
-  }
-  pageTemplateCache.set(page, sectionHtml);
-  try {
-    sessionStorage.setItem(pageTemplateStorageKey(page), sectionHtml);
-  } catch {
-    // ignore cache quota errors
-  }
+  void page;
+  void sectionHtml;
 }
 
 function readPageTemplateCache(page) {
-  if (!page) {
-    return '';
-  }
-  const memoryCached = pageTemplateCache.get(page);
-  if (memoryCached) {
-    return memoryCached;
-  }
-  try {
-    const cached = sessionStorage.getItem(pageTemplateStorageKey(page));
-    if (cached) {
-      pageTemplateCache.set(page, cached);
-      return cached;
-    }
-  } catch {
-    // ignore
-  }
+  void page;
   return '';
 }
 
@@ -6255,10 +7558,7 @@ async function loadPageSectionTemplate(page, allowFetch = true) {
 }
 
 async function preloadPageTemplates(excludePage = '') {
-  const tasks = Array.from(VALID_PAGES)
-    .filter((page) => page !== excludePage)
-    .map((page) => loadPageSectionTemplate(page, true));
-  await Promise.allSettled(tasks);
+  void excludePage;
 }
 
 function preventPageReloadShortcuts() {
@@ -6289,6 +7589,14 @@ async function navigatePage(targetPage, pushState = true) {
     cacheOverviewNetworkFromState();
     cacheOverviewTrafficFromState();
     cacheOverviewRulesCard();
+    closeTopologyZoomModal();
+    if (normalized !== 'overview') {
+      closeMihomoConnectionsSocket();
+      closeMihomoTrafficSocket();
+      closeMihomoMemorySocket();
+      closeMihomoLogsSocket();
+      stopTopologyTicker();
+    }
   }
   if (!normalized || normalized === currentPage) {
     return;
@@ -6312,6 +7620,10 @@ async function navigatePage(targetPage, pushState = true) {
   newSection.classList.add('page-section');
   contentRoot.innerHTML = '';
   contentRoot.appendChild(newSection);
+  contentRoot.scrollTop = 0;
+  if (typeof contentRoot.scrollTo === 'function') {
+    contentRoot.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }
 
   currentPage = normalized;
   if (document.body) {
@@ -6323,6 +7635,15 @@ async function navigatePage(targetPage, pushState = true) {
   applyI18n();
   bindPageEvents();
   refreshPageView();
+  if (normalized === 'settings') {
+    requestAnimationFrame(() => {
+      if (!contentRoot) return;
+      contentRoot.scrollTop = 0;
+      if (typeof contentRoot.scrollTo === 'function') {
+        contentRoot.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      }
+    });
+  }
   if (normalized === 'dashboard') {
     initDashboardFrame();
   }
@@ -6335,6 +7656,11 @@ window.addEventListener('beforeunload', () => {
   if (dashboardLocalModule && typeof dashboardLocalModule.teardownDashboardPanel === 'function') {
     dashboardLocalModule.teardownDashboardPanel();
   }
+  closeMihomoConnectionsSocket();
+  closeMihomoTrafficSocket();
+  closeMihomoMemorySocket();
+  closeMihomoLogsSocket();
+  stopTopologyTicker();
   if (currentPage === 'overview') {
     cacheOverviewNetworkFromState();
     cacheOverviewTrafficFromState();
@@ -6366,47 +7692,6 @@ function updateScrollbarWidthVar() {
 async function loadLayoutParts() {
   const menuContainer = document.getElementById('menuContainer');
   const topbarContainer = document.getElementById('topbarContainer');
-  let hasCache = false;
-  const layoutKey = (key) => `layout:${LAYOUT_CACHE_VERSION}:${key}`;
-  const applyCachedFragment = (key, target) => {
-    if (!target) {
-      return;
-    }
-    const cached = sessionStorage.getItem(layoutKey(key));
-    if (cached) {
-      target.innerHTML = cached;
-      hasCache = true;
-    }
-  };
-  try {
-    if (menuContainer) {
-      const cachedMenu = sessionStorage.getItem(layoutKey('menu'));
-      if (cachedMenu) {
-        menuContainer.innerHTML = cachedMenu;
-        hasCache = true;
-      }
-    }
-    if (topbarContainer) {
-      const cachedTopbar = sessionStorage.getItem(layoutKey('topbar'));
-      if (cachedTopbar) {
-        topbarContainer.innerHTML = cachedTopbar;
-        hasCache = true;
-      }
-      if (cachedTopbar) {
-        applyCachedFragment('sudo', document.getElementById('sudoRoot'));
-        applyCachedFragment('confirm', document.getElementById('confirmRoot'));
-      }
-    }
-  } catch {
-    // Ignore cache errors
-  }
-  if (hasCache) {
-    refreshLayoutRefs();
-    refreshPageRefs();
-    bindNavButtons();
-    bindTopbarActions();
-    setLayoutReady();
-  }
   const tasks = [];
   if (menuContainer) {
     tasks.push(
@@ -6415,11 +7700,6 @@ async function loadLayoutParts() {
         .then((html) => {
           if (html) {
             menuContainer.innerHTML = html;
-            try {
-              sessionStorage.setItem(layoutKey('menu'), html);
-            } catch {
-              // Ignore cache errors
-            }
           }
         })
     );
@@ -6431,11 +7711,6 @@ async function loadLayoutParts() {
         .then((html) => {
           if (html) {
             topbarContainer.innerHTML = html;
-            try {
-              sessionStorage.setItem(layoutKey('topbar'), html);
-            } catch {
-              // Ignore cache errors
-            }
           }
         })
     );
@@ -6461,11 +7736,6 @@ async function loadLayoutParts() {
         .then((html) => {
           if (html) {
             sudoRoot.innerHTML = html;
-            try {
-              sessionStorage.setItem(layoutKey('sudo'), html);
-            } catch {
-              // Ignore cache errors
-            }
           }
         })
     );
@@ -6477,11 +7747,6 @@ async function loadLayoutParts() {
         .then((html) => {
           if (html) {
             confirmRoot.innerHTML = html;
-            try {
-              sessionStorage.setItem(layoutKey('confirm'), html);
-            } catch {
-              // Ignore cache errors
-            }
           }
         })
     );
@@ -6493,11 +7758,6 @@ async function loadLayoutParts() {
         .then((html) => {
           if (html) {
             updateGuideRoot.innerHTML = html;
-            try {
-              sessionStorage.setItem(layoutKey('updateGuide'), html);
-            } catch {
-              // Ignore cache errors
-            }
           }
         })
     );
@@ -6558,7 +7818,7 @@ if (document.body && document.body.dataset.proxyConfigActionBound !== 'true') {
       loadStatus();
       loadTunStatus(false);
       if (currentPage === 'overview') {
-        loadOverviewLite();
+        loadOverview();
       }
     } finally {
       button.disabled = false;
@@ -6606,6 +7866,14 @@ if (document.body && document.body.dataset.tipDelegationBound !== 'true') {
   };
   document.addEventListener('mouseover', delegatedTipHandler, true);
   document.addEventListener('focusin', delegatedTipHandler, true);
+}
+if (document.body && document.body.dataset.topologyKeyBound !== 'true') {
+  document.body.dataset.topologyKeyBound = 'true';
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      setTopologyHoverKey('');
+    }
+  });
 }
 if (overviewKernelCopy && overviewKernelCopy.dataset.bound !== 'true') {
   overviewKernelCopy.dataset.bound = 'true';
@@ -7814,7 +9082,7 @@ async function handleCoreAction(action, button) {
           guiLog('core-action', 'failed after wait', { action, reason: 'wait_for_stopped_timeout' }, 'warn');
         }
       }
-      loadOverviewLite();
+      loadOverview();
     } else {
       guiLog('core-action', 'command failed', {
         action,
@@ -8424,7 +9692,7 @@ function startOverviewTimer() {
     if (currentPage === 'overview') {
       loadStatusSilently();
     }
-  }, 1500);
+  }, 4000);
 
   if (state.overviewTimer) {
     clearInterval(state.overviewTimer);
@@ -8433,37 +9701,22 @@ function startOverviewTimer() {
     if (currentPage === 'overview') {
       loadOverview();
     }
-  }, 1500);
+  }, 8000);
 
   if (state.trafficTimer) {
     clearInterval(state.trafficTimer);
   }
-  if (currentPage === 'overview') {
-    loadTraffic();
-  }
-  state.trafficTimer = setInterval(() => {
-    if (currentPage === 'overview') {
-      loadTraffic();
-    }
-  }, 500);
+  state.trafficTimer = null;
 
   if (state.overviewLiteTimer) {
     clearInterval(state.overviewLiteTimer);
   }
-  state.overviewLiteTimer = setInterval(() => {
-    if (currentPage === 'overview') {
-      loadOverviewLite();
-    }
-  }, 2000);
+  state.overviewLiteTimer = null;
 
   if (state.overviewMemoryTimer) {
     clearInterval(state.overviewMemoryTimer);
   }
-  state.overviewMemoryTimer = setInterval(() => {
-    if (currentPage === 'overview') {
-      loadOverviewMemory();
-    }
-  }, 2000);
+  state.overviewMemoryTimer = null;
 
   if (state.overviewTickTimer) {
     clearInterval(state.overviewTickTimer);
@@ -8473,7 +9726,7 @@ function startOverviewTimer() {
       return;
     }
     const elapsedSec = Math.max(0, Math.floor((Date.now() - state.overviewUptimeAt) / 1000));
-    overviewUptime.textContent = formatUptime(state.overviewUptimeBaseSec + elapsedSec);
+    setNodeTextIfChanged(overviewUptime, formatUptime(state.overviewUptimeBaseSec + elapsedSec));
   }, 1000);
 
   if (state.providerSubscriptionTimer) {
@@ -8486,7 +9739,7 @@ function startOverviewTimer() {
     if (currentPage === 'overview') {
       loadProviderSubscriptionOverview();
     }
-  }, 8000);
+  }, 15000);
 
   if (state.rulesOverviewTimer) {
     clearInterval(state.rulesOverviewTimer);
@@ -8498,7 +9751,7 @@ function startOverviewTimer() {
     if (currentPage === 'overview') {
       loadRulesOverviewCard();
     }
-  }, 10000);
+  }, 20000);
 }
 
 function bridgeReady() {
@@ -8655,13 +9908,17 @@ async function initApp() {
   setTimeout(() => loadStatus(), 1200);
   setTimeout(() => loadStatus(), 4000);
   if (currentPage === 'settings') {
+    if (contentRoot) {
+      contentRoot.scrollTop = 0;
+      if (typeof contentRoot.scrollTo === 'function') {
+        contentRoot.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      }
+    }
     await invokeHelperPanelRefresh();
   }
   if (currentPage === 'overview') {
     Promise.all([
       loadOverview(),
-      loadOverviewLite(),
-      loadOverviewMemory(),
       loadProviderSubscriptionOverview(),
       loadRulesOverviewCard(),
     ]);
@@ -8694,6 +9951,10 @@ import {
   reloadMihomoConfig,
   reloadMihomoCore,
   resolveMihomoApiSourceFromState,
+  resolveMihomoConnectionsWebSocketUrl,
+  resolveMihomoLogsWebSocketUrl,
+  resolveMihomoMemoryWebSocketUrl,
+  resolveMihomoTrafficWebSocketUrl,
   updateAllowLanViaController,
   updateModeViaController,
   updateMihomoConfigViaController,

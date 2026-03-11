@@ -62,6 +62,7 @@
   --icon-external-link: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M14 5h5v5' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M10 14L19 5' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M19 13v5a1 1 0 0 1-1 1h-12a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
   --icon-outbound: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 7h8V4l6 5-6 5v-3H4V7Zm16 10H12v3l-6-5 6-5v3h8v4Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-connections: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='7' cy='12' r='3' fill='%23000'/%3E%3Ccircle cx='17' cy='7' r='3' fill='%23000'/%3E%3Ccircle cx='17' cy='17' r='3' fill='%23000'/%3E%3Cpath d='M9.8 10.8l4.4-2.6M9.8 13.2l4.4 2.6' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --icon-topology: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3.5' y='10.2' width='4' height='3.6' rx='1.4' fill='%23000'/%3E%3Crect x='10' y='4.2' width='4' height='3.6' rx='1.4' fill='%23000'/%3E%3Crect x='10' y='16.2' width='4' height='3.6' rx='1.4' fill='%23000'/%3E%3Crect x='16.5' y='10.2' width='4' height='3.6' rx='1.4' fill='%23000'/%3E%3Cpath d='M7.5 12h2.5M14 6h2.5v6M14 18h2.5v-6' stroke='%23000' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --icon-fill-default: linear-gradient(135deg, #ffbf47 0%, #ff8f57 100%);
   --icon-fill-overview: linear-gradient(135deg, #6fd3ff 0%, #4f86ff 100%);
   --icon-fill-kernel: linear-gradient(135deg, #ffc85a 0%, #ff9452 100%);
@@ -79,6 +80,7 @@
   --icon-fill-connections: linear-gradient(135deg, #5fd5ff 0%, #8b8cff 100%);
   --icon-fill-clock: linear-gradient(135deg, #ffbf54 0%, #ff8cab 100%);
   --icon-fill-shield: linear-gradient(135deg, #ffd05c 0%, #ff9858 100%);
+  --icon-fill-topology: linear-gradient(135deg, #7fe0ff 0%, #6f8cff 52%, #90f0c1 100%);
 }
 
 body[data-theme="night"], html[data-theme="night"] body {
@@ -1959,6 +1961,432 @@ body[data-theme="day"] .history-axis {
   color: rgba(90, 108, 128, 0.6);
 }
 
+.topology-card {
+  display: grid;
+  gap: 12px;
+}
+
+.topology-stage {
+  position: relative;
+  min-height: 336px;
+  border-radius: 18px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(122, 160, 255, 0.14), transparent 38%),
+    radial-gradient(circle at bottom right, rgba(78, 223, 190, 0.12), transparent 34%),
+    rgba(11, 16, 25, 0.74);
+  border: 1px solid rgba(148, 171, 197, 0.16);
+}
+
+.topology-zoom-btn {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 5;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  padding: 0;
+  backdrop-filter: blur(10px);
+}
+
+.topology-zoom-btn svg,
+.topology-zoom-close svg {
+  width: 12px;
+  height: 12px;
+}
+
+.topology-surface {
+  position: relative;
+  min-height: 336px;
+  padding: 6px 8px 8px;
+}
+
+.topology-empty {
+  position: absolute;
+  inset: 12px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  border: 1px dashed rgba(148, 171, 197, 0.26);
+  color: var(--muted);
+  font-size: 13px;
+  background: rgba(14, 21, 33, 0.22);
+  z-index: 3;
+}
+
+.topology-empty[hidden] {
+  display: none;
+}
+
+.topology-links,
+.topology-columns {
+  position: absolute;
+  inset: 6px 8px 8px;
+}
+
+.topology-links {
+  display: block;
+  z-index: 2;
+  overflow: visible;
+}
+
+.topology-columns {
+  display: grid;
+  grid-template-columns: 1.42fr 1.08fr 0.9fr 0.72fr;
+  gap: 8px;
+  z-index: 3;
+}
+
+.topology-column {
+  position: relative;
+  min-width: 0;
+  padding: 0;
+  border-radius: 14px;
+  background: transparent;
+  border: 0;
+  backdrop-filter: none;
+}
+
+.topology-column-header {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+  margin-bottom: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(221, 232, 245, 0.76);
+  padding: 0 4px;
+}
+
+.topology-column-body {
+  position: relative;
+  height: var(--topology-body-height, 286px);
+}
+
+.topology-node-card {
+  position: absolute;
+  left: 0;
+  right: auto;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-height: 20px;
+  padding: 8px 9px 6px 15px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 171, 197, 0.1);
+  background: rgba(148, 171, 197, 0.055);
+  color: var(--ink);
+  box-sizing: border-box;
+  transition: opacity 140ms ease, transform 140ms ease, border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+  z-index: 2;
+  max-width: 100%;
+}
+
+.topology-node-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  border-radius: 10px 0 0 10px;
+  background: rgba(148, 171, 197, 0.42);
+}
+
+.topology-node-card.source::after,
+.topology-node-card.rule::after,
+.topology-node-card.outbound::after,
+.topology-node-card.target::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  border-radius: 0 10px 10px 0;
+  background: rgba(148, 171, 197, 0.26);
+}
+
+.topology-node-card[data-topology-key],
+.topology-node-card[data-column-key][data-node-id] {
+  cursor: default;
+}
+
+.topology-node-card.source {
+  background: rgba(90, 182, 255, 0.055);
+}
+
+.topology-node-card.source::before {
+  background: linear-gradient(180deg, rgba(89, 120, 255, 0.88), rgba(94, 170, 255, 0.88));
+}
+
+.topology-node-card.source::after {
+  background: linear-gradient(180deg, rgba(89, 120, 255, 0.74), rgba(94, 170, 255, 0.74));
+}
+
+.topology-node-card.rule {
+  background: rgba(112, 139, 255, 0.055);
+}
+
+.topology-node-card.rule::before {
+  background: linear-gradient(180deg, rgba(158, 199, 130, 0.88), rgba(142, 192, 112, 0.88));
+}
+
+.topology-node-card.rule::after {
+  background: linear-gradient(180deg, rgba(158, 199, 130, 0.74), rgba(142, 192, 112, 0.74));
+}
+
+.topology-node-card.outbound {
+  background: rgba(239, 205, 105, 0.06);
+}
+
+.topology-node-card.outbound::before {
+  background: linear-gradient(180deg, rgba(239, 205, 105, 0.92), rgba(239, 185, 93, 0.92));
+}
+
+.topology-node-card.outbound::after {
+  background: linear-gradient(180deg, rgba(239, 205, 105, 0.74), rgba(239, 185, 93, 0.74));
+}
+
+.topology-node-card.target {
+  background: rgba(242, 154, 154, 0.055);
+  padding: 6px 7px 5px 14px;
+  border-radius: 10px;
+}
+
+.topology-node-card.target::before {
+  background: linear-gradient(180deg, rgba(242, 154, 154, 0.92), rgba(232, 133, 133, 0.92));
+}
+
+.topology-node-card.target::after {
+  background: linear-gradient(180deg, rgba(242, 154, 154, 0.74), rgba(232, 133, 133, 0.74));
+}
+
+.topology-node-title {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.15;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+.topology-node-subtitle {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  position: relative;
+  z-index: 1;
+}
+
+.topology-node-card.target .topology-node-title {
+  font-size: 11px;
+  -webkit-line-clamp: 1;
+}
+
+.topology-node-card.target .topology-node-subtitle {
+  font-size: 9px;
+}
+
+.topology-node-card.is-active {
+  border-color: rgba(255, 214, 138, 0.34);
+  box-shadow: 0 0 0 1px rgba(255, 214, 138, 0.08), 0 6px 14px rgba(9, 14, 24, 0.16);
+  transform: translateY(-1px);
+}
+
+.topology-node-card:hover {
+  border-color: rgba(160, 205, 255, 0.22);
+  box-shadow: 0 6px 12px rgba(10, 16, 26, 0.1);
+}
+
+.topology-node-card.is-dimmed {
+  opacity: 0.44;
+}
+
+.topology-link {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: opacity 140ms ease, stroke-width 140ms ease, filter 140ms ease;
+}
+
+.topology-link.is-active {
+  opacity: 1;
+  filter: drop-shadow(0 0 8px rgba(165, 210, 255, 0.38));
+}
+
+.topology-link.is-dimmed {
+  opacity: 0.08;
+}
+
+.topology-link-hit {
+  fill: none;
+  stroke: transparent;
+  pointer-events: stroke;
+}
+
+.topology-hover-tooltip {
+  position: fixed;
+  z-index: 60;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(182, 194, 209, 0.72);
+  color: rgba(33, 41, 51, 0.96);
+  font-size: 12px;
+  line-height: 1.35;
+  box-shadow: 0 8px 18px rgba(21, 28, 36, 0.18);
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+  white-space: pre-line;
+}
+
+.topology-hover-tooltip[hidden] {
+  display: none;
+}
+
+.topology-zoom-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+}
+
+.topology-zoom-modal[hidden] {
+  display: none;
+}
+
+.topology-zoom-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 10, 16, 0.46);
+  backdrop-filter: blur(6px);
+}
+
+.topology-zoom-dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(1200px, calc(100vw - 48px));
+  height: min(820px, calc(100vh - 48px));
+  max-height: calc(100vh - 48px);
+  padding: 14px 14px 16px;
+  border-radius: 22px;
+  background: rgba(13, 19, 28, 0.92);
+  border: 1px solid rgba(148, 171, 197, 0.18);
+  box-shadow: 0 24px 60px rgba(3, 8, 14, 0.34);
+}
+
+.topology-zoom-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 28px;
+  padding: 2px 2px 0;
+}
+
+.topology-zoom-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: rgba(236, 243, 252, 0.96);
+}
+
+.topology-zoom-close {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  z-index: 2;
+}
+
+.topology-stage-zoom {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  border-radius: 18px;
+}
+
+.topology-surface-zoom {
+  min-height: 0;
+  height: 100%;
+  padding: 8px 10px 10px;
+}
+
+.topology-stage-zoom .topology-links,
+.topology-stage-zoom .topology-columns {
+  inset: 8px 10px 10px;
+}
+
+.topology-stage-zoom .topology-column-body {
+  height: var(--topology-body-height, 286px);
+}
+
+.topology-stage-zoom .topology-empty {
+  inset: 14px;
+}
+
+body.topology-zoom-open {
+  overflow: hidden;
+}
+
+body[data-theme="day"] .topology-stage {
+  background:
+    radial-gradient(circle at top left, rgba(109, 153, 255, 0.12), transparent 38%),
+    radial-gradient(circle at bottom right, rgba(67, 197, 172, 0.1), transparent 34%),
+    rgba(247, 249, 253, 0.92);
+  border-color: rgba(166, 182, 201, 0.24);
+}
+
+body[data-theme="day"] .topology-empty {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+body[data-theme="day"] .topology-column {
+  background: transparent;
+  border-color: transparent;
+}
+
+body[data-theme="day"] .topology-column-header {
+  color: rgba(61, 78, 98, 0.76);
+}
+
+body[data-theme="day"] .topology-hover-tooltip {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(166, 182, 201, 0.54);
+  color: rgba(37, 51, 67, 0.96);
+  box-shadow: 0 10px 24px rgba(51, 67, 84, 0.16);
+}
+
+body[data-theme="day"] .topology-zoom-dialog {
+  background: rgba(250, 252, 255, 0.94);
+  border-color: rgba(166, 182, 201, 0.24);
+  box-shadow: 0 24px 54px rgba(51, 67, 84, 0.18);
+}
+
+body[data-theme="day"] .topology-zoom-title {
+  color: rgba(35, 48, 62, 0.96);
+}
+
+body[data-theme="day"] .topology-node-card {
+  border-color: rgba(166, 182, 201, 0.14);
+}
+
 .label {
   font-size: 12px;
   color: var(--muted);
@@ -2495,6 +2923,7 @@ body[data-theme="day"] .mode-row {
 .provider-subscription-card {
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 
 .provider-subscription-card > .card-header-row,
@@ -2519,6 +2948,10 @@ body[data-theme="day"] .mode-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  padding-right: var(--scrollbar-width);
 }
 
 .provider-subscription-stat {
@@ -2551,12 +2984,19 @@ body[data-theme="day"] .mode-row {
   max-height: 220px;
   height: 220px;
   overflow: auto;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  scrollbar-gutter: stable;
+  padding-right: 2px;
 }
 
 .provider-subscription-item {
   display: grid;
   gap: 6px;
   padding: 9px 10px;
+  width: 100%;
+  box-sizing: border-box;
   border-radius: 10px;
   border: 1px solid rgba(148, 171, 197, 0.2);
   background: rgba(148, 171, 197, 0.05);
@@ -2616,10 +3056,16 @@ body[data-theme="day"] .mode-row {
   --card-icon-fill: linear-gradient(135deg, #55d0ff 0%, #4c88ff 55%, #73b7ff 100%);
 }
 
+.topology-icon {
+  --card-icon-mask: var(--icon-topology);
+  --card-icon-fill: var(--icon-fill-topology);
+}
+
 .rules-overview-card {
   display: grid;
   gap: 10px;
   min-height: 336px;
+  min-width: 0;
 }
 
 .rules-overview-icon {
@@ -2713,12 +3159,17 @@ body[data-theme="day"] .rules-overview-switch button.active {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   grid-auto-rows: 58px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding-right: var(--scrollbar-width);
 }
 
 .rules-overview-metric {
   display: grid;
   gap: 4px;
   padding: 8px 10px;
+  min-width: 0;
   min-height: 58px;
   height: 58px;
   align-content: space-between;
@@ -2778,6 +3229,7 @@ body[data-theme="day"] .rules-overview-switch button.active {
   background: rgba(148, 171, 197, 0.06);
   box-sizing: border-box;
   align-content: start;
+  min-width: 0;
 }
 
 .rules-overview-chart[hidden] {
@@ -2839,6 +3291,7 @@ body[data-theme="day"] .rules-overview-switch button.active {
   background: rgba(148, 171, 197, 0.06);
   box-sizing: border-box;
   align-content: start;
+  min-width: 0;
 }
 
 .rules-overview-records[hidden] {
@@ -2847,12 +3300,13 @@ body[data-theme="day"] .rules-overview-switch button.active {
 
 .rules-overview-record {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr) 120px;
+  grid-template-columns: minmax(76px, auto) minmax(0, 1fr) minmax(88px, auto);
   gap: 8px;
   align-items: center;
   font-size: 11px;
   line-height: 1.35;
   color: var(--ink);
+  min-width: 0;
 }
 
 .rules-overview-record + .rules-overview-record {
@@ -2875,8 +3329,29 @@ body[data-theme="day"] .rules-overview-switch button.active {
 }
 
 @media (max-width: 1080px) {
-  .rules-overview-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .rules-overview-record {
+    grid-template-columns: minmax(64px, auto) minmax(0, 1fr) minmax(72px, auto);
+  }
+}
+
+@media (max-width: 820px) {
+  .rules-overview-record {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .rules-overview-record-type {
+    grid-column: 1 / 2;
+  }
+
+  .rules-overview-record-policy {
+    grid-column: 2 / 3;
+    justify-self: end;
+  }
+
+  .rules-overview-record-payload {
+    grid-column: 1 / -1;
+    white-space: normal;
+    word-break: break-word;
   }
 }
 
@@ -4837,10 +5312,14 @@ body[data-page="logs"] .logs-clean-action {
   font-size: 13px;
 }
 
+.help-intro-card {
+  border-color: rgba(148, 171, 197, 0.14);
+}
+
 .help-intro-meta {
   display: grid;
-  gap: 6px;
-  margin-bottom: 14px;
+  gap: 4px;
+  margin-bottom: 12px;
   color: var(--muted);
   font-size: 13px;
 }
@@ -4851,6 +5330,22 @@ body[data-page="logs"] .logs-clean-action {
   font-family:"PingFang SC, Microsoft YaHei, Arial";
   font-size: 16px;
   font-style: italic;
+  line-height: 1.45;
+}
+
+.help-intro-card .help-list {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.7;
+}
+
+body[data-theme="night"] .help-intro-card {
+  border-color: rgba(148, 171, 197, 0.12);
+}
+
+body[data-theme="day"] .help-intro-card {
+  border-color: rgba(96, 113, 133, 0.18);
+  background: var(--panel);
 }
 
 @media (max-width: 760px) {

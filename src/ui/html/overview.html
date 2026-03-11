@@ -81,21 +81,21 @@
                     <input type="radio" name="proxyMode" value="global" />
                     <span class="radio-copy">
                       <span class="radio-title" data-i18n="status.proxyGlobal">Global</span>
-                      <span class="radio-hint">All requests will be forwarded to a proxy server</span>
+                      <span class="radio-hint" data-i18n="status.proxyGlobalHint">All requests will be forwarded to a proxy server</span>
                     </span>
                   </label>
                   <label class="radio-pill">
                     <input type="radio" name="proxyMode" value="rule" checked />
                     <span class="radio-copy">
                       <span class="radio-title" data-i18n="status.proxyRule">Rule</span>
-                      <span class="radio-hint">Using rule system to determine how to process requests</span>
+                      <span class="radio-hint" data-i18n="status.proxyRuleHint">Using rule system to determine how to process requests</span>
                     </span>
                   </label>
                   <label class="radio-pill">
                     <input type="radio" name="proxyMode" value="direct" />
                     <span class="radio-copy">
                       <span class="radio-title" data-i18n="status.proxyDirect">Direct</span>
-                      <span class="radio-hint">All requests will be sent to the target server directly</span>
+                      <span class="radio-hint" data-i18n="status.proxyDirectHint">All requests will be sent to the target server directly</span>
                     </span>
                   </label>
                 </div>
@@ -177,6 +177,56 @@
                       <span id="trafficDownloadAxis3">-</span>
                       <span id="trafficDownloadAxis2">-</span>
                       <span id="trafficDownloadAxis1">-</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card topology-card" data-module="network-topology" data-span="full" draggable="true">
+              <div class="card-header-row">
+                <h3 class="iconized topology-icon" data-i18n="status.topologyTitle">Network Topology</h3>
+                <button class="icon-btn ghost small overview-drag-handle" type="button">
+                  <span class="sr-only" data-i18n="labels.dragToReorder">Drag to reorder</span>
+                  <span class="drag-grip" aria-hidden="true"></span>
+                </button>
+              </div>
+              <div class="topology-stage" id="overviewTopologyStage">
+                <button
+                  class="icon-btn ghost small topology-zoom-btn"
+                  id="overviewTopologyZoomBtn"
+                  type="button"
+                  data-tip-key="status.topologyExpand"
+                  data-tip-fallback="Expand Topology"
+                  data-position="left"
+                  data-native-title="false"
+                  aria-label="Expand Topology">
+                  <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                    <path d="M8 4H4v4M16 4h4v4M8 20H4v-4M20 16v4h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="M9 9l-5-5M15 9l5-5M9 15l-5 5M15 15l5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+                  </svg>
+                </button>
+                <div class="topology-empty" id="overviewTopologyEmpty" data-i18n="status.topologyEmpty">No live request path yet</div>
+                <div class="topology-surface" id="overviewTopologySurface">
+                  <svg class="topology-links" id="overviewTopologySvg" viewBox="0 0 1000 380" preserveAspectRatio="none" aria-hidden="true"></svg>
+                  <div class="topology-columns" id="overviewTopologyColumns" aria-hidden="true"></div>
+                </div>
+              </div>
+              <div class="topology-zoom-modal" id="topologyZoomModal" hidden>
+                <div class="topology-zoom-backdrop"></div>
+                <div class="topology-zoom-dialog">
+                  <div class="topology-zoom-header">
+                    <h3 class="topology-zoom-title" data-i18n="status.topologyTitle">Network Topology</h3>
+                    <button class="icon-btn ghost small topology-zoom-close" id="topologyZoomClose" type="button" aria-label="Close">
+                      <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                        <path d="M7 7l10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+                      </svg>
+                    </button>
+                  </div>
+                  <div class="topology-stage topology-stage-zoom" id="topologyZoomStage">
+                    <div class="topology-empty" id="topologyZoomEmpty">No live request path yet</div>
+                    <div class="topology-surface topology-surface-zoom" id="topologyZoomSurface">
+                      <svg class="topology-links" id="topologyZoomSvg" viewBox="0 0 1000 380" preserveAspectRatio="none" aria-hidden="true"></svg>
+                      <div class="topology-columns" id="topologyZoomColumns" aria-hidden="true"></div>
                     </div>
                   </div>
                 </div>

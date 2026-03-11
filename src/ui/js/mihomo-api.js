@@ -33,6 +33,87 @@ export function resolveMihomoControllerAccess(source = {}) {
   };
 }
 
+export function resolveMihomoConnectionsWebSocketUrl(source = {}) {
+  const { baseUrl, secret } = resolveMihomoControllerAccess(source);
+  if (!baseUrl) {
+    return '';
+  }
+  try {
+    const url = new URL(baseUrl);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.pathname = '/connections';
+    if (secret) {
+      url.searchParams.set('token', secret);
+    } else {
+      url.searchParams.delete('token');
+    }
+    return url.toString();
+  } catch {
+    return '';
+  }
+}
+
+export function resolveMihomoTrafficWebSocketUrl(source = {}) {
+  const { baseUrl, secret } = resolveMihomoControllerAccess(source);
+  if (!baseUrl) {
+    return '';
+  }
+  try {
+    const url = new URL(baseUrl);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.pathname = '/traffic';
+    if (secret) {
+      url.searchParams.set('token', secret);
+    } else {
+      url.searchParams.delete('token');
+    }
+    return url.toString();
+  } catch {
+    return '';
+  }
+}
+
+export function resolveMihomoMemoryWebSocketUrl(source = {}) {
+  const { baseUrl, secret } = resolveMihomoControllerAccess(source);
+  if (!baseUrl) {
+    return '';
+  }
+  try {
+    const url = new URL(baseUrl);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.pathname = '/memory';
+    if (secret) {
+      url.searchParams.set('token', secret);
+    } else {
+      url.searchParams.delete('token');
+    }
+    return url.toString();
+  } catch {
+    return '';
+  }
+}
+
+export function resolveMihomoLogsWebSocketUrl(source = {}, level = 'info') {
+  const { baseUrl, secret } = resolveMihomoControllerAccess(source);
+  if (!baseUrl) {
+    return '';
+  }
+  try {
+    const url = new URL(baseUrl);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.pathname = '/logs';
+    if (secret) {
+      url.searchParams.set('token', secret);
+    } else {
+      url.searchParams.delete('token');
+    }
+    url.searchParams.set('level', String(level || 'info').trim() || 'info');
+    return url.toString();
+  } catch {
+    return '';
+  }
+}
+
 function buildAuthHeaders(secret, headers = {}) {
   const nextHeaders = { ...headers };
   if (secret) {

@@ -78,7 +78,6 @@ let globalSettings = {
 const GUI_MAIN_NOISY_COMMANDS = new Set([
   'traffic',
   'overview',
-  'overview-lite',
   'overview-memory',
   'track-connections',
   'tun-status',
@@ -600,12 +599,56 @@ function resolveCurrentComputerName() {
   return normalizeTextValue(os.hostname());
 }
 
-function resolveDefaultDeviceVersion() {
-  const release = normalizeTextValue(os.release());
-  if (process.platform === 'darwin') {
-    return release ? `Darwin ${release}` : '';
+function resolveCurrentMacProductVersion() {
+  if (process.platform !== 'darwin') {
+    return '';
   }
+  try {
+    const result = spawnSync('/usr/bin/sw_vers', ['-productVersion'], { encoding: 'utf8' });
+    return normalizeTextValue(result && result.stdout);
+  } catch {
+    return '';
+  }
+}
+
+function resolveCurrentMacBuildVersion() {
+  if (process.platform !== 'darwin') {
+    return '';
+  }
+  try {
+    const result = spawnSync('/usr/bin/sw_vers', ['-buildVersion'], { encoding: 'utf8' });
+    return normalizeTextValue(result && result.stdout);
+  } catch {
+    return '';
+  }
+}
+
+function resolveDefaultDeviceVersion() {
+  if (process.platform === 'darwin') {
+    return resolveCurrentMacProductVersion();
+  }
+  const release = normalizeTextValue(os.release());
   return release;
+}
+
+function resolveCurrentDeviceBuild() {
+  if (process.platform === 'darwin') {
+    return resolveCurrentMacBuildVersion();
+  }
+  return '';
+}
+
+function resolveCurrentDeviceSnapshot(source = 'electron') {
+  return {
+    user: resolveCurrentDeviceUser(),
+    userRealName: resolveCurrentUserRealName(),
+    computerName: resolveCurrentComputerName(),
+    os: resolveDefaultDeviceOsName(),
+    version: resolveDefaultDeviceVersion(),
+    build: resolveCurrentDeviceBuild(),
+    source: normalizeTextValue(source) || 'electron',
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 function mapOrderedFields(source = {}, orderedKeys = []) {
@@ -784,28 +827,13 @@ function normalizeKernelSettings(value = {}) {
 
 function normalizeDeviceSettings(value = {}, overviewValue = {}) {
   const device = value && typeof value === 'object' ? value : {};
-  const overview = overviewValue && typeof overviewValue === 'object' ? overviewValue : {};
-  const overviewOs = normalizeTextValue(overview.systemName);
-  const overviewVersion = normalizeTextValue(overview.systemVersion);
-  const overviewBuild = normalizeTextValue(overview.systemBuild);
-  const user = normalizeTextValue(device.user) || resolveCurrentDeviceUser();
-  const userRealName = normalizeTextValue(device.userRealName) || resolveCurrentUserRealName();
-  const computerName = normalizeTextValue(device.computerName) || normalizeTextValue(device.displayName) || resolveCurrentComputerName();
-  const osName = normalizeTextValue(device.os) || overviewOs || resolveDefaultDeviceOsName();
-  let version = normalizeTextValue(device.version) || overviewVersion || resolveDefaultDeviceVersion();
-  let build = normalizeTextValue(device.build) || overviewBuild;
-  if (version) {
-    const combinedMatch = version.match(/^([0-9]+(?:\.[0-9]+)*(?:\.[0-9]+)?)\s+([0-9A-Za-z]+)$/);
-    if (combinedMatch) {
-      version = normalizeTextValue(combinedMatch[1]);
-      if (!build) {
-        build = normalizeTextValue(combinedMatch[2]);
-      }
-    }
-  }
-  if (overviewVersion && /^Darwin\s+\d+/i.test(version || '')) {
-    version = overviewVersion;
-  }
+  const snapshot = resolveCurrentDeviceSnapshot(normalizeTextValue(device.source) || 'electron');
+  const user = normalizeTextValue(device.user) || snapshot.user;
+  const userRealName = normalizeTextValue(device.userRealName) || snapshot.userRealName;
+  const computerName = normalizeTextValue(device.computerName) || normalizeTextValue(device.displayName) || snapshot.computerName;
+  const osName = normalizeTextValue(device.os) || snapshot.os;
+  const version = normalizeTextValue(device.version) || snapshot.version;
+  const build = normalizeTextValue(device.build) || snapshot.build;
   const normalized = {
     user,
     userRealName,
@@ -813,8 +841,8 @@ function normalizeDeviceSettings(value = {}, overviewValue = {}) {
     os: osName,
     version,
     build,
-    source: normalizeTextValue(device.source),
-    updatedAt: normalizeTextValue(device.updatedAt),
+    source: normalizeTextValue(device.source) || snapshot.source,
+    updatedAt: normalizeTextValue(device.updatedAt) || snapshot.updatedAt,
   };
   const ordered = mapOrderedFields(normalized, [
     'user',
@@ -3295,32 +3323,22 @@ async function persistKernelVersionFromStatus(source = 'status-refresh') {
 }
 
 function buildDeviceVersionFromOverview(systemVersion = '', systemBuild = '') {
-  const version = normalizeTextValue(systemVersion);
-  return version;
+  return resolveDefaultDeviceVersion();
 }
 
 function persistOverviewSystemToSettings(overviewData = {}, source = 'overview') {
-  const payload = overviewData && typeof overviewData === 'object' ? overviewData : {};
-  const systemName = normalizeTextValue(payload.systemName);
-  const systemVersion = normalizeTextValue(payload.systemVersion);
-  const systemBuild = normalizeTextValue(payload.systemBuild);
-  if (!systemName && !systemVersion && !systemBuild) {
-    return false;
-  }
   try {
     const parsed = readAppSettings() || {};
     const previousDevice = parsed.device && typeof parsed.device === 'object' ? parsed.device : {};
-
+    const snapshot = resolveCurrentDeviceSnapshot('electron');
     const nextDeviceCore = {
-      user: normalizeTextValue(previousDevice.user) || resolveCurrentDeviceUser(),
-      userRealName: normalizeTextValue(previousDevice.userRealName) || resolveCurrentUserRealName(),
-      computerName: normalizeTextValue(previousDevice.computerName) || normalizeTextValue(previousDevice.displayName) || resolveCurrentComputerName(),
-      os: systemName || normalizeTextValue(previousDevice.os) || resolveDefaultDeviceOsName(),
-      version: buildDeviceVersionFromOverview(systemVersion, systemBuild)
-        || normalizeTextValue(previousDevice.version)
-        || resolveDefaultDeviceVersion(),
-      build: systemBuild || normalizeTextValue(previousDevice.build),
-      source: String(source || 'overview'),
+      user: snapshot.user,
+      userRealName: snapshot.userRealName,
+      computerName: snapshot.computerName,
+      os: snapshot.os,
+      version: snapshot.version,
+      build: snapshot.build,
+      source: snapshot.source,
     };
     const previousDeviceSignature = [
       normalizeTextValue(previousDevice.user),
@@ -3349,7 +3367,7 @@ function persistOverviewSystemToSettings(overviewData = {}, source = 'overview')
     if (deviceChanged) {
       parsed.device = {
         ...nextDeviceCore,
-        updatedAt: new Date().toISOString(),
+        updatedAt: snapshot.updatedAt,
       };
       if (Object.prototype.hasOwnProperty.call(parsed.device, 'displayName')) {
         delete parsed.device.displayName;
@@ -4201,21 +4219,18 @@ async function runBridgeViaHelperApi(bridgeArgs = []) {
         return respondFromHelper('/v1/proxy/disable?withStatus=1', 'POST', {});
       }
       case 'system-proxy-status': {
-        let service = await resolveUsableNetworkServiceName(readArgValue('--service'));
-        if (!service) {
-          return { ok: false, error: 'network_service_not_found' };
-        }
-        let endpoint = `/v1/proxy/status?service=${encodeURIComponent(service)}`;
-        let result = await respondFromHelper(endpoint, 'GET');
-        if (isInvalidServiceError(result)) {
-          const fallbackService = await resolveActiveNetworkServiceName();
-          if (fallbackService && fallbackService !== service) {
-            service = fallbackService;
-            endpoint = `/v1/proxy/status?service=${encodeURIComponent(service)}`;
-            result = await respondFromHelper(endpoint, 'GET');
-          }
-          if (isInvalidServiceError(result)) {
-            result = await respondFromHelper('/v1/proxy/status', 'GET');
+        const activeService = await resolveActiveNetworkServiceName();
+        const candidates = [activeService, '']
+          .map((item) => String(item || '').trim())
+          .filter((item, index, list) => list.indexOf(item) === index);
+        let result = null;
+        for (const service of candidates) {
+          const endpoint = service
+            ? `/v1/proxy/status?service=${encodeURIComponent(service)}`
+            : '/v1/proxy/status';
+          result = await respondFromHelper(endpoint, 'GET');
+          if (!isInvalidServiceError(result)) {
+            break;
           }
         }
         if (!result || result.ok === false) {
@@ -6752,22 +6767,38 @@ async function buildTrayMenuOnce() {
       networkTakeoverSocksPort = String(parsedProxyPorts.socksPort).trim() || networkTakeoverSocksPort;
     }
   }
+  const showProviderTraffic = traySettings ? traySettings.providerTrafficEnabled !== false : true;
+  const systemProxyArgs = ['system-proxy-status', '--config', configPath];
+  if (expectedProxyPort) {
+    systemProxyArgs.push('--port', expectedProxyPort);
+  }
+  const [
+    statusResult,
+    overviewResult,
+    takeoverResult,
+    connectivitySnapshot,
+    tunStatusResult,
+    providerTrafficResult,
+  ] = await Promise.allSettled([
+    runBridge(['status']),
+    runBridge(['overview']),
+    runBridge(systemProxyArgs),
+    getConnectivityQualitySnapshot(configPath),
+    runBridge(['tun-status', '--config', configPath]),
+    showProviderTraffic ? loadProvidersProxiesRaw() : Promise.resolve(null),
+  ]);
   try {
-    const status = await runBridge(['status']);
+    const status = statusResult.status === 'fulfilled' ? statusResult.value : null;
     dashboardEnabled = Boolean(status && status.ok && status.data && status.data.running);
     if (!dashboardEnabled) {
-      const overview = await runBridge(['overview']);
+      const overview = overviewResult.status === 'fulfilled' ? overviewResult.value : null;
       dashboardEnabled = Boolean(overview && overview.ok && overview.data && overview.data.running);
     }
   } catch {
     dashboardEnabled = false;
   }
   try {
-    const statusArgs = ['system-proxy-status', '--config', configPath];
-    if (expectedProxyPort) {
-      statusArgs.push('--port', expectedProxyPort);
-    }
-    const takeover = await runBridge(statusArgs);
+    const takeover = takeoverResult.status === 'fulfilled' ? takeoverResult.value : null;
     networkTakeoverEnabled = Boolean(takeover && takeover.ok && takeover.data && takeover.data.enabled);
     networkTakeoverService = (takeover && takeover.ok && takeover.data && takeover.data.service)
       ? String(takeover.data.service)
@@ -6800,15 +6831,15 @@ async function buildTrayMenuOnce() {
       : '7891');
     // Keep last persisted systemProxy on transient status errors.
   }
-  const connectivitySnapshot = await getConnectivityQualitySnapshot(configPath);
-  connectivityQuality = connectivitySnapshot && connectivitySnapshot.text
-    ? String(connectivitySnapshot.text)
+  const connectivity = connectivitySnapshot.status === 'fulfilled' ? connectivitySnapshot.value : null;
+  connectivityQuality = connectivity && connectivity.text
+    ? String(connectivity.text)
     : '-';
-  connectivityTone = connectivitySnapshot && connectivitySnapshot.tone
-    ? String(connectivitySnapshot.tone)
+  connectivityTone = connectivity && connectivity.tone
+    ? String(connectivity.tone)
     : 'neutral';
   try {
-    const tunStatus = await runBridge(['tun-status', '--config', configPath]);
+    const tunStatus = tunStatusResult.status === 'fulfilled' ? tunStatusResult.value : null;
     if (tunStatus && tunStatus.ok && tunStatus.data) {
       const tunEnabledRaw = Object.prototype.hasOwnProperty.call(tunStatus.data, 'enabled')
         ? tunStatus.data.enabled
@@ -6831,12 +6862,11 @@ async function buildTrayMenuOnce() {
   const showDirectoryLocations = traySettings ? traySettings.directoryLocationsEnabled !== false : true;
   const showTrackers = traySettings ? traySettings.trackersEnabled !== false : true;
   const showFoxboard = traySettings ? traySettings.foxboardEnabled !== false : true;
-  const showProviderTraffic = traySettings ? traySettings.providerTrafficEnabled !== false : true;
   const showCopyShellExportCommand = traySettings ? traySettings.copyShellExportCommandEnabled !== false : true;
   let providerTraffic = null;
   if (showProviderTraffic) {
     try {
-      const rawProviders = await loadProvidersProxiesRaw();
+      const rawProviders = providerTrafficResult.status === 'fulfilled' ? providerTrafficResult.value : null;
       if (rawProviders && rawProviders.ok) {
         providerTraffic = buildProviderSubscriptionOverviewData(rawProviders.data || {});
       }
@@ -7624,7 +7654,11 @@ function applyDevToolsState() {
 if (process.env.CLASHFOX_DEV === '1') {
   // Hot reload for main + renderer during local development.
   // eslint-disable-next-line global-require
-  require('electron-reload')(ROOT_DIR, {
+  require('electron-reload')([
+    path.join(ROOT_DIR, 'src'),
+    path.join(ROOT_DIR, 'static'),
+    path.join(ROOT_DIR, 'package.json'),
+  ], {
     electron: path.join(ROOT_DIR, 'node_modules', '.bin', 'electron'),
   });
 }
@@ -8743,15 +8777,7 @@ app.whenReady().then(() => {
             copyShellExportCommandEnabled: true,
           },
           kernel: {},
-          device: {
-            user: resolveCurrentDeviceUser(),
-            userRealName: resolveCurrentUserRealName(),
-            computerName: resolveCurrentComputerName(),
-            os: resolveDefaultDeviceOsName(),
-            version: resolveDefaultDeviceVersion(),
-            source: 'init',
-            updatedAt: new Date().toISOString(),
-          },
+          device: resolveCurrentDeviceSnapshot('electron'),
           mihomoStatus: {
             running: false,
             source: 'init',

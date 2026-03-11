@@ -1039,38 +1039,6 @@ JSON
     print_ok "$data"
 }
 
-handle_runtime_overview_lite() {
-    rotate_logs
-    parse_common_controller_args "$@"
-    local config_path="$CF_ARG_CONFIG_PATH"
-    if [ -z "$config_path" ]; then
-        config_path="$CLASHFOX_CONFIG_DIR/default.yaml"
-    fi
-    apply_controller_overrides "$config_path" "$CF_ARG_CONTROLLER_OVERRIDE" "$CF_ARG_SECRET_OVERRIDE"
-
-    collect_runtime_snapshot
-    local kernel_path="$CF_RT_KERNEL_PATH"
-    local pid="$CF_RT_PID"
-    local running="$CF_RT_RUNNING"
-    local uptime_sec
-    uptime_sec="$(resolve_runtime_uptime_sec "$running" "$pid")"
-
-    local connections=""
-    local memory=""
-    connections="$(get_mihomo_connections)"
-    if [ "$running" = false ] && [ -n "$connections" ]; then
-        running=true
-    fi
-    memory="$(resolve_runtime_memory "$kernel_path" "$running" "$pid")"
-
-    local data
-    data=$(cat <<JSON
-{"running":$running,"uptimeSec":$uptime_sec,"connections":"$(json_escape "$connections")","memory":"$(json_escape "$memory")"}
-JSON
-)
-    print_ok "$data"
-}
-
 handle_runtime_memory() {
     collect_runtime_snapshot
     local kernel_path="$CF_RT_KERNEL_PATH"
@@ -2907,9 +2875,6 @@ case "$command" in
         ;;
     providers-rules)
         handle_providers_rules "$@"
-        ;;
-    overview-lite)
-        handle_runtime_overview_lite "$@"
         ;;
     overview-memory)
         handle_runtime_memory "$@"

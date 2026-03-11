@@ -27,11 +27,18 @@ const OVERVIEW_INTERVAL_MS = 5000;
 const SETTINGS_CACHE_MS = 10000;
 const TRAFFIC_CACHE_KEY = 'clashfox.trayMenuTrafficCache.v1';
 const TRAFFIC_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
+const TRAFFIC_WS_RECONNECT_BASE_MS = 1500;
+const TRAFFIC_WS_RECONNECT_MAX_MS = 12000;
 const trafficState = {
   trafficTimer: null,
   overviewTimer: null,
   trafficLoading: false,
   overviewLoading: false,
+  socket: null,
+  socketUrl: '',
+  socketLive: false,
+  reconnectTimer: null,
+  reconnectAttempts: 0,
   trafficRxBytes: null,
   trafficTxBytes: null,
   trafficAt: 0,
@@ -100,62 +107,51 @@ async function applyTrayTheme() {
 }
 
 function persistTrafficCache() {
-  try {
-    localStorage.setItem(TRAFFIC_CACHE_KEY, JSON.stringify({
-      savedAt: Date.now(),
-      historyRx: trafficState.historyRx.slice(-TRAFFIC_HISTORY_POINTS),
-      historyTx: trafficState.historyTx.slice(-TRAFFIC_HISTORY_POINTS),
-      lastRateRx: trafficState.lastRateRx,
-      lastRateTx: trafficState.lastRateTx,
-      lastTotalRx: trafficState.lastTotalRx,
-      lastTotalTx: trafficState.lastTotalTx,
-      trafficRxBytes: trafficState.trafficRxBytes,
-      trafficTxBytes: trafficState.trafficTxBytes,
-      trafficAt: trafficState.trafficAt,
-      lastTrafficAt: trafficState.lastTrafficAt,
-    }));
-  } catch {
-    // ignore cache persistence failures
+  return;
+}
+
+function stopTrafficReconnect() {
+  if (trafficState.reconnectTimer) {
+    clearTimeout(trafficState.reconnectTimer);
+    trafficState.reconnectTimer = null;
   }
 }
 
-function restoreTrafficCache() {
-  try {
-    const raw = localStorage.getItem(TRAFFIC_CACHE_KEY);
-    if (!raw) {
-      return false;
-    }
-    const parsed = JSON.parse(raw);
-    const savedAt = Number(parsed && parsed.savedAt);
-    if (!Number.isFinite(savedAt) || (Date.now() - savedAt) > TRAFFIC_CACHE_MAX_AGE_MS) {
-      localStorage.removeItem(TRAFFIC_CACHE_KEY);
-      return false;
-    }
-    const historyRx = Array.isArray(parsed.historyRx) ? parsed.historyRx : [];
-    const historyTx = Array.isArray(parsed.historyTx) ? parsed.historyTx : [];
-    trafficState.historyRx = historyRx
-      .map((value) => Number.parseFloat(value))
-      .filter((value) => Number.isFinite(value) && value >= 0)
-      .slice(-TRAFFIC_HISTORY_POINTS);
-    trafficState.historyTx = historyTx
-      .map((value) => Number.parseFloat(value))
-      .filter((value) => Number.isFinite(value) && value >= 0)
-      .slice(-TRAFFIC_HISTORY_POINTS);
-    trafficState.lastRateRx = Number.isFinite(parsed.lastRateRx) ? parsed.lastRateRx : Number.parseFloat(parsed.lastRateRx);
-    trafficState.lastRateTx = Number.isFinite(parsed.lastRateTx) ? parsed.lastRateTx : Number.parseFloat(parsed.lastRateTx);
-    trafficState.lastTotalRx = Number.isFinite(parsed.lastTotalRx) ? parsed.lastTotalRx : Number.parseFloat(parsed.lastTotalRx);
-    trafficState.lastTotalTx = Number.isFinite(parsed.lastTotalTx) ? parsed.lastTotalTx : Number.parseFloat(parsed.lastTotalTx);
-    trafficState.trafficRxBytes = Number.isFinite(parsed.trafficRxBytes) ? parsed.trafficRxBytes : Number.parseFloat(parsed.trafficRxBytes);
-    trafficState.trafficTxBytes = Number.isFinite(parsed.trafficTxBytes) ? parsed.trafficTxBytes : Number.parseFloat(parsed.trafficTxBytes);
-    trafficState.trafficAt = Number.isFinite(parsed.trafficAt) ? parsed.trafficAt : Number.parseFloat(parsed.trafficAt);
-    trafficState.lastTrafficAt = Number.isFinite(parsed.lastTrafficAt) ? parsed.lastTrafficAt : Number.parseFloat(parsed.lastTrafficAt);
-    renderTrafficBars();
-    updateChartTimeLabels();
-    setOverlayLabels();
-    return trafficState.historyRx.length > 0 || trafficState.historyTx.length > 0;
-  } catch {
-    return false;
+function closeTrafficSocket() {
+  stopTrafficReconnect();
+  const socket = trafficState.socket;
+  trafficState.socket = null;
+  trafficState.socketUrl = '';
+  trafficState.socketLive = false;
+  if (!socket) {
+    return;
   }
+  try {
+    socket.onopen = null;
+    socket.onmessage = null;
+    socket.onerror = null;
+    socket.onclose = null;
+    socket.close();
+  } catch {
+    // ignore socket close failures
+  }
+}
+
+function scheduleTrafficReconnect() {
+  stopTrafficReconnect();
+  const attempt = Math.max(0, Number(trafficState.reconnectAttempts || 0));
+  const delay = Math.min(
+    TRAFFIC_WS_RECONNECT_MAX_MS,
+    TRAFFIC_WS_RECONNECT_BASE_MS * Math.max(1, 2 ** attempt),
+  );
+  trafficState.reconnectTimer = setTimeout(() => {
+    trafficState.reconnectTimer = null;
+    openTrafficSocket().catch(() => {});
+  }, delay);
+}
+
+function restoreTrafficCache() {
+  return false;
 }
 
 const ICON_SVGS = {
@@ -587,12 +583,15 @@ function applyChartEnabled(enabled) {
     stopTrafficTimers();
     resetTrafficChart();
     syncWindowGeometry();
+    return;
   }
+  openTrafficSocket().catch(() => {});
 }
 
 function invalidateSettingsCache() {
   trafficState.settings = null;
   trafficState.settingsAt = 0;
+  closeTrafficSocket();
 }
 
 async function getTrafficArgs() {
@@ -635,7 +634,128 @@ async function getTrafficArgs() {
   }
 }
 
+async function getTrafficSocketUrl() {
+  if (!window.clashfox || typeof window.clashfox.readSettings !== 'function') {
+    return '';
+  }
+  try {
+    const response = await window.clashfox.readSettings();
+    const settings = response && response.ok ? response.data : null;
+    if (!settings || typeof settings !== 'object') {
+      return '';
+    }
+    const controllerRaw = String(settings.externalController || '127.0.0.1:9090').trim() || '127.0.0.1:9090';
+    const secret = String(settings.secret || 'clashfox').trim();
+    const baseUrl = /^https?:\/\//i.test(controllerRaw) ? controllerRaw : `http://${controllerRaw}`;
+    const url = new URL(baseUrl);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.pathname = '/traffic';
+    if (secret) {
+      url.searchParams.set('token', secret);
+    } else {
+      url.searchParams.delete('token');
+    }
+    return url.toString();
+  } catch {
+    return '';
+  }
+}
+
+function shouldUseTrafficFallback() {
+  return !trafficState.socketLive;
+}
+
+function updateProxyTrafficSnapshot(downRate, upRate, downTotal, upTotal) {
+  const down = Number.parseFloat(downRate);
+  const up = Number.parseFloat(upRate);
+  const rxTotal = Number.parseFloat(downTotal);
+  const txTotal = Number.parseFloat(upTotal);
+  if (!Number.isFinite(down) || !Number.isFinite(up) || down < 0 || up < 0) {
+    return;
+  }
+  trafficState.lastTrafficAt = Date.now();
+  trafficState.lastRateRx = down;
+  trafficState.lastRateTx = up;
+  if (Number.isFinite(rxTotal) && rxTotal >= 0) {
+    trafficState.lastTotalRx = rxTotal;
+  }
+  if (Number.isFinite(txTotal) && txTotal >= 0) {
+    trafficState.lastTotalTx = txTotal;
+  }
+  setOverlayLabels();
+  updateTrafficHistory(down, up);
+  persistTrafficCache();
+}
+
+function handleTrafficSocketPayload(payload = {}) {
+  trafficState.socketLive = true;
+  trafficState.reconnectAttempts = 0;
+  updateProxyTrafficSnapshot(payload.down, payload.up, payload.downTotal, payload.upTotal);
+}
+
+async function openTrafficSocket() {
+  if (!trafficState.chartEnabled || typeof WebSocket !== 'function') {
+    return;
+  }
+  const nextUrl = await getTrafficSocketUrl();
+  if (!nextUrl) {
+    closeTrafficSocket();
+    return;
+  }
+  const existing = trafficState.socket;
+  if (
+    existing
+    && trafficState.socketUrl === nextUrl
+    && (
+      existing.readyState === WebSocket.OPEN
+      || existing.readyState === WebSocket.CONNECTING
+    )
+  ) {
+    return;
+  }
+  closeTrafficSocket();
+  let socket = null;
+  try {
+    socket = new WebSocket(nextUrl);
+  } catch {
+    trafficState.socketLive = false;
+    trafficState.reconnectAttempts += 1;
+    scheduleTrafficReconnect();
+    return;
+  }
+  trafficState.socket = socket;
+  trafficState.socketUrl = nextUrl;
+  socket.onopen = () => {
+    trafficState.reconnectAttempts = 0;
+  };
+  socket.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(String(event && event.data ? event.data : '{}'));
+      handleTrafficSocketPayload(payload);
+    } catch {
+      // ignore malformed websocket frames
+    }
+  };
+  socket.onerror = () => {
+    trafficState.socketLive = false;
+  };
+  socket.onclose = () => {
+    const currentSocket = trafficState.socket;
+    if (currentSocket !== socket) {
+      return;
+    }
+    trafficState.socket = null;
+    trafficState.socketUrl = '';
+    trafficState.socketLive = false;
+    trafficState.reconnectAttempts += 1;
+    scheduleTrafficReconnect();
+  };
+}
+
 async function loadTrafficSnapshot() {
+  if (!shouldUseTrafficFallback()) {
+    return;
+  }
   if (!window.clashfox || typeof window.clashfox.runCommand !== 'function') {
     return;
   }
@@ -660,6 +780,9 @@ async function loadTrafficSnapshot() {
 }
 
 async function loadOverviewSnapshot() {
+  if (!shouldUseTrafficFallback()) {
+    return;
+  }
   if (!window.clashfox || typeof window.clashfox.runCommand !== 'function') {
     return;
   }
@@ -683,12 +806,14 @@ async function loadOverviewSnapshot() {
 
 async function startTrafficTimers() {
   if (trafficState.trafficTimer || trafficState.overviewTimer) {
+    openTrafficSocket().catch(() => {});
     return;
   }
   await getTrafficArgs();
   if (!trafficState.chartEnabled) {
     return;
   }
+  openTrafficSocket().catch(() => {});
   loadTrafficSnapshot();
   loadOverviewSnapshot();
   trafficState.trafficTimer = setInterval(loadTrafficSnapshot, TRAFFIC_INTERVAL_MS);
@@ -696,6 +821,7 @@ async function startTrafficTimers() {
 }
 
 function stopTrafficTimers() {
+  closeTrafficSocket();
   if (trafficState.trafficTimer) {
     clearInterval(trafficState.trafficTimer);
     trafficState.trafficTimer = null;
@@ -1058,11 +1184,6 @@ function renderAll() {
 async function init() {
   await applyTrayTheme();
   ensureMenuAutoResize();
-  if (chartEl) {
-    if (!restoreTrafficCache()) {
-      resetTrafficChart();
-    }
-  }
   if (window.clashfox && typeof window.clashfox.onTrayMenuUpdate === 'function') {
     window.clashfox.onTrayMenuUpdate((payload) => {
       if (!payload) {
@@ -1080,6 +1201,11 @@ async function init() {
       renderHeader();
       renderProviderTraffic();
       renderMainList();
+      if (chartEl && chartBarsEl && !chartBarsEl.hasChildNodes()) {
+        if (!restoreTrafficCache()) {
+          resetTrafficChart();
+        }
+      }
       if (keepSubmenuKey && keepSubmenuAnchorKey) {
         const nextAnchor = findMainAnchorBySubmenuKey(keepSubmenuAnchorKey);
         if (nextAnchor) {
@@ -1103,6 +1229,11 @@ async function init() {
     if (menuVersion === 0) {
       menuData = initial;
       renderAll();
+      if (chartEl) {
+        if (!restoreTrafficCache()) {
+          resetTrafficChart();
+        }
+      }
     }
   } catch {
     // ignore
