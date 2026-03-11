@@ -18,9 +18,13 @@ let lastHeightSent = 0;
 let lastWidthSent = 0;
 let blockClickUntil = 0;
 let menuVersion = 0;
+let lastMenuRenderSignature = '';
+let lastHeaderRenderSignature = '';
+let lastMainListRenderSignature = '';
 let menuResizeObserver = null;
 let menuMutationObserver = null;
 let geometryRaf = 0;
+let suppressSubmenuUntil = 0;
 const TRAFFIC_HISTORY_POINTS = 520;
 const TRAFFIC_INTERVAL_MS = 1000;
 const OVERVIEW_INTERVAL_MS = 5000;
@@ -58,8 +62,45 @@ const providerTrafficState = {
   index: 0,
   paused: false,
   signature: '',
+  renderKey: '',
 };
-let trayDebugMode = false;
+
+function hasTrafficChartData() {
+  return Math.max(trafficState.historyRx.length, trafficState.historyTx.length, 0) > 0;
+}
+
+function syncTrafficChartVisibility() {
+  if (!chartEl) {
+    return;
+  }
+  const shouldShow = trafficState.chartEnabled && hasTrafficChartData();
+  chartEl.classList.toggle('is-hidden', !shouldShow);
+  scheduleGeometrySync();
+}
+
+function buildMenuRenderSignature(value = null) {
+  try {
+    return JSON.stringify(value || {});
+  } catch {
+    return '';
+  }
+}
+
+function buildHeaderRenderSignature(value = null) {
+  try {
+    return JSON.stringify((value && value.header) || {});
+  } catch {
+    return '';
+  }
+}
+
+function buildMainListRenderSignature(value = null) {
+  try {
+    return JSON.stringify(Array.isArray(value && value.items) ? value.items : []);
+  } catch {
+    return '';
+  }
+}
 
 function trayLog(scope, message, payload = null, level = 'log') {
   return;
@@ -76,7 +117,6 @@ async function applyTrayTheme() {
       const settings = response && response.ok && response.data && typeof response.data === 'object'
         ? response.data
         : null;
-      trayDebugMode = Boolean(settings && settings.debugMode);
       preference = String(
         (settings && settings.theme)
         || (settings && settings.appearance && settings.appearance.theme)
@@ -288,9 +328,12 @@ function renderProviderTraffic() {
     : null;
   const items = payload && Array.isArray(payload.items) ? payload.items : [];
   if (!payload || !summary || items.length === 0) {
-    providerTrafficEl.innerHTML = '';
-    providerTrafficEl.classList.add('is-hidden');
+    if (!providerTrafficEl.classList.contains('is-hidden') || providerTrafficEl.innerHTML) {
+      providerTrafficEl.innerHTML = '';
+      providerTrafficEl.classList.add('is-hidden');
+    }
     stopProviderTrafficRotation();
+    providerTrafficState.renderKey = '';
     trayLog('provider-traffic', 'render empty');
     return;
   }
@@ -307,6 +350,18 @@ function renderProviderTraffic() {
   const usedBytes = Number.parseFloat(currentItem.usedBytes || 0) || 0;
   const remainingBytes = Number.parseFloat(currentItem.remainingBytes || 0) || 0;
   const usedPercent = Number.parseFloat(currentItem.usedPercent || 0) || 0;
+  const renderKey = [
+    signature,
+    providerTrafficState.index,
+    summary.providerCount || 0,
+    summary.usedBytes || 0,
+    summary.remainingBytes || 0,
+  ].join('|');
+  if (providerTrafficState.renderKey === renderKey) {
+    startProviderTrafficRotation(totalItems);
+    return;
+  }
+  providerTrafficState.renderKey = renderKey;
   providerTrafficEl.innerHTML = `
     <div class="provider-traffic-summary">
       <div class="provider-traffic-stat">
@@ -506,6 +561,7 @@ function resetTrafficChart() {
   if (chartBottomLabelEl) chartBottomLabelEl.textContent = '-';
   if (chartTopTotalEl) chartTopTotalEl.textContent = '-';
   if (chartBottomTotalEl) chartBottomTotalEl.textContent = '-';
+  syncTrafficChartVisibility();
   persistTrafficCache();
 }
 
@@ -522,6 +578,7 @@ function updateTrafficHistory(rxRate, txRate) {
   }
   renderTrafficBars();
   updateChartTimeLabels();
+  syncTrafficChartVisibility();
   persistTrafficCache();
 }
 
@@ -576,9 +633,7 @@ function updateSystemTraffic(rxBytes, txBytes) {
 
 function applyChartEnabled(enabled) {
   trafficState.chartEnabled = enabled;
-  if (chartEl) {
-    chartEl.classList.toggle('is-hidden', !enabled);
-  }
+  syncTrafficChartVisibility();
   if (!enabled) {
     stopTrafficTimers();
     resetTrafficChart();
@@ -813,6 +868,7 @@ async function startTrafficTimers() {
   if (!trafficState.chartEnabled) {
     return;
   }
+  syncTrafficChartVisibility();
   openTrafficSocket().catch(() => {});
   loadTrafficSnapshot();
   loadOverviewSnapshot();
@@ -876,8 +932,6 @@ function ensureMenuAutoResize() {
     menuMutationObserver.observe(menuRootEl, {
       childList: true,
       subtree: true,
-      attributes: true,
-      characterData: true,
     });
   }
   if (document.fonts && typeof document.fonts.ready === 'object' && typeof document.fonts.ready.then === 'function') {
@@ -1082,9 +1136,17 @@ function findShortcutItem(shortcut) {
 
 function renderHeader() {
   if (!menuData || !menuData.header) {
-    headerEl.innerHTML = '';
+    if (headerEl.innerHTML) {
+      headerEl.innerHTML = '';
+      lastHeaderRenderSignature = '';
+    }
     return;
   }
+  const nextSignature = buildHeaderRenderSignature(menuData);
+  if (nextSignature === lastHeaderRenderSignature) {
+    return;
+  }
+  lastHeaderRenderSignature = nextSignature;
   const title = menuData.header.title || 'ClashFox';
   const rawStatus = String(menuData.header.status || '');
   let statusState = String(menuData.header.statusState || '').trim().toLowerCase();
@@ -1114,8 +1176,13 @@ function renderHeader() {
 }
 
 function renderMainList() {
-  listEl.innerHTML = '';
   const items = Array.isArray(menuData && menuData.items) ? menuData.items : [];
+  const nextSignature = buildMainListRenderSignature(menuData);
+  if (nextSignature === lastMainListRenderSignature) {
+    return;
+  }
+  lastMainListRenderSignature = nextSignature;
+  listEl.innerHTML = '';
   for (const item of items) {
     listEl.appendChild(makeRow(item));
   }
@@ -1139,7 +1206,20 @@ function resolveSubmenuAnchor(submenuKey, anchorRow) {
   return findMainAnchorBySubmenuKey(submenuKey);
 }
 
+function shouldRestoreSubmenu(anchorRow) {
+  return Boolean(
+    document.hasFocus()
+    && anchorRow
+    && anchorRow.isConnected
+    && typeof anchorRow.matches === 'function'
+    && anchorRow.matches(':hover')
+  );
+}
+
 function openSubmenu(submenuKey, anchorRow, keepAnchor = false) {
+  if (!document.hasFocus() || Date.now() < suppressSubmenuUntil) {
+    return;
+  }
   if (!submenuKey || !menuData || !menuData.submenus || !Array.isArray(menuData.submenus[submenuKey])) {
     hideSubmenu();
     return;
@@ -1190,14 +1270,20 @@ async function init() {
         return;
       }
       applyTrayTheme().catch(() => {});
+      const nextSignature = buildMenuRenderSignature(payload);
+      if (nextSignature === lastMenuRenderSignature) {
+        return;
+      }
       menuVersion += 1;
       const keepSubmenuKey = activeSubmenuKey;
+      const shouldKeepSubmenu = shouldRestoreSubmenu(activeSubmenuAnchor);
       const keepSubmenuAnchorKey = activeSubmenuAnchor
         && activeSubmenuAnchor.dataset
         && activeSubmenuAnchor.dataset.submenuKey
         ? activeSubmenuAnchor.dataset.submenuKey
         : keepSubmenuKey;
       menuData = payload;
+      lastMenuRenderSignature = nextSignature;
       renderHeader();
       renderProviderTraffic();
       renderMainList();
@@ -1206,7 +1292,7 @@ async function init() {
           resetTrafficChart();
         }
       }
-      if (keepSubmenuKey && keepSubmenuAnchorKey) {
+      if (shouldKeepSubmenu && keepSubmenuKey && keepSubmenuAnchorKey) {
         const nextAnchor = findMainAnchorBySubmenuKey(keepSubmenuAnchorKey);
         if (nextAnchor) {
           activeSubmenuKey = null;
@@ -1227,7 +1313,9 @@ async function init() {
   try {
     const initial = await window.clashfox.trayMenuGetData();
     if (menuVersion === 0) {
+      const nextSignature = buildMenuRenderSignature(initial);
       menuData = initial;
+      lastMenuRenderSignature = nextSignature;
       renderAll();
       if (chartEl) {
         if (!restoreTrafficCache()) {
@@ -1248,7 +1336,6 @@ async function init() {
   if (window.clashfox && typeof window.clashfox.onSettingsUpdated === 'function') {
     window.clashfox.onSettingsUpdated(async (settings = {}) => {
       invalidateSettingsCache();
-      trayDebugMode = Boolean(settings && settings.debugMode);
       applyChartEnabled(
         Object.prototype.hasOwnProperty.call(settings || {}, 'chartEnabled')
           ? settings.chartEnabled !== false
@@ -1258,7 +1345,12 @@ async function init() {
       try {
         const nextData = await window.clashfox.trayMenuGetData();
         if (nextData && typeof nextData === 'object') {
+          const nextSignature = buildMenuRenderSignature(nextData);
+          if (nextSignature === lastMenuRenderSignature) {
+            return;
+          }
           menuData = nextData;
+          lastMenuRenderSignature = nextSignature;
           renderAll();
           scheduleGeometrySync();
         }
@@ -1318,7 +1410,15 @@ document.addEventListener('visibilitychange', () => {
     blockClickUntil = Date.now() + 220;
     hideSubmenu();
     startTrafficTimers();
+  } else {
+    suppressSubmenuUntil = Date.now() + 250;
+    hideSubmenu();
   }
+});
+
+window.addEventListener('blur', () => {
+  suppressSubmenuUntil = Date.now() + 250;
+  hideSubmenu();
 });
 
 window.addEventListener('beforeunload', () => {

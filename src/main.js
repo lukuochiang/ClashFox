@@ -57,6 +57,8 @@ let trayMenuContentHeight = 420;
 let trayMenuRefreshTimer = null;
 let trayMenuRendererReady = false;
 let trayMenuLastBuiltAt = 0;
+let trayMenuDataSignature = '';
+let trayMenuClosing = false;
 let traySubmenuWindow = null;
 let traySubmenuVisible = false;
 let traySubmenuReady = false;
@@ -75,82 +77,19 @@ let currentInstallProcess = null; // 仅用于跟踪安装进程，支持取消�
 let globalSettings = {
   debugMode: true, // 是否启用调试模式
 };
-const GUI_MAIN_NOISY_COMMANDS = new Set([
-  'traffic',
-  'overview',
-  'overview-memory',
-  'track-connections',
-  'tun-status',
-]);
-const GUI_MAIN_SUPPRESSED_LOGS = new Set([
-  'command:ipc command received',
-  'command:ipc command result',
-  'bridge:command start',
-  'bridge:command completed',
-  'tray:build started',
-  'tray:build completed',
-  'tray:build skipped, pending rerun',
-  'tray:build loop entered',
-  'tray:build loop exited',
-  'tray:action completed',
-]);
-const guiMainLogThrottleState = new Map();
-
-function shouldThrottleGuiMainLog(scope, message, payload = null, level = 'log') {
-  if (level !== 'log' || !payload || typeof payload !== 'object') {
-    return false;
-  }
-  const command = String(
-    payload.cmd
-    || payload.command
-    || '',
-  ).trim().toLowerCase();
-  if (!GUI_MAIN_NOISY_COMMANDS.has(command)) {
-    return false;
-  }
-  if (scope === 'bridge' && (message === 'command start' || message === 'command completed')) {
-    return true;
-  }
-  const ok = Object.prototype.hasOwnProperty.call(payload, 'ok')
-    ? Boolean(payload.ok)
-    : true;
-  if (!ok) {
-    return false;
-  }
-  const key = `${scope}:${message}:${command}`;
-  const now = Date.now();
-  const lastAt = guiMainLogThrottleState.get(key) || 0;
-  if ((now - lastAt) < 5000) {
-    return true;
-  }
-  guiMainLogThrottleState.set(key, now);
-  return false;
+function guiMainLog(scope, message, payload = null, level = 'log') {
+  void scope;
+  void message;
+  void payload;
+  void level;
 }
 
-function guiMainLog(scope, message, payload = null, level = 'log') {
-  if (!globalSettings.debugMode) {
-    return;
+function buildTrayMenuDataSignature(value = null) {
+  try {
+    return JSON.stringify(value || {});
+  } catch {
+    return '';
   }
-  const scopeText = String(scope || '').trim();
-  const messageText = String(message || '').trim();
-  const suppressionKey = `${scopeText}:${messageText}`;
-  if (level === 'log' && GUI_MAIN_SUPPRESSED_LOGS.has(suppressionKey)) {
-    return;
-  }
-  if (shouldThrottleGuiMainLog(scopeText, messageText, payload, level)) {
-    return;
-  }
-  const method = level === 'error'
-    ? 'error'
-    : level === 'warn'
-      ? 'warn'
-      : 'log';
-  const prefix = `[gui-main:${scopeText}] ${messageText}`;
-  if (payload === null || payload === undefined) {
-    console[method](prefix);
-    return;
-  }
-  console[method](prefix, payload);
 }
 
 function truncateLogPayload(value, maxLength = 1200) {
@@ -6691,9 +6630,6 @@ function patchTrayMenuNetworkState({ systemProxyEnabled, tunEnabled } = {}) {
     }
     return item;
   });
-  if (trayMenuWindow && !trayMenuWindow.isDestroyed()) {
-    trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
-  }
   if (traySubmenuWindow && traySubmenuVisible) {
     sendTraySubmenuUpdate({
       key: 'network',
@@ -6986,7 +6922,10 @@ async function buildTrayMenuOnce() {
       { type: 'action', label: labels.copyShellExportCommand || 'Copy Shell Export Command', action: 'copy-shell-export', rightText: '⌘ C', iconKey: 'copyShellExport' },
     );
   }
+  const nextSignature = buildTrayMenuDataSignature(nextMenuData);
+  const changed = nextSignature !== trayMenuDataSignature;
   trayMenuData = nextMenuData;
+  trayMenuDataSignature = nextSignature;
   trayMenuLastBuiltAt = Date.now();
   guiMainLog('tray', 'build completed', {
     items: Array.isArray(items) ? items.length : 0,
@@ -7000,7 +6939,7 @@ async function buildTrayMenuOnce() {
     networkTakeoverEnabled,
     tunEnabled,
   });
-  if (trayMenuWindow && !trayMenuWindow.isDestroyed()) {
+  if (changed && trayMenuWindow && !trayMenuWindow.isDestroyed()) {
     trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
   }
   return trayMenuData;
@@ -7085,6 +7024,8 @@ function ensureTrayMenuWindow() {
   });
   trayMenuWindow.loadFile(path.join(__dirname, 'ui', 'html', 'tray-menu.html'));
   trayMenuWindow.on('blur', () => {
+    trayMenuClosing = true;
+    hideTraySubmenuWindow();
     setTimeout(() => {
       if (!traySubmenuHovering) {
         hideTrayMenuWindow();
@@ -7095,6 +7036,7 @@ function ensureTrayMenuWindow() {
     hideTraySubmenuWindow();
     trayMenuWindow = null;
     trayMenuVisible = false;
+    trayMenuClosing = false;
     trayMenuRendererReady = false;
     if (trayMenuRefreshTimer) {
       clearInterval(trayMenuRefreshTimer);
@@ -7160,6 +7102,7 @@ function ensureTraySubmenuWindow() {
 function hideTrayMenuWindow() {
   if (!trayMenuWindow || trayMenuWindow.isDestroyed()) {
     trayMenuVisible = false;
+    trayMenuClosing = false;
     hideTraySubmenuWindow();
     traySubmenuPendingPayload = null;
     if (trayMenuRefreshTimer) {
@@ -7170,6 +7113,7 @@ function hideTrayMenuWindow() {
   }
   hideTraySubmenuWindow();
   trayMenuVisible = false;
+  trayMenuClosing = false;
   traySubmenuPendingPayload = null;
   if (trayMenuRefreshTimer) {
     clearInterval(trayMenuRefreshTimer);
@@ -7180,7 +7124,13 @@ function hideTrayMenuWindow() {
 
 function sendTraySubmenuUpdate(payload) {
   traySubmenuPendingPayload = payload || null;
-  if (!trayMenuVisible) {
+  if (
+    !trayMenuVisible
+    || trayMenuClosing
+    || !trayMenuWindow
+    || trayMenuWindow.isDestroyed()
+    || !trayMenuWindow.isFocused()
+  ) {
     hideTraySubmenuWindow();
     return;
   }
@@ -7332,6 +7282,7 @@ async function showTrayMenuWindow() {
   if (!tray) {
     return;
   }
+  trayMenuClosing = false;
   hideTraySubmenuWindow();
   const popup = ensureTrayMenuWindow();
   const currentBounds = popup.getBounds();
@@ -8419,14 +8370,16 @@ app.whenReady().then(() => {
     }
   });
   ipcMain.on('clashfox:trayMenu:openSubmenu', async (_event, payload = {}) => {
-    if (!trayMenuVisible) {
+    if (
+      !trayMenuVisible
+      || trayMenuClosing
+      || !trayMenuWindow
+      || trayMenuWindow.isDestroyed()
+      || !trayMenuWindow.isFocused()
+    ) {
       return;
     }
     const key = payload && payload.key ? String(payload.key) : '';
-    if (key === 'network') {
-      await createTrayMenu().catch(() => {});
-      // await refreshNetworkSubmenuState().catch(() => {});
-    }
     const items = (trayMenuData
       && trayMenuData.submenus
       && Array.isArray(trayMenuData.submenus[key]))
@@ -8454,7 +8407,13 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('clashfox:traySubmenu:resize', (_event, payload = {}) => {
-    if (!trayMenuVisible) {
+    if (
+      !trayMenuVisible
+      || trayMenuClosing
+      || !trayMenuWindow
+      || trayMenuWindow.isDestroyed()
+      || !trayMenuWindow.isFocused()
+    ) {
       hideTraySubmenuWindow();
       return;
     }
@@ -8478,7 +8437,13 @@ app.whenReady().then(() => {
 
   ipcMain.on('clashfox:traySubmenu:ready', () => {
     traySubmenuReady = true;
-    if (!trayMenuVisible) {
+    if (
+      !trayMenuVisible
+      || trayMenuClosing
+      || !trayMenuWindow
+      || trayMenuWindow.isDestroyed()
+      || !trayMenuWindow.isFocused()
+    ) {
       hideTraySubmenuWindow();
       return;
     }
@@ -9046,6 +9011,7 @@ app.whenReady().then(() => {
         mainWindow.setSize(normalizedForUi.windowWidth, normalizedForUi.windowHeight);
       }
       trayMenuData = null;
+      trayMenuDataSignature = '';
       trayMenuLastBuiltAt = 0;
       refreshTrayMenuLabelsOnly();
       await createTrayMenu();

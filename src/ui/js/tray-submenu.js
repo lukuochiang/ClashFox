@@ -4,6 +4,9 @@ const submenuListEl = document.getElementById('submenuList');
 let submenuKey = '';
 let submenuItems = [];
 let connectivityRefreshTimer = null;
+let lastResizeWidth = 0;
+let lastResizeHeight = 0;
+let lastHoverSent = false;
 const CONNECTIVITY_REFRESH_MS = 1000;
 const SUBMENU_MIN_WIDTH = 170;
 const SUBMENU_MAX_WIDTH = 340;
@@ -329,10 +332,14 @@ function renderSubmenu() {
     submenuListEl.appendChild(makeRow(item));
   });
   applySubmenuWidthByContent();
-  window.clashfox.traySubmenuResize({
-    width: Math.ceil(submenuRootEl.getBoundingClientRect().width || 0),
-    height: Math.ceil(submenuRootEl.getBoundingClientRect().height || 0),
-  });
+  const width = Math.ceil(submenuRootEl.getBoundingClientRect().width || 0);
+  const height = Math.ceil(submenuRootEl.getBoundingClientRect().height || 0);
+  if (width === lastResizeWidth && height === lastResizeHeight) {
+    return;
+  }
+  lastResizeWidth = width;
+  lastResizeHeight = height;
+  window.clashfox.traySubmenuResize({ width, height });
 }
 
 function setSubmenu(payload) {
@@ -383,8 +390,19 @@ if (window.matchMedia) {
 }
 
 if (window.clashfox && typeof window.clashfox.traySubmenuHover === 'function') {
-  document.addEventListener('mouseenter', () => window.clashfox.traySubmenuHover(true));
-  document.addEventListener('mouseleave', () => window.clashfox.traySubmenuHover(false));
+  const sendHover = (nextValue) => {
+    const normalized = Boolean(nextValue);
+    if (normalized === lastHoverSent) {
+      return;
+    }
+    lastHoverSent = normalized;
+    window.clashfox.traySubmenuHover(normalized);
+  };
+  if (submenuRootEl) {
+    submenuRootEl.addEventListener('mousemove', () => sendHover(true));
+    submenuRootEl.addEventListener('mouseleave', () => sendHover(false));
+  }
+  window.addEventListener('blur', () => sendHover(false));
 }
 
 if (window.clashfox && typeof window.clashfox.traySubmenuReady === 'function') {

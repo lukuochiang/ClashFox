@@ -4214,13 +4214,6 @@ function showToast(message, type = 'info') {
   showNoticePop(message, type);
 }
 
-function guiLogEnabled() {
-  return Boolean(
-    (state.settings && state.settings.debugMode)
-    || (state.fileSettings && state.fileSettings.debugMode),
-  );
-}
-
 function guiLog(scope, message, payload = null, level = 'log') {
   return;
 }
