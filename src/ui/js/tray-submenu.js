@@ -7,9 +7,17 @@ let connectivityRefreshTimer = null;
 let lastResizeWidth = 0;
 let lastResizeHeight = 0;
 let lastHoverSent = false;
+let panelChartSocket = null;
+let panelChartReconnectTimer = null;
+let panelChartReconnectAttempts = 0;
+let panelChartRatesRx = [];
+let panelChartRatesTx = [];
+let panelChartTotalRx = null;
+let panelChartTotalTx = null;
 const CONNECTIVITY_REFRESH_MS = 1000;
 const SUBMENU_MIN_WIDTH = 170;
 const SUBMENU_MAX_WIDTH = 340;
+const SUBMENU_PANEL_MAX_WIDTH = 520;
 const NETWORK_TOGGLE_ACTIONS = new Set(['toggle-system-proxy', 'toggle-tun']);
 const pendingActionSet = new Set();
 const loadingVisibleSet = new Set();
@@ -18,6 +26,10 @@ const loadingVisibleAtMap = new Map();
 const ACTION_TIMEOUT_MS = 12000;
 const LOADING_SHOW_DELAY_MS = 180;
 const MIN_LOADING_VISIBLE_MS = 220;
+const PANEL_TRAFFIC_HISTORY_LIMIT = 18;
+const PANEL_TRAFFIC_INTERVAL_MS = 1500;
+const PANEL_TRAFFIC_RECONNECT_BASE_MS = 1200;
+const PANEL_TRAFFIC_RECONNECT_MAX_MS = 10000;
 
 async function applyTrayTheme() {
   try {
@@ -66,6 +78,8 @@ function wait(ms = 0) {
 }
 
 const ICON_SVGS = {
+  dashboard: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8 14.5a4 4 0 0 1 8 0"/><path d="M12 12l3-3"/><circle cx="9" cy="10" r="1" class="menu-icon-fill"/></svg>',
+  panel: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2" fill="rgba(86,156,255,0.18)" stroke="#5ea8ff" stroke-width="1.4"/><path d="M4 10h16" stroke="#f2b663" stroke-width="1.4"/><path d="M8 14h7" stroke="#67d39c" stroke-width="1.6" stroke-linecap="round"/><path d="M8 17h5" stroke="#c78bff" stroke-width="1.6" stroke-linecap="round"/></svg>',
   systemProxy: '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6l7-3z"/></svg>',
   tun: '<svg viewBox="0 0 24 24"><path d="M3 12h8"/><path d="M13 12h8"/><path d="M9 8l4 4-4 4"/></svg>',
   currentService: '<svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>',
@@ -83,6 +97,315 @@ const ICON_SVGS = {
   workDir: '<svg viewBox="0 0 24 24"><path d="M4 9h16v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9z"/><path d="M8 9V7a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M4 12h16"/></svg>',
   logDir: '<svg viewBox="0 0 24 24"><path d="M6 4h9l3 3v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M9 11h6M9 15h6"/></svg>',
 };
+
+function formatBytes(value) {
+  const num = Number.parseFloat(value);
+  if (!Number.isFinite(num) || num < 0) return '-';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = num;
+  let idx = 0;
+  while (size >= 1024 && idx < units.length - 1) {
+    size /= 1024;
+    idx += 1;
+  }
+  const fixed = size >= 100 ? 0 : size >= 10 ? 1 : 2;
+  return `${size.toFixed(fixed)} ${units[idx]}`;
+}
+
+function formatBitrate(bytesPerSec) {
+  const num = Number.parseFloat(bytesPerSec);
+  if (!Number.isFinite(num) || num < 0) return '-';
+  const bitsPerSec = (num * 8) / 1000;
+  const units = ['Kb/s', 'Mb/s', 'Gb/s', 'Tb/s'];
+  let value = bitsPerSec;
+  let idx = 0;
+  while (value >= 1000 && idx < units.length - 1) {
+    value /= 1000;
+    idx += 1;
+  }
+  const fixed = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(fixed)} ${units[idx]}`;
+}
+
+function formatExpireAt(value) {
+  const timestamp = Number.parseInt(String(value || ''), 10);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return '-';
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return '-';
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function niceMaxValue(value) {
+  if (!Number.isFinite(value) || value <= 0) return 8;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(value)));
+  const normalized = value / magnitude;
+  let factor = 10;
+  if (normalized <= 1) factor = 1;
+  else if (normalized <= 2) factor = 2;
+  else if (normalized <= 5) factor = 5;
+  return factor * magnitude;
+}
+
+async function getPanelTrafficSocketUrl() {
+  if (!window.clashfox || typeof window.clashfox.readSettings !== 'function') {
+    return '';
+  }
+  try {
+    const response = await window.clashfox.readSettings();
+    const settings = response && response.ok ? response.data : null;
+    if (!settings || typeof settings !== 'object') {
+      return '';
+    }
+    const controllerRaw = String(settings.externalController || '127.0.0.1:9090').trim() || '127.0.0.1:9090';
+    const secret = String(settings.secret || 'clashfox').trim();
+    const baseUrl = /^https?:\/\//i.test(controllerRaw) ? controllerRaw : `http://${controllerRaw}`;
+    const url = new URL(baseUrl);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.pathname = '/traffic';
+    if (secret) {
+      url.searchParams.set('token', secret);
+    }
+    return url.toString();
+  } catch {
+    return '';
+  }
+}
+
+function stopPanelTrafficReconnect() {
+  if (panelChartReconnectTimer) {
+    clearTimeout(panelChartReconnectTimer);
+    panelChartReconnectTimer = null;
+  }
+}
+
+function closePanelTrafficSocket() {
+  stopPanelTrafficReconnect();
+  panelChartReconnectAttempts = 0;
+  const socket = panelChartSocket;
+  panelChartSocket = null;
+  if (!socket) return;
+  try {
+    socket.onopen = null;
+    socket.onmessage = null;
+    socket.onerror = null;
+    socket.onclose = null;
+    socket.close();
+  } catch {
+    // ignore
+  }
+}
+
+function schedulePanelTrafficReconnect() {
+  stopPanelTrafficReconnect();
+  const delay = Math.min(
+    PANEL_TRAFFIC_RECONNECT_MAX_MS,
+    PANEL_TRAFFIC_RECONNECT_BASE_MS * Math.max(1, 2 ** panelChartReconnectAttempts),
+  );
+  panelChartReconnectTimer = setTimeout(() => {
+    panelChartReconnectTimer = null;
+    openPanelTrafficSocket().catch(() => {});
+  }, delay);
+}
+
+function buildPanelChartMarkup() {
+  return `
+    <div class="menu-chart">
+      <div class="menu-chart-body">
+        <div class="menu-chart-overlay">
+          <div id="panelChartTopLabel" class="menu-chart-label top">-</div>
+          <div id="panelChartBottomLabel" class="menu-chart-label bottom">-</div>
+        </div>
+        <div class="menu-chart-overlay right">
+          <div id="panelChartTopTotal" class="menu-chart-label top total">-</div>
+          <div id="panelChartBottomTotal" class="menu-chart-label bottom total">-</div>
+        </div>
+        <svg class="menu-chart-svg" viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="panelDownGradient" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stop-color="#53b8ff" stop-opacity="0.98" />
+              <stop offset="100%" stop-color="#53b8ff" stop-opacity="0.18" />
+            </linearGradient>
+            <linearGradient id="panelUpGradient" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stop-color="#d88cff" stop-opacity="0.98" />
+              <stop offset="100%" stop-color="#d88cff" stop-opacity="0.18" />
+            </linearGradient>
+          </defs>
+          <line class="chart-baseline" x1="0" y1="30" x2="100" y2="30"></line>
+          <g id="panelChartBars"></g>
+        </svg>
+      </div>
+      <div class="menu-chart-footer">
+        <span id="panelChartLeftTime">-</span>
+        <span id="panelChartRightTime">now</span>
+      </div>
+    </div>
+  `;
+}
+
+function buildPanelProviderTrafficMarkup(payload = null) {
+  const summary = payload && payload.summary && typeof payload.summary === 'object' ? payload.summary : null;
+  const items = payload && Array.isArray(payload.items) ? payload.items : [];
+  if (!summary || !items.length) {
+    return '';
+  }
+  const current = items[0];
+  const usedPercent = Number.parseFloat(current.usedPercent || 0) || 0;
+  return `
+    <div class="menu-provider-traffic">
+      <div class="provider-traffic-summary">
+        <div class="provider-traffic-stat">
+          <span class="provider-traffic-stat-label">Providers</span>
+          <span class="provider-traffic-stat-value">${Number.parseInt(String(summary.providerCount || 0), 10) || 0}</span>
+        </div>
+        <div class="provider-traffic-stat">
+          <span class="provider-traffic-stat-label">Used</span>
+          <span class="provider-traffic-stat-value">${formatBytes(summary.usedBytes || 0)}</span>
+        </div>
+        <div class="provider-traffic-stat">
+          <span class="provider-traffic-stat-label">Remaining</span>
+          <span class="provider-traffic-stat-value">${formatBytes(summary.remainingBytes || 0)}</span>
+        </div>
+      </div>
+      <div class="provider-traffic-item">
+        <div class="provider-traffic-item-head">
+          <div class="provider-traffic-item-name">${current.name || '-'}</div>
+          <div class="provider-traffic-item-percent">${usedPercent.toFixed(usedPercent >= 10 ? 0 : 1)}%</div>
+        </div>
+        <div class="provider-traffic-progress">
+          <div class="provider-traffic-progress-bar" style="width:${Math.max(0, Math.min(100, usedPercent)).toFixed(2)}%"></div>
+        </div>
+        <div class="provider-traffic-item-meta">
+          <span>${formatBytes(current.usedBytes || 0)} used</span>
+          <span>${formatBytes(current.remainingBytes || 0)} left</span>
+        </div>
+        <div class="provider-traffic-item-meta secondary">
+          <span>${current.vehicleType || '-'}</span>
+          <span>Expire ${formatExpireAt(current.expireAt)}</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderPanelTrafficChart() {
+  const barsEl = document.getElementById('panelChartBars');
+  if (!barsEl) return;
+  const topLabelEl = document.getElementById('panelChartTopLabel');
+  const bottomLabelEl = document.getElementById('panelChartBottomLabel');
+  const topTotalEl = document.getElementById('panelChartTopTotal');
+  const bottomTotalEl = document.getElementById('panelChartBottomTotal');
+  const leftTimeEl = document.getElementById('panelChartLeftTime');
+  const rightTimeEl = document.getElementById('panelChartRightTime');
+  const count = Math.max(panelChartRatesRx.length, panelChartRatesTx.length, 0);
+  const maxRx = panelChartRatesRx.length ? Math.max(...panelChartRatesRx, 0) : 0;
+  const maxTx = panelChartRatesTx.length ? Math.max(...panelChartRatesTx, 0) : 0;
+  const niceMaxRx = Math.max(8, niceMaxValue(maxRx));
+  const niceMaxTx = Math.max(8, niceMaxValue(maxTx));
+  if (topLabelEl) topLabelEl.textContent = formatBitrate(maxTx);
+  if (bottomLabelEl) bottomLabelEl.textContent = formatBitrate(maxRx);
+  if (topTotalEl) topTotalEl.textContent = formatBytes(panelChartTotalTx || 0);
+  if (bottomTotalEl) bottomTotalEl.textContent = formatBytes(panelChartTotalRx || 0);
+  if (leftTimeEl) {
+    const totalSec = Math.max(1, Math.round(((Math.max(count, 1) - 1) * PANEL_TRAFFIC_INTERVAL_MS) / 1000));
+    leftTimeEl.textContent = count <= 1 ? '-' : `${totalSec} seconds ago`;
+  }
+  if (rightTimeEl) rightTimeEl.textContent = 'now';
+  const width = 100;
+  const height = 60;
+  const baseline = height / 2;
+  const available = baseline;
+  const maxBars = PANEL_TRAFFIC_HISTORY_LIMIT;
+  const barWidth = 3.6;
+  const xStep = maxBars > 1 ? (width - barWidth) / (maxBars - 1) : 0;
+  const startIndex = Math.max(0, count - maxBars);
+  let svg = '';
+  for (let i = 0; i < maxBars; i += 1) {
+    const x = i * xStep;
+    const idx = startIndex + i;
+    const hasSample = idx < count;
+    const downValue = hasSample ? (panelChartRatesRx[idx] || 0) : 0;
+    const upValue = hasSample ? (panelChartRatesTx[idx] || 0) : 0;
+    const downHeight = Math.max(0, Math.min(available, (downValue / niceMaxRx) * available));
+    const upHeight = Math.max(0, Math.min(available, (upValue / niceMaxTx) * available));
+    svg += `<rect class="chart-bar-bg down${hasSample ? '' : ' is-placeholder'}" x="${x.toFixed(2)}" y="${baseline.toFixed(2)}" width="${barWidth.toFixed(2)}" height="${available.toFixed(2)}" rx="0.35"></rect>`;
+    svg += `<rect class="chart-bar-bg up${hasSample ? '' : ' is-placeholder'}" x="${x.toFixed(2)}" y="${(baseline - available).toFixed(2)}" width="${barWidth.toFixed(2)}" height="${available.toFixed(2)}" rx="0.35"></rect>`;
+    if (hasSample && downHeight > 0.2) {
+      svg += `<rect class="chart-bar down" x="${x.toFixed(2)}" y="${baseline.toFixed(2)}" width="${barWidth.toFixed(2)}" height="${downHeight.toFixed(2)}" rx="0.35" fill="url(#panelDownGradient)"></rect>`;
+    }
+    if (hasSample && upHeight > 0.2) {
+      svg += `<rect class="chart-bar up" x="${x.toFixed(2)}" y="${(baseline - upHeight).toFixed(2)}" width="${barWidth.toFixed(2)}" height="${upHeight.toFixed(2)}" rx="0.35" fill="url(#panelUpGradient)"></rect>`;
+    }
+  }
+  barsEl.innerHTML = svg;
+  requestAnimationFrame(() => {
+    if (submenuKey === 'panel') {
+      resizeSubmenuToContent();
+    }
+  });
+}
+
+function applyPanelTrafficSnapshot(payload = {}) {
+  const down = Number.parseFloat(payload.down);
+  const up = Number.parseFloat(payload.up);
+  const downTotal = Number.parseFloat(payload.downTotal);
+  const upTotal = Number.parseFloat(payload.upTotal);
+  if (!Number.isFinite(down) || !Number.isFinite(up) || down < 0 || up < 0) {
+    return;
+  }
+  panelChartRatesRx.push(down);
+  panelChartRatesTx.push(up);
+  if (panelChartRatesRx.length > PANEL_TRAFFIC_HISTORY_LIMIT) panelChartRatesRx = panelChartRatesRx.slice(-PANEL_TRAFFIC_HISTORY_LIMIT);
+  if (panelChartRatesTx.length > PANEL_TRAFFIC_HISTORY_LIMIT) panelChartRatesTx = panelChartRatesTx.slice(-PANEL_TRAFFIC_HISTORY_LIMIT);
+  if (Number.isFinite(downTotal) && downTotal >= 0) panelChartTotalRx = downTotal;
+  if (Number.isFinite(upTotal) && upTotal >= 0) panelChartTotalTx = upTotal;
+  renderPanelTrafficChart();
+}
+
+async function openPanelTrafficSocket() {
+  if (submenuKey !== 'panel' || typeof WebSocket !== 'function') {
+    return;
+  }
+  const nextUrl = await getPanelTrafficSocketUrl();
+  if (!nextUrl) return;
+  const existing = panelChartSocket;
+  if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
+    return;
+  }
+  try {
+    const socket = new WebSocket(nextUrl);
+    panelChartSocket = socket;
+    socket.onopen = () => {
+      panelChartReconnectAttempts = 0;
+    };
+    socket.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data || '{}');
+        applyPanelTrafficSnapshot(payload);
+      } catch {
+        // ignore
+      }
+    };
+    socket.onclose = () => {
+      if (panelChartSocket === socket) {
+        panelChartSocket = null;
+      }
+      if (submenuKey === 'panel') {
+        panelChartReconnectAttempts += 1;
+        schedulePanelTrafficReconnect();
+      }
+    };
+    socket.onerror = () => {
+      try {
+        socket.close();
+      } catch {
+        // ignore
+      }
+    };
+  } catch {
+    panelChartReconnectAttempts += 1;
+    schedulePanelTrafficReconnect();
+  }
+}
 
 function stopConnectivityRefresh() {
   if (connectivityRefreshTimer) {
@@ -253,6 +576,76 @@ function makeRow(item) {
     return sep;
   }
 
+  if (item.type === 'panel-chart') {
+    const row = document.createElement('div');
+    row.className = 'menu-row menu-row-panel-card disabled';
+    row.innerHTML = buildPanelChartMarkup();
+    return row;
+  }
+
+  if (item.type === 'panel-provider-traffic') {
+    const row = document.createElement('div');
+    row.className = 'menu-row menu-row-panel-card disabled';
+    row.innerHTML = buildPanelProviderTrafficMarkup(item.payload || null);
+    return row;
+  }
+
+  if (item.type === 'provider') {
+    const row = document.createElement('div');
+    row.className = 'menu-row menu-row-provider disabled';
+    const bullet = document.createElement('div');
+    bullet.className = 'menu-leading provider-bullet';
+    row.appendChild(bullet);
+    const label = document.createElement('div');
+    label.className = 'menu-label';
+    label.textContent = item.label || '';
+    row.appendChild(label);
+    if (item.rightText) {
+      const right = document.createElement('div');
+      right.className = 'menu-right';
+      right.textContent = String(item.rightText || '');
+      row.appendChild(right);
+    }
+    return row;
+  }
+
+  if (item.type === 'child') {
+    const row = document.createElement('div');
+    const clickable = item.enabled !== false && item.action;
+    row.className = `menu-row menu-row-child status-${String(item.status || 'unknown')}`;
+    if (clickable) {
+      row.classList.add('clickable');
+    } else {
+      row.classList.add('disabled');
+    }
+    if (item.checked) {
+      row.classList.add('selected');
+    }
+    if (item.action) {
+      row.dataset.action = String(item.action);
+    }
+    const bullet = document.createElement('div');
+    bullet.className = 'menu-leading child-bullet';
+    row.appendChild(bullet);
+    const label = document.createElement('div');
+    label.className = 'menu-label';
+    label.textContent = item.label || '';
+    row.appendChild(label);
+    if (item.rightText) {
+      const right = document.createElement('div');
+      right.className = 'menu-right';
+      right.textContent = String(item.rightText || '');
+      row.appendChild(right);
+    }
+    if (clickable) {
+      row.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        await runActionForItem(item);
+      });
+    }
+    return row;
+  }
+
   const row = document.createElement('div');
   row.className = 'menu-row';
   if (item.action) {
@@ -318,22 +711,33 @@ function makeRow(item) {
 
 function applySubmenuWidthByContent() {
   if (!submenuRootEl) {
-    return;
+    return { width: SUBMENU_MIN_WIDTH, height: 0 };
   }
   submenuRootEl.style.width = 'fit-content';
-  const measured = Math.ceil(submenuRootEl.getBoundingClientRect().width || 0);
-  const width = Math.max(SUBMENU_MIN_WIDTH, Math.min(measured, SUBMENU_MAX_WIDTH));
+  const measured = Math.ceil(
+    Math.max(
+      submenuRootEl.scrollWidth || 0,
+      submenuRootEl.getBoundingClientRect().width || 0,
+      submenuListEl ? submenuListEl.scrollWidth || 0 : 0,
+    ),
+  );
+  const maxWidth = submenuKey === 'panel' ? SUBMENU_PANEL_MAX_WIDTH : SUBMENU_MAX_WIDTH;
+  const width = Math.max(SUBMENU_MIN_WIDTH, Math.min(measured, maxWidth));
   submenuRootEl.style.width = `${width}px`;
+  const height = Math.ceil(
+    Math.max(
+      submenuRootEl.scrollHeight || 0,
+      submenuRootEl.getBoundingClientRect().height || 0,
+      submenuListEl ? submenuListEl.scrollHeight || 0 : 0,
+    ),
+  );
+  return { width, height };
 }
 
-function renderSubmenu() {
-  submenuListEl.innerHTML = '';
-  submenuItems.forEach((item) => {
-    submenuListEl.appendChild(makeRow(item));
-  });
-  applySubmenuWidthByContent();
-  const width = Math.ceil(submenuRootEl.getBoundingClientRect().width || 0);
-  const height = Math.ceil(submenuRootEl.getBoundingClientRect().height || 0);
+function resizeSubmenuToContent() {
+  const metrics = applySubmenuWidthByContent();
+  const width = Math.max(SUBMENU_MIN_WIDTH, Math.ceil(metrics && metrics.width ? metrics.width : 0));
+  const height = Math.max(60, Math.ceil(metrics && metrics.height ? metrics.height : 0));
   if (width === lastResizeWidth && height === lastResizeHeight) {
     return;
   }
@@ -342,11 +746,29 @@ function renderSubmenu() {
   window.clashfox.traySubmenuResize({ width, height });
 }
 
+function renderSubmenu() {
+  submenuListEl.innerHTML = '';
+  submenuItems.forEach((item) => {
+    submenuListEl.appendChild(makeRow(item));
+  });
+  requestAnimationFrame(() => {
+    resizeSubmenuToContent();
+  });
+}
+
 function setSubmenu(payload) {
   submenuKey = payload && payload.key ? payload.key : '';
   submenuItems = Array.isArray(payload && payload.items) ? payload.items : [];
   renderSubmenu();
   ensureConnectivityRefresh();
+  if (submenuKey === 'panel') {
+    openPanelTrafficSocket().catch(() => {});
+    setTimeout(() => {
+      renderPanelTrafficChart();
+    }, 0);
+  } else {
+    closePanelTrafficSocket();
+  }
 }
 
 applyTrayTheme().catch(() => {});

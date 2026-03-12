@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld('clashfox', {
   doctorHelper: (options = {}) => ipcRenderer.invoke('clashfox:doctorHelper', options),
   openHelperLogs: () => ipcRenderer.invoke('clashfox:openHelperLogs'),
   openPath: (targetPath) => ipcRenderer.invoke('clashfox:openPath', targetPath),
+  getOverviewNetworkSnapshot: () => ipcRenderer.invoke('clashfox:getOverviewNetworkSnapshot'),
+  getMihomoVersion: (source = {}) => ipcRenderer.invoke('clashfox:getMihomoVersion', source),
   getMihomoConfigs: (source = {}) => ipcRenderer.invoke('clashfox:getMihomoConfigs', source),
   updateMihomoConfig: (patch = {}, source = {}) => ipcRenderer.invoke('clashfox:updateMihomoConfig', patch, source),
   updateMihomoAllowLan: (enabled, source = {}) => ipcRenderer.invoke('clashfox:updateMihomoAllowLan', Boolean(enabled), source),

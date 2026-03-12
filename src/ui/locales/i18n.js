@@ -142,7 +142,6 @@ const I18N = {
       "tableMessage": "MSG",
       "levelLabel": "Level",
       "msgLabel": "MSG",
-      "levelAll": "All",
       "searchPlaceholder": "Search message...",
       "noMatching": "No matching logs.",
       "fileNotFound": "Log file not found."
@@ -170,13 +169,16 @@ const I18N = {
     },
     "clean": {
       "title": "Clean Logs",
+      "modeLabel": "Mode",
       "all": "Delete all backups",
       "7d": "Keep last 7 days",
       "30d": "Keep last 30 days",
       "action": "Clean Logs"
     },
     "pagination": {
-      "size": "Per page"
+      "size": "Per page",
+      "prev": "Prev",
+      "next": "Next"
     },
     "help": {
       "title": "Help & Notes",
@@ -333,6 +335,10 @@ const I18N = {
       "installConfigHint": "Please install or update the config file.",
       "logMissing": "Log file not found.",
       "cleanDone": "Cleanup completed.",
+      "noticeInfo": "Notice",
+      "noticeSuccess": "Completed",
+      "noticeWarning": "Attention",
+      "noticeError": "Error",
       "deleteSuccess": "Deleted selected backups.",
       "deleteEmpty": "Select backups to delete.",
       "configDeleteSuccess": "Config deleted.",
@@ -392,6 +398,12 @@ const I18N = {
       "menuKernelManagerDesc": "Show Kernel Manager in the tray menu.",
       "menuDirectoryLocations": "Directory Locations",
       "menuDirectoryLocationsDesc": "Show Directory Locations in the tray menu.",
+      "menuTrackers": "Trackers",
+      "menuTrackersDesc": "Show Trackers in the tray menu.",
+      "menuFoxboard": "Foxboard",
+      "menuFoxboardDesc": "Show Foxboard in the tray menu.",
+      "menuCopyShellExportCommand": "Copy Shell Export Command",
+      "menuCopyShellExportCommandDesc": "Show Copy Shell Export Command in the Network submenu.",
       "panelManager": "Panel Manager",
       "panelOption": "Panel",
       "panelHint": "",
@@ -471,15 +483,15 @@ const I18N = {
       "backups": "备份",
       "logs": "日志",
       "dashboard": "仪表盘",
-      "trackers": "连接追踪",
+      "trackers": "追踪器",
       "settings": "设置",
       "help": "帮助"
     },
     "overview": {
       "runningTitle": "运行状态",
       "networkTitle": "网络状态",
-      "providerTrafficTitle": "订阅流量概览",
-      "rulesOverviewTitle": "规则概览",
+      "providerTrafficTitle": "订阅流量",
+      "rulesOverviewTitle": "概览",
       "rulesSwitchRules": "规则",
       "rulesSwitchProviders": "规则提供商",
       "uptime": "运行时长",
@@ -590,7 +602,6 @@ const I18N = {
       "tableMessage": "消息",
       "levelLabel": "级别",
       "msgLabel": "消息",
-      "levelAll": "全部",
       "searchPlaceholder": "搜索消息...",
       "noMatching": "没有匹配的日志。",
       "fileNotFound": "未找到日志文件。"
@@ -618,13 +629,16 @@ const I18N = {
     },
     "clean": {
       "title": "清理日志",
+      "modeLabel": "模式",
       "all": "删除全部旧日志",
       "7d": "保留最近 7 天",
       "30d": "保留最近 30 天",
       "action": "清理日志"
     },
     "pagination": {
-      "size": "每页"
+      "size": "每页",
+      "prev": "上一页",
+      "next": "下一页"
     },
     "help": {
       "title": "帮助与说明",
@@ -781,6 +795,10 @@ const I18N = {
       "installConfigHint": "请安装或更新配置文件。",
       "logMissing": "日志文件不存在。",
       "cleanDone": "清理完成。",
+      "noticeInfo": "提示",
+      "noticeSuccess": "完成",
+      "noticeWarning": "注意",
+      "noticeError": "错误",
       "deleteSuccess": "已删除所选备份。",
       "deleteEmpty": "请选择要删除的备份。",
       "configDeleteSuccess": "配置已删除。",
@@ -840,6 +858,12 @@ const I18N = {
       "menuKernelManagerDesc": "在托盘菜单中显示内核管理。",
       "menuDirectoryLocations": "目录位置",
       "menuDirectoryLocationsDesc": "在托盘菜单中显示目录位置。",
+      "menuTrackers": "追踪器",
+      "menuTrackersDesc": "在托盘菜单中显示追踪器。",
+      "menuFoxboard": "Foxboard",
+      "menuFoxboardDesc": "在托盘菜单中显示 Foxboard。",
+      "menuCopyShellExportCommand": "复制 Shell 导出命令",
+      "menuCopyShellExportCommandDesc": "在网络接管子菜单中显示复制 Shell 导出命令。",
       "panelManager": "面板管理",
       "panelOption": "面板选择",
       "panelHint": "",
@@ -1038,7 +1062,6 @@ const I18N = {
       "tableMessage": "メッセージ",
       "levelLabel": "レベル",
       "msgLabel": "メッセージ",
-      "levelAll": "すべて",
       "searchPlaceholder": "メッセージを検索...",
       "noMatching": "一致するログがありません。",
       "fileNotFound": "ログファイルが見つかりません。"
@@ -1066,13 +1089,16 @@ const I18N = {
     },
     "clean": {
       "title": "ログの削除",
+      "modeLabel": "モード",
       "all": "古いログをすべて削除",
       "7d": "最近 7 日間を保持",
       "30d": "最近 30 日間を保持",
       "action": "ログの削除"
     },
     "pagination": {
-      "size": "1ページあたり"
+      "size": "1ページあたり",
+      "prev": "前へ",
+      "next": "次へ"
     },
     "help": {
       "title": "ヘルプ & メモ",
@@ -1229,6 +1255,10 @@ const I18N = {
       "installConfigHint": "設定ファイルをインストールまたは更新してください。",
       "logMissing": "ログファイルが見つかりません。",
       "cleanDone": "削除が完了しました。",
+      "noticeInfo": "通知",
+      "noticeSuccess": "完了",
+      "noticeWarning": "注意",
+      "noticeError": "エラー",
       "deleteSuccess": "選択したバックアップを削除しました。",
       "deleteEmpty": "削除するバックアップを選択してください。",
       "configDeleteSuccess": "設定を削除しました。",
@@ -1288,6 +1318,12 @@ const I18N = {
       "menuKernelManagerDesc": "トレイメニューにカーネル管理を表示します。",
       "menuDirectoryLocations": "ディレクトリ場所",
       "menuDirectoryLocationsDesc": "トレイメニューにディレクトリ場所を表示します。",
+      "menuTrackers": "接続トラッカー",
+      "menuTrackersDesc": "トレイメニューに接続トラッカーを表示します。",
+      "menuFoxboard": "Foxboard",
+      "menuFoxboardDesc": "トレイメニューに Foxboard を表示します。",
+      "menuCopyShellExportCommand": "シェルのエクスポートコマンドをコピー",
+      "menuCopyShellExportCommandDesc": "ネットワーク引き継ぎサブメニューにシェルのエクスポートコマンドコピーを表示します。",
       "panelManager": "パネル管理",
       "panelOption": "パネル",
       "panelHint": "",
@@ -1486,7 +1522,6 @@ const I18N = {
       "tableMessage": "메시지",
       "levelLabel": "레벨",
       "msgLabel": "메시지",
-      "levelAll": "전체",
       "searchPlaceholder": "메시지 검색...",
       "noMatching": "일치하는 로그가 없습니다.",
       "fileNotFound": "로그 파일을 찾을 수 없습니다."
@@ -1514,13 +1549,16 @@ const I18N = {
     },
     "clean": {
       "title": "로그 정리",
+      "modeLabel": "모드",
       "all": "오래된 로그 모두 삭제",
       "7d": "최근 7일 유지",
       "30d": "최근 30일 유지",
       "action": "로그 정리"
     },
     "pagination": {
-      "size": "페이지당"
+      "size": "페이지당",
+      "prev": "이전",
+      "next": "다음"
     },
     "help": {
       "title": "도움말 및 안내",
@@ -1677,6 +1715,10 @@ const I18N = {
       "installConfigHint": "설정 파일을 설치하거나 업데이트하세요.",
       "logMissing": "로그 파일이 없습니다.",
       "cleanDone": "정리가 완료되었습니다.",
+      "noticeInfo": "알림",
+      "noticeSuccess": "완료",
+      "noticeWarning": "주의",
+      "noticeError": "오류",
       "deleteSuccess": "선택한 백업을 삭제했습니다.",
       "deleteEmpty": "삭제할 백업을 선택하세요.",
       "configDeleteSuccess": "설정을 삭제했습니다.",
@@ -1736,6 +1778,12 @@ const I18N = {
       "menuKernelManagerDesc": "트레이 메뉴에 커널 관리자를 표시합니다.",
       "menuDirectoryLocations": "디렉터리 위치",
       "menuDirectoryLocationsDesc": "트레이 메뉴에 디렉터리 위치를 표시합니다.",
+      "menuTrackers": "연결 추적",
+      "menuTrackersDesc": "트레이 메뉴에 연결 추적을 표시합니다.",
+      "menuFoxboard": "Foxboard",
+      "menuFoxboardDesc": "트레이 메뉴에 Foxboard를 표시합니다.",
+      "menuCopyShellExportCommand": "셸 내보내기 명령 복사",
+      "menuCopyShellExportCommandDesc": "네트워크 테이크오버 하위 메뉴에 셸 내보내기 명령 복사를 표시합니다.",
       "panelManager": "패널 관리",
       "panelOption": "패널",
       "panelHint": "",
@@ -1934,7 +1982,6 @@ const I18N = {
       "tableMessage": "MSG",
       "levelLabel": "Niveau",
       "msgLabel": "MSG",
-      "levelAll": "Tous",
       "searchPlaceholder": "Rechercher un message...",
       "noMatching": "Aucun journal correspondant.",
       "fileNotFound": "Fichier journal introuvable."
@@ -1962,13 +2009,16 @@ const I18N = {
     },
     "clean": {
       "title": "Nettoyer les journaux",
+      "modeLabel": "Mode",
       "all": "Supprimer tous les anciens journaux",
       "7d": "Conserver les 7 derniers jours",
       "30d": "Conserver les 30 derniers jours",
       "action": "Nettoyer les journaux"
     },
     "pagination": {
-      "size": "Par page"
+      "size": "Par page",
+      "prev": "Préc.",
+      "next": "Suiv."
     },
     "help": {
       "title": "Aide & Notes",
@@ -2125,6 +2175,10 @@ const I18N = {
       "installConfigHint": "Veuillez installer ou mettre à jour le fichier de configuration.",
       "logMissing": "Fichier journal introuvable.",
       "cleanDone": "Nettoyage terminé.",
+      "noticeInfo": "Info",
+      "noticeSuccess": "Terminé",
+      "noticeWarning": "Attention",
+      "noticeError": "Erreur",
       "deleteSuccess": "Sauvegardes sélectionnées supprimées.",
       "deleteEmpty": "Sélectionnez des sauvegardes à supprimer.",
       "configDeleteSuccess": "Configuration supprimée.",
@@ -2184,6 +2238,12 @@ const I18N = {
       "menuKernelManagerDesc": "Afficher le gestionnaire du noyau dans le menu de la barre.",
       "menuDirectoryLocations": "Emplacements des répertoires",
       "menuDirectoryLocationsDesc": "Afficher les emplacements des répertoires dans le menu de la barre.",
+      "menuTrackers": "Suivi des connexions",
+      "menuTrackersDesc": "Afficher le suivi des connexions dans le menu de la barre.",
+      "menuFoxboard": "Foxboard",
+      "menuFoxboardDesc": "Afficher Foxboard dans le menu de la barre.",
+      "menuCopyShellExportCommand": "Copier la commande d’export shell",
+      "menuCopyShellExportCommandDesc": "Afficher la commande de copie d’export shell dans le sous-menu de prise en charge réseau.",
       "panelManager": "Gestion du panneau",
       "panelOption": "Panneau",
       "panelHint": "",
@@ -2382,7 +2442,6 @@ const I18N = {
       "tableMessage": "Nachricht",
       "levelLabel": "Level",
       "msgLabel": "Nachricht",
-      "levelAll": "Alle",
       "searchPlaceholder": "Nachricht suchen...",
       "noMatching": "Keine passenden Logs gefunden.",
       "fileNotFound": "Log-Datei nicht gefunden."
@@ -2410,13 +2469,16 @@ const I18N = {
     },
     "clean": {
       "title": "Logs bereinigen",
+      "modeLabel": "Modus",
       "all": "Alle alten Logs löschen",
       "7d": "Letzte 7 Tage behalten",
       "30d": "Letzte 30 Tage behalten",
       "action": "Logs bereinigen"
     },
     "pagination": {
-      "size": "Pro Seite"
+      "size": "Pro Seite",
+      "prev": "Zurück",
+      "next": "Weiter"
     },
     "help": {
       "title": "Hilfe & Hinweise",
@@ -2573,6 +2635,10 @@ const I18N = {
       "installConfigHint": "Bitte die Konfigurationsdatei installieren oder aktualisieren.",
       "logMissing": "Logdatei nicht gefunden.",
       "cleanDone": "Bereinigung abgeschlossen.",
+      "noticeInfo": "Hinweis",
+      "noticeSuccess": "Abgeschlossen",
+      "noticeWarning": "Achtung",
+      "noticeError": "Fehler",
       "deleteSuccess": "Ausgewählte Backups gelöscht.",
       "deleteEmpty": "Backups zum Löschen auswählen.",
       "configDeleteSuccess": "Konfiguration gelöscht.",
@@ -2632,6 +2698,12 @@ const I18N = {
       "menuKernelManagerDesc": "Kernel-Manager im Tray-Menü anzeigen.",
       "menuDirectoryLocations": "Verzeichnisorte",
       "menuDirectoryLocationsDesc": "Verzeichnisorte im Tray-Menü anzeigen.",
+      "menuTrackers": "Verbindungen",
+      "menuTrackersDesc": "Verbindungen im Tray-Menü anzeigen.",
+      "menuFoxboard": "Foxboard",
+      "menuFoxboardDesc": "Foxboard im Tray-Menü anzeigen.",
+      "menuCopyShellExportCommand": "Shell-Exportbefehl kopieren",
+      "menuCopyShellExportCommandDesc": "Shell-Exportbefehl im Untermenü Netzwerkübernahme anzeigen.",
       "panelManager": "Panel-Verwaltung",
       "panelOption": "Panel",
       "panelHint": "",
@@ -2830,7 +2902,6 @@ const I18N = {
       "tableMessage": "Сообщение",
       "levelLabel": "Уровень",
       "msgLabel": "Сообщение",
-      "levelAll": "Все",
       "searchPlaceholder": "Поиск по сообщению...",
       "noMatching": "Подходящих журналов нет.",
       "fileNotFound": "Файл журнала не найден."
@@ -2858,13 +2929,16 @@ const I18N = {
     },
     "clean": {
       "title": "Очистка журналов",
+      "modeLabel": "Режим",
       "all": "Удалить все старые журналы",
       "7d": "Хранить последние 7 дней",
       "30d": "Хранить последние 30 дней",
       "action": "Очистить журналы"
     },
     "pagination": {
-      "size": "На страницу"
+      "size": "На страницу",
+      "prev": "Назад",
+      "next": "Далее"
     },
     "help": {
       "title": "Помощь и заметки",
@@ -3021,6 +3095,10 @@ const I18N = {
       "installConfigHint": "Установите или обновите файл конфигурации.",
       "logMissing": "Файл журнала не найден.",
       "cleanDone": "Очистка завершена.",
+      "noticeInfo": "Уведомление",
+      "noticeSuccess": "Готово",
+      "noticeWarning": "Внимание",
+      "noticeError": "Ошибка",
       "deleteSuccess": "Выбранные резервные копии удалены.",
       "deleteEmpty": "Выберите резервные копии для удаления.",
       "configDeleteSuccess": "Конфигурация удалена.",
@@ -3080,6 +3158,12 @@ const I18N = {
       "menuKernelManagerDesc": "Показывать диспетчер ядра в меню трея.",
       "menuDirectoryLocations": "Расположения каталогов",
       "menuDirectoryLocationsDesc": "Показывать расположения каталогов в меню трея.",
+      "menuTrackers": "Отслеживание",
+      "menuTrackersDesc": "Показывать отслеживание в меню трея.",
+      "menuFoxboard": "Foxboard",
+      "menuFoxboardDesc": "Показывать Foxboard в меню трея.",
+      "menuCopyShellExportCommand": "Копировать команду экспорта Shell",
+      "menuCopyShellExportCommandDesc": "Показывать команду экспорта Shell в подменю перехвата сети.",
       "panelManager": "Управление панелью",
       "panelOption": "Панель",
       "panelHint": "",

@@ -301,6 +301,9 @@ function refreshTrayMenuLabelsOnly() {
     if (item.submenu === 'outbound') {
       return { ...item, label: labels.outboundMode || 'Outbound Mode' };
     }
+    if (item.submenu === 'panel') {
+      return { ...item, label: labels.panel || 'Panel' };
+    }
     if (item.action === 'open-dashboard') {
       return { ...item, label: labels.dashboard };
     }
@@ -334,7 +337,7 @@ function refreshTrayMenuLabelsOnly() {
         return item;
       }
       if (item.action === 'toggle-system-proxy') {
-        return { ...item, label: labels.systemProxy || 'System Proxy' };
+        return { ...item, label: labels.networkTakeover || 'Network Takeover' };
       }
       if (item.action === 'toggle-tun') {
         return { ...item, label: labels.tun || 'TUN' };
@@ -2642,8 +2645,20 @@ function resolveConfigPathFromSettingsOrArgs(settings = null) {
 }
 
 async function resolveActiveNetworkServiceName() {
-  const runCommand = (bin, args = []) => new Promise((resolve) => {
-    execFile(bin, args, { timeout: 2500 }, (err, stdout) => {
+  const defaultRoute = await resolveDefaultRouteSnapshot();
+  if (defaultRoute.interfaceName) {
+    const service = await resolveNetworkServiceNameForInterface(defaultRoute.interfaceName);
+    if (service) {
+      return service;
+    }
+  }
+  const fallback = await listEnabledNetworkServices();
+  return fallback[0] || '';
+}
+
+function execFileText(bin, args = [], timeout = 2500) {
+  return new Promise((resolve) => {
+    execFile(bin, args, { timeout }, (err, stdout) => {
       if (err) {
         resolve('');
         return;
@@ -2651,25 +2666,305 @@ async function resolveActiveNetworkServiceName() {
       resolve(String(stdout || '').trim());
     });
   });
-  const iface = await runCommand('/bin/sh', [
-    '-c',
-    'route get default 2>/dev/null | awk \'/interface:/{print $2; exit}\'',
-  ]);
-  if (iface) {
-    const escapedIface = iface.replace(/'/g, "'\\''");
-    const service = await runCommand('/bin/sh', [
-      '-c',
-      `networksetup -listnetworkserviceorder 2>/dev/null | awk -v iface='${escapedIface}' '$0 ~ "\\\\(" iface "\\\\)" {print prev; exit} {prev=$0}' | sed -E 's/^\\([0-9]+\\) //'`,
-    ]);
-    if (service && !service.includes('denotes that a network service is disabled')) {
-      return service;
+}
+
+async function resolveDefaultRouteSnapshot() {
+  const output = await execFileText('/usr/sbin/route', ['-n', 'get', 'default'], 2500);
+  if (!output) {
+    return { interfaceName: '', gateway: '' };
+  }
+  let interfaceName = '';
+  let gateway = '';
+  output.split(/\r?\n/).forEach((line) => {
+    const ifaceMatch = line.match(/^\s*interface:\s*(.+)\s*$/i);
+    if (ifaceMatch && ifaceMatch[1]) {
+      interfaceName = String(ifaceMatch[1]).trim();
+    }
+    const gatewayMatch = line.match(/^\s*gateway:\s*(.+)\s*$/i);
+    if (gatewayMatch && gatewayMatch[1]) {
+      gateway = String(gatewayMatch[1]).trim();
+    }
+  });
+  return { interfaceName, gateway };
+}
+
+async function listEnabledNetworkServices() {
+  const output = await execFileText('/usr/sbin/networksetup', ['-listallnetworkservices'], 2500);
+  if (!output) {
+    return [];
+  }
+  return output
+    .split(/\r?\n/)
+    .map((line, index) => {
+      const text = String(line || '').trim();
+      if (!text) {
+        return '';
+      }
+      if (index === 0 && text.toLowerCase().includes('network services')) {
+        return '';
+      }
+      if (text.startsWith('*')) {
+        return '';
+      }
+      return text;
+    })
+    .filter(Boolean);
+}
+
+async function listOrderedNetworkServices() {
+  const output = await execFileText('/usr/sbin/networksetup', ['-listnetworkserviceorder'], 2500);
+  if (!output) {
+    return [];
+  }
+  const services = [];
+  const lines = output.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const current = String(lines[index] || '').trim();
+    const next = String(lines[index + 1] || '').trim();
+    const serviceMatch = current.match(/^\(\d+\)\s*(.+)$/);
+    if (!serviceMatch || !serviceMatch[1]) {
+      continue;
+    }
+    const detailMatch = next.match(/Hardware Port:\s*(.+?),\s*Device:\s*([^)]+)/i);
+    services.push({
+      service: String(serviceMatch[1]).trim(),
+      hardwarePort: detailMatch && detailMatch[1] ? String(detailMatch[1]).trim() : '',
+      device: detailMatch && detailMatch[2] ? String(detailMatch[2]).trim() : '',
+    });
+  }
+  return services.filter((item) => item.service);
+}
+
+async function resolveNetworkServiceNameForInterface(interfaceName = '') {
+  const iface = String(interfaceName || '').trim();
+  if (!iface) {
+    return '';
+  }
+  const services = await listOrderedNetworkServices();
+  for (const item of services) {
+    if (String(item.device || '').trim() === iface) {
+      return String(item.service || '').trim();
     }
   }
-  const fallback = await runCommand('/bin/sh', [
-    '-c',
-    "networksetup -listallnetworkservices 2>/dev/null | sed '1d' | sed '/^\\*/d' | awk 'NF{print; exit}'",
+  return '';
+}
+
+async function resolveNetworkServiceInfo(serviceName = '') {
+  const service = String(serviceName || '').trim();
+  if (!service) {
+    return { ip: '', router: '' };
+  }
+  const output = await execFileText('/usr/sbin/networksetup', ['-getinfo', service], 2500);
+  if (!output) {
+    return { ip: '', router: '' };
+  }
+  let ip = '';
+  let router = '';
+  output.split(/\r?\n/).forEach((line) => {
+    const ipMatch = line.match(/^\s*IP address:\s*(.+)\s*$/i);
+    if (ipMatch && ipMatch[1] && !String(ipMatch[1]).includes('none')) {
+      ip = String(ipMatch[1]).trim();
+    }
+    const routerMatch = line.match(/^\s*Router:\s*(.+)\s*$/i);
+    if (routerMatch && routerMatch[1] && !String(routerMatch[1]).includes('none')) {
+      router = String(routerMatch[1]).trim();
+    }
+  });
+  return { ip, router };
+}
+
+async function resolveInterfaceIpv4ViaIpconfig(interfaceName = '') {
+  const iface = String(interfaceName || '').trim();
+  if (!iface) {
+    return '';
+  }
+  const output = await execFileText('/usr/sbin/ipconfig', ['getifaddr', iface], 2000);
+  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(output) ? output : '';
+}
+
+async function resolvePreferredNetworkServiceSnapshot() {
+  const defaultRoute = await resolveDefaultRouteSnapshot();
+  const services = await listOrderedNetworkServices();
+  const defaultInterface = String(defaultRoute.interfaceName || '').trim();
+  for (const item of services) {
+    const device = String(item.device || '').trim();
+    const hardwarePort = String(item.hardwarePort || '').trim().toLowerCase();
+    if (!device || device.startsWith('utun')) {
+      continue;
+    }
+    if (!hardwarePort.includes('wi-fi') && !hardwarePort.includes('airport')) {
+      continue;
+    }
+    const info = await resolveNetworkServiceInfo(item.service);
+    const localIp = info.ip
+      || await resolveInterfaceIpv4ViaIpconfig(device)
+      || resolveInterfacePrimaryAddress(device);
+    if (!localIp) {
+      continue;
+    }
+    return {
+      service: item.service,
+      device,
+      router: info.router || '',
+      localIp,
+    };
+  }
+  const preferred = services.find((item) => {
+    const device = String(item.device || '').trim();
+    return device && device === defaultInterface && !device.startsWith('utun');
+  });
+  if (preferred) {
+    const info = await resolveNetworkServiceInfo(preferred.service);
+    const localIp = info.ip
+      || await resolveInterfaceIpv4ViaIpconfig(preferred.device)
+      || resolveInterfacePrimaryAddress(preferred.device);
+    return {
+      service: preferred.service,
+      device: preferred.device,
+      router: info.router || defaultRoute.gateway || '',
+      localIp,
+    };
+  }
+  for (const item of services) {
+    const device = String(item.device || '').trim();
+    if (!device || device.startsWith('utun')) {
+      continue;
+    }
+    const info = await resolveNetworkServiceInfo(item.service);
+    const localIp = info.ip
+      || await resolveInterfaceIpv4ViaIpconfig(device)
+      || resolveInterfacePrimaryAddress(device);
+    if (!localIp) {
+      continue;
+    }
+    return {
+      service: item.service,
+      device,
+      router: info.router || '',
+      localIp,
+    };
+  }
+  return {
+    service: await resolveActiveNetworkServiceName(),
+    device: defaultInterface,
+    router: defaultRoute.gateway || '',
+    localIp: await resolveInterfaceIpv4ViaIpconfig(defaultInterface) || resolveInterfacePrimaryAddress(defaultInterface),
+  };
+}
+
+function resolveInterfacePrimaryAddress(interfaceName = '') {
+  const iface = String(interfaceName || '').trim();
+  if (!iface) {
+    return '';
+  }
+  const interfaces = os.networkInterfaces();
+  const items = Array.isArray(interfaces[iface]) ? interfaces[iface] : [];
+  const ipv4 = items.find((item) => item && item.family === 'IPv4' && !item.internal && item.address);
+  if (ipv4 && ipv4.address) {
+    return String(ipv4.address).trim();
+  }
+  const ipv6 = items.find((item) => item && item.family === 'IPv6' && !item.internal && item.address);
+  return ipv6 && ipv6.address ? String(ipv6.address).trim() : '';
+}
+
+async function measurePingLatency(host = '', timeoutMs = 1800) {
+  const target = String(host || '').trim();
+  if (!target) {
+    return '';
+  }
+  const output = await execFileText('/sbin/ping', ['-n', '-c', '1', target], timeoutMs);
+  const match = output.match(/time[=<]([0-9.]+)\s*ms/i);
+  return match && match[1] ? String(match[1]).trim() : '';
+}
+
+async function measureDnsLatency(hostname = 'cloudflare.com') {
+  const target = String(hostname || '').trim();
+  if (!target) {
+    return '';
+  }
+  const startedAt = Date.now();
+  try {
+    await dns.promises.resolve4(target);
+    return String(Math.max(1, Date.now() - startedAt));
+  } catch {
+    return '';
+  }
+}
+
+function extractIpFromPayload(raw = '') {
+  const text = String(raw || '').trim();
+  if (!text) {
+    return '';
+  }
+  try {
+    const parsed = JSON.parse(text);
+    const directCandidates = [
+      parsed && parsed.ip,
+      parsed && parsed.address,
+      parsed && parsed.query,
+      parsed && parsed.data && parsed.data.ip,
+      parsed && parsed.data && parsed.data.address,
+      parsed && parsed.ipip && parsed.ipip.ip,
+    ];
+    for (const candidate of directCandidates) {
+      const value = String(candidate || '').trim();
+      if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(value)) {
+        return value;
+      }
+    }
+  } catch {}
+  const match = text.match(/\b\d{1,3}(?:\.\d{1,3}){3}\b/);
+  return match && match[0] ? String(match[0]).trim() : '';
+}
+
+async function fetchPublicIpViaCurl(url, { proxyPort = '', useProxy = false } = {}) {
+  const requestUrl = String(url || '').trim();
+  if (!requestUrl) {
+    return '';
+  }
+  const args = ['-sS', '--max-time', '4', '--connect-timeout', '2', requestUrl];
+  const normalizedProxyPort = String(proxyPort || '').trim();
+  if (useProxy && normalizedProxyPort) {
+    args.unshift('--proxy', `http://127.0.0.1:${normalizedProxyPort}`, '--noproxy', '');
+  }
+  const output = await execFileText('/usr/bin/curl', args, 4000);
+  return extractIpFromPayload(output);
+}
+
+async function buildOverviewNetworkSnapshot() {
+  const settings = readAppSettings();
+  const [defaultRoute, preferredNetwork] = await Promise.all([
+    resolveDefaultRouteSnapshot(),
+    resolvePreferredNetworkServiceSnapshot(),
   ]);
-  return fallback || '';
+  const networkName = String(preferredNetwork.service || '').trim();
+  const localIp = String(preferredNetwork.localIp || '').trim();
+  const routerTarget = String(preferredNetwork.router || defaultRoute.gateway || '').trim();
+  const proxyPortCandidate = String(
+    (settings && (settings.mixedPort ?? settings.port))
+      ?? '',
+  ).trim();
+  const now = Date.now();
+  const [routerMs, dnsMs, internetMs, internetIp, proxyIp] = await Promise.all([
+    measurePingLatency(routerTarget),
+    measureDnsLatency(),
+    measurePingLatency('1.1.1.1'),
+    fetchPublicIpViaCurl(`https://api.ipapi.is/?t=${now}`, { useProxy: false }),
+    fetchPublicIpViaCurl(`https://api.ip.sb/ip?t=${now}`, { proxyPort: proxyPortCandidate, useProxy: true }),
+  ]);
+  return {
+    ok: true,
+    data: {
+      networkName: networkName || preferredNetwork.device || defaultRoute.interfaceName || '-',
+      localIp: localIp || '',
+      proxyIp: proxyIp || '',
+      internetIp: internetIp || '',
+      internetIp4: internetIp || '',
+      internetMs: internetMs || '',
+      dnsMs: dnsMs || '',
+      routerMs: routerMs || '',
+    },
+  };
 }
 
 async function resolveUsableNetworkServiceName(preferred = '') {
@@ -3539,8 +3834,10 @@ function trimTransparentPadding(image, alphaThreshold = 8) {
   }
 }
 
-function buildTrayIconWithMode(mode) {
-  const cacheKey = process.platform === 'darwin' ? 'mac-template-v3' : 'default';
+function buildTrayIconWithState({ active = true } = {}) {
+  const cacheKey = process.platform === 'darwin'
+    ? `mac-template-v5-${active ? 'active' : 'inactive'}`
+    : `default-${active ? 'active' : 'inactive'}`;
   const cached = trayIconCache.get(cacheKey);
   if (cached && !cached.isEmpty()) {
     return cached;
@@ -3548,10 +3845,10 @@ function buildTrayIconWithMode(mode) {
   let icon = nativeImage.createEmpty();
 
   if (process.platform === 'darwin') {
-    // Pixel-tuned menubar glyph with maximal visual occupancy.
+    const fill = active ? '#000000' : 'rgba(0,0,0,0.34)';
     const trayTemplateSvg = [
       '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">',
-      '<path fill="#000" d="M9 0.2 12 2.7l3.8.8-.9 3 .9 2.3-2.7 1.7-1.2 3.4L9 15.2l-2.9-1.3-1.2-3.4-2.7-1.7.9-2.3-.9-3 3.8-.8L9 .2z"/>',
+      `<path fill="${fill}" d="M9 0.2 12 2.7l3.8.8-.9 3 .9 2.3-2.7 1.7-1.2 3.4L9 15.2l-2.9-1.3-1.2-3.4-2.7-1.7.9-2.3-.9-3 3.8-.8L9 .2z"/>`,
       '</svg>',
     ].join('');
     const dataUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(trayTemplateSvg)}`;
@@ -3582,17 +3879,21 @@ function buildTrayIconWithMode(mode) {
   return icon;
 }
 
-function applyTrayIconForMode(mode) {
+function applyTrayIconForState({ active = true } = {}) {
   if (!tray) {
     return;
   }
-  const trayIcon = buildTrayIconWithMode(mode);
+  const trayIcon = buildTrayIconWithState({ active });
   if (!trayIcon.isEmpty()) {
     if (process.platform === 'darwin' && typeof trayIcon.setTemplateImage === 'function') {
       trayIcon.setTemplateImage(true);
     }
     tray.setImage(trayIcon);
   }
+}
+
+function isTrayActiveState({ systemProxyEnabled = false, tunEnabled = false } = {}) {
+  return Boolean(systemProxyEnabled || tunEnabled);
 }
 
 function runBridgeWithSystemAuth(bridgeArgs = []) {
@@ -4792,6 +5093,69 @@ async function getControllerConfigsMain(source = {}) {
   }
 }
 
+async function getControllerVersionMain(source = {}) {
+  const requestId = `main-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const kind = 'manual';
+  try {
+    const normalizedSource = source && typeof source === 'object' ? source : {};
+    const controllerOverride = String(
+      normalizedSource.controller || normalizedSource.externalController || '',
+    ).trim();
+    const secretOverride = String(normalizedSource.secret || '').trim();
+    const { baseUrl, secret } = resolveControllerAccessFromSettings(controllerOverride, secretOverride);
+    if (!baseUrl) {
+      return { ok: false, error: 'controller_missing' };
+    }
+    const headers = {};
+    if (secret) {
+      headers.Authorization = `Bearer ${secret}`;
+    }
+    const requestUrl = `${baseUrl}/version`;
+    const logHeaders = { ...headers };
+    if (Object.prototype.hasOwnProperty.call(logHeaders, 'Authorization')) {
+      logHeaders.Authorization = '[redacted]';
+    }
+    guiMainLog('mihomo-api', 'request', {
+      requestId,
+      kind,
+      method: 'GET',
+      url: requestUrl,
+      headers: logHeaders,
+    });
+    const resp = await fetch(requestUrl, { method: 'GET', headers });
+    if (!resp.ok) {
+      const details = (await resp.text().catch(() => '')) || `http_status=${resp.status}`;
+      guiMainLog('mihomo-api', 'response', {
+        requestId,
+        kind,
+        method: 'GET',
+        url: requestUrl,
+        ok: false,
+        status: resp.status,
+        details: truncateLogPayload(details),
+      }, 'warn');
+      return { ok: false, error: 'request_failed', details };
+    }
+    const data = await resp.json().catch(() => ({}));
+    guiMainLog('mihomo-api', 'response', {
+      requestId,
+      kind,
+      method: 'GET',
+      url: requestUrl,
+      ok: true,
+      status: resp.status,
+      data: truncateLogPayload(JSON.stringify(data)),
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return {
+      ok: false,
+      error: 'request_failed',
+      details: String((error && error.message) || error || 'request_failed'),
+    };
+  }
+}
+
 async function updateMihomoConfigMain(patch = {}, source = {}) {
   const configPatch = patch && typeof patch === 'object' && !Array.isArray(patch) ? patch : {};
   if (!Object.keys(configPatch).length) {
@@ -4809,6 +5173,28 @@ async function updateMihomoConfigMain(patch = {}, source = {}) {
       path: '/configs',
       headers: { 'Content-Type': 'application/json' },
       body: configPatch,
+    },
+  ]);
+}
+
+async function updateMihomoProxySelectionMain(groupName = '', proxyName = '', source = {}) {
+  const group = String(groupName || '').trim();
+  const proxy = String(proxyName || '').trim();
+  if (!group || !proxy) {
+    return { ok: false, error: 'invalid_proxy_selection' };
+  }
+  return runControllerConfigRequestMain(source, [
+    {
+      method: 'PUT',
+      path: `/proxies/${encodeURIComponent(group)}`,
+      headers: { 'Content-Type': 'application/json' },
+      body: { name: proxy },
+    },
+    {
+      method: 'PATCH',
+      path: `/proxies/${encodeURIComponent(group)}`,
+      headers: { 'Content-Type': 'application/json' },
+      body: { name: proxy },
     },
   ]);
 }
@@ -5023,8 +5409,7 @@ function openDashboardPanel() {
 
     dashboardWindow.loadURL(url);
   } catch (err) {
-    // fallback: just show main window
-    showMainWindow();
+    // keep tray-only flow stable; do not reopen main window on panel failure
   }
 }
 
@@ -5936,7 +6321,40 @@ function normalizeProxyProviderRecords(rawData = {}) {
       ?? entry.Expire
       ?? fromHeader.expire,
     );
-    const proxies = Array.isArray(entry.proxies) ? entry.proxies : [];
+    let proxies = [];
+    if (Array.isArray(entry.proxies)) {
+      proxies = entry.proxies;
+    } else if (entry.proxies && typeof entry.proxies === 'object') {
+      proxies = Object.values(entry.proxies).filter(Boolean);
+    } else if (Array.isArray(entry.all)) {
+      proxies = entry.all;
+    } else if (Array.isArray(entry.children)) {
+      proxies = entry.children;
+    } else if (entry.now && Array.isArray(entry.now.all)) {
+      proxies = entry.now.all;
+    }
+    let currentProxy = '';
+    if (typeof entry.now === 'string') {
+      currentProxy = String(entry.now).trim();
+    } else if (entry.now && typeof entry.now === 'object') {
+      currentProxy = String(
+        entry.now.name
+        || entry.now.now
+        || entry.now.current
+        || entry.now.selected
+        || '',
+      ).trim();
+    }
+    if (!currentProxy) {
+      currentProxy = String(
+        entry.current
+        || entry.currentProxy
+        || entry.selected
+        || entry.selectedProxy
+        || entry.nowName
+        || '',
+      ).trim();
+    }
     records.push({
       key: String(key || '').trim() || name,
       name,
@@ -5946,6 +6364,7 @@ function normalizeProxyProviderRecords(rawData = {}) {
       total,
       expire,
       proxies,
+      currentProxy,
     });
   });
   return records;
@@ -6006,6 +6425,9 @@ function buildProviderProxyTreeData(rawData = {}) {
   const groupsMap = new Map();
   records.forEach((record) => {
     const vehicleType = record.vehicleType || 'UNKNOWN';
+    if (vehicleType !== 'COMPATIBLE') {
+      return;
+    }
     if (!groupsMap.has(vehicleType)) {
       groupsMap.set(vehicleType, []);
     }
@@ -6021,14 +6443,16 @@ function buildProviderProxyTreeData(rawData = {}) {
         };
       }
       const node = item && typeof item === 'object' ? item : {};
+      const proxyName = String(node.name || '').trim() || '-';
       return {
         id: `${record.key}:${index}:${String(node.name || item || '').trim() || 'proxy'}`,
-        name: String(node.name || '').trim() || '-',
+        name: proxyName,
         type: String(node.type || '').trim() || 'Proxy',
         alive: typeof node.alive === 'boolean' ? node.alive : null,
         delay: Number.isFinite(Number(node.history && node.history[0] && node.history[0].delay))
           ? Number(node.history[0].delay)
           : (Number.isFinite(Number(node.delay)) ? Number(node.delay) : null),
+        isCurrent: Boolean(record.currentProxy) && proxyName === record.currentProxy,
       };
     }) : [];
     providers.push({
@@ -6036,6 +6460,7 @@ function buildProviderProxyTreeData(rawData = {}) {
       name: record.name,
       vehicleType,
       proxyCount: proxies.length,
+      currentProxy: record.currentProxy || '',
       proxies,
     });
   });
@@ -6374,8 +6799,7 @@ function openFoxboardWindow() {
     windowRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'dashboard.html'));
     guiMainLog('foxboard', 'window created');
   } catch {
-    guiMainLog('foxboard', 'open failed, fallback to main window', null, 'error');
-    showMainWindow();
+    guiMainLog('foxboard', 'open failed', null, 'error');
   }
 }
 
@@ -6636,6 +7060,13 @@ function patchTrayMenuNetworkState({ systemProxyEnabled, tunEnabled } = {}) {
       items: trayMenuData.submenus.network,
     });
   }
+  const settings = readAppSettings();
+  applyTrayIconForState({
+    active: isTrayActiveState({
+      systemProxyEnabled: typeof systemProxyEnabled === 'boolean' ? systemProxyEnabled : Boolean(settings && settings.systemProxy),
+      tunEnabled: typeof tunEnabled === 'boolean' ? tunEnabled : Boolean(settings && settings.tun),
+    }),
+  });
 }
 
 async function buildTrayMenuOnce() {
@@ -6643,33 +7074,6 @@ async function buildTrayMenuOnce() {
     return;
   }
   guiMainLog('tray', 'build started');
-  if (!tray) {
-    const trayIcon = buildTrayIconWithMode(resolveOutboundModeFromSettings());
-    tray = new Tray(trayIcon);
-    if (process.platform === 'darwin' && trayIcon && typeof trayIcon.setTemplateImage === 'function') {
-      trayIcon.setTemplateImage(true);
-    }
-    tray.setToolTip('ClashFox');
-    if (typeof tray.setIgnoreDoubleClickEvents === 'function') {
-      tray.setIgnoreDoubleClickEvents(true);
-    }
-    tray.on('click', () => {
-      try {
-        toggleTrayMenuWindow();
-      } catch (err) {
-        console.error('[tray] click handler failed:', err && err.message ? err.message : err);
-      }
-    });
-    tray.on('right-click', () => {
-      try {
-        toggleTrayMenuWindow();
-      } catch (err) {
-        console.error('[tray] right-click handler failed:', err && err.message ? err.message : err);
-      }
-    });
-  } else {
-    applyTrayIconForMode(resolveOutboundModeFromSettings());
-  }
   const labels = getTrayLabels();
   const uiLabels = getUiLabels();
   const configPath = getConfigPathFromSettings();
@@ -6721,7 +7125,7 @@ async function buildTrayMenuOnce() {
     runBridge(systemProxyArgs),
     getConnectivityQualitySnapshot(configPath),
     runBridge(['tun-status', '--config', configPath]),
-    showProviderTraffic ? loadProvidersProxiesRaw() : Promise.resolve(null),
+    loadProvidersProxiesRaw(),
   ]);
   try {
     const status = statusResult.status === 'fulfilled' ? statusResult.value : null;
@@ -6786,6 +7190,34 @@ async function buildTrayMenuOnce() {
   } catch {
     // Keep fallback from local settings when controller is unavailable.
   }
+  const trayActive = isTrayActiveState({ systemProxyEnabled: networkTakeoverEnabled, tunEnabled });
+  if (!tray) {
+    const trayIcon = buildTrayIconWithState({ active: trayActive });
+    tray = new Tray(trayIcon);
+    if (process.platform === 'darwin' && trayIcon && typeof trayIcon.setTemplateImage === 'function') {
+      trayIcon.setTemplateImage(true);
+    }
+    tray.setToolTip('ClashFox');
+    if (typeof tray.setIgnoreDoubleClickEvents === 'function') {
+      tray.setIgnoreDoubleClickEvents(true);
+    }
+    tray.on('click', () => {
+      try {
+        toggleTrayMenuWindow();
+      } catch (err) {
+        console.error('[tray] click handler failed:', err && err.message ? err.message : err);
+      }
+    });
+    tray.on('right-click', () => {
+      try {
+        toggleTrayMenuWindow();
+      } catch (err) {
+        console.error('[tray] right-click handler failed:', err && err.message ? err.message : err);
+      }
+    });
+  } else {
+    applyTrayIconForState({ active: trayActive });
+  }
   // Re-read mode at commit time to avoid stale snapshot overwriting a newer switch.
   const currentOutboundMode = resolveOutboundModeFromSettings();
   const currentOutboundBadge = OUTBOUND_MODE_BADGE[currentOutboundMode] || OUTBOUND_MODE_BADGE.rule;
@@ -6800,6 +7232,7 @@ async function buildTrayMenuOnce() {
   const showFoxboard = traySettings ? traySettings.foxboardEnabled !== false : true;
   const showCopyShellExportCommand = traySettings ? traySettings.copyShellExportCommandEnabled !== false : true;
   let providerTraffic = null;
+  let outboundProxyTree = null;
   if (showProviderTraffic) {
     try {
       const rawProviders = providerTrafficResult.status === 'fulfilled' ? providerTrafficResult.value : null;
@@ -6810,19 +7243,88 @@ async function buildTrayMenuOnce() {
       providerTraffic = null;
     }
   }
+  try {
+    const rawProviders = providerTrafficResult.status === 'fulfilled' ? providerTrafficResult.value : null;
+    if (rawProviders && rawProviders.ok) {
+      outboundProxyTree = buildProviderProxyTreeData(rawProviders.data || {});
+    }
+  } catch {
+    outboundProxyTree = null;
+  }
+  const outboundItems = [
+    { type: 'action', label: labels.modeGlobalTitle || 'Global Proxy', action: 'mode-change', value: 'global', checked: currentOutboundMode === 'global', iconKey: 'modeGlobal' },
+    { type: 'action', label: labels.modeRuleTitle || 'Rule-Based Proxy', action: 'mode-change', value: 'rule', checked: currentOutboundMode === 'rule', iconKey: 'modeRule' },
+    { type: 'action', label: labels.modeDirectTitle || 'Direct Outbound', action: 'mode-change', value: 'direct', checked: currentOutboundMode === 'direct', iconKey: 'modeDirect' },
+  ];
+
   const items = [
     { type: 'action', label: labels.showMain, action: 'show-main', rightText: '⌘ 1', shortcut: 'Cmd+1', iconKey: 'showMain' },
     { type: 'separator' },
     { type: 'action', label: labels.networkTakeover || 'Network Takeover', submenu: 'network', iconKey: 'networkTakeover' },
     { type: 'separator' },
     { type: 'action', label: labels.outboundMode || 'Outbound Mode', rightText: `[${currentOutboundBadge}]`, submenu: 'outbound', iconKey: 'outboundMode' },
+  ];
+  const showOutboundProxyGroups = false;
+  let outboundProxyCard = null;
+  const outboundProviderSubmenus = {};
+  if (showOutboundProxyGroups && outboundProxyTree && Array.isArray(outboundProxyTree.groups) && outboundProxyTree.groups.length) {
+    const compatibleGroup = outboundProxyTree.groups.find((group) => String(group.vehicleType || '').trim() === 'COMPATIBLE');
+    const providers = compatibleGroup && Array.isArray(compatibleGroup.providers) ? compatibleGroup.providers : [];
+    if (providers.length) {
+      outboundProxyCard = {
+        totalProviders: providers.length,
+        totalProxies: providers.reduce((sum, provider) => sum + (Array.isArray(provider.proxies) ? provider.proxies.length : 0), 0),
+        providers: providers.map((provider) => ({
+          id: provider.id,
+          name: provider.name,
+          proxyCount: provider.proxyCount,
+          currentProxy: provider.currentProxy || '',
+          chart: (Array.isArray(provider.proxies) ? provider.proxies : []).slice(0, 18).map((proxy) => ({
+            status: proxy && proxy.isCurrent ? 'current' : (typeof proxy.alive === 'boolean' ? (proxy.alive ? 'alive' : 'dead') : 'unknown'),
+          })),
+          submenuKey: `outbound-provider:${provider.id}`,
+        })),
+      };
+      providers.forEach((provider) => {
+        const submenuKey = `outbound-provider:${provider.id}`;
+        const proxies = Array.isArray(provider.proxies) ? provider.proxies : [];
+        const proxyItems = proxies.length
+          ? proxies.flatMap((proxy, index) => {
+              const nextItem = {
+                type: 'child',
+                label: proxy.name || '-',
+                rightText: Number.isFinite(Number(proxy.delay)) ? `${Number(proxy.delay)} ms` : '',
+                status: typeof proxy.alive === 'boolean' ? (proxy.alive ? 'alive' : 'dead') : 'unknown',
+                checked: Boolean(proxy.isCurrent),
+                action: 'proxy-select',
+                value: proxy.name || '',
+                groupName: provider.name || '',
+                submenuKey,
+              };
+              if (index >= proxies.length - 1) {
+                return [nextItem];
+              }
+              return [nextItem, { type: 'separator' }];
+            })
+          : [{ type: 'child', label: '-', rightText: '', status: 'unknown', enabled: false }];
+        outboundProviderSubmenus[submenuKey] = [
+          { type: 'provider', label: provider.name || '-', rightText: String(Number(provider.proxyCount || 0)) },
+          { type: 'separator' },
+          ...proxyItems,
+        ];
+      });
+    }
+  }
+  items.push(
     { type: 'separator' },
     { type: 'action', label: labels.dashboard, action: 'open-dashboard', enabled: dashboardEnabled, rightText: '⌘ 2', shortcut: 'Cmd+2', iconKey: 'dashboard' },
-  ];
+  );
   if (showTrackers) {
+    items.push({ type: 'separator' });
     items.push({ type: 'action', label: labels.trackers || 'Trackers', action: 'open-worldwide', rightText: '⌘ 3', shortcut: 'Cmd+3', iconKey: 'trackers' });
   }
   if (showFoxboard) {
+    items.push({ type: 'separator' });
     items.push({ type: 'action', label: 'Foxboard', action: 'open-foxboard', rightText: '⌘ 4', shortcut: 'Cmd+4', iconKey: 'foxboard' });
   }
   if (showKernelManager) {
@@ -6858,12 +7360,13 @@ async function buildTrayMenuOnce() {
       submenuSide: 'right',
     },
     providerTraffic: showProviderTraffic ? providerTraffic : null,
+    outboundProxyTree: outboundProxyCard,
     items,
     submenus: {
       network: [
         {
           type: 'action',
-          label: labels.systemProxy || 'System Proxy',
+          label: labels.networkTakeover || 'Network Takeover',
           action: 'toggle-system-proxy',
           checked: networkTakeoverEnabled,
           enabled: true,
@@ -6894,9 +7397,17 @@ async function buildTrayMenuOnce() {
         },
       ],
       outbound: [
-        { type: 'action', label: labels.modeGlobalTitle || 'Global Proxy', action: 'mode-change', value: 'global', checked: currentOutboundMode === 'global', iconKey: 'modeGlobal' },
-        { type: 'action', label: labels.modeRuleTitle || 'Rule-Based Proxy', action: 'mode-change', value: 'rule', checked: currentOutboundMode === 'rule', iconKey: 'modeRule' },
-        { type: 'action', label: labels.modeDirectTitle || 'Direct Outbound', action: 'mode-change', value: 'direct', checked: currentOutboundMode === 'direct', iconKey: 'modeDirect' },
+        outboundItems[0],
+        { type: 'separator' },
+        outboundItems[1],
+        { type: 'separator' },
+        outboundItems[2],
+      ],
+      panel: [
+        { type: 'panel-chart' },
+        ...(showProviderTraffic && providerTraffic && Array.isArray(providerTraffic.items) && providerTraffic.items.length
+          ? [{ type: 'panel-provider-traffic', payload: providerTraffic }]
+          : []),
       ],
       directory: [
         { type: 'action', label: labels.userDirectory || 'User Directory', action: 'open-user-directory', iconKey: 'userDir' },
@@ -6914,6 +7425,7 @@ async function buildTrayMenuOnce() {
         { type: 'separator' },
         { type: 'action', label: labels.restartKernel, action: 'kernel-restart', enabled: dashboardEnabled, iconKey: 'kernelRestart' },
       ],
+      ...outboundProviderSubmenus,
     },
   };
   if (showCopyShellExportCommand) {
@@ -7467,10 +7979,21 @@ async function handleTrayMenuAction(action, payload = {}) {
       if (response.ok) {
         persistOutboundModeToSettings(nextMode);
         patchTrayMenuOutboundMode(nextMode);
-        applyTrayIconForMode(nextMode);
         emitTrayRefresh();
       }
       return { ok: true, submenu: 'outbound' };
+    }
+    case 'proxy-select': {
+      const nextProxy = payload && payload.value ? String(payload.value) : '';
+      const groupName = payload && payload.groupName ? String(payload.groupName) : '';
+      const submenu = payload && payload.submenuKey ? String(payload.submenuKey) : '';
+      const response = await updateMihomoProxySelectionMain(groupName, nextProxy);
+      if (response && response.ok) {
+        const rebuilt = await createTrayMenu();
+        emitTrayRefresh();
+        return { ok: true, submenu, data: rebuilt || trayMenuData };
+      }
+      return { ok: false, submenu, error: response && response.error ? response.error : 'proxy_select_failed' };
     }
     case 'kernel-start': {
       try {
@@ -8118,11 +8641,14 @@ app.whenReady().then(() => {
   ensureAppDirs();
   setDockIcon();
   createTrayMenu();
-  // Always show main window on app launch; close-to-tray only applies to current runtime.
-  const shouldShowMainWindow = true;
+  const shouldShowMainWindow = !readMainWindowClosedFromSettings();
   createWindow(shouldShowMainWindow);
   if (app.dock && app.dock.show) {
-    app.dock.show();
+    if (shouldShowMainWindow) {
+      app.dock.show();
+    } else {
+      app.dock.hide();
+    }
   }
   ensureTrayMenuWindow();
   setTimeout(() => {
@@ -8192,6 +8718,18 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.handle('clashfox:getOverviewNetworkSnapshot', async () => {
+    try {
+      return await buildOverviewNetworkSnapshot();
+    } catch (error) {
+      return {
+        ok: false,
+        error: 'overview_network_snapshot_failed',
+        details: String(error && error.message ? error.message : error || ''),
+      };
+    }
+  });
+
   ipcMain.handle('clashfox:reloadMihomoCore', async (_event, source = {}) => runControllerConfigRequestMain(source, [
     {
       method: 'POST',
@@ -8200,6 +8738,7 @@ app.whenReady().then(() => {
   ]));
 
   ipcMain.handle('clashfox:getMihomoConfigs', async (_event, source = {}) => getControllerConfigsMain(source));
+  ipcMain.handle('clashfox:getMihomoVersion', async (_event, source = {}) => getControllerVersionMain(source));
 
   ipcMain.handle('clashfox:reloadMihomoConfig', async (_event, source = {}) => runControllerConfigRequestMain(source, [
     {
@@ -9190,6 +9729,9 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     hideTrayMenuWindow();
     if (focusPreferredWindowOnActivate()) {
+      return;
+    }
+    if (readMainWindowClosedFromSettings()) {
       return;
     }
     if (!mainWindow || mainWindow.isDestroyed()) {

@@ -303,6 +303,14 @@ async function getConfigsViaBridgeOrFetch(source = {}, bridge) {
   return fetchJsonThroughController(source, '/configs');
 }
 
+async function getVersionViaBridgeOrFetch(source = {}, bridge) {
+  const bridged = callBridge(bridge, 'getMihomoVersion', source);
+  if (bridged) {
+    return bridged;
+  }
+  return fetchJsonThroughController(source, '/version');
+}
+
 async function patchConfigsViaBridgeOrFetch(patch = {}, source = {}, bridge) {
   const configPatch = normalizeConfigPatch(patch);
   if (!Object.keys(configPatch).length) {
@@ -338,6 +346,10 @@ async function patchConfigsViaBridgeOrFetch(patch = {}, source = {}, bridge) {
 
 export async function fetchMihomoConfigs(source = {}, bridge) {
   return getConfigsViaBridgeOrFetch(source, bridge);
+}
+
+export async function fetchMihomoVersion(source = {}, bridge) {
+  return getVersionViaBridgeOrFetch(source, bridge);
 }
 
 // Mihomo returns tun either as a boolean or as an object. Normalize that once

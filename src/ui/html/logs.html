@@ -38,13 +38,12 @@
                 <div class="field-inline logs-level-filter">
                   <label for="logLevelFilter" data-i18n="logs.levelLabel">Level</label>
                   <select id="logLevelFilter">
-                    <option value="all" data-i18n="logs.levelAll">All</option>
-                    <option value="debug">DEBUG</option>
-                    <option value="info">INFO</option>
-                    <option value="warn">WARN</option>
-                    <option value="error">ERROR</option>
-                    <option value="fatal">FATAL</option>
-                    <option value="trace">TRACE</option>
+                    <option value="debug">debug</option>
+                    <option value="info" selected>info</option>
+                    <option value="warn">warn</option>
+                    <option value="error">error</option>
+                    <option value="fatal">fatal</option>
+                    <option value="trace">trace</option>
                   </select>
                 </div>
                 <div class="field-inline logs-msg-filter">
@@ -69,10 +68,15 @@
               <div class="card-header-row">
                 <h3 data-i18n="clean.title">Clean Logs</h3>
               </div>
-              <div class="radio-group">
-                <label><input type="radio" name="cleanMode" value="all" checked /> <span data-i18n="clean.all">Delete all backups</span></label>
-                <label><input type="radio" name="cleanMode" value="7d" /> <span data-i18n="clean.7d">Keep last 7 days</span></label>
-                <label><input type="radio" name="cleanMode" value="30d" /> <span data-i18n="clean.30d">Keep last 30 days</span></label>
+              <div class="form-row logs-toolbar logs-clean-toolbar">
+                <div class="field-inline logs-level-filter">
+                  <label for="cleanModeSelect" data-i18n="clean.modeLabel">Mode</label>
+                  <select id="cleanModeSelect">
+                    <option value="all" data-i18n="clean.all">Delete all backups</option>
+                    <option value="7d" data-i18n="clean.7d">Keep last 7 days</option>
+                    <option value="30d" data-i18n="clean.30d">Keep last 30 days</option>
+                  </select>
+                </div>
               </div>
               <div class="action-row logs-clean-action">
                 <button class="btn danger" id="cleanBtn" data-i18n="clean.action">Clean Logs</button>

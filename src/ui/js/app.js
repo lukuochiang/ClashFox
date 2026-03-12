@@ -37,6 +37,7 @@ let panels = Array.from(document.querySelectorAll('.panel'));
 let noticePop = document.getElementById('noticePop');
 let noticePopBody = document.getElementById('noticePopBody');
 let noticePopClose = document.getElementById('noticePopClose');
+let noticePopTitle = document.getElementById('noticePopTitle');
 let contentRoot = document.getElementById('contentRoot');
 let currentPage = document.body ? document.body.dataset.page : '';
 const VALID_PAGES = new Set(['overview', 'kernel', 'config', 'logs', 'settings', 'help', 'dashboard']);
@@ -106,6 +107,13 @@ let topologyZoomSvg = document.getElementById('topologyZoomSvg');
 let topologyZoomColumns = document.getElementById('topologyZoomColumns');
 let topologyZoomEmpty = document.getElementById('topologyZoomEmpty');
 let topologyTooltip = null;
+let topologyTooltipLifecycleBound = false;
+let overviewSummaryConnections = document.getElementById('overviewSummaryConnections');
+let overviewSummaryMemory = document.getElementById('overviewSummaryMemory');
+let overviewSummaryDownloadTotal = document.getElementById('overviewSummaryDownloadTotal');
+let overviewSummaryDownloadRate = document.getElementById('overviewSummaryDownloadRate');
+let overviewSummaryUploadTotal = document.getElementById('overviewSummaryUploadTotal');
+let overviewSummaryUploadRate = document.getElementById('overviewSummaryUploadRate');
 let trafficUploadAxis = [];
 let trafficDownloadAxis = [];
 let tunToggle = document.getElementById('tunToggle');
@@ -259,12 +267,18 @@ function shouldUseOverviewMemoryFallback() {
 
 function updateOverviewMemoryValue(inUseBytes) {
   const inUse = Number.parseFloat(inUseBytes);
-  if (!overviewMemory) {
+  const value = Number.isFinite(inUse) && inUse >= 0
+    ? formatBytes(inUse)
+    : '-';
+  if (!overviewMemory && !overviewSummaryMemory) {
     return;
   }
-  setNodeTextIfChanged(overviewMemory, Number.isFinite(inUse) && inUse >= 0
-    ? formatBytes(inUse)
-    : '-');
+  if (overviewMemory) {
+    setNodeTextIfChanged(overviewMemory, value);
+  }
+  if (overviewSummaryMemory) {
+    setNodeTextIfChanged(overviewSummaryMemory, value);
+  }
 }
 
 function escapeTopologyText(value = '') {
@@ -577,6 +591,10 @@ function setTopologyMarkup({ linksMarkup = '', columnsMarkup = '' } = {}, hasDat
   } = targets;
   setTopologyLinksMarkup(linksMarkup, svgEl);
   setTopologyColumnsMarkup(columnsMarkup, columnsEl);
+  if (!hasData) {
+    hideTopologyTooltip();
+    setTopologyHoverKey('');
+  }
   if (emptyEl) {
     emptyEl.hidden = hasData;
     if (!hasData) {
@@ -605,7 +623,35 @@ function ensureTopologyTooltip() {
   topologyTooltip.className = 'topology-hover-tooltip';
   topologyTooltip.hidden = true;
   document.body.appendChild(topologyTooltip);
+  bindTopologyTooltipLifecycle();
   return topologyTooltip;
+}
+
+function bindTopologyTooltipLifecycle() {
+  if (topologyTooltipLifecycleBound) {
+    return;
+  }
+  topologyTooltipLifecycleBound = true;
+  window.addEventListener('blur', () => {
+    hideTopologyTooltip();
+    setTopologyHoverKey('');
+  });
+  window.addEventListener('scroll', () => {
+    hideTopologyTooltip();
+  }, true);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      hideTopologyTooltip();
+      setTopologyHoverKey('');
+    }
+  });
+  document.addEventListener('pointerdown', () => {
+    hideTopologyTooltip();
+  }, true);
+  document.addEventListener('mouseleave', () => {
+    hideTopologyTooltip();
+    setTopologyHoverKey('');
+  });
 }
 
 function closeTopologyZoomModal() {
@@ -1264,6 +1310,54 @@ function closeMihomoLogsSocket() {
   }
 }
 
+function stopMihomoPageLogsReconnect() {
+  if (state.mihomoPageLogsReconnectTimer) {
+    clearTimeout(state.mihomoPageLogsReconnectTimer);
+    state.mihomoPageLogsReconnectTimer = null;
+  }
+}
+
+function closeMihomoPageLogsSocket() {
+  stopMihomoPageLogsReconnect();
+  const socket = state.mihomoPageLogsSocket;
+  state.mihomoPageLogsSocket = null;
+  state.mihomoPageLogsSocketUrl = '';
+  state.mihomoPageLogsLive = false;
+  if (!socket) {
+    return;
+  }
+  try {
+    socket.onopen = null;
+    socket.onmessage = null;
+    socket.onerror = null;
+    socket.onclose = null;
+    socket.close();
+  } catch {
+    // ignore socket close failures
+  }
+}
+
+function getSelectedMihomoLogLevel() {
+  const normalized = String((logLevelFilter && logLevelFilter.value) || 'info').trim().toLowerCase();
+  if (!normalized) {
+    return 'info';
+  }
+  return normalized;
+}
+
+function scheduleMihomoPageLogsReconnect() {
+  stopMihomoPageLogsReconnect();
+  const attempt = Math.max(0, Number(state.mihomoPageLogsReconnectAttempts || 0));
+  const delay = Math.min(
+    12000,
+    1500 * Math.max(1, 2 ** attempt),
+  );
+  state.mihomoPageLogsReconnectTimer = setTimeout(() => {
+    state.mihomoPageLogsReconnectTimer = null;
+    connectMihomoPageLogsStream();
+  }, delay);
+}
+
 function scheduleMihomoLogsReconnect() {
   if (currentPage !== 'overview') {
     return;
@@ -1394,6 +1488,92 @@ function connectMihomoLogsStream() {
   };
 }
 
+function appendMihomoLogEntry(payload = {}) {
+  const rawMessage = String(payload && payload.payload ? payload.payload : '').trim();
+  if (!rawMessage) {
+    return;
+  }
+  const parsedEntry = parseLogLine(rawMessage) || {};
+  const typeLevel = normalizeLogLevel(payload && payload.type ? payload.type : '');
+  const nextEntry = {
+    date: parsedEntry.date && parsedEntry.date !== '-' ? parsedEntry.date : formatLogDate(new Date().toISOString()),
+    level: typeLevel || parsedEntry.level || 'INFO',
+    msg: parsedEntry.msg && parsedEntry.msg !== '-' ? parsedEntry.msg : rawMessage,
+  };
+  const maxLines = Number.parseInt(
+    String(
+      (logLines && logLines.value)
+      || (state.settings && state.settings.logLines)
+      || 200,
+    ),
+    10,
+  ) || 200;
+  state.logEntries = [nextEntry, ...(Array.isArray(state.logEntries) ? state.logEntries : [])].slice(0, Math.max(1, maxLines));
+  renderLogTable();
+  if (logContent) {
+    logContent.textContent = state.logEntries.map((entry) => `[${entry.level}] ${entry.msg}`).join('\n');
+  }
+}
+
+function connectMihomoPageLogsStream() {
+  if (currentPage !== 'logs' || typeof WebSocket !== 'function') {
+    return;
+  }
+  const nextUrl = resolveMihomoLogsWebSocketUrl(getMihomoApiSource(), getSelectedMihomoLogLevel());
+  if (!nextUrl) {
+    closeMihomoPageLogsSocket();
+    return;
+  }
+  const existing = state.mihomoPageLogsSocket;
+  if (
+    existing
+    && state.mihomoPageLogsSocketUrl === nextUrl
+    && (
+      existing.readyState === WebSocket.OPEN
+      || existing.readyState === WebSocket.CONNECTING
+    )
+  ) {
+    return;
+  }
+  closeMihomoPageLogsSocket();
+  let socket = null;
+  try {
+    socket = new WebSocket(nextUrl);
+  } catch {
+    state.mihomoPageLogsReconnectAttempts += 1;
+    scheduleMihomoPageLogsReconnect();
+    return;
+  }
+  state.mihomoPageLogsSocket = socket;
+  state.mihomoPageLogsSocketUrl = nextUrl;
+  socket.onopen = () => {
+    state.mihomoPageLogsLive = true;
+    state.mihomoPageLogsReconnectAttempts = 0;
+  };
+  socket.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(String(event && event.data ? event.data : '{}'));
+      appendMihomoLogEntry(payload);
+    } catch {
+      // ignore malformed websocket frames
+    }
+  };
+  socket.onerror = () => {
+    state.mihomoPageLogsLive = false;
+  };
+  socket.onclose = () => {
+    const currentSocket = state.mihomoPageLogsSocket;
+    if (currentSocket !== socket) {
+      return;
+    }
+    state.mihomoPageLogsSocket = null;
+    state.mihomoPageLogsSocketUrl = '';
+    state.mihomoPageLogsLive = false;
+    state.mihomoPageLogsReconnectAttempts += 1;
+    scheduleMihomoPageLogsReconnect();
+  };
+}
+
 function handleMihomoMemoryPayload(payload = {}) {
   state.mihomoMemoryLive = true;
   state.mihomoMemoryReconnectAttempts = 0;
@@ -1470,8 +1650,14 @@ function updateProxyTrafficSnapshot(downRate, upRate, downTotal, upTotal) {
   if (trafficSystemDownloadRate) {
     trafficSystemDownloadRate.textContent = formatBitrate(down);
   }
+  if (overviewSummaryDownloadRate) {
+    setNodeTextIfChanged(overviewSummaryDownloadRate, formatBitrate(down));
+  }
   if (trafficSystemUploadRate) {
     trafficSystemUploadRate.textContent = formatBitrate(up);
+  }
+  if (overviewSummaryUploadRate) {
+    setNodeTextIfChanged(overviewSummaryUploadRate, formatBitrate(up));
   }
   if (Number.isFinite(rxTotal) && rxTotal >= 0) {
     if (trafficSystemDownloadTotal) {
@@ -1480,6 +1666,9 @@ function updateProxyTrafficSnapshot(downRate, upRate, downTotal, upTotal) {
     if (trafficTotalDownload) {
       trafficTotalDownload.textContent = formatBytes(rxTotal);
     }
+    if (overviewSummaryDownloadTotal) {
+      setNodeTextIfChanged(overviewSummaryDownloadTotal, formatBytes(rxTotal));
+    }
   }
   if (Number.isFinite(txTotal) && txTotal >= 0) {
     if (trafficSystemUploadTotal) {
@@ -1487,6 +1676,9 @@ function updateProxyTrafficSnapshot(downRate, upRate, downTotal, upTotal) {
     }
     if (trafficTotalUpload) {
       trafficTotalUpload.textContent = formatBytes(txTotal);
+    }
+    if (overviewSummaryUploadTotal) {
+      setNodeTextIfChanged(overviewSummaryUploadTotal, formatBytes(txTotal));
     }
   }
   state.lastProxyTrafficAt = Date.now();
@@ -1726,6 +1918,7 @@ let logIntervalPreset = document.getElementById('logIntervalPreset');
 let logLevelFilter = document.getElementById('logLevelFilter');
 let logMessageFilter = document.getElementById('logMessageFilter');
 let logTableBody = document.getElementById('logTableBody');
+let cleanModeSelect = document.getElementById('cleanModeSelect');
 
 let cleanBtn = document.getElementById('cleanBtn');
 let dashboardFrame = document.getElementById('dashboardFrame');
@@ -1784,9 +1977,6 @@ let helpCheckAppUpdateBtn = document.getElementById('helpCheckAppUpdateBtn');
 let helpCheckKernelUpdateBtn = document.getElementById('helpCheckKernelUpdateBtn');
 let helpCheckHelperUpdateBtn = document.getElementById('helpCheckHelperUpdateBtn');
 let helperPrimaryAction = 'install';
-let settingsLogLines = document.getElementById('settingsLogLines');
-let settingsLogAutoRefresh = document.getElementById('settingsLogAutoRefresh');
-let settingsLogIntervalPreset = document.getElementById('settingsLogIntervalPreset');
 let settingsBackupsPageSize = document.getElementById('settingsBackupsPageSize');
 let settingsDebugMode = document.getElementById('settingsDebugMode');
 let settingsWindowWidth = document.getElementById('settingsWindowWidth');
@@ -2002,6 +2192,11 @@ const state = {
   mihomoLogsSocketUrl: '',
   mihomoLogsReconnectTimer: null,
   mihomoLogsReconnectAttempts: 0,
+  mihomoPageLogsSocket: null,
+  mihomoPageLogsSocketUrl: '',
+  mihomoPageLogsReconnectTimer: null,
+  mihomoPageLogsReconnectAttempts: 0,
+  mihomoPageLogsLive: false,
   topologyTickTimer: null,
   topologyRenderTimer: null,
   topologyRenderRaf: null,
@@ -2517,6 +2712,19 @@ function applyCardIcons() {
     if (key === 'status.connLiveTitle') return 'var(--icon-connections)';
     if (key === 'status.trafficTitle') return 'var(--icon-clock)';
     if (key === 'status.topologyTitle') return 'var(--icon-topology)';
+    if (key === 'overview.runningTitle') return 'var(--icon-activity)';
+    if (key === 'overview.networkTitle') return 'var(--icon-wifi)';
+    if (key === 'overview.providerTrafficTitle') return 'var(--icon-clock)';
+    if (key === 'overview.rulesOverviewTitle') return 'var(--icon-list)';
+    if (key === 'install.title') return 'var(--icon-download)';
+    if (key === 'install.kernelsTitle') return 'var(--icon-kernel)';
+    if (key === 'control.title') return 'var(--icon-config)';
+    if (key === 'control.recommendationsTitle') return 'var(--icon-list)';
+    if (key === 'logs.title') return 'var(--icon-doc)';
+    if (key === 'clean.title') return 'var(--icon-broom)';
+    if (key === 'help.title') return 'var(--icon-help)';
+    if (key === 'help.introTitle') return 'var(--icon-info)';
+    if (key === 'help.ackTitle') return 'var(--icon-defaults)';
     if (key === 'settings.appearance') return 'var(--icon-palette)';
     if (key === 'settings.panelManager') return 'var(--icon-panels)';
     if (key === 'settings.paths') return 'var(--icon-folders)';
@@ -2532,6 +2740,19 @@ function applyCardIcons() {
     if (key === 'status.connLiveTitle') return 'var(--icon-fill-connections)';
     if (key === 'status.trafficTitle') return 'var(--icon-fill-clock)';
     if (key === 'status.topologyTitle') return 'var(--icon-fill-topology)';
+    if (key === 'overview.runningTitle') return 'var(--icon-fill-dashboard)';
+    if (key === 'overview.networkTitle') return 'var(--icon-fill-worldwide)';
+    if (key === 'overview.providerTrafficTitle') return 'var(--icon-fill-clock)';
+    if (key === 'overview.rulesOverviewTitle') return 'var(--icon-fill-default)';
+    if (key === 'install.title') return 'var(--icon-fill-warning)';
+    if (key === 'install.kernelsTitle') return 'var(--icon-fill-kernel)';
+    if (key === 'control.title') return 'var(--icon-fill-config)';
+    if (key === 'control.recommendationsTitle') return 'var(--icon-fill-default)';
+    if (key === 'logs.title') return 'var(--icon-fill-logs)';
+    if (key === 'clean.title') return 'var(--icon-fill-warning)';
+    if (key === 'help.title') return 'var(--icon-fill-help)';
+    if (key === 'help.introTitle') return 'var(--icon-fill-default)';
+    if (key === 'help.ackTitle') return 'var(--icon-fill-default)';
     if (key === 'settings.panelManager') return 'var(--icon-fill-overview)';
     if (key === 'settings.paths') return 'var(--icon-fill-worldwide)';
     if (key === 'settings.proxyConfigTitle') return 'var(--icon-fill-config)';
@@ -3410,9 +3631,14 @@ function getOverviewInsertTarget(container, x, y) {
 }
 
 function bindOverviewDrag() {
-  if (!overviewGrids || overviewGrids.length === 0) {
-    return;
+  if (overviewGrids && overviewGrids.length) {
+    overviewGrids.forEach((grid) => {
+      grid.querySelectorAll('[draggable="true"][data-module]').forEach((card) => {
+        card.removeAttribute('draggable');
+      });
+    });
   }
+  return;
   overviewGrids.forEach((grid) => {
     if (grid.dataset.dragBound === 'true') {
       return;
@@ -3668,13 +3894,7 @@ function applySettings(settings) {
     settingsGithubUser.value = state.settings.githubUser;
   }
   state.coreVersionRaw = readKernelVersionFromSettings();
-  if (installCurrentKernel) {
-    const kernelText = formatKernelDisplay(state.coreVersionRaw || '');
-    installCurrentKernel.textContent = kernelText && kernelText !== '-' ? kernelText : t('labels.notInstalled');
-  }
-  if (statusVersion) {
-    statusVersion.textContent = state.coreVersionRaw || t('labels.notInstalled');
-  }
+  applyKernelVersionDisplay(state.coreVersionRaw || '');
   updateInstallVersionVisibility();
   if (configPathInput) {
     configPathInput.value = state.settings.configPath;
@@ -3704,21 +3924,12 @@ function applySettings(settings) {
   if (logLines) {
     logLines.value = state.settings.logLines;
   }
-  if (settingsLogLines) {
-    settingsLogLines.value = state.settings.logLines;
-  }
   if (logIntervalPreset) {
     logIntervalPreset.value = state.settings.logIntervalPreset;
-  }
-  if (settingsLogIntervalPreset) {
-    settingsLogIntervalPreset.value = state.settings.logIntervalPreset;
   }
   updateInterval();
   if (logAutoRefresh) {
     logAutoRefresh.checked = state.settings.logAutoRefresh;
-  }
-  if (settingsLogAutoRefresh) {
-    settingsLogAutoRefresh.checked = state.settings.logAutoRefresh;
   }
   setLogAutoRefresh(true);
   if (proxyModeSelect) {
@@ -4233,15 +4444,28 @@ function showNoticePop(message, type = 'info') {
   if (!message || !noticePop || !noticePopBody) {
     return;
   }
-  noticePopBody.textContent = message;
-  noticePop.dataset.type = type;
+  const normalizedType = ['success', 'warn', 'error'].includes(String(type || '').toLowerCase())
+    ? String(type).toLowerCase()
+    : 'info';
+  const titleKey = normalizedType === 'success'
+    ? 'labels.noticeSuccess'
+    : normalizedType === 'warn'
+      ? 'labels.noticeWarning'
+      : normalizedType === 'error'
+        ? 'labels.noticeError'
+        : 'labels.noticeInfo';
+  if (noticePopTitle) {
+    noticePopTitle.textContent = ti(titleKey, ti('labels.notice', 'Notice'));
+  }
+  noticePopBody.textContent = String(message || '').trim();
+  noticePop.dataset.type = normalizedType;
   noticePop.classList.add('show');
   if (noticePopTimer) {
     clearTimeout(noticePopTimer);
   }
   noticePopTimer = setTimeout(() => {
     hideNoticePop();
-  }, 3200);
+  }, normalizedType === 'error' ? 4200 : 3200);
 }
 
 async function copyTextToClipboard(text) {
@@ -4431,11 +4655,7 @@ function setNodeHtmlIfChanged(node, value) {
 
 function hydrateOverviewIdentityFromSettings() {
   const persistedVersion = readKernelVersionFromSettings();
-  const kernelDisplay = formatKernelDisplay(persistedVersion);
-  if (overviewKernel) {
-    overviewKernel.textContent = kernelDisplay || '-';
-  }
-  setOverviewCopyButtonVisible(overviewKernelCopy, Boolean(kernelDisplay && kernelDisplay !== '-'));
+  applyKernelVersionDisplay(persistedVersion);
   const persistedDevice = readDeviceFromSettings();
   if (overviewSystem) {
     overviewSystem.textContent = persistedDevice.os || '-';
@@ -4459,6 +4679,38 @@ function hydrateOverviewIdentityFromSettings() {
   setOverviewCopyButtonVisible(overviewLocalIpCopy, false);
   setOverviewCopyButtonVisible(overviewProxyIpCopy, false);
   setOverviewCopyButtonVisible(overviewInternetIpCopy, false);
+}
+
+function applyKernelVersionDisplay(versionRaw = '') {
+  const normalizedVersion = String(versionRaw || '').trim();
+  const kernelDisplay = formatKernelDisplay(normalizedVersion);
+  if (overviewKernel) {
+    overviewKernel.textContent = kernelDisplay || '-';
+  }
+  if (installCurrentKernel) {
+    installCurrentKernel.textContent = kernelDisplay && kernelDisplay !== '-' ? kernelDisplay : t('labels.notInstalled');
+  }
+  if (statusVersion) {
+    statusVersion.textContent = normalizedVersion || t('labels.notInstalled');
+  }
+  setOverviewCopyButtonVisible(overviewKernelCopy, Boolean(kernelDisplay && kernelDisplay !== '-'));
+}
+
+async function syncKernelVersionFromMihomo() {
+  const source = getMihomoApiSource();
+  const response = await fetchMihomoVersion(source, window.clashfox);
+  if (!response || !response.ok || !response.data) {
+    return response || { ok: false, error: 'request_failed' };
+  }
+  const versionRaw = String((response.data && response.data.version) || '').trim();
+  if (!versionRaw) {
+    return { ok: false, error: 'version_missing' };
+  }
+  syncKernelVersionInState(versionRaw);
+  state.coreVersionRaw = versionRaw;
+  syncGithubSourceFromKernelVersion();
+  applyKernelVersionDisplay(versionRaw);
+  return { ok: true, data: response.data };
 }
 
 function syncKernelVersionInState(version = '') {
@@ -4735,6 +4987,8 @@ async function loadAppInfo() {
   if (!window.clashfox || typeof window.clashfox.getAppInfo !== 'function') {
     return;
   }
+  const helpVersionEl = helpAboutVersion || document.getElementById('helpAboutVersion');
+  const helpBuildEl = helpAboutBuild || document.getElementById('helpAboutBuild');
   const response = await window.clashfox.getAppInfo();
   if (response && response.ok && response.data) {
     if (appName) {
@@ -4745,11 +4999,13 @@ async function loadAppInfo() {
     if (appVersion) {
       appVersion.textContent = displayVersion;
     }
-    if (helpAboutVersion) {
-      helpAboutVersion.textContent = displayVersion;
+    if (helpVersionEl) {
+      helpVersionEl.textContent = displayVersion;
+      helpAboutVersion = helpVersionEl;
     }
-    if (helpAboutBuild) {
-      helpAboutBuild.textContent = response.data.buildNumber || '-';
+    if (helpBuildEl) {
+      helpBuildEl.textContent = response.data.buildNumber || '-';
+      helpAboutBuild = helpBuildEl;
     }
   }
 }
@@ -4916,18 +5172,12 @@ async function handleHelpHelperUpdateCheck() {
 function updateStatusUI(data) {
   const running = data.running;
   applyKernelRunningState(running, 'status');
-  const statusVersionRaw = String((data && data.version) || '').trim();
-  if (statusVersionRaw) {
-    syncKernelVersionInState(statusVersionRaw);
-    state.coreVersionRaw = statusVersionRaw;
-  } else {
-    state.coreVersionRaw = readKernelVersionFromSettings();
-    if (!state.coreVersionRaw) {
-      const kernelPathRaw = String((data && data.kernelPath) || '').trim();
-      const kernelName = kernelPathRaw ? kernelPathRaw.split('/').pop() : '';
-      if (kernelName && kernelName !== '-') {
-        state.coreVersionRaw = kernelName;
-      }
+  state.coreVersionRaw = readKernelVersionFromSettings();
+  if (!state.coreVersionRaw) {
+    const kernelPathRaw = String((data && data.kernelPath) || '').trim();
+    const kernelName = kernelPathRaw ? kernelPathRaw.split('/').pop() : '';
+    if (kernelName && kernelName !== '-') {
+      state.coreVersionRaw = kernelName;
     }
   }
   syncGithubSourceFromKernelVersion();
@@ -4944,10 +5194,7 @@ function updateStatusUI(data) {
   if (statusVersion) {
     statusVersion.textContent = state.coreVersionRaw || t('labels.notInstalled');
   }
-  if (installCurrentKernel) {
-    const kernelText = formatKernelDisplay(state.coreVersionRaw || '');
-    installCurrentKernel.textContent = kernelText && kernelText !== '-' ? kernelText : t('labels.notInstalled');
-  }
+  applyKernelVersionDisplay(state.coreVersionRaw || '');
   syncQuickActionButtons();
   if (quickHintNodes.length) {
   // quick hint removed
@@ -5279,6 +5526,7 @@ function renderProviderSubscriptionOverview(payload = null) {
   setNodeHtmlIfChanged(overviewProviderSubscriptionList, listMarkup);
 }
 
+
 function renderRulesOverviewCard() {
   if (!overviewRulesChart || !overviewRulesRecords || !overviewRulesMetrics || !overviewRulesBehaviors) {
     return;
@@ -5560,11 +5808,17 @@ function updateSystemTraffic(rxBytes, txBytes) {
     if (trafficSystemDownloadRate) {
       trafficSystemDownloadRate.textContent = '-';
     }
+    if (overviewSummaryDownloadRate) {
+      setNodeTextIfChanged(overviewSummaryDownloadRate, '-');
+    }
     if (trafficSystemDownloadTotal) {
       trafficSystemDownloadTotal.textContent = '-';
     }
     if (trafficSystemUploadRate) {
       trafficSystemUploadRate.textContent = '-';
+    }
+    if (overviewSummaryUploadRate) {
+      setNodeTextIfChanged(overviewSummaryUploadRate, '-');
     }
     if (trafficSystemUploadTotal) {
       trafficSystemUploadTotal.textContent = '-';
@@ -5572,8 +5826,14 @@ function updateSystemTraffic(rxBytes, txBytes) {
     if (trafficTotalDownload) {
       trafficTotalDownload.textContent = '-';
     }
+    if (overviewSummaryDownloadTotal) {
+      setNodeTextIfChanged(overviewSummaryDownloadTotal, '-');
+    }
     if (trafficTotalUpload) {
       trafficTotalUpload.textContent = '-';
+    }
+    if (overviewSummaryUploadTotal) {
+      setNodeTextIfChanged(overviewSummaryUploadTotal, '-');
     }
     state.trafficRxBytes = null;
     state.trafficTxBytes = null;
@@ -5591,8 +5851,14 @@ function updateSystemTraffic(rxBytes, txBytes) {
   if (trafficTotalDownload) {
     trafficTotalDownload.textContent = formatBytes(rx);
   }
+  if (overviewSummaryDownloadTotal) {
+    setNodeTextIfChanged(overviewSummaryDownloadTotal, formatBytes(rx));
+  }
   if (trafficTotalUpload) {
     trafficTotalUpload.textContent = formatBytes(tx);
+  }
+  if (overviewSummaryUploadTotal) {
+    setNodeTextIfChanged(overviewSummaryUploadTotal, formatBytes(tx));
   }
 
   if (state.trafficRxBytes === null || state.trafficTxBytes === null || !state.trafficAt) {
@@ -5602,8 +5868,14 @@ function updateSystemTraffic(rxBytes, txBytes) {
     if (trafficSystemDownloadRate) {
       trafficSystemDownloadRate.textContent = '-';
     }
+    if (overviewSummaryDownloadRate) {
+      setNodeTextIfChanged(overviewSummaryDownloadRate, '-');
+    }
     if (trafficSystemUploadRate) {
       trafficSystemUploadRate.textContent = '-';
+    }
+    if (overviewSummaryUploadRate) {
+      setNodeTextIfChanged(overviewSummaryUploadRate, '-');
     }
     cacheOverviewTrafficFromState();
     return;
@@ -5622,8 +5894,14 @@ function updateSystemTraffic(rxBytes, txBytes) {
   if (trafficSystemDownloadRate) {
     trafficSystemDownloadRate.textContent = formatBitrate(rxRate);
   }
+  if (overviewSummaryDownloadRate) {
+    setNodeTextIfChanged(overviewSummaryDownloadRate, formatBitrate(rxRate));
+  }
   if (trafficSystemUploadRate) {
     trafficSystemUploadRate.textContent = formatBitrate(txRate);
+  }
+  if (overviewSummaryUploadRate) {
+    setNodeTextIfChanged(overviewSummaryUploadRate, formatBitrate(txRate));
   }
   updateTrafficHistory(rxRate, txRate);
 }
@@ -5708,6 +5986,9 @@ function updateRealtimeConnections(value) {
     if (overviewConnections) {
       setNodeTextIfChanged(overviewConnections, '-');
     }
+    if (overviewSummaryConnections) {
+      setNodeTextIfChanged(overviewSummaryConnections, '-');
+    }
     setNodeTextIfChanged(overviewConnCurrent, '-');
     setNodeTextIfChanged(overviewConnPeak, '-');
     setNodeTextIfChanged(overviewConnAvg, '-');
@@ -5734,6 +6015,9 @@ function updateRealtimeConnections(value) {
   if (overviewConnections) {
     setNodeTextIfChanged(overviewConnections, String(current));
   }
+  if (overviewSummaryConnections) {
+    setNodeTextIfChanged(overviewSummaryConnections, String(current));
+  }
   setNodeTextIfChanged(overviewConnCurrent, String(current));
   setNodeTextIfChanged(overviewConnPeak, String(state.connPeak));
   setNodeTextIfChanged(overviewConnAvg, String(avg));
@@ -5759,12 +6043,12 @@ function updateOverviewUI(data) {
   const running = Boolean(data.running);
   state.overviewRunning = running;
   state.overviewRunningUpdatedAt = Date.now();
-  const uptimeSec = Number.parseFloat(data.uptimeSec);
-  if (running && Number.isFinite(uptimeSec) && uptimeSec >= 0) {
-    state.overviewUptimeBaseSec = uptimeSec;
+  const uptime = Number.parseFloat(data.uptimeSec);
+  if (running && Number.isFinite(uptime) && uptime >= 0) {
+    state.overviewUptimeBaseSec = uptime;
     state.overviewUptimeAt = Date.now();
     if (overviewUptime) {
-      setNodeTextIfChanged(overviewUptime, formatUptime(uptimeSec));
+      setNodeTextIfChanged(overviewUptime, formatUptime(uptime));
     }
   } else if (!running) {
     state.overviewUptimeBaseSec = 0;
@@ -5772,6 +6056,13 @@ function updateOverviewUI(data) {
     if (overviewUptime) {
       setNodeTextIfChanged(overviewUptime, '-');
     }
+  }
+  applyOverviewNetworkSnapshot(data);
+}
+
+function applyOverviewNetworkSnapshot(data) {
+  if (!data || typeof data !== 'object') {
+    return;
   }
   const internetLatency = formatLatency(data.internetMs ?? data.internet ?? data.internetLatency);
   const dnsLatency = formatLatency(data.dnsMs ?? data.dns ?? data.dnsLatency);
@@ -5803,27 +6094,40 @@ function updateOverviewUI(data) {
       : (state.overviewLatencySnapshot.router || '-'));
   }
   if (overviewNetwork) {
-    setNodeTextIfChanged(overviewNetwork, data.networkName || '-');
+    const nextNetworkName = String(data.networkName || '').trim();
+    const fallbackNetworkName = state.settings && state.settings.device && state.settings.device.networkName
+      ? String(state.settings.device.networkName || '').trim()
+      : '';
+    setNodeTextIfChanged(
+      overviewNetwork,
+      nextNetworkName || fallbackNetworkName || String(overviewNetwork.textContent || '').trim() || '-',
+    );
   }
   if (overviewLocalIp) {
     const rawLocalIp = String(data.localIp || '').trim();
-    state.overviewIpRaw.local = rawLocalIp;
-    const text = rawLocalIp || '-';
+    if (rawLocalIp) {
+      state.overviewIpRaw.local = rawLocalIp;
+    }
+    const text = maskIpAddress(rawLocalIp || state.overviewIpRaw.local || '') || '-';
     setNodeTextIfChanged(overviewLocalIp, text);
     setOverviewCopyButtonVisible(overviewLocalIpCopy, Boolean(text && text !== '-'));
   }
   if (overviewProxyIp) {
     const rawProxyIp = String(data.proxyIp || '').trim();
-    const text = maskIpAddress(rawProxyIp) || '-';
-    state.overviewIpRaw.proxy = text !== '-' ? rawProxyIp : '';
+    if (rawProxyIp) {
+      state.overviewIpRaw.proxy = rawProxyIp;
+    }
+    const text = maskIpAddress(rawProxyIp || state.overviewIpRaw.proxy || '') || '-';
     setNodeTextIfChanged(overviewProxyIp, text);
     setOverviewCopyButtonVisible(overviewProxyIpCopy, Boolean(text && text !== '-'));
   }
   if (overviewInternetIp) {
     const ipValue = data.internetIp4 || data.internetIp || '';
     const rawInternetIp = String(ipValue || '').trim();
-    const text = maskIpAddress(rawInternetIp) || '-';
-    state.overviewIpRaw.internet = text !== '-' ? rawInternetIp : '';
+    if (rawInternetIp) {
+      state.overviewIpRaw.internet = rawInternetIp;
+    }
+    const text = maskIpAddress(rawInternetIp || state.overviewIpRaw.internet || '') || '-';
     setNodeTextIfChanged(overviewInternetIp, text);
     setOverviewCopyButtonVisible(overviewInternetIpCopy, Boolean(text && text !== '-'));
   }
@@ -5846,6 +6150,9 @@ async function loadStatusSilently() {
     return response;
   }
   updateStatusUI(response.data);
+  if (currentPage === 'overview' || currentPage === 'kernel') {
+    await syncKernelVersionFromMihomo().catch(() => {});
+  }
   loadTunStatus(false);
   return response;
 }
@@ -5925,8 +6232,16 @@ async function loadOverview(showToastOnSuccess = false) {
       args.push('--config', configPath);
     }
     args.push(...getControllerArgs());
-    const response = await runCommand('overview', args);
+    const [response, networkSnapshot] = await Promise.all([
+      runCommand('overview', args),
+      window.clashfox && typeof window.clashfox.getOverviewNetworkSnapshot === 'function'
+        ? window.clashfox.getOverviewNetworkSnapshot()
+        : Promise.resolve({ ok: false }),
+    ]);
     if (!response.ok) {
+      if (networkSnapshot && networkSnapshot.ok && networkSnapshot.data) {
+        applyOverviewNetworkSnapshot(networkSnapshot.data);
+      }
       guiLog('overview', 'loadOverview failed', {
         error: response.error || 'unknown_error',
       }, 'warn');
@@ -5935,12 +6250,15 @@ async function loadOverview(showToastOnSuccess = false) {
       }
       return false;
     }
-    updateOverviewUI(response.data);
+    const mergedOverviewData = networkSnapshot && networkSnapshot.ok && networkSnapshot.data
+      ? { ...(response.data || {}), ...networkSnapshot.data }
+      : response.data;
+    updateOverviewUI(mergedOverviewData);
     guiLog('overview', 'loadOverview completed', {
-      mode: response.data && response.data.mode ? response.data.mode : '',
-      mixedPort: response.data && response.data.mixedPort ? response.data.mixedPort : '',
-      running: response.data && Object.prototype.hasOwnProperty.call(response.data, 'running')
-        ? Boolean(response.data.running)
+      mode: mergedOverviewData && mergedOverviewData.mode ? mergedOverviewData.mode : '',
+      mixedPort: mergedOverviewData && mergedOverviewData.mixedPort ? mergedOverviewData.mixedPort : '',
+      running: mergedOverviewData && Object.prototype.hasOwnProperty.call(mergedOverviewData, 'running')
+        ? Boolean(mergedOverviewData.running)
         : Boolean(state.coreRunning),
     });
     if (showToastOnSuccess) {
@@ -6093,10 +6411,10 @@ async function loadProviderSubscriptionOverview() {
         error: response && response.error ? response.error : 'provider_subscription_overview_failed',
         cacheHit: Boolean(readOverviewProviderSubscriptionCache()),
       }, 'warn');
-      if (!readOverviewProviderSubscriptionCache()) {
-        renderProviderSubscriptionOverview({ items: [], summary: { providerCount: 0 } });
-      } else {
+      if (readOverviewProviderSubscriptionCache()) {
         hydrateOverviewProviderSubscriptionFromCache();
+      } else if (!state.providerSubscriptionRenderSignature) {
+        renderProviderSubscriptionOverview({ items: [], summary: { providerCount: 0 } });
       }
       return;
     }
@@ -6112,15 +6430,16 @@ async function loadProviderSubscriptionOverview() {
     guiLog('provider-traffic', 'load threw', {
       cacheHit: Boolean(readOverviewProviderSubscriptionCache()),
     }, 'error');
-    if (!readOverviewProviderSubscriptionCache()) {
-      renderProviderSubscriptionOverview({ items: [], summary: { providerCount: 0 } });
-    } else {
+    if (readOverviewProviderSubscriptionCache()) {
       hydrateOverviewProviderSubscriptionFromCache();
+    } else if (!state.providerSubscriptionRenderSignature) {
+      renderProviderSubscriptionOverview({ items: [], summary: { providerCount: 0 } });
     }
   } finally {
     state.providerSubscriptionLoading = false;
   }
 }
+
 
 async function loadRulesOverviewCard() {
   if (!overviewRulesChart || !overviewRulesRecords) {
@@ -6145,15 +6464,23 @@ async function loadRulesOverviewCard() {
         hydrateOverviewRulesCardFromCache();
         return;
       }
+      if (
+        state.rulesOverviewPayload
+        || state.ruleProvidersOverviewPayload
+        || state.rulesOverviewRenderSignatures.records
+        || state.rulesOverviewRenderSignatures.chart
+      ) {
+        return;
+      }
     }
     if (hasRules) {
       state.rulesOverviewPayload = rulesResp.data;
-    } else {
+    } else if (!state.rulesOverviewPayload) {
       state.rulesOverviewPayload = { totalRules: 0, types: [], records: [] };
     }
     if (hasProviders) {
       state.ruleProvidersOverviewPayload = providerResp.data;
-    } else {
+    } else if (!state.ruleProvidersOverviewPayload) {
       state.ruleProvidersOverviewPayload = { totalProviders: 0, totalRules: 0, behaviors: [], items: [], records: [] };
     }
     cacheOverviewRulesCard();
@@ -6175,7 +6502,12 @@ async function loadRulesOverviewCard() {
     }, 'error');
     if (readOverviewRulesCardCache()) {
       hydrateOverviewRulesCardFromCache();
-    } else {
+    } else if (
+      !state.rulesOverviewPayload
+      && !state.ruleProvidersOverviewPayload
+      && !state.rulesOverviewRenderSignatures.records
+      && !state.rulesOverviewRenderSignatures.chart
+    ) {
       state.rulesOverviewPayload = { totalRules: 0, types: [], records: [] };
       state.ruleProvidersOverviewPayload = { totalProviders: 0, totalRules: 0, behaviors: [], items: [], records: [] };
       renderRulesOverviewCard();
@@ -6750,40 +7082,13 @@ async function loadLogs() {
   if (!logTableBody && !logContent) {
     return;
   }
-  const lines = Number.parseInt(
-    String(
-      (logLines && logLines.value)
-      || (settingsLogLines && settingsLogLines.value)
-      || (state.settings && state.settings.logLines)
-      || 200,
-    ),
-    10,
-  ) || 200;
-  const response = await runCommand('logs', ['--lines', String(lines)]);
-  if (!response.ok) {
+  if (!Array.isArray(state.logEntries)) {
     state.logEntries = [];
-    if (logTableBody) {
-      logTableBody.innerHTML = `<tr><td class="empty-cell" colspan="3">${escapeLogCell(ti('logs.fileNotFound', 'Log file not found.'))}</td></tr>`;
-    }
-    if (logContent) {
-      logContent.textContent = t('labels.logMissing');
-    }
-    return;
   }
-  let textContent = '';
-  if (response.data && response.data.contentBase64) {
-    const binary = atob(response.data.contentBase64);
-    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    const decoded = new TextDecoder('utf-8').decode(bytes);
-    textContent = decoded || '';
-  } else {
-    textContent = String((response.data && response.data.content) || '');
-  }
-  const linesList = textContent.replace(/\n$/, '').split('\n').filter((line) => String(line || '').trim()).reverse();
-  state.logEntries = linesList.map(parseLogLine).filter(Boolean);
+  connectMihomoPageLogsStream();
   renderLogTable();
   if (logContent) {
-    logContent.textContent = linesList.join('\n');
+    logContent.textContent = state.logEntries.map((entry) => `[${entry.level}] ${entry.msg}`).join('\n');
   }
 }
 
@@ -6792,17 +7097,16 @@ function setLogAutoRefresh(enabled) {
     clearInterval(state.logTimer);
     state.logTimer = null;
   }
-  if (!enabled) {
-    return;
+  void enabled;
+  if (currentPage === 'logs') {
+    connectMihomoPageLogsStream();
+  } else {
+    closeMihomoPageLogsSocket();
   }
-  state.logTimer = setInterval(() => {
-    loadLogs();
-  }, state.logIntervalMs);
 }
 
 function getIntervalMs() {
   const sourcePreset = (logIntervalPreset && logIntervalPreset.value)
-    || (settingsLogIntervalPreset && settingsLogIntervalPreset.value)
     || (state.settings && state.settings.logIntervalPreset)
     || '3';
   const presetValue = Number.parseInt(String(sourcePreset), 10);
@@ -6812,9 +7116,6 @@ function getIntervalMs() {
 
 function updateInterval() {
   state.logIntervalMs = getIntervalMs();
-  if (state.logTimer) {
-    setLogAutoRefresh(true);
-  }
 }
 
 function normalizeLogLevel(level = '') {
@@ -6937,11 +7238,11 @@ function renderLogTable() {
   if (!logTableBody) {
     return;
   }
-  const levelFilter = String((logLevelFilter && logLevelFilter.value) || 'all').toLowerCase();
+  const levelFilter = String((logLevelFilter && logLevelFilter.value) || 'info').toLowerCase();
   const keyword = String((logMessageFilter && logMessageFilter.value) || '').trim().toLowerCase();
   const rows = (Array.isArray(state.logEntries) ? state.logEntries : []).filter((entry) => {
     const entryLevel = String(entry.level || '').toLowerCase();
-    if (levelFilter !== 'all' && entryLevel !== levelFilter) {
+    if (entryLevel !== levelFilter) {
       return false;
     }
     if (!keyword) {
@@ -7166,6 +7467,7 @@ function refreshPageRefs() {
   noticePop = document.getElementById('noticePop');
   noticePopBody = document.getElementById('noticePopBody');
   noticePopClose = document.getElementById('noticePopClose');
+  noticePopTitle = document.getElementById('noticePopTitle');
   contentRoot = document.getElementById('contentRoot');
 
   const menuItemsTitle = document.querySelector('.menu-items-title');
@@ -7220,6 +7522,12 @@ function refreshPageRefs() {
   overviewTopologyColumns = document.getElementById('overviewTopologyColumns');
   overviewTopologyEmpty = document.getElementById('overviewTopologyEmpty');
   overviewTopologyZoomBtn = document.getElementById('overviewTopologyZoomBtn');
+  overviewSummaryConnections = document.getElementById('overviewSummaryConnections');
+  overviewSummaryMemory = document.getElementById('overviewSummaryMemory');
+  overviewSummaryDownloadTotal = document.getElementById('overviewSummaryDownloadTotal');
+  overviewSummaryDownloadRate = document.getElementById('overviewSummaryDownloadRate');
+  overviewSummaryUploadTotal = document.getElementById('overviewSummaryUploadTotal');
+  overviewSummaryUploadRate = document.getElementById('overviewSummaryUploadRate');
   topologyZoomModal = document.getElementById('topologyZoomModal');
   topologyZoomClose = document.getElementById('topologyZoomClose');
   topologyZoomStage = document.getElementById('topologyZoomStage');
@@ -7321,6 +7629,7 @@ function refreshPageRefs() {
   logLevelFilter = document.getElementById('logLevelFilter');
   logMessageFilter = document.getElementById('logMessageFilter');
   logTableBody = document.getElementById('logTableBody');
+  cleanModeSelect = document.getElementById('cleanModeSelect');
   cleanBtn = document.getElementById('cleanBtn');
   dashboardFrame = document.getElementById('dashboardFrame');
   dashboardEmpty = document.getElementById('dashboardEmpty');
@@ -7376,9 +7685,6 @@ function refreshPageRefs() {
   helpCheckAppUpdateBtn = document.getElementById('helpCheckAppUpdateBtn');
   helpCheckKernelUpdateBtn = document.getElementById('helpCheckKernelUpdateBtn');
   helpCheckHelperUpdateBtn = document.getElementById('helpCheckHelperUpdateBtn');
-  settingsLogLines = document.getElementById('settingsLogLines');
-  settingsLogAutoRefresh = document.getElementById('settingsLogAutoRefresh');
-  settingsLogIntervalPreset = document.getElementById('settingsLogIntervalPreset');
   settingsBackupsPageSize = document.getElementById('settingsBackupsPageSize');
   settingsDebugMode = document.getElementById('settingsDebugMode');
   settingsWindowWidth = document.getElementById('settingsWindowWidth');
@@ -7591,6 +7897,9 @@ async function navigatePage(targetPage, pushState = true) {
       stopTopologyTicker();
     }
   }
+  if (currentPage === 'logs' && normalized !== 'logs') {
+    closeMihomoPageLogsSocket();
+  }
   if (!normalized || normalized === currentPage) {
     return;
   }
@@ -7653,6 +7962,7 @@ window.addEventListener('beforeunload', () => {
   closeMihomoTrafficSocket();
   closeMihomoMemorySocket();
   closeMihomoLogsSocket();
+  closeMihomoPageLogsSocket();
   stopTopologyTicker();
   if (currentPage === 'overview') {
     cacheOverviewNetworkFromState();
@@ -9405,26 +9715,6 @@ if (switchNext) {
     renderSwitchTable();
   });
 }
-// 添加settings页面上Log Settings的事件监听器
-if (settingsLogLines) {
-  settingsLogLines.addEventListener('change', () => {
-    if (logLines) {
-      logLines.value = settingsLogLines.value;
-    }
-    saveSettings({ logLines: parseInt(settingsLogLines.value, 10) });
-  });
-}
-
-if (settingsLogIntervalPreset) {
-  settingsLogIntervalPreset.addEventListener('change', () => {
-    if (logIntervalPreset) {
-      logIntervalPreset.value = settingsLogIntervalPreset.value;
-    }
-    updateInterval();
-    saveSettings({ logIntervalPreset: settingsLogIntervalPreset.value });
-  });
-}
-
 if (settingsBackupsPageSize) {
   settingsBackupsPageSize.addEventListener('change', () => {
     if (backupsPageSize) {
@@ -9578,36 +9868,6 @@ if (logIntervalPreset) {
   });
 }
 
-if (settingsLogAutoRefresh) {
-  settingsLogAutoRefresh.addEventListener('change', (event) => {
-    if (logAutoRefresh) {
-      logAutoRefresh.checked = event.target.checked;
-    }
-    saveSettings({ logAutoRefresh: event.target.checked });
-    setLogAutoRefresh(true);
-  });
-}
-
-if (settingsLogIntervalPreset) {
-  settingsLogIntervalPreset.addEventListener('change', () => {
-    if (logIntervalPreset) {
-      logIntervalPreset.value = settingsLogIntervalPreset.value;
-      updateInterval();
-      saveSettings({ logIntervalPreset: settingsLogIntervalPreset.value });
-    }
-  });
-}
-
-if (settingsLogLines) {
-  settingsLogLines.addEventListener('change', (event) => {
-    const value = Number.parseInt(event.target.value, 10) || 10;
-    if (logLines) {
-      logLines.value = value;
-      saveSettings({ logLines: value });
-    }
-  });
-}
-
 if (logLines) {
   logLines.addEventListener('change', (event) => {
     const value = Number.parseInt(event.target.value, 10) || 10;
@@ -9619,6 +9879,13 @@ if (logLines) {
 
 if (logLevelFilter) {
   logLevelFilter.addEventListener('change', () => {
+    if (currentPage === 'logs') {
+      state.logEntries = [];
+      renderLogTable();
+      closeMihomoPageLogsSocket();
+      connectMihomoPageLogsStream();
+      return;
+    }
     renderLogTable();
   });
 }
@@ -9641,8 +9908,7 @@ if (cleanBtn) {
       return;
     }
 
-    const selected = document.querySelector('input[name="cleanMode"]:checked');
-    const mode = selected ? selected.value : 'all';
+    const mode = cleanModeSelect ? String(cleanModeSelect.value || 'all') : 'all';
     const response = await runCommand('clean', ['--mode', mode]);
     if (response.ok) {
       showToast(t('labels.cleanDone'));
@@ -9882,6 +10148,7 @@ async function initApp() {
     showToast(t('labels.bridgeMissing'), 'error');
     return;
   }
+  loadAppInfo();
   if (state.settings && state.settings.panelChoice && !state.autoPanelInstalled) {
     const preset = PANEL_PRESETS[state.settings.panelChoice];
     if (preset) {
@@ -9941,6 +10208,7 @@ import {
   fetchProviderSubscriptionOverview,
   fetchRulesOverviewBundle,
   fetchTunConfigFromController,
+  fetchMihomoVersion,
   reloadMihomoConfig,
   reloadMihomoCore,
   resolveMihomoApiSourceFromState,

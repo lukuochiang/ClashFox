@@ -96,7 +96,10 @@ function buildHeaderRenderSignature(value = null) {
 
 function buildMainListRenderSignature(value = null) {
   try {
-    return JSON.stringify(Array.isArray(value && value.items) ? value.items : []);
+    return JSON.stringify({
+      items: Array.isArray(value && value.items) ? value.items : [],
+      outboundProxyTree: value && value.outboundProxyTree ? value.outboundProxyTree : null,
+    });
   } catch {
     return '';
   }
@@ -199,6 +202,7 @@ const ICON_SVGS = {
   networkTakeover: '<svg viewBox="0 0 24 24"><path d="M4 10a12 12 0 0 1 16 0"/><path d="M7 13a8 8 0 0 1 10 0"/><path d="M10 16a4 4 0 0 1 4 0"/><circle cx="12" cy="19" r="1"/></svg>',
   outboundMode: '<svg viewBox="0 0 24 24"><path d="M4 8h11"/><path d="M12 5l3 3-3 3"/><path d="M20 16H9"/><path d="M12 13l-3 3 3 3"/></svg>',
   dashboard: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8 14.5a4 4 0 0 1 8 0"/><path d="M12 12l3-3"/><circle cx="9" cy="10" r="1" class="menu-icon-fill"/></svg>',
+  panel: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2" fill="rgba(86,156,255,0.18)" stroke="#5ea8ff" stroke-width="1.4"/><path d="M4 10h16" stroke="#f2b663" stroke-width="1.4"/><path d="M8 14h7" stroke="#67d39c" stroke-width="1.6" stroke-linecap="round"/><path d="M8 17h5" stroke="#c78bff" stroke-width="1.6" stroke-linecap="round"/></svg>',
   trackers: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6"/><path d="M3.8 12h16.4"/><path d="M12 3.4c2.7 2.2 2.7 15 0 17.2"/><path d="M12 3.4c-2.7 2.2-2.7 15 0 17.2"/><path d="M6.2 7.1c1.7 1 3.7 1.6 5.8 1.6s4.1-.6 5.8-1.6"/><path d="M6.2 16.9c1.7-1 3.7-1.6 5.8-1.6s4.1.6 5.8 1.6"/></svg>',
   foxboard: '<svg viewBox="0 0 24 24"><path d="M4 13.4a8 8 0 0 1 16 0"/><path d="M12 13l4-4"/><circle cx="12" cy="13" r="1.2"/><path d="M4 15.6h16"/><path d="M5 18h14"/></svg>',
   kernelManager: '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M3 10h2M3 14h2M19 10h2M19 14h2M10 3v2M14 3v2M10 19v2M14 19v2"/></svg>',
@@ -963,7 +967,90 @@ function makeLeading(item) {
   return { check, leading };
 }
 
+function buildOutboundProxyTreeItems(payload = null) {
+  const providers = payload && Array.isArray(payload.providers) ? payload.providers : [];
+  if (!providers.length) {
+    return [];
+  }
+  const items = [{ type: 'separator' }];
+  providers.forEach((provider) => {
+    items.push({
+      type: 'provider-link',
+      label: provider.name || '-',
+      currentProxy: provider.currentProxy || '',
+      chart: Array.isArray(provider.chart) ? provider.chart : [],
+      submenu: provider.submenuKey || '',
+      rightText: String(Number(provider.proxyCount || 0)),
+      enabled: true,
+    });
+  });
+  return items;
+}
+
 function makeRow(item) {
+  if (item.type === 'section') {
+    const row = document.createElement('div');
+    row.className = 'menu-row-section';
+    row.textContent = item.label || '';
+    return row;
+  }
+
+  if (item.type === 'provider-link') {
+    const row = document.createElement('div');
+    row.className = 'menu-row clickable menu-row-provider-link';
+    if (item.submenu) {
+      row.dataset.submenuKey = String(item.submenu);
+    }
+    const spacer = document.createElement('div');
+    spacer.className = 'menu-leading';
+    row.appendChild(spacer);
+    const content = document.createElement('div');
+    content.className = 'menu-provider-link-content';
+    const title = document.createElement('div');
+    title.className = 'menu-provider-link-title';
+    title.textContent = item.label || '';
+    content.appendChild(title);
+    if (item.currentProxy) {
+      const subtitle = document.createElement('div');
+      subtitle.className = 'menu-provider-link-subtitle';
+      subtitle.textContent = String(item.currentProxy || '');
+      content.appendChild(subtitle);
+    }
+    if (Array.isArray(item.chart) && item.chart.length) {
+      const chart = document.createElement('div');
+      chart.className = 'menu-provider-link-chart';
+      item.chart.forEach((segment) => {
+        const bar = document.createElement('span');
+        bar.className = `menu-provider-link-bar is-${String(segment && segment.status ? segment.status : 'unknown')}`;
+        chart.appendChild(bar);
+      });
+      content.appendChild(chart);
+    }
+    row.appendChild(content);
+    if (item.rightText) {
+      const right = document.createElement('div');
+      right.className = 'menu-right';
+      right.textContent = String(item.rightText || '');
+      row.appendChild(right);
+    }
+    const arrow = document.createElement('div');
+    arrow.className = 'menu-arrow';
+    arrow.textContent = '›';
+    row.appendChild(arrow);
+    row.addEventListener('mouseenter', () => {
+      openSubmenu(item.submenu, row);
+    });
+    row.addEventListener('click', (event) => {
+      if (Date.now() < blockClickUntil) {
+        event.preventDefault();
+        return;
+      }
+      event.preventDefault();
+      openSubmenu(item.submenu, row);
+    });
+    return row;
+  }
+
   if (item.type === 'separator') {
     const sep = document.createElement('div');
     sep.className = 'menu-row-sep';
@@ -1185,6 +1272,14 @@ function renderMainList() {
   listEl.innerHTML = '';
   for (const item of items) {
     listEl.appendChild(makeRow(item));
+    if (item && item.submenu === 'outbound') {
+      const extraItems = buildOutboundProxyTreeItems(menuData && menuData.outboundProxyTree ? menuData.outboundProxyTree : null);
+      if (extraItems.length) {
+        extraItems.forEach((extraItem) => {
+          listEl.appendChild(makeRow(extraItem));
+        });
+      }
+    }
   }
   scheduleGeometrySync();
 }
@@ -1376,16 +1471,9 @@ async function init() {
       media.addListener(handleThemeChange);
     }
   }
-  if (providerTrafficEl) {
-    providerTrafficEl.addEventListener('mouseenter', () => {
-      providerTrafficState.paused = true;
-    });
-    providerTrafficEl.addEventListener('mouseleave', () => {
-      providerTrafficState.paused = false;
-    });
+  if (chartEl) {
+    startTrafficTimers();
   }
-
-  startTrafficTimers();
 }
 
 window.addEventListener('keydown', (event) => {
