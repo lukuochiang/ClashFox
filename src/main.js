@@ -9557,6 +9557,20 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.handle('clashfox:getSystemLocale', () => {
+    try {
+      return {
+        ok: true,
+        locale: String((app.getLocale && app.getLocale()) || '').trim() || 'en',
+      };
+    } catch {
+      return {
+        ok: true,
+        locale: 'en',
+      };
+    }
+  });
+
   ipcMain.handle('clashfox:writeSettings', async (_event, data) => {
     try {
       ensureAppDirs();

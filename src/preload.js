@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('clashfox', {
   setThemeSource: (source) => ipcRenderer.invoke('clashfox:setThemeSource', source),
   readSettings: () => ipcRenderer.invoke('clashfox:readSettings'),
   writeSettings: (data) => ipcRenderer.invoke('clashfox:writeSettings', data),
+  getSystemLocale: () => ipcRenderer.invoke('clashfox:getSystemLocale'),
   getUserDataPath: () => ipcRenderer.invoke('clashfox:userDataPath'),
   revealInFinder: (targetPath) => ipcRenderer.invoke('clashfox:revealInFinder', targetPath),
   clearUiStorage: () => ipcRenderer.invoke('clashfox:clearUiStorage'),

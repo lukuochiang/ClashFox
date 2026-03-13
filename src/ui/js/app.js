@@ -2,6 +2,7 @@ const appLocaleUtils = globalThis.CLASHFOX_LOCALE_UTILS || {};
 const detectSystemLocale = typeof appLocaleUtils.detectSystemLocale === 'function'
   ? appLocaleUtils.detectSystemLocale
   : (() => 'en');
+let systemLocaleFromMain = '';
 
 // apply last-used theme immediately to avoid flicker on reload
 // this will be overwritten later when settings are applied
@@ -2459,7 +2460,33 @@ function formatAppUpdateChannelText(key, fallback, channel, version = '') {
 }
 
 function getAutoLanguage() {
-  return detectSystemLocale();
+  return detectSystemLocale(systemLocaleFromMain || '');
+}
+
+async function refreshSystemLocaleFromMain(forceApply = false) {
+  if (!window.clashfox || typeof window.clashfox.getSystemLocale !== 'function') {
+    return false;
+  }
+  try {
+    const response = await window.clashfox.getSystemLocale();
+    const nextLocale = response && response.ok
+      ? String(response.locale || '').trim()
+      : '';
+    if (!nextLocale) {
+      return false;
+    }
+    const changed = nextLocale !== systemLocaleFromMain;
+    systemLocaleFromMain = nextLocale;
+    if ((changed || forceApply) && state.lang === 'auto') {
+      applyI18n();
+      if (typeof refreshPageView === 'function') {
+        refreshPageView();
+      }
+    }
+    return changed;
+  } catch {
+    return false;
+  }
 }
 
 function applyI18n() {
@@ -2940,6 +2967,9 @@ function setLanguage(lang, persist = true, refreshStatus = true) {
     saveSettings({ lang });
   }
   applyI18n();
+  if (lang === 'auto') {
+    refreshSystemLocaleFromMain(true).catch(() => {});
+  }
   if (refreshStatus) {
     loadStatus();
   }
@@ -10291,6 +10321,7 @@ async function initApp() {
   preloadPageTemplates(targetPage || currentPage).catch(() => {});
   await loadStaticConfigs();
   await syncSettingsFromFile();
+  await refreshSystemLocaleFromMain();
   applySettings(readSettings());
   if (state.themeSetting === 'auto' && prefersDarkQuery) {
     applySystemTheme(prefersDarkQuery.matches);

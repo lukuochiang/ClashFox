@@ -7,6 +7,7 @@ const resolveLocaleFromSettings = typeof foxboardLocaleUtils.resolveLocaleFromSe
   : (() => 'en');
 
 let foxboardDebugMode = false;
+let systemLocaleFromMain = '';
 
 function foxboardLog(scope, message, payload = null, level = 'log') {
   return;
@@ -74,18 +75,46 @@ let currentTheme = 'auto';
 let unsubscribeSystemTheme = null;
 let unsubscribeSettingsUpdated = null;
 
+async function refreshSystemLocaleFromMain() {
+  if (!window.clashfox || typeof window.clashfox.getSystemLocale !== 'function') {
+    return false;
+  }
+  try {
+    const response = await window.clashfox.getSystemLocale();
+    if (!response || !response.ok) {
+      return false;
+    }
+    const locale = String(response.locale || '').trim();
+    if (!locale) {
+      return false;
+    }
+    const changed = locale !== systemLocaleFromMain;
+    systemLocaleFromMain = locale;
+    return changed;
+  } catch {
+    return false;
+  }
+}
+
+function resolveLocaleWithSystem(settings = {}) {
+  return resolveLocaleFromSettings(settings, {
+    systemLocale: systemLocaleFromMain || '',
+  });
+}
+
 async function syncSettings() {
   if (!window.clashfox || typeof window.clashfox.readSettings !== 'function') {
     return;
   }
   try {
+    await refreshSystemLocaleFromMain();
     const response = await window.clashfox.readSettings();
     const settings = unwrapSettingsPayload(response);
     const appearance = settings && typeof settings.appearance === 'object' ? settings.appearance : {};
     foxboardDebugMode = Boolean(settings && settings.debugMode);
     window.__clashfoxFoxboardDebug = foxboardDebugMode;
     currentTheme = String(settings.theme || appearance.theme || 'auto').trim().toLowerCase();
-    const locale = resolveLocaleFromSettings(settings);
+    const locale = resolveLocaleWithSystem(settings);
     foxboardLog('settings', 'sync completed', {
       theme: currentTheme,
       locale,
@@ -115,12 +144,12 @@ async function bootFoxboard() {
     }
     if (window.clashfox && typeof window.clashfox.onSettingsUpdated === 'function') {
       unsubscribeSettingsUpdated = window.clashfox.onSettingsUpdated((settings = {}) => {
-        try {
+        Promise.resolve(refreshSystemLocaleFromMain()).then(() => {
           const appearance = settings && typeof settings.appearance === 'object' ? settings.appearance : {};
           foxboardDebugMode = Boolean(settings && settings.debugMode);
           window.__clashfoxFoxboardDebug = foxboardDebugMode;
           currentTheme = String(settings.theme || appearance.theme || 'auto').trim().toLowerCase();
-          const locale = resolveLocaleFromSettings(settings);
+          const locale = resolveLocaleWithSystem(settings);
           foxboardLog('settings', 'event update received', {
             theme: currentTheme,
             locale,
@@ -131,9 +160,9 @@ async function bootFoxboard() {
             ? window.matchMedia('(prefers-color-scheme: dark)').matches
             : document.documentElement.getAttribute('data-theme') === 'night';
           applyTheme(currentTheme, dark);
-        } catch {
+        }).catch(() => {
           foxboardLog('settings', 'event update failed', null, 'warn');
-        }
+        });
       });
     }
     await initDashboardPanel();

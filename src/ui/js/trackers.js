@@ -7,10 +7,6 @@ const detectSystemLocale = typeof trackersLocaleUtils.detectSystemLocale === 'fu
 const normalizeLocaleCode = typeof trackersLocaleUtils.normalizeLocaleCode === 'function'
   ? trackersLocaleUtils.normalizeLocaleCode
   : (value => String(value || 'en').trim().toLowerCase() || 'en');
-const resolveLocaleFromSettings = typeof trackersLocaleUtils.resolveLocaleFromSettings === 'function'
-  ? trackersLocaleUtils.resolveLocaleFromSettings
-  : (() => 'en');
-
 let map = null;
 let localMarker = null;
 let pointsLayer = null;
@@ -32,6 +28,7 @@ let flowAnimationFrame = 0;
 let flowLastFrameAt = 0;
 let languagePreference = 'auto';
 let activeLanguage = 'en';
+let systemLocaleFromMain = '';
 let themePreference = 'auto';
 let lastSystemDark = window.matchMedia
   ? window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -192,15 +189,51 @@ function applyThemeMode(preference) {
   }
 }
 
+async function refreshSystemLocaleFromMain() {
+  if (!window.clashfox || typeof window.clashfox.getSystemLocale !== 'function') {
+    return false;
+  }
+  try {
+    const response = await window.clashfox.getSystemLocale();
+    if (!response || !response.ok) {
+      return false;
+    }
+    const locale = String(response.locale || '').trim();
+    if (!locale) {
+      return false;
+    }
+    const changed = locale !== systemLocaleFromMain;
+    systemLocaleFromMain = locale;
+    return changed;
+  } catch {
+    return false;
+  }
+}
+
+function readLanguagePreferenceFromSettings(settings = {}) {
+  const appearance = settings && typeof settings.appearance === 'object' ? settings.appearance : {};
+  const raw = String(
+    settings.lang
+    || settings.language
+    || settings.locale
+    || appearance.lang
+    || appearance.language
+    || appearance.locale
+    || 'auto',
+  ).trim().toLowerCase();
+  return raw || 'auto';
+}
+
 function syncLanguageFromPreference() {
   activeLanguage = languagePreference === 'auto'
-    ? detectSystemLocale()
+    ? detectSystemLocale(systemLocaleFromMain || '')
     : normalizeLocaleCode(languagePreference);
   document.documentElement.setAttribute('lang', activeLanguage);
   refreshLocalizedUi();
 }
 
 async function syncPreferencesFromSettings() {
+  await refreshSystemLocaleFromMain();
   if (!window.clashfox || typeof window.clashfox.readSettings !== 'function') {
     syncLanguageFromPreference();
     applyThemeMode(themePreference);
@@ -212,7 +245,7 @@ async function syncPreferencesFromSettings() {
       ? response.data
       : {};
     if (settings && Object.keys(settings).length) {
-      languagePreference = String(resolveLocaleFromSettings(settings) || 'auto');
+      languagePreference = readLanguagePreferenceFromSettings(settings);
       themePreference = resolveThemePreference(settings);
     }
   } catch {
@@ -224,10 +257,17 @@ async function syncPreferencesFromSettings() {
 }
 
 function applySettingsPayload(settings = {}) {
-  languagePreference = String(resolveLocaleFromSettings(settings) || 'auto');
+  languagePreference = readLanguagePreferenceFromSettings(settings);
   themePreference = resolveThemePreference(settings);
-  syncLanguageFromPreference();
-  applyThemeMode(themePreference);
+  const applyNow = () => {
+    syncLanguageFromPreference();
+    applyThemeMode(themePreference);
+  };
+  if (languagePreference === 'auto') {
+    refreshSystemLocaleFromMain().finally(applyNow);
+    return;
+  }
+  applyNow();
 }
 
 function setStats(text) {
