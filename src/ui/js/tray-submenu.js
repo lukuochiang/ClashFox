@@ -17,7 +17,7 @@ let panelChartTotalTx = null;
 const CONNECTIVITY_REFRESH_MS = 1000;
 const SUBMENU_MIN_WIDTH = 170;
 const SUBMENU_MAX_WIDTH = 340;
-const SUBMENU_PANEL_MAX_WIDTH = 520;
+const SUBMENU_PANEL_WIDTH = 456;
 const NETWORK_TOGGLE_ACTIONS = new Set(['toggle-system-proxy', 'toggle-tun']);
 const pendingActionSet = new Set();
 const loadingVisibleSet = new Set();
@@ -337,11 +337,11 @@ function renderPanelTrafficChart() {
     }
   }
   barsEl.innerHTML = svg;
-  requestAnimationFrame(() => {
-    if (submenuKey === 'panel') {
+  if (submenuKey === 'panel') {
+    requestAnimationFrame(() => {
       resizeSubmenuToContent();
-    }
-  });
+    });
+  }
 }
 
 function applyPanelTrafficSnapshot(payload = {}) {
@@ -713,7 +713,11 @@ function applySubmenuWidthByContent() {
   if (!submenuRootEl) {
     return { width: SUBMENU_MIN_WIDTH, height: 0 };
   }
-  submenuRootEl.style.width = 'fit-content';
+  if (submenuKey === 'panel') {
+    submenuRootEl.style.width = `${SUBMENU_PANEL_WIDTH}px`;
+  } else {
+    submenuRootEl.style.width = 'fit-content';
+  }
   const measured = Math.ceil(
     Math.max(
       submenuRootEl.scrollWidth || 0,
@@ -721,8 +725,9 @@ function applySubmenuWidthByContent() {
       submenuListEl ? submenuListEl.scrollWidth || 0 : 0,
     ),
   );
-  const maxWidth = submenuKey === 'panel' ? SUBMENU_PANEL_MAX_WIDTH : SUBMENU_MAX_WIDTH;
-  const width = Math.max(SUBMENU_MIN_WIDTH, Math.min(measured, maxWidth));
+  const width = submenuKey === 'panel'
+    ? SUBMENU_PANEL_WIDTH
+    : Math.max(SUBMENU_MIN_WIDTH, Math.min(measured, SUBMENU_MAX_WIDTH));
   submenuRootEl.style.width = `${width}px`;
   const height = Math.ceil(
     Math.max(
@@ -763,9 +768,9 @@ function setSubmenu(payload) {
   ensureConnectivityRefresh();
   if (submenuKey === 'panel') {
     openPanelTrafficSocket().catch(() => {});
-    setTimeout(() => {
+    requestAnimationFrame(() => {
       renderPanelTrafficChart();
-    }, 0);
+    });
   } else {
     closePanelTrafficSocket();
   }

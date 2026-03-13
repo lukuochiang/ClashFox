@@ -4,7 +4,6 @@ const path = require('path');
 const https = require('https');
 const dns = require('dns');
 const net = require('net');
-const maxmind = require('maxmind');
 const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme, shell, Tray, session, clipboard, screen } = require('electron');
 const { spawn, spawnSync, execFile } = require('child_process');
 
@@ -228,6 +227,8 @@ let worldwideSelfGeoCache = {
 };
 let worldwideCityReader = null;
 let worldwideCountryReader = null;
+let maxmindModule = null;
+let maxmindModuleError = null;
 const dnsLookupAsync = dns.promises && dns.promises.lookup
   ? dns.promises.lookup.bind(dns.promises)
   : null;
@@ -5529,19 +5530,31 @@ function resolveCountryCentroid(countryCode = '') {
 }
 
 function getWorldwideReaders() {
+  if (!maxmindModule) {
+    if (maxmindModuleError) {
+      throw maxmindModuleError;
+    }
+    try {
+      // Load geo DB reader on demand so a packaging miss cannot crash app startup.
+      maxmindModule = require('maxmind');
+    } catch (error) {
+      maxmindModuleError = error || new Error('maxmind_load_failed');
+      throw maxmindModuleError;
+    }
+  }
   if (!worldwideCityReader) {
     const cityPath = resolveWorldwideMmdbPath('GeoLite2-City.mmdb');
     if (!cityPath) {
       throw new Error('city_mmdb_missing');
     }
-    worldwideCityReader = new maxmind.Reader(fs.readFileSync(cityPath));
+    worldwideCityReader = new maxmindModule.Reader(fs.readFileSync(cityPath));
   }
   if (!worldwideCountryReader) {
     const countryPath = resolveWorldwideMmdbPath('GeoLite2-Country.mmdb');
     if (!countryPath) {
       throw new Error('country_mmdb_missing');
     }
-    worldwideCountryReader = new maxmind.Reader(fs.readFileSync(countryPath));
+    worldwideCountryReader = new maxmindModule.Reader(fs.readFileSync(countryPath));
   }
   return {
     cityReader: worldwideCityReader,
@@ -7069,6 +7082,164 @@ function patchTrayMenuNetworkState({ systemProxyEnabled, tunEnabled } = {}) {
   });
 }
 
+function buildTrayProviderPayload({ providerTrafficResult, showProviderTraffic }) {
+  let providerTraffic = null;
+  let outboundProxyTree = null;
+  try {
+    const rawProviders = providerTrafficResult && providerTrafficResult.status === 'fulfilled'
+      ? providerTrafficResult.value
+      : null;
+    if (rawProviders && rawProviders.ok) {
+      if (showProviderTraffic) {
+        providerTraffic = buildProviderSubscriptionOverviewData(rawProviders.data || {});
+      }
+      outboundProxyTree = buildProviderProxyTreeData(rawProviders.data || {});
+    }
+  } catch {
+    providerTraffic = null;
+    outboundProxyTree = null;
+  }
+  return { providerTraffic, outboundProxyTree };
+}
+
+function buildTrayOutboundModeItems({ labels, currentOutboundMode }) {
+  return [
+    { type: 'action', label: labels.modeGlobalTitle || 'Global Proxy', action: 'mode-change', value: 'global', checked: currentOutboundMode === 'global', iconKey: 'modeGlobal' },
+    { type: 'action', label: labels.modeRuleTitle || 'Rule-Based Proxy', action: 'mode-change', value: 'rule', checked: currentOutboundMode === 'rule', iconKey: 'modeRule' },
+    { type: 'action', label: labels.modeDirectTitle || 'Direct Outbound', action: 'mode-change', value: 'direct', checked: currentOutboundMode === 'direct', iconKey: 'modeDirect' },
+  ];
+}
+
+function buildTrayMainMenuItems({
+  labels,
+  currentOutboundBadge,
+  dashboardEnabled,
+  trayFeatureFlags,
+}) {
+  const items = [
+    { type: 'action', label: labels.showMain, action: 'show-main', rightText: '⌘ 1', shortcut: 'Cmd+1', iconKey: 'showMain' },
+    { type: 'separator' },
+    { type: 'action', label: labels.networkTakeover || 'Network Takeover', submenu: 'network', iconKey: 'networkTakeover' },
+    { type: 'separator' },
+    { type: 'action', label: labels.outboundMode || 'Outbound Mode', rightText: `[${currentOutboundBadge}]`, submenu: 'outbound', iconKey: 'outboundMode' },
+    { type: 'separator' },
+    { type: 'action', label: labels.dashboard, action: 'open-dashboard', enabled: dashboardEnabled, rightText: '⌘ 2', shortcut: 'Cmd+2', iconKey: 'dashboard' },
+  ];
+  if (trayFeatureFlags.showTrackers) {
+    items.push({ type: 'separator' });
+    items.push({ type: 'action', label: labels.trackers || 'Trackers', action: 'open-worldwide', rightText: '⌘ 3', shortcut: 'Cmd+3', iconKey: 'trackers' });
+  }
+  if (trayFeatureFlags.showFoxboard) {
+    items.push({ type: 'separator' });
+    items.push({ type: 'action', label: 'Foxboard', action: 'open-foxboard', rightText: '⌘ 4', shortcut: 'Cmd+4', iconKey: 'foxboard' });
+  }
+  if (trayFeatureFlags.showKernelManager) {
+    items.push({ type: 'separator' });
+    items.push({ type: 'action', label: labels.kernelManager, submenu: 'kernel', iconKey: 'kernelManager' });
+  }
+  if (trayFeatureFlags.showDirectoryLocations) {
+    items.push({ type: 'separator' });
+    items.push({ type: 'action', label: labels.directoryLocations || 'Directory Locations', submenu: 'directory', iconKey: 'directory' });
+  }
+  items.push(
+    { type: 'separator' },
+    { type: 'action', label: getNavLabels().settings || 'Settings', action: 'open-settings', rightText: '⌘ ,', shortcut: 'Cmd+,', iconKey: 'settings' },
+    { type: 'separator' },
+    { type: 'action', label: labels.checkUpdate || 'Check for Updates', action: 'check-update', iconKey: 'checkUpdate' },
+    { type: 'action', label: labels.quit, action: 'quit', rightText: '⌘ Q', shortcut: 'Cmd+Q', iconKey: 'quit' },
+  );
+  return items;
+}
+
+function buildTraySubmenuData({
+  labels,
+  outboundItems,
+  providerTraffic,
+  showProviderTraffic,
+  dashboardEnabled,
+  networkTakeoverEnabled,
+  tunEnabled,
+  tunAvailable,
+  networkTakeoverService,
+  connectivityQuality,
+  connectivityTone,
+  showCopyShellExportCommand,
+  outboundProviderSubmenus,
+}) {
+  const submenus = {
+    network: [
+      {
+        type: 'action',
+        label: labels.networkTakeover || 'Network Takeover',
+        action: 'toggle-system-proxy',
+        checked: networkTakeoverEnabled,
+        enabled: true,
+        rightText: networkTakeoverEnabled ? 'On' : 'Off',
+        iconKey: 'systemProxy',
+      },
+      {
+        type: 'action',
+        label: labels.tun || 'TUN',
+        action: 'toggle-tun',
+        checked: tunEnabled,
+        enabled: tunAvailable,
+        rightText: tunEnabled ? 'On' : 'Off',
+        iconKey: 'tun',
+      },
+      { type: 'separator' },
+      { type: 'action', label: `${labels.currentService || 'Current Service'}: ${networkTakeoverService || '-'}`, enabled: false, iconKey: 'currentService' },
+      { type: 'separator' },
+      {
+        type: 'action',
+        label: labels.connectivityQuality || 'Connectivity Quality',
+        rightBadge: {
+          text: connectivityQuality,
+          tone: connectivityTone,
+        },
+        enabled: false,
+        iconKey: 'connectivityQuality',
+      },
+    ],
+    outbound: [
+      outboundItems[0],
+      { type: 'separator' },
+      outboundItems[1],
+      { type: 'separator' },
+      outboundItems[2],
+    ],
+    panel: [
+      { type: 'panel-chart' },
+      ...(showProviderTraffic && providerTraffic && Array.isArray(providerTraffic.items) && providerTraffic.items.length
+        ? [{ type: 'panel-provider-traffic', payload: providerTraffic }]
+        : []),
+    ],
+    directory: [
+      { type: 'action', label: labels.userDirectory || 'User Directory', action: 'open-user-directory', iconKey: 'userDir' },
+      { type: 'separator' },
+      { type: 'action', label: labels.userConfigDirectory || 'Config Directory', action: 'open-config-directory', iconKey: 'configDir' },
+      { type: 'separator' },
+      { type: 'action', label: labels.workDirectory || 'Work Directory', action: 'open-work-directory', iconKey: 'workDir' },
+      { type: 'separator' },
+      { type: 'action', label: labels.logDirectory || 'Log Directory', action: 'open-log-directory', iconKey: 'logDir' },
+    ],
+    kernel: [
+      { type: 'action', label: labels.startKernel, action: 'kernel-start', enabled: !dashboardEnabled, iconKey: 'kernelStart' },
+      { type: 'separator' },
+      { type: 'action', label: labels.stopKernel, action: 'kernel-stop', enabled: dashboardEnabled, iconKey: 'kernelStop' },
+      { type: 'separator' },
+      { type: 'action', label: labels.restartKernel, action: 'kernel-restart', enabled: dashboardEnabled, iconKey: 'kernelRestart' },
+    ],
+    ...outboundProviderSubmenus,
+  };
+  if (showCopyShellExportCommand) {
+    submenus.network.push(
+      { type: 'separator' },
+      { type: 'action', label: labels.copyShellExportCommand || 'Copy Shell Export Command', action: 'copy-shell-export', rightText: '⌘ C', iconKey: 'copyShellExport' },
+    );
+  }
+  return submenus;
+}
+
 async function buildTrayMenuOnce() {
   if (process.platform !== 'darwin') {
     return;
@@ -7226,49 +7397,32 @@ async function buildTrayMenuOnce() {
   const trayStatusState = dashboardEnabled ? 'running' : 'stopped';
   const trayStatusLabel = dashboardEnabled ? runningLabel : stoppedLabel;
 
-  const showKernelManager = traySettings ? traySettings.kernelManagerEnabled !== false : true;
-  const showDirectoryLocations = traySettings ? traySettings.directoryLocationsEnabled !== false : true;
-  const showTrackers = traySettings ? traySettings.trackersEnabled !== false : true;
-  const showFoxboard = traySettings ? traySettings.foxboardEnabled !== false : true;
-  const showCopyShellExportCommand = traySettings ? traySettings.copyShellExportCommandEnabled !== false : true;
-  let providerTraffic = null;
-  let outboundProxyTree = null;
-  if (showProviderTraffic) {
-    try {
-      const rawProviders = providerTrafficResult.status === 'fulfilled' ? providerTrafficResult.value : null;
-      if (rawProviders && rawProviders.ok) {
-        providerTraffic = buildProviderSubscriptionOverviewData(rawProviders.data || {});
-      }
-    } catch {
-      providerTraffic = null;
-    }
-  }
-  try {
-    const rawProviders = providerTrafficResult.status === 'fulfilled' ? providerTrafficResult.value : null;
-    if (rawProviders && rawProviders.ok) {
-      outboundProxyTree = buildProviderProxyTreeData(rawProviders.data || {});
-    }
-  } catch {
-    outboundProxyTree = null;
-  }
-  const outboundItems = [
-    { type: 'action', label: labels.modeGlobalTitle || 'Global Proxy', action: 'mode-change', value: 'global', checked: currentOutboundMode === 'global', iconKey: 'modeGlobal' },
-    { type: 'action', label: labels.modeRuleTitle || 'Rule-Based Proxy', action: 'mode-change', value: 'rule', checked: currentOutboundMode === 'rule', iconKey: 'modeRule' },
-    { type: 'action', label: labels.modeDirectTitle || 'Direct Outbound', action: 'mode-change', value: 'direct', checked: currentOutboundMode === 'direct', iconKey: 'modeDirect' },
-  ];
-
-  const items = [
-    { type: 'action', label: labels.showMain, action: 'show-main', rightText: '⌘ 1', shortcut: 'Cmd+1', iconKey: 'showMain' },
-    { type: 'separator' },
-    { type: 'action', label: labels.networkTakeover || 'Network Takeover', submenu: 'network', iconKey: 'networkTakeover' },
-    { type: 'separator' },
-    { type: 'action', label: labels.outboundMode || 'Outbound Mode', rightText: `[${currentOutboundBadge}]`, submenu: 'outbound', iconKey: 'outboundMode' },
-  ];
+  const trayFeatureFlags = {
+    showKernelManager: traySettings ? traySettings.kernelManagerEnabled !== false : true,
+    showDirectoryLocations: traySettings ? traySettings.directoryLocationsEnabled !== false : true,
+    showTrackers: traySettings ? traySettings.trackersEnabled !== false : true,
+    showFoxboard: traySettings ? traySettings.foxboardEnabled !== false : true,
+    showCopyShellExportCommand: traySettings ? traySettings.copyShellExportCommandEnabled !== false : true,
+  };
+  const trayProviderPayload = buildTrayProviderPayload({
+    providerTrafficResult,
+    showProviderTraffic,
+  });
+  const outboundItems = buildTrayOutboundModeItems({
+    labels,
+    currentOutboundMode,
+  });
+  const items = buildTrayMainMenuItems({
+    labels,
+    currentOutboundBadge,
+    dashboardEnabled,
+    trayFeatureFlags,
+  });
   const showOutboundProxyGroups = false;
   let outboundProxyCard = null;
   const outboundProviderSubmenus = {};
-  if (showOutboundProxyGroups && outboundProxyTree && Array.isArray(outboundProxyTree.groups) && outboundProxyTree.groups.length) {
-    const compatibleGroup = outboundProxyTree.groups.find((group) => String(group.vehicleType || '').trim() === 'COMPATIBLE');
+  if (showOutboundProxyGroups && trayProviderPayload.outboundProxyTree && Array.isArray(trayProviderPayload.outboundProxyTree.groups) && trayProviderPayload.outboundProxyTree.groups.length) {
+    const compatibleGroup = trayProviderPayload.outboundProxyTree.groups.find((group) => String(group.vehicleType || '').trim() === 'COMPATIBLE');
     const providers = compatibleGroup && Array.isArray(compatibleGroup.providers) ? compatibleGroup.providers : [];
     if (providers.length) {
       outboundProxyCard = {
@@ -7315,34 +7469,6 @@ async function buildTrayMenuOnce() {
       });
     }
   }
-  items.push(
-    { type: 'separator' },
-    { type: 'action', label: labels.dashboard, action: 'open-dashboard', enabled: dashboardEnabled, rightText: '⌘ 2', shortcut: 'Cmd+2', iconKey: 'dashboard' },
-  );
-  if (showTrackers) {
-    items.push({ type: 'separator' });
-    items.push({ type: 'action', label: labels.trackers || 'Trackers', action: 'open-worldwide', rightText: '⌘ 3', shortcut: 'Cmd+3', iconKey: 'trackers' });
-  }
-  if (showFoxboard) {
-    items.push({ type: 'separator' });
-    items.push({ type: 'action', label: 'Foxboard', action: 'open-foxboard', rightText: '⌘ 4', shortcut: 'Cmd+4', iconKey: 'foxboard' });
-  }
-  if (showKernelManager) {
-    items.push({ type: 'separator' });
-    items.push({ type: 'action', label: labels.kernelManager, submenu: 'kernel', iconKey: 'kernelManager' });
-  }
-  if (showDirectoryLocations) {
-    items.push({ type: 'separator' });
-    items.push({ type: 'action', label: labels.directoryLocations || 'Directory Locations', submenu: 'directory', iconKey: 'directory' });
-  }
-  items.push(
-    { type: 'separator' },
-    { type: 'action', label: getNavLabels().settings || 'Settings', action: 'open-settings', rightText: '⌘ ,', shortcut: 'Cmd+,', iconKey: 'settings' },
-    { type: 'separator' },
-    { type: 'action', label: labels.checkUpdate || 'Check for Updates', action: 'check-update', iconKey: 'checkUpdate' },
-    { type: 'action', label: labels.quit, action: 'quit', rightText: '⌘ Q', shortcut: 'Cmd+Q', iconKey: 'quit' },
-  );
-
   const nextMenuData = {
     header: {
       title: app.getName(),
@@ -7359,81 +7485,25 @@ async function buildTrayMenuOnce() {
       currentOutboundMode,
       submenuSide: 'right',
     },
-    providerTraffic: showProviderTraffic ? providerTraffic : null,
+    providerTraffic: trayProviderPayload.providerTraffic,
     outboundProxyTree: outboundProxyCard,
     items,
-    submenus: {
-      network: [
-        {
-          type: 'action',
-          label: labels.networkTakeover || 'Network Takeover',
-          action: 'toggle-system-proxy',
-          checked: networkTakeoverEnabled,
-          enabled: true,
-          rightText: networkTakeoverEnabled ? 'On' : 'Off',
-          iconKey: 'systemProxy',
-        },
-        {
-          type: 'action',
-          label: labels.tun || 'TUN',
-          action: 'toggle-tun',
-          checked: tunEnabled,
-          enabled: tunAvailable,
-          rightText: tunEnabled ? 'On' : 'Off',
-          iconKey: 'tun',
-        },
-        { type: 'separator' },
-        { type: 'action', label: `${labels.currentService || 'Current Service'}: ${networkTakeoverService || '-'}`, enabled: false, iconKey: 'currentService' },
-        { type: 'separator' },
-        {
-          type: 'action',
-          label: labels.connectivityQuality || 'Connectivity Quality',
-          rightBadge: {
-            text: connectivityQuality,
-            tone: connectivityTone,
-          },
-          enabled: false,
-          iconKey: 'connectivityQuality',
-        },
-      ],
-      outbound: [
-        outboundItems[0],
-        { type: 'separator' },
-        outboundItems[1],
-        { type: 'separator' },
-        outboundItems[2],
-      ],
-      panel: [
-        { type: 'panel-chart' },
-        ...(showProviderTraffic && providerTraffic && Array.isArray(providerTraffic.items) && providerTraffic.items.length
-          ? [{ type: 'panel-provider-traffic', payload: providerTraffic }]
-          : []),
-      ],
-      directory: [
-        { type: 'action', label: labels.userDirectory || 'User Directory', action: 'open-user-directory', iconKey: 'userDir' },
-        { type: 'separator' },
-        { type: 'action', label: labels.userConfigDirectory || 'Config Directory', action: 'open-config-directory', iconKey: 'configDir' },
-        { type: 'separator' },
-        { type: 'action', label: labels.workDirectory || 'Work Directory', action: 'open-work-directory', iconKey: 'workDir' },
-        { type: 'separator' },
-        { type: 'action', label: labels.logDirectory || 'Log Directory', action: 'open-log-directory', iconKey: 'logDir' },
-      ],
-      kernel: [
-        { type: 'action', label: labels.startKernel, action: 'kernel-start', enabled: !dashboardEnabled, iconKey: 'kernelStart' },
-        { type: 'separator' },
-        { type: 'action', label: labels.stopKernel, action: 'kernel-stop', enabled: dashboardEnabled, iconKey: 'kernelStop' },
-        { type: 'separator' },
-        { type: 'action', label: labels.restartKernel, action: 'kernel-restart', enabled: dashboardEnabled, iconKey: 'kernelRestart' },
-      ],
-      ...outboundProviderSubmenus,
-    },
+    submenus: buildTraySubmenuData({
+      labels,
+      outboundItems,
+      providerTraffic: trayProviderPayload.providerTraffic,
+      showProviderTraffic,
+      dashboardEnabled,
+      networkTakeoverEnabled,
+      tunEnabled,
+      tunAvailable,
+      networkTakeoverService,
+      connectivityQuality,
+      connectivityTone,
+      showCopyShellExportCommand: trayFeatureFlags.showCopyShellExportCommand,
+      outboundProviderSubmenus,
+    }),
   };
-  if (showCopyShellExportCommand) {
-    nextMenuData.submenus.network.push(
-      { type: 'separator' },
-      { type: 'action', label: labels.copyShellExportCommand || 'Copy Shell Export Command', action: 'copy-shell-export', rightText: '⌘ C', iconKey: 'copyShellExport' },
-    );
-  }
   const nextSignature = buildTrayMenuDataSignature(nextMenuData);
   const changed = nextSignature !== trayMenuDataSignature;
   trayMenuData = nextMenuData;
@@ -7441,11 +7511,11 @@ async function buildTrayMenuOnce() {
   trayMenuLastBuiltAt = Date.now();
   guiMainLog('tray', 'build completed', {
     items: Array.isArray(items) ? items.length : 0,
-    showTrackers,
-    showFoxboard,
+    showTrackers: trayFeatureFlags.showTrackers,
+    showFoxboard: trayFeatureFlags.showFoxboard,
     showProviderTraffic,
-    providerCount: providerTraffic && Array.isArray(providerTraffic.items)
-      ? providerTraffic.items.length
+    providerCount: trayProviderPayload.providerTraffic && Array.isArray(trayProviderPayload.providerTraffic.items)
+      ? trayProviderPayload.providerTraffic.items.length
       : 0,
     dashboardEnabled,
     networkTakeoverEnabled,
@@ -9590,6 +9660,7 @@ app.whenReady().then(() => {
         name: app.getName(),
         version: app.getVersion(),
         buildNumber: getBuildNumber(),
+        isDev: !app.isPackaged,
       },
     };
   });

@@ -1,7 +1,10 @@
 #!/bin/bash
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMMON_LIB="$SCRIPT_DIR/lib/clashfox_script_common.sh"
+COMMON_LIB="$SCRIPT_DIR/clashfox_script_common.sh"
+if [ ! -f "$COMMON_LIB" ]; then
+    COMMON_LIB="$(cd "$SCRIPT_DIR/.." && pwd)/lib/clashfox_script_common.sh"
+fi
 if [ -f "$COMMON_LIB" ]; then
     # shellcheck source=/dev/null
     . "$COMMON_LIB"

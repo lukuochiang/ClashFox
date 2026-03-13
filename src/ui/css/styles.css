@@ -1678,6 +1678,18 @@ body[data-page="help"] .help-stack .card {
   margin-bottom: 0;
 }
 
+/* Align help card content to the same start line as iconized titles. */
+body[data-page="help"] .help-stack .card > :not(h3):not(.card-header-row) {
+  margin-left: 24px;
+}
+
+body[data-page="help"] .help-stack .card > .help-list {
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-left: 0;
+  list-style-position: inside;
+}
+
 .help-about-card {
   display: grid;
   gap: 14px;
@@ -1736,7 +1748,7 @@ body[data-page="help"] .help-stack .card {
 .help-about-item {
   display: grid;
   gap: 6px;
-  padding: 12px 14px;
+  padding: 12px 2px;
   border-radius: 14px;
   background: color-mix(in srgb, var(--card) 78%, var(--accent) 22%);
   border: 1px solid color-mix(in srgb, var(--line) 76%, var(--accent) 24%);
@@ -5562,7 +5574,8 @@ body[data-page="logs"] .logs-clean-action {
 
 .help-intro-card .help-list {
   margin: 0;
-  padding-left: 18px;
+  padding-left: 0;
+  list-style-position: inside;
   line-height: 1.7;
 }
 

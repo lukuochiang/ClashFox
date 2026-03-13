@@ -1,7 +1,7 @@
 {
   "name": "ClashFox",
   "version": "0.4.6",
-  "buildNumber": 1,
+  "buildNumber": 3,
   "description": "ClashFox GUI for Mihomo",
   "license": "GPL-3.0",
   "author": "Kuochiang Lu <lukuochiang@gmail.com> (https://github.com/lukuochiang/ClashFox)",
@@ -11,6 +11,10 @@
     "start": "electron .",
     "dev": "node static/scripts/bump-version.js && node -e 'const p=require(\"./package.json\"); console.log(`> ClashFox@${p.version} dev (buildNumber: ${p.buildNumber})`)' && CLASHFOX_DEV=1 electron .",
     "build:mac": "node static/scripts/build-mac.js",
+    "build:mac:alpha": "node static/scripts/build-mac.js --channel alpha",
+    "build:mac:beta": "node static/scripts/build-mac.js --channel beta",
+    "build:mac:rc": "node static/scripts/build-mac.js --channel rc",
+    "build:mac:stable": "node static/scripts/build-mac.js --channel stable",
     "clean:mac": "node static/scripts/clean-dist-mac.js"
   },
   "devDependencies": {
@@ -33,7 +37,6 @@
       "!static/scripts",
       "!static/scripts/**/*",
       "!**/dist/**",
-      "!**/node_modules/**",
       "!**/.DS_Store"
     ],
     "extraResources": [
@@ -115,6 +118,8 @@
     }
   },
   "dependencies": {
-    "maxmind": "^4.3.24"
+    "maxmind": "^4.3.24",
+    "mmdb-lib": "^2.1.1",
+    "tiny-lru": "^11.2.11"
   }
 }

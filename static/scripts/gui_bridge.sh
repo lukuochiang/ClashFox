@@ -1,8 +1,15 @@
 #!/bin/bash
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-SCRIPT_PATH="$ROOT_DIR/static/scripts/lib/clashfox_mihomo_toolkit.sh"
-COMMON_LIB="$ROOT_DIR/static/scripts/lib/clashfox_script_common.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+SCRIPT_PATH="$SCRIPT_DIR/lib/clashfox_mihomo_toolkit.sh"
+COMMON_LIB="$SCRIPT_DIR/lib/clashfox_script_common.sh"
+
+# Backward-compatible fallback for older development layouts.
+if [ ! -f "$SCRIPT_PATH" ] || [ ! -f "$COMMON_LIB" ]; then
+    SCRIPT_PATH="$ROOT_DIR/static/scripts/lib/clashfox_mihomo_toolkit.sh"
+    COMMON_LIB="$ROOT_DIR/static/scripts/lib/clashfox_script_common.sh"
+fi
 
 if [ "$(uname -s)" != "Darwin" ]; then
     printf '{"ok":false,"error":"unsupported_os"}\n'

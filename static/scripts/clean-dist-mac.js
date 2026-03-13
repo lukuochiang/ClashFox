@@ -12,9 +12,11 @@ if (!fs.existsSync(distDir)) {
 
 let version = 'unknown';
 try {
+  const releaseVersion = String(process.env.CLASHFOX_RELEASE_VERSION || '').trim();
   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-  if (pkg && pkg.version) {
-    version = String("v" + pkg.version);// prepend 'v' to match the naming convention, e.g., 'v1.2.3'
+  const resolvedVersion = releaseVersion || (pkg && pkg.version ? String(pkg.version) : '');
+  if (resolvedVersion) {
+    version = String(`v${resolvedVersion}`);
   }
 } catch {
   // ignore

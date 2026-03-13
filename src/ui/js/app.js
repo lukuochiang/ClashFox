@@ -1972,6 +1972,8 @@ let helperLogsPath = document.getElementById('helperLogsPath');
 let helperVersionText = document.getElementById('helperVersionText');
 let helpAboutVersion = document.getElementById('helpAboutVersion');
 let helpAboutBuild = document.getElementById('helpAboutBuild');
+let appInfoCache = null;
+let appInfoPromise = null;
 let helpAboutStatus = document.getElementById('helpAboutStatus');
 let helpCheckAppUpdateBtn = document.getElementById('helpCheckAppUpdateBtn');
 let helpCheckKernelUpdateBtn = document.getElementById('helpCheckKernelUpdateBtn');
@@ -2204,6 +2206,8 @@ const state = {
   topologyLinkSignatures: {},
   topologyEvents: [],
   topologyHoverKey: '',
+  providerSubscriptionCachePayload: null,
+  rulesOverviewCachePayload: null,
   overviewLatencySnapshot: {
     internet: '',
     dns: '',
@@ -2297,7 +2301,10 @@ function hydrateOverviewTrafficFromCache() {
 }
 
 function readOverviewProviderSubscriptionCache() {
-  return null;
+  return state.providerSubscriptionCachePayload
+    && typeof state.providerSubscriptionCachePayload === 'object'
+    ? state.providerSubscriptionCachePayload
+    : null;
 }
 
 function writeOverviewProviderSubscriptionCache(payload = {}) {
@@ -2305,15 +2312,24 @@ function writeOverviewProviderSubscriptionCache(payload = {}) {
 }
 
 function cacheOverviewProviderSubscription(payload = null) {
-  void payload;
+  state.providerSubscriptionCachePayload = payload && typeof payload === 'object'
+    ? JSON.parse(JSON.stringify(payload))
+    : null;
 }
 
 function hydrateOverviewProviderSubscriptionFromCache() {
-  return;
+  const cached = readOverviewProviderSubscriptionCache();
+  if (!cached) {
+    return;
+  }
+  renderProviderSubscriptionOverview(cached);
 }
 
 function readOverviewRulesCardCache() {
-  return null;
+  return state.rulesOverviewCachePayload
+    && typeof state.rulesOverviewCachePayload === 'object'
+    ? state.rulesOverviewCachePayload
+    : null;
 }
 
 function writeOverviewRulesCardCache(payload = {}) {
@@ -2321,11 +2337,30 @@ function writeOverviewRulesCardCache(payload = {}) {
 }
 
 function cacheOverviewRulesCard() {
-  return;
+  state.rulesOverviewCachePayload = JSON.parse(JSON.stringify({
+    rules: state.rulesOverviewPayload && typeof state.rulesOverviewPayload === 'object'
+      ? state.rulesOverviewPayload
+      : null,
+    providers: state.ruleProvidersOverviewPayload && typeof state.ruleProvidersOverviewPayload === 'object'
+      ? state.ruleProvidersOverviewPayload
+      : null,
+    view: state.rulesOverviewView === 'providers' ? 'providers' : 'rules',
+  }));
 }
 
 function hydrateOverviewRulesCardFromCache() {
-  return;
+  const cached = readOverviewRulesCardCache();
+  if (!cached) {
+    return;
+  }
+  state.rulesOverviewPayload = cached.rules && typeof cached.rules === 'object'
+    ? cached.rules
+    : state.rulesOverviewPayload;
+  state.ruleProvidersOverviewPayload = cached.providers && typeof cached.providers === 'object'
+    ? cached.providers
+    : state.ruleProvidersOverviewPayload;
+  state.rulesOverviewView = cached.view === 'providers' ? 'providers' : 'rules';
+  renderRulesOverviewCard();
 }
 
 function clamp(value, min, max) {
@@ -2381,6 +2416,37 @@ function normalizeVersionForDisplay(raw = '') {
   }
   const match = text.match(/v?\d+\.\d+\.\d+/);
   return match ? String(match[0]).replace(/^v/i, '') : text;
+}
+
+function resolveAppReleaseChannel(version = '', prerelease = false) {
+  if (!prerelease) {
+    return 'stable';
+  }
+  const normalized = String(version || '').trim().toLowerCase();
+  if (/-rc(?:\.|$)/.test(normalized)) {
+    return 'rc';
+  }
+  if (/-beta(?:\.|$)/.test(normalized)) {
+    return 'beta';
+  }
+  if (/-alpha(?:\.|$)/.test(normalized)) {
+    return 'alpha';
+  }
+  return 'beta';
+}
+
+function getAppReleaseChannelLabel(channel = 'stable') {
+  const normalized = String(channel || 'stable').trim().toLowerCase();
+  if (normalized === 'alpha') return ti('help.channelAlpha', 'Alpha');
+  if (normalized === 'beta') return ti('help.channelBeta', 'Beta');
+  if (normalized === 'rc') return ti('help.channelRc', 'RC');
+  return ti('help.channelStable', 'Stable');
+}
+
+function formatAppUpdateChannelText(key, fallback, channel, version = '') {
+  return ti(key, fallback)
+    .replace('{channel}', getAppReleaseChannelLabel(channel))
+    .replace('{version}', String(version || '').trim());
 }
 
 function getAutoLanguage() {
@@ -4196,8 +4262,8 @@ function promptUpdateGuide({
   }
   updateGuideTitle.textContent = title || ti('help.appUpdateChoicesTitle', 'Update Options');
   updateGuideBody.textContent = body || ti('help.updateGuideHint', 'Choose a version channel to continue.');
-  updateGuideReleaseBtn.textContent = releaseLabel || ti('help.appUpdateReleaseAction', 'Update Release');
-  updateGuideAlphaBtn.textContent = alphaLabel || ti('help.appUpdateAlphaAction', 'Update to Alpha');
+  updateGuideReleaseBtn.textContent = releaseLabel || formatAppUpdateChannelText('help.appUpdateOpenChannelAction', 'Open {channel}', 'stable');
+  updateGuideAlphaBtn.textContent = alphaLabel || formatAppUpdateChannelText('help.appUpdateOpenChannelAction', 'Open {channel}', 'alpha');
   updateGuideReleaseBtn.classList.toggle('is-hidden', !releaseLabel);
   updateGuideAlphaBtn.classList.toggle('is-hidden', !alphaLabel);
   updateGuideModal.classList.add('show');
@@ -4983,31 +5049,64 @@ async function cancelCommand() {
   return window.clashfox.cancelCommand();
 }
 
-async function loadAppInfo() {
+async function readAppInfo(force = false) {
   if (!window.clashfox || typeof window.clashfox.getAppInfo !== 'function') {
+    return null;
+  }
+  if (!force && appInfoCache) {
+    return appInfoCache;
+  }
+  if (!force && appInfoPromise) {
+    return appInfoPromise;
+  }
+  appInfoPromise = window.clashfox.getAppInfo()
+    .then((response) => {
+      if (response && response.ok && response.data) {
+        appInfoCache = response.data;
+        return appInfoCache;
+      }
+      return null;
+    })
+    .catch(() => null)
+    .finally(() => {
+      appInfoPromise = null;
+    });
+  return appInfoPromise;
+}
+
+function applyAppInfo(appInfo) {
+  if (!appInfo || typeof appInfo !== 'object') {
     return;
   }
   const helpVersionEl = helpAboutVersion || document.getElementById('helpAboutVersion');
   const helpBuildEl = helpAboutBuild || document.getElementById('helpAboutBuild');
-  const response = await window.clashfox.getAppInfo();
-  if (response && response.ok && response.data) {
-    if (appName) {
-      appName.textContent = response.data.name || 'ClashFox';
-    }
-    const version = response.data.version || '0.0.0';
-    const displayVersion = `v${version}`;
-    if (appVersion) {
-      appVersion.textContent = displayVersion;
-    }
-    if (helpVersionEl) {
-      helpVersionEl.textContent = displayVersion;
-      helpAboutVersion = helpVersionEl;
-    }
-    if (helpBuildEl) {
-      helpBuildEl.textContent = response.data.buildNumber || '-';
-      helpAboutBuild = helpBuildEl;
-    }
+  if (appName) {
+    appName.textContent = appInfo.name || 'ClashFox';
   }
+  const version = appInfo.version || '0.0.0';
+  const prereleaseMatch = String(version).match(/-(alpha|beta|rc)\.(\d+)$/i);
+  const isDev = Boolean(appInfo.isDev);
+  const buildNumber = Number.parseInt(appInfo.buildNumber, 10);
+  const normalizedBuild = Number.isFinite(buildNumber) && buildNumber > 0 ? buildNumber : 1;
+  const displayVersion = isDev && !prereleaseMatch
+    ? `v${version}-alpha.${normalizedBuild}`
+    : `v${version}`;
+  if (appVersion) {
+    appVersion.textContent = displayVersion;
+  }
+  if (helpVersionEl) {
+    helpVersionEl.textContent = displayVersion;
+    helpAboutVersion = helpVersionEl;
+  }
+  if (helpBuildEl) {
+    helpBuildEl.textContent = appInfo.buildNumber || '-';
+    helpAboutBuild = helpBuildEl;
+  }
+}
+
+async function loadAppInfo(force = false) {
+  const appInfo = await readAppInfo(force);
+  applyAppInfo(appInfo);
 }
 
 function setHelpAboutStatus(text = '', stateName = 'idle') {
@@ -5033,33 +5132,68 @@ async function handleHelpAppUpdateCheck() {
       window.clashfox.checkUpdates({ manual: true, acceptBeta: true }),
     ]);
     const stableAvailable = Boolean(stableResult && stableResult.ok && stableResult.status === 'update_available' && !stableResult.prerelease);
-    const alphaAvailable = Boolean(alphaResult && alphaResult.ok && alphaResult.status === 'update_available' && alphaResult.prerelease);
-    if (!stableAvailable && !alphaAvailable) {
+    const prereleaseAvailable = Boolean(alphaResult && alphaResult.ok && alphaResult.status === 'update_available' && alphaResult.prerelease);
+    if (!stableAvailable && !prereleaseAvailable) {
       setHelpAboutStatus(ti('help.appAlreadyLatest', 'App is up to date.'), 'success');
       return;
     }
     const stableVersion = normalizeVersionForDisplay(stableResult && stableResult.latestVersion ? stableResult.latestVersion : '');
-    const alphaVersion = normalizeVersionForDisplay(alphaResult && alphaResult.latestVersion ? alphaResult.latestVersion : '');
+    const prereleaseVersion = normalizeVersionForDisplay(alphaResult && alphaResult.latestVersion ? alphaResult.latestVersion : '');
+    const prereleaseChannel = resolveAppReleaseChannel(prereleaseVersion, Boolean(alphaResult && alphaResult.prerelease));
+    const currentAppVersion = normalizeVersionForDisplay(appInfoCache && appInfoCache.version ? appInfoCache.version : '');
+    const currentAppIsPrerelease = /-(alpha|beta|rc)(?:\.|$)/i.test(String(currentAppVersion || ''));
+    const currentAppChannel = (appInfoCache && appInfoCache.isDev)
+      ? 'alpha'
+      : resolveAppReleaseChannel(currentAppVersion, currentAppIsPrerelease);
     const bodyParts = [];
-    if (alphaAvailable) {
+    bodyParts.push(
+      formatAppUpdateChannelText(
+        'help.currentChannelHint',
+        'Current channel: {channel}',
+        currentAppChannel,
+      ),
+    );
+    if (prereleaseAvailable) {
       bodyParts.push(
-        alphaVersion
-          ? ti('help.appUpdateAlphaBodyVersion', 'A newer alpha version v{version} is available. Open the latest beta tag page?').replace('{version}', alphaVersion)
-          : ti('help.appUpdateAlphaBody', 'A newer alpha version is available. Open the latest beta tag page?'),
+        prereleaseVersion
+          ? formatAppUpdateChannelText(
+            'help.appUpdateChannelBodyVersion',
+            'A newer {channel} version v{version} is available. Open the latest tag page?',
+            prereleaseChannel,
+            prereleaseVersion,
+          )
+          : formatAppUpdateChannelText(
+            'help.appUpdateChannelBody',
+            'A newer {channel} version is available. Open the latest tag page?',
+            prereleaseChannel,
+          ),
       );
     }
     if (stableAvailable) {
       bodyParts.push(
         stableVersion
-          ? ti('help.appUpdateReleaseBodyVersion', 'A newer stable version v{version} is available. Open the stable release tag page?').replace('{version}', stableVersion)
-          : ti('help.appUpdateReleaseBody', 'A newer stable version is available. Open the stable release tag page?'),
+          ? formatAppUpdateChannelText(
+            'help.appUpdateChannelBodyVersion',
+            'A newer {channel} version v{version} is available. Open the latest tag page?',
+            'stable',
+            stableVersion,
+          )
+          : formatAppUpdateChannelText(
+            'help.appUpdateChannelBody',
+            'A newer {channel} version is available. Open the latest tag page?',
+            'stable',
+          ),
       );
     }
     const choice = await promptUpdateGuide({
       title: ti('help.appUpdateChoicesTitle', 'Update Options'),
       body: bodyParts.join(' '),
-      releaseLabel: stableAvailable ? ti('help.appUpdateReleaseAction', 'Update Release') : '',
-      alphaLabel: alphaAvailable ? ti('help.appUpdateAlphaAction', 'Update to Alpha') : '',
+      releaseLabel: stableAvailable
+        ? formatAppUpdateChannelText('help.appUpdateOpenChannelAction', 'Open {channel}', 'stable')
+        : '',
+      alphaLabel: prereleaseAvailable
+        ? formatAppUpdateChannelText('help.appUpdateOpenChannelAction', 'Open {channel}', prereleaseChannel)
+        : '',
     });
     if (choice === 'release' && window.clashfox && typeof window.clashfox.openExternal === 'function') {
       await window.clashfox.openExternal((stableResult && stableResult.releaseUrl) || APP_RELEASES_URL);
@@ -5070,15 +5204,15 @@ async function handleHelpAppUpdateCheck() {
     if (stableAvailable) {
       statusParts.push(
         stableVersion
-          ? `${ti('help.appUpdateReleaseAvailable', 'Release update available')}: v${stableVersion}`
-          : ti('help.appUpdateReleaseAvailable', 'Release update available'),
+          ? `${formatAppUpdateChannelText('help.appUpdateChannelAvailable', '{channel} update available', 'stable')}: v${stableVersion}`
+          : formatAppUpdateChannelText('help.appUpdateChannelAvailable', '{channel} update available', 'stable'),
       );
     }
-    if (alphaAvailable) {
+    if (prereleaseAvailable) {
       statusParts.push(
-        alphaVersion
-          ? `${ti('help.appUpdateAlphaAvailable', 'Alpha update available')}: v${alphaVersion}`
-          : ti('help.appUpdateAlphaAvailable', 'Alpha update available'),
+        prereleaseVersion
+          ? `${formatAppUpdateChannelText('help.appUpdateChannelAvailable', '{channel} update available', prereleaseChannel)}: v${prereleaseVersion}`
+          : formatAppUpdateChannelText('help.appUpdateChannelAvailable', '{channel} update available', prereleaseChannel),
       );
     }
     setHelpAboutStatus(statusParts.join(' · '), 'warning');
@@ -7703,6 +7837,17 @@ function refreshPageRefs() {
   settingsProxyAllowLan = document.getElementById('settingsProxyAllowLan');
   langButtons = Array.from(document.querySelectorAll('.lang-btn'));
   initCustomSelects(document);
+
+  // Page sections are re-mounted on navigation. Reset overview render signatures so
+  // the current payload can render into fresh DOM nodes instead of being skipped.
+  state.providerSubscriptionRenderSignature = '';
+  state.rulesOverviewRenderSignatures = {
+    metrics: '',
+    chart: '',
+    records: '',
+    behaviors: '',
+    switchView: '',
+  };
 }
 
 function bindNavButtons() {
@@ -7784,6 +7929,8 @@ function refreshPageView() {
     loadBackups();
   }
   if (currentPage === 'overview') {
+    hydrateOverviewProviderSubscriptionFromCache();
+    hydrateOverviewRulesCardFromCache();
     Promise.all([
       loadOverview(),
       loadProviderSubscriptionOverview(),
@@ -7792,6 +7939,9 @@ function refreshPageView() {
   }
   if (currentPage === 'dashboard') {
     initDashboardFrame();
+  }
+  if (currentPage === 'help') {
+    loadAppInfo().catch(() => {});
   }
   if (currentPage === 'settings') {
     invokeHelperPanelRefresh();
@@ -10139,7 +10289,6 @@ async function initApp() {
     contentRoot.firstElementChild.classList.add('page-section');
   }
   setActiveNav(currentPage);
-  loadAppInfo();
   if (currentPage === 'dashboard') {
     initDashboardFrame();
   }
@@ -10148,7 +10297,7 @@ async function initApp() {
     showToast(t('labels.bridgeMissing'), 'error');
     return;
   }
-  loadAppInfo();
+  loadAppInfo(true);
   if (state.settings && state.settings.panelChoice && !state.autoPanelInstalled) {
     const preset = PANEL_PRESETS[state.settings.panelChoice];
     if (preset) {

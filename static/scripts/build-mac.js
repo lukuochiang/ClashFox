@@ -10,9 +10,46 @@ const forceWithHelper = process.argv.includes('--with-helper') || process.env.CL
 const withHelper = forceWithHelper || !forceWithoutHelper;
 const dualOutputFromHelper = withHelper && process.env.CLASHFOX_DUAL_FROM_HELPER === '1';
 const artifactNameOverride = String(process.env.CLASHFOX_ARTIFACT_NAME || '').trim();
+const releaseChannelArgIndex = process.argv.findIndex((arg) => arg === '--channel');
+const releaseChannelArg = releaseChannelArgIndex >= 0 ? String(process.argv[releaseChannelArgIndex + 1] || '').trim().toLowerCase() : '';
+const releaseChannelEnv = String(process.env.CLASHFOX_RELEASE_CHANNEL || '').trim().toLowerCase();
+const requestedReleaseChannel = releaseChannelArg || releaseChannelEnv || '';
+const VALID_RELEASE_CHANNELS = new Set(['alpha', 'beta', 'rc', 'stable']);
 const configMode = withHelper ? 'helper' : 'no-helper';
 const tempConfigPath = path.join(ROOT, 'dist', `electron-builder.${configMode}.json`);
 const tempX64ConfigPath = path.join(ROOT, 'dist', `electron-builder.${configMode}.x64.json`);
+const effectiveAppVersion = deriveReleaseVersion(String(pkg.version || '0.0.0'), requestedReleaseChannel);
+
+function parseSemver(version) {
+  const normalized = String(version || '').trim();
+  const match = normalized.match(/^(\d+\.\d+\.\d+)(?:-([0-9A-Za-z-]+)(?:\.(\d+))?)?$/);
+  if (!match) {
+    return null;
+  }
+  return {
+    base: match[1],
+    channel: String(match[2] || '').toLowerCase(),
+    sequence: match[3] ? String(match[3]) : '1',
+  };
+}
+
+function deriveReleaseVersion(version, channel) {
+  const parsed = parseSemver(version);
+  if (!parsed) {
+    return String(version || '0.0.0').trim();
+  }
+  const normalizedChannel = String(channel || '').trim().toLowerCase();
+  if (!normalizedChannel) {
+    return `${parsed.base}${parsed.channel ? `-${parsed.channel}.${parsed.sequence}` : ''}`;
+  }
+  if (!VALID_RELEASE_CHANNELS.has(normalizedChannel)) {
+    throw new Error(`Unsupported release channel: ${normalizedChannel}`);
+  }
+  if (normalizedChannel === 'stable') {
+    return parsed.base;
+  }
+  return `${parsed.base}-${normalizedChannel}.${parsed.sequence}`;
+}
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -64,6 +101,10 @@ function buildConfig({ includeHelper = true, forceX64Suffix = false } = {}) {
     ...base,
     files,
     extraResources,
+    extraMetadata: {
+      ...(base.extraMetadata || {}),
+      version: effectiveAppVersion,
+    },
   };
   if (artifactNameOverride) {
     config.mac = {
@@ -109,6 +150,8 @@ function buildMac() {
   const env = {
     ...process.env,
     CLASHFOX_BUILD_NUMBER: buildNumberFromEnv || String(pkg.buildNumber || ''),
+    CLASHFOX_RELEASE_VERSION: effectiveAppVersion,
+    CLASHFOX_RELEASE_CHANNEL: requestedReleaseChannel,
     CSC_IDENTITY_AUTO_DISCOVERY: 'false',
     PYTHON: process.env.PYTHON || 'python3',
   };
@@ -119,6 +162,14 @@ function buildMac() {
   renameUnpackedMacDir('mac', 'mac-arm64');
   run('npx', ['electron-builder', ...commonArgs, '--universal', '--publish', 'never', '--config', tempConfigPath], { env });
   renameUnpackedMacDir('mac', 'mac-universal');
+}
+
+function validateRuntimeLayout() {
+  run('node', ['static/scripts/validate-runtime-layout.js']);
+}
+
+function validateBuiltArtifacts() {
+  run('node', ['static/scripts/validate-packaged-mac.js']);
 }
 
 function findAppBundlePath(baseDir) {
@@ -133,7 +184,7 @@ function findAppBundlePath(baseDir) {
 
 function renderArtifactName(pattern, arch, ext = 'zip') {
   const productName = String((pkg.build && pkg.build.productName) || pkg.productName || pkg.name || 'ClashFox');
-  const version = String(pkg.version || '0.0.0');
+  const version = effectiveAppVersion;
   const buildNumber = String(process.env.CLASHFOX_BUILD_NUMBER || pkg.buildNumber || '');
   return String(pattern || '')
     .replace(/\$\{productName\}/g, productName)
@@ -212,7 +263,9 @@ writeBuildConfigs();
 
 let exitCode = 0;
 try {
+  validateRuntimeLayout();
   buildMac();
+  validateBuiltArtifacts();
   if (dualOutputFromHelper) {
     buildDualArtifactsFromUnpacked();
   }
