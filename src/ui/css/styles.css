@@ -5574,8 +5574,7 @@ body[data-page="logs"] .logs-clean-action {
 
 .help-intro-card .help-list {
   margin: 0;
-  padding-left: 0;
-  list-style-position: inside;
+  padding-left: 18px;
   line-height: 1.7;
 }
 

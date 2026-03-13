@@ -136,6 +136,7 @@ function closeMihomoConnectionsSocket() {
   const socket = state.mihomoConnectionsSocket;
   state.mihomoConnectionsSocket = null;
   state.mihomoConnectionsLive = false;
+  state.lastMihomoConnectionsAt = 0;
   state.mihomoConnectionsSocketUrl = '';
   if (!socket) {
     return;
@@ -183,6 +184,7 @@ function closeMihomoTrafficSocket() {
   const socket = state.mihomoTrafficSocket;
   state.mihomoTrafficSocket = null;
   state.mihomoTrafficLive = false;
+  state.lastMihomoTrafficAt = 0;
   state.mihomoTrafficSocketUrl = '';
   if (!socket) {
     return;
@@ -231,6 +233,7 @@ function closeMihomoMemorySocket() {
   state.mihomoMemorySocket = null;
   state.mihomoMemorySocketUrl = '';
   state.mihomoMemoryLive = false;
+  state.lastMihomoMemoryAt = 0;
   if (!socket) {
     return;
   }
@@ -1577,6 +1580,7 @@ function connectMihomoPageLogsStream() {
 function handleMihomoMemoryPayload(payload = {}) {
   state.mihomoMemoryLive = true;
   state.mihomoMemoryReconnectAttempts = 0;
+  state.lastMihomoMemoryAt = Date.now();
   updateOverviewMemoryValue(payload.inuse);
 }
 
@@ -1688,6 +1692,7 @@ function updateProxyTrafficSnapshot(downRate, upRate, downTotal, upTotal) {
 function handleMihomoTrafficPayload(payload = {}) {
   state.mihomoTrafficLive = true;
   state.mihomoTrafficReconnectAttempts = 0;
+  state.lastMihomoTrafficAt = Date.now();
   updateProxyTrafficSnapshot(payload.down, payload.up, payload.downTotal, payload.upTotal);
 }
 
@@ -1754,6 +1759,7 @@ function handleMihomoConnectionsPayload(payload = {}) {
   const connections = Array.isArray(payload && payload.connections) ? payload.connections : [];
   state.mihomoConnectionsLive = true;
   state.mihomoConnectionsReconnectAttempts = 0;
+  state.lastMihomoConnectionsAt = Date.now();
   state.mihomoConnectionsSnapshot = connections;
   updateRealtimeConnections(connections.length);
   renderTopologyCard();
@@ -2179,17 +2185,20 @@ const state = {
   mihomoConnectionsReconnectTimer: null,
   mihomoConnectionsReconnectAttempts: 0,
   mihomoConnectionsLive: false,
+  lastMihomoConnectionsAt: 0,
   mihomoConnectionsSnapshot: [],
   mihomoTrafficSocket: null,
   mihomoTrafficSocketUrl: '',
   mihomoTrafficReconnectTimer: null,
   mihomoTrafficReconnectAttempts: 0,
   mihomoTrafficLive: false,
+  lastMihomoTrafficAt: 0,
   mihomoMemorySocket: null,
   mihomoMemorySocketUrl: '',
   mihomoMemoryReconnectTimer: null,
   mihomoMemoryReconnectAttempts: 0,
   mihomoMemoryLive: false,
+  lastMihomoMemoryAt: 0,
   mihomoLogsSocket: null,
   mihomoLogsSocketUrl: '',
   mihomoLogsReconnectTimer: null,
@@ -5084,12 +5093,13 @@ function applyAppInfo(appInfo) {
     appName.textContent = appInfo.name || 'ClashFox';
   }
   const version = appInfo.version || '0.0.0';
-  const prereleaseMatch = String(version).match(/-(alpha|beta|rc)\.(\d+)$/i);
+  const baseVersionMatch = String(version).match(/^(\d+\.\d+\.\d+)/);
+  const baseVersion = baseVersionMatch ? baseVersionMatch[1] : String(version).replace(/-.*/, '');
   const isDev = Boolean(appInfo.isDev);
   const buildNumber = Number.parseInt(appInfo.buildNumber, 10);
   const normalizedBuild = Number.isFinite(buildNumber) && buildNumber > 0 ? buildNumber : 1;
-  const displayVersion = isDev && !prereleaseMatch
-    ? `v${version}-alpha.${normalizedBuild}`
+  const displayVersion = isDev
+    ? `v${baseVersion || '0.0.0'}-alpha.${normalizedBuild}`
     : `v${version}`;
   if (appVersion) {
     appVersion.textContent = displayVersion;
@@ -5140,19 +5150,7 @@ async function handleHelpAppUpdateCheck() {
     const stableVersion = normalizeVersionForDisplay(stableResult && stableResult.latestVersion ? stableResult.latestVersion : '');
     const prereleaseVersion = normalizeVersionForDisplay(alphaResult && alphaResult.latestVersion ? alphaResult.latestVersion : '');
     const prereleaseChannel = resolveAppReleaseChannel(prereleaseVersion, Boolean(alphaResult && alphaResult.prerelease));
-    const currentAppVersion = normalizeVersionForDisplay(appInfoCache && appInfoCache.version ? appInfoCache.version : '');
-    const currentAppIsPrerelease = /-(alpha|beta|rc)(?:\.|$)/i.test(String(currentAppVersion || ''));
-    const currentAppChannel = (appInfoCache && appInfoCache.isDev)
-      ? 'alpha'
-      : resolveAppReleaseChannel(currentAppVersion, currentAppIsPrerelease);
     const bodyParts = [];
-    bodyParts.push(
-      formatAppUpdateChannelText(
-        'help.currentChannelHint',
-        'Current channel: {channel}',
-        currentAppChannel,
-      ),
-    );
     if (prereleaseAvailable) {
       bodyParts.push(
         prereleaseVersion
@@ -6174,6 +6172,10 @@ function updateOverviewUI(data) {
   if (!data) {
     return;
   }
+  const now = Date.now();
+  const wsConnectionFresh = Boolean(state.lastMihomoConnectionsAt) && (now - Number(state.lastMihomoConnectionsAt || 0) < 10000);
+  const wsTrafficFresh = Boolean(state.lastMihomoTrafficAt) && (now - Number(state.lastMihomoTrafficAt || 0) < 10000);
+  const wsMemoryFresh = Boolean(state.lastMihomoMemoryAt) && (now - Number(state.lastMihomoMemoryAt || 0) < 10000);
   const running = Boolean(data.running);
   state.overviewRunning = running;
   state.overviewRunningUpdatedAt = Date.now();
@@ -6189,6 +6191,21 @@ function updateOverviewUI(data) {
     state.overviewUptimeAt = 0;
     if (overviewUptime) {
       setNodeTextIfChanged(overviewUptime, '-');
+    }
+  }
+  if (!wsConnectionFresh) {
+    const fallbackConnections = parseConnectionCount(data.connections);
+    if (fallbackConnections !== null) {
+      updateRealtimeConnections(fallbackConnections);
+    }
+  }
+  if (!wsTrafficFresh) {
+    updateSystemTraffic(data.rxBytes, data.txBytes);
+  }
+  if (!wsMemoryFresh) {
+    const fallbackMemory = Number.parseFloat(data.memory);
+    if (Number.isFinite(fallbackMemory) && fallbackMemory >= 0) {
+      updateOverviewMemoryValue(fallbackMemory);
     }
   }
   applyOverviewNetworkSnapshot(data);

@@ -789,8 +789,18 @@ for conn in connections:
     metadata = conn.get("metadata")
     if not isinstance(metadata, dict):
         metadata = {}
-    destination_ip = str(metadata.get("destinationIP") or "").strip()
-    host = str(metadata.get("host") or metadata.get("destinationHost") or "").strip()
+    destination_ip = str(
+        metadata.get("destinationIP")
+        or metadata.get("remoteDestination")
+        or metadata.get("destinationIp")
+        or ""
+    ).strip()
+    host = str(
+        metadata.get("host")
+        or metadata.get("sniffHost")
+        or metadata.get("destinationHost")
+        or ""
+    ).strip()
     destination_port = metadata.get("destinationPort")
     try:
         destination_port = int(destination_port)
@@ -825,6 +835,8 @@ for conn in connections:
         "sourceIp": str(metadata.get("sourceIP") or "").strip(),
         "sourcePort": int(metadata.get("sourcePort") or 0),
     }
+    # Some Mihomo builds leave destinationIP empty but provide remoteDestination.
+    # Keep this connection as long as we can resolve either ip or host later.
     if not item["ip"] and not item["host"]:
         continue
     tracks.append(item)
