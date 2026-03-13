@@ -952,6 +952,9 @@ function hideSubmenu() {
   if (window.clashfox && typeof window.clashfox.trayMenuCloseSubmenu === 'function') {
     window.clashfox.trayMenuCloseSubmenu();
   }
+  if (window.clashfox && typeof window.clashfox.trayMenuClosePanel === 'function') {
+    window.clashfox.trayMenuClosePanel();
+  }
 }
 
 function makeLeading(item) {
@@ -1343,6 +1346,15 @@ function openSubmenu(submenuKey, anchorRow, keepAnchor = false) {
     anchorHeight: Math.max(0, Math.round(anchorHeight)),
     rootHeight: Math.max(0, Math.round(rootRect.height || 0)),
   };
+  if (submenuKey === 'panel') {
+    if (window.clashfox && typeof window.clashfox.trayMenuCloseSubmenu === 'function') {
+      window.clashfox.trayMenuCloseSubmenu();
+    }
+    if (window.clashfox && typeof window.clashfox.trayMenuOpenPanel === 'function') {
+      window.clashfox.trayMenuOpenPanel(payload);
+    }
+    return;
+  }
   if (window.clashfox && typeof window.clashfox.trayMenuOpenSubmenu === 'function') {
     window.clashfox.trayMenuOpenSubmenu(payload);
   }

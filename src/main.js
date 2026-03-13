@@ -65,6 +65,14 @@ let traySubmenuHovering = false;
 let traySubmenuAnchor = { top: 0, height: 0, rootHeight: 0 };
 let traySubmenuLastSize = { width: 0, height: 0 };
 let traySubmenuPendingPayload = null;
+let trayPanelWindow = null;
+let trayPanelVisible = false;
+let trayPanelReady = false;
+let trayPanelHovering = false;
+let trayPanelAnchor = { top: 0, height: 0, rootHeight: 0 };
+let trayPanelLastSize = { width: 0, height: 0 };
+let trayPanelPendingPayload = null;
+let trayPanelPayloadSignature = '';
 let dashboardWindow = null;
 let foxboardWindow = null;
 let foxboardPreloadWindow = null;
@@ -7073,6 +7081,12 @@ function patchTrayMenuNetworkState({ systemProxyEnabled, tunEnabled } = {}) {
       items: trayMenuData.submenus.network,
     });
   }
+  if (trayPanelWindow && trayPanelVisible) {
+    sendTrayPanelUpdate({
+      key: 'panel',
+      items: trayMenuData.submenus.panel,
+    });
+  }
   const settings = readAppSettings();
   applyTrayIconForState({
     active: isTrayActiveState({
@@ -7122,6 +7136,8 @@ function buildTrayMainMenuItems({
     { type: 'action', label: labels.networkTakeover || 'Network Takeover', submenu: 'network', iconKey: 'networkTakeover' },
     { type: 'separator' },
     { type: 'action', label: labels.outboundMode || 'Outbound Mode', rightText: `[${currentOutboundBadge}]`, submenu: 'outbound', iconKey: 'outboundMode' },
+    { type: 'separator' },
+    { type: 'action', label: labels.panel || 'Panel', submenu: 'panel', iconKey: 'panel' },
     { type: 'separator' },
     { type: 'action', label: labels.dashboard, action: 'open-dashboard', enabled: dashboardEnabled, rightText: '⌘ 2', shortcut: 'Cmd+2', iconKey: 'dashboard' },
   ];
@@ -7209,9 +7225,11 @@ function buildTraySubmenuData({
     ],
     panel: [
       { type: 'panel-chart' },
-      ...(showProviderTraffic && providerTraffic && Array.isArray(providerTraffic.items) && providerTraffic.items.length
-        ? [{ type: 'panel-provider-traffic', payload: providerTraffic }]
-        : []),
+      {
+        type: 'panel-provider-traffic',
+        payload: providerTraffic,
+        enabled: showProviderTraffic !== false,
+      },
     ],
     directory: [
       { type: 'action', label: labels.userDirectory || 'User Directory', action: 'open-user-directory', iconKey: 'userDir' },
@@ -7524,6 +7542,12 @@ async function buildTrayMenuOnce() {
   if (changed && trayMenuWindow && !trayMenuWindow.isDestroyed()) {
     trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
   }
+  if (trayPanelVisible) {
+    sendTrayPanelUpdate({
+      key: 'panel',
+      items: trayMenuData.submenus.panel,
+    });
+  }
   return trayMenuData;
 }
 
@@ -7608,14 +7632,16 @@ function ensureTrayMenuWindow() {
   trayMenuWindow.on('blur', () => {
     trayMenuClosing = true;
     hideTraySubmenuWindow();
+    hideTrayPanelWindow();
     setTimeout(() => {
-      if (!traySubmenuHovering) {
+      if (!traySubmenuHovering && !trayPanelHovering) {
         hideTrayMenuWindow();
       }
     }, 40);
   });
   trayMenuWindow.on('closed', () => {
     hideTraySubmenuWindow();
+    hideTrayPanelWindow();
     trayMenuWindow = null;
     trayMenuVisible = false;
     trayMenuClosing = false;
@@ -7633,6 +7659,15 @@ function hideTraySubmenuWindow() {
   traySubmenuHovering = false;
   if (traySubmenuWindow && !traySubmenuWindow.isDestroyed()) {
     traySubmenuWindow.hide();
+  }
+}
+
+function hideTrayPanelWindow() {
+  trayPanelVisible = false;
+  trayPanelHovering = false;
+  trayPanelPayloadSignature = '';
+  if (trayPanelWindow && !trayPanelWindow.isDestroyed()) {
+    trayPanelWindow.hide();
   }
 }
 
@@ -7681,12 +7716,60 @@ function ensureTraySubmenuWindow() {
   return traySubmenuWindow;
 }
 
+function ensureTrayPanelWindow() {
+  if (trayPanelWindow && !trayPanelWindow.isDestroyed()) {
+    return trayPanelWindow;
+  }
+  trayPanelWindow = new BrowserWindow({
+    width: 260,
+    height: 340,
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    hasShadow: true,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    focusable: false,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+      devTools: false,
+    },
+  });
+  if (trayPanelWindow.setSkipTaskbar) {
+    trayPanelWindow.setSkipTaskbar(true);
+  }
+  if (trayPanelWindow.setExcludedFromShownWindowsMenu) {
+    trayPanelWindow.setExcludedFromShownWindowsMenu(true);
+  }
+  trayPanelWindow.setAlwaysOnTop(true, 'pop-up-menu');
+  trayPanelWindow.loadFile(path.join(__dirname, 'ui', 'html', 'tray-panel.html'));
+  trayPanelWindow.on('closed', () => {
+    trayPanelWindow = null;
+    trayPanelVisible = false;
+    trayPanelReady = false;
+    trayPanelHovering = false;
+    trayPanelPendingPayload = null;
+    trayPanelPayloadSignature = '';
+    trayPanelLastSize = { width: 0, height: 0 };
+  });
+  return trayPanelWindow;
+}
+
 function hideTrayMenuWindow() {
   if (!trayMenuWindow || trayMenuWindow.isDestroyed()) {
     trayMenuVisible = false;
     trayMenuClosing = false;
     hideTraySubmenuWindow();
+    hideTrayPanelWindow();
     traySubmenuPendingPayload = null;
+    trayPanelPendingPayload = null;
     if (trayMenuRefreshTimer) {
       clearInterval(trayMenuRefreshTimer);
       trayMenuRefreshTimer = null;
@@ -7694,9 +7777,11 @@ function hideTrayMenuWindow() {
     return;
   }
   hideTraySubmenuWindow();
+  hideTrayPanelWindow();
   trayMenuVisible = false;
   trayMenuClosing = false;
   traySubmenuPendingPayload = null;
+  trayPanelPendingPayload = null;
   if (trayMenuRefreshTimer) {
     clearInterval(trayMenuRefreshTimer);
     trayMenuRefreshTimer = null;
@@ -7723,6 +7808,34 @@ function sendTraySubmenuUpdate(payload) {
     && traySubmenuPendingPayload
   ) {
     traySubmenuWindow.webContents.send('clashfox:traySubmenu:update', traySubmenuPendingPayload);
+  }
+}
+
+function sendTrayPanelUpdate(payload) {
+  const nextPayload = payload || null;
+  const nextSignature = buildTrayMenuDataSignature(nextPayload);
+  if (trayPanelReady && trayPanelPayloadSignature && nextSignature === trayPanelPayloadSignature) {
+    return;
+  }
+  trayPanelPendingPayload = nextPayload;
+  trayPanelPayloadSignature = nextSignature;
+  if (
+    !trayMenuVisible
+    || trayMenuClosing
+    || !trayMenuWindow
+    || trayMenuWindow.isDestroyed()
+    || !trayMenuWindow.isFocused()
+  ) {
+    hideTrayPanelWindow();
+    return;
+  }
+  if (
+    trayPanelWindow
+    && !trayPanelWindow.isDestroyed()
+    && trayPanelReady
+    && trayPanelPendingPayload
+  ) {
+    trayPanelWindow.webContents.send('clashfox:trayPanel:update', trayPanelPendingPayload);
   }
 }
 
@@ -7779,6 +7892,61 @@ function positionTraySubmenuWindow(width, height) {
     height: Math.round(height),
   };
   traySubmenuWindow.setBounds(nextBounds);
+}
+
+function computeTrayPanelBounds(width, height) {
+  if (!trayMenuWindow || trayMenuWindow.isDestroyed()) {
+    return null;
+  }
+  if (!trayMenuVisible) {
+    return null;
+  }
+  const mainBounds = trayMenuWindow.getBounds();
+  const display = screen.getDisplayNearestPoint({ x: mainBounds.x, y: mainBounds.y });
+  const area = display.workArea;
+  const gap = 0;
+  const targetWidth = Math.max(260, Math.round(width || 0));
+  const targetHeight = Math.max(260, Math.round(height || 0));
+  const maxTopWithinMain = Math.max(
+    8,
+    (trayPanelAnchor.rootHeight || targetHeight) - targetHeight - 8,
+  );
+  const anchorTop = Math.min(Math.max(8, Math.round(trayPanelAnchor.top || 0)), maxTopWithinMain);
+  const desiredY = mainBounds.y + anchorTop;
+  const y = Math.max(area.y + 4, Math.min(desiredY, area.y + area.height - targetHeight - 4));
+  let xRight = mainBounds.x + mainBounds.width + gap;
+  let xLeft = mainBounds.x - targetWidth - gap;
+  let side = 'right';
+  const canRight = (xRight + targetWidth) <= (area.x + area.width - 4);
+  const canLeft = xLeft >= (area.x + 4);
+  if (!canRight && canLeft) {
+    side = 'left';
+  } else if (!canRight && !canLeft) {
+    const rightOverflow = (xRight + targetWidth) - (area.x + area.width - 4);
+    const leftOverflow = (area.x + 4) - xLeft;
+    side = rightOverflow <= leftOverflow ? 'right' : 'left';
+  }
+  const x = side === 'right'
+    ? Math.min(Math.max(area.x + 4, xRight), area.x + area.width - targetWidth - 4)
+    : Math.max(area.x + 4, Math.min(xLeft, area.x + area.width - targetWidth - 4));
+  return { x, y, side };
+}
+
+function positionTrayPanelWindow(width, height) {
+  if (!trayPanelWindow || trayPanelWindow.isDestroyed()) {
+    return;
+  }
+  const bounds = computeTrayPanelBounds(width, height);
+  if (!bounds) {
+    return;
+  }
+  const nextBounds = {
+    x: Math.round(bounds.x),
+    y: Math.round(bounds.y),
+    width: Math.round(width),
+    height: Math.round(height),
+  };
+  trayPanelWindow.setBounds(nextBounds);
 }
 
 function computeTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, explicitWidth = 260) {
@@ -7845,6 +8013,14 @@ function applyTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, preser
   ) {
     positionTraySubmenuWindow(traySubmenuLastSize.width, traySubmenuLastSize.height);
   }
+  if (
+    trayPanelVisible
+    && trayPanelLastSize
+    && trayPanelLastSize.width
+    && trayPanelLastSize.height
+  ) {
+    positionTrayPanelWindow(trayPanelLastSize.width, trayPanelLastSize.height);
+  }
   if (syncMenuData && trayMenuData) {
     const sendUpdate = () => {
       if (!trayMenuWindow || trayMenuWindow.isDestroyed()) {
@@ -7866,6 +8042,7 @@ async function showTrayMenuWindow() {
   }
   trayMenuClosing = false;
   hideTraySubmenuWindow();
+  hideTrayPanelWindow();
   const popup = ensureTrayMenuWindow();
   const currentBounds = popup.getBounds();
   if (
@@ -8711,7 +8888,7 @@ app.whenReady().then(() => {
   ensureAppDirs();
   setDockIcon();
   createTrayMenu();
-  const shouldShowMainWindow = !readMainWindowClosedFromSettings();
+  const shouldShowMainWindow = false;
   createWindow(shouldShowMainWindow);
   if (app.dock && app.dock.show) {
     if (shouldShowMainWindow) {
@@ -8994,6 +9171,28 @@ app.whenReady().then(() => {
       && Array.isArray(trayMenuData.submenus[key]))
       ? trayMenuData.submenus[key]
       : (Array.isArray(payload.items) ? payload.items : []);
+    if (key === 'panel') {
+      hideTraySubmenuWindow();
+      const popup = ensureTrayPanelWindow();
+      trayPanelAnchor = {
+        top: Number(payload && payload.anchorTop) || 0,
+        height: Number(payload && payload.anchorHeight) || 0,
+        rootHeight: Number(payload && payload.rootHeight) || 0,
+      };
+      trayPanelLastSize = { width: 260, height: 340 };
+      trayPanelVisible = true;
+      positionTrayPanelWindow(trayPanelLastSize.width, trayPanelLastSize.height);
+      sendTrayPanelUpdate({
+        key,
+        items,
+      });
+      createTrayMenu().catch(() => {});
+      if (!popup.isVisible()) {
+        popup.show();
+      }
+      return;
+    }
+    hideTrayPanelWindow();
     const popup = ensureTraySubmenuWindow();
     traySubmenuAnchor = {
       top: Number(payload && payload.anchorTop) || 0,
@@ -9013,6 +9212,46 @@ app.whenReady().then(() => {
 
   ipcMain.on('clashfox:trayMenu:closeSubmenu', () => {
     hideTraySubmenuWindow();
+    hideTrayPanelWindow();
+  });
+
+  ipcMain.on('clashfox:trayMenu:openPanel', async (_event, payload = {}) => {
+    if (
+      !trayMenuVisible
+      || trayMenuClosing
+      || !trayMenuWindow
+      || trayMenuWindow.isDestroyed()
+      || !trayMenuWindow.isFocused()
+    ) {
+      return;
+    }
+    const items = (trayMenuData
+      && trayMenuData.submenus
+      && Array.isArray(trayMenuData.submenus.panel))
+      ? trayMenuData.submenus.panel
+      : (Array.isArray(payload.items) ? payload.items : []);
+    hideTraySubmenuWindow();
+    const popup = ensureTrayPanelWindow();
+    trayPanelAnchor = {
+      top: Number(payload && payload.anchorTop) || 0,
+      height: Number(payload && payload.anchorHeight) || 0,
+      rootHeight: Number(payload && payload.rootHeight) || 0,
+    };
+    trayPanelLastSize = { width: 260, height: 340 };
+    trayPanelVisible = true;
+    positionTrayPanelWindow(trayPanelLastSize.width, trayPanelLastSize.height);
+    sendTrayPanelUpdate({
+      key: 'panel',
+      items,
+    });
+    createTrayMenu().catch(() => {});
+    if (!popup.isVisible()) {
+      popup.show();
+    }
+  });
+
+  ipcMain.on('clashfox:trayMenu:closePanel', () => {
+    hideTrayPanelWindow();
   });
 
   ipcMain.on('clashfox:traySubmenu:resize', (_event, payload = {}) => {
@@ -9039,7 +9278,7 @@ app.whenReady().then(() => {
 
   ipcMain.on('clashfox:traySubmenu:hover', (_event, hovering) => {
     traySubmenuHovering = Boolean(hovering);
-    if (!traySubmenuHovering && (!trayMenuWindow || trayMenuWindow.isDestroyed() || !trayMenuWindow.isFocused())) {
+    if (!traySubmenuHovering && !trayPanelHovering && (!trayMenuWindow || trayMenuWindow.isDestroyed() || !trayMenuWindow.isFocused())) {
       hideTrayMenuWindow();
     }
   });
@@ -9069,6 +9308,62 @@ app.whenReady().then(() => {
 
   ipcMain.on('clashfox:traySubmenu:hide', () => {
     hideTraySubmenuWindow();
+  });
+
+  ipcMain.on('clashfox:trayPanel:resize', (_event, payload = {}) => {
+    if (
+      !trayMenuVisible
+      || trayMenuClosing
+      || !trayMenuWindow
+      || trayMenuWindow.isDestroyed()
+      || !trayMenuWindow.isFocused()
+    ) {
+      hideTrayPanelWindow();
+      return;
+    }
+    const width = Math.max(260, Math.round(Number(payload && payload.width) || 0));
+    const height = Math.max(260, Math.round(Number(payload && payload.height) || 0));
+    trayPanelLastSize = { width, height };
+    positionTrayPanelWindow(width, height);
+    const popup = ensureTrayPanelWindow();
+    trayPanelVisible = true;
+    if (!popup.isVisible()) {
+      popup.show();
+    }
+  });
+
+  ipcMain.on('clashfox:trayPanel:hover', (_event, hovering) => {
+    trayPanelHovering = Boolean(hovering);
+    if (!trayPanelHovering && !traySubmenuHovering && (!trayMenuWindow || trayMenuWindow.isDestroyed() || !trayMenuWindow.isFocused())) {
+      hideTrayMenuWindow();
+    }
+  });
+
+  ipcMain.on('clashfox:trayPanel:ready', () => {
+    trayPanelReady = true;
+    if (
+      !trayMenuVisible
+      || trayMenuClosing
+      || !trayMenuWindow
+      || trayMenuWindow.isDestroyed()
+      || !trayMenuWindow.isFocused()
+    ) {
+      hideTrayPanelWindow();
+      return;
+    }
+    if (trayPanelPendingPayload) {
+      sendTrayPanelUpdate(trayPanelPendingPayload);
+    }
+    if (trayPanelVisible && trayPanelLastSize.width && trayPanelLastSize.height) {
+      positionTrayPanelWindow(trayPanelLastSize.width, trayPanelLastSize.height);
+      if (trayPanelWindow && !trayPanelWindow.isDestroyed()) {
+        trayPanelWindow.show();
+      }
+    }
+  });
+
+  ipcMain.on('clashfox:trayPanel:hide', () => {
+    hideTrayPanelWindow();
   });
   
   // 处理取消命令，只取消安装进程

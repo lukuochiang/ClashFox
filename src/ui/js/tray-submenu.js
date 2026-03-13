@@ -17,7 +17,8 @@ let panelChartTotalTx = null;
 const CONNECTIVITY_REFRESH_MS = 1000;
 const SUBMENU_MIN_WIDTH = 170;
 const SUBMENU_MAX_WIDTH = 340;
-const SUBMENU_PANEL_WIDTH = 456;
+const SUBMENU_PANEL_MIN_WIDTH = 300;
+const SUBMENU_PANEL_MAX_WIDTH = 356;
 const NETWORK_TOGGLE_ACTIONS = new Set(['toggle-system-proxy', 'toggle-tun']);
 const pendingActionSet = new Set();
 const loadingVisibleSet = new Set();
@@ -714,7 +715,7 @@ function applySubmenuWidthByContent() {
     return { width: SUBMENU_MIN_WIDTH, height: 0 };
   }
   if (submenuKey === 'panel') {
-    submenuRootEl.style.width = `${SUBMENU_PANEL_WIDTH}px`;
+    submenuRootEl.style.width = 'max-content';
   } else {
     submenuRootEl.style.width = 'fit-content';
   }
@@ -726,7 +727,7 @@ function applySubmenuWidthByContent() {
     ),
   );
   const width = submenuKey === 'panel'
-    ? SUBMENU_PANEL_WIDTH
+    ? Math.max(SUBMENU_PANEL_MIN_WIDTH, Math.min(measured, SUBMENU_PANEL_MAX_WIDTH))
     : Math.max(SUBMENU_MIN_WIDTH, Math.min(measured, SUBMENU_MAX_WIDTH));
   submenuRootEl.style.width = `${width}px`;
   const height = Math.ceil(

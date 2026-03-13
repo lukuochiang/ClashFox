@@ -56,13 +56,26 @@ function buildAppAsarPath(appPath) {
   return path.join(appPath, 'Contents', 'Resources', 'app.asar');
 }
 
+function buildAppAsarUnpackedPath(appPath) {
+  return path.join(appPath, 'Contents', 'Resources', 'app.asar.unpacked');
+}
+
+function existsInAsarOrUnpacked(entry, asarEntries, asarUnpackedPath) {
+  if (asarEntries.has(entry)) {
+    return true;
+  }
+  const unpackedEntryPath = path.join(asarUnpackedPath, ...String(entry || '').split('/'));
+  return fs.existsSync(unpackedEntryPath);
+}
+
 function validateAppBundle(appPath) {
   const appAsarPath = buildAppAsarPath(appPath);
   if (!fs.existsSync(appAsarPath)) {
     throw new Error(`Missing app.asar in ${appPath}`);
   }
+  const appAsarUnpackedPath = buildAppAsarUnpackedPath(appPath);
   const entries = new Set(asar.listPackage(appAsarPath));
-  const missing = buildCriticalRuntimeFiles().filter((entry) => !entries.has(entry));
+  const missing = buildCriticalRuntimeFiles().filter((entry) => !existsInAsarOrUnpacked(entry, entries, appAsarUnpackedPath));
   if (missing.length) {
     throw new Error(
       `${path.basename(appPath)} is missing runtime files:\n${missing.map((item) => `- ${item}`).join('\n')}`,
