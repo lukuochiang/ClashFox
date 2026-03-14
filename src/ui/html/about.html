@@ -35,86 +35,108 @@
       </div>
     </div>
     <script>
-      const { ipcRenderer } = require('electron');
-      const SETTINGS_KEY = 'clashfox-settings';
+      (function () {
+        const SETTINGS_KEY = 'clashfox-settings';
+        let lastSystemDark = window.matchMedia
+          ? window.matchMedia('(prefers-color-scheme: dark)').matches
+          : true;
+        const versionEl = document.getElementById('version');
+        const closeBtn = document.getElementById('closeBtn');
 
-      let lastSystemDark = window.matchMedia
-        ? window.matchMedia('(prefers-color-scheme: dark)').matches
-        : true;
-
-      function resolveTheme(preference) {
-        if (preference !== 'auto') {
-          return preference;
+        function resolveTheme(preference) {
+          if (preference !== 'auto') {
+            return preference;
+          }
+          return lastSystemDark ? 'night' : 'day';
         }
-        return lastSystemDark ? 'night' : 'day';
-      }
 
-      function applyThemePreference(preference) {
-        document.body.dataset.theme = resolveTheme(preference);
-      }
+        function applyTheme(preference) {
+          const theme = resolveTheme(preference);
+          if (document.body) {
+            document.body.dataset.theme = theme;
+          }
+          document.documentElement.setAttribute('data-theme', theme);
+        }
 
-      function readThemePreference() {
-        try {
-          const raw = localStorage.getItem(SETTINGS_KEY);
-          if (!raw) {
+        function readThemePreference() {
+          try {
+            const raw = localStorage.getItem(SETTINGS_KEY);
+            if (!raw) {
+              return 'auto';
+            }
+            const parsed = JSON.parse(raw);
+            return parsed && parsed.themePreference ? parsed.themePreference : 'auto';
+          } catch {
             return 'auto';
           }
-          const parsed = JSON.parse(raw);
-          return parsed && parsed.themePreference ? parsed.themePreference : 'auto';
-        } catch {
-          return 'auto';
         }
-      }
 
-      function syncThemeFromSettings() {
-        applyThemePreference(readThemePreference());
-      }
+        function syncThemeFromSettings() {
+          applyTheme(readThemePreference());
+        }
 
-      const mediaQuery = window.matchMedia
-        ? window.matchMedia('(prefers-color-scheme: dark)')
-        : null;
-
-      if (mediaQuery) {
-        mediaQuery.addEventListener('change', (event) => {
-          lastSystemDark = Boolean(event.matches);
-          if (readThemePreference() === 'auto') {
-            applyThemePreference('auto');
+        function updateLastSystemTheme(payload) {
+          if (payload && typeof payload.dark === 'boolean') {
+            lastSystemDark = payload.dark;
           }
-        });
-      }
-
-      ipcRenderer.on('clashfox:systemTheme', (_event, payload) => {
-        if (!payload || typeof payload.dark !== 'boolean') {
-          return;
         }
-        lastSystemDark = payload.dark;
-        if (readThemePreference() === 'auto') {
-          applyThemePreference('auto');
-        }
-      });
 
-      window.addEventListener('storage', (event) => {
-        if (event.key === SETTINGS_KEY) {
-          syncThemeFromSettings();
+        function bindSystemThemeListeners() {
+          if (window.matchMedia) {
+            const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+            mediaQuery.addEventListener('change', (event) => {
+              lastSystemDark = Boolean(event.matches);
+              if (readThemePreference() === 'auto') {
+                applyTheme('auto');
+              }
+            });
+          }
+          if (window.clashfox && typeof window.clashfox.onSystemThemeChange === 'function') {
+            window.clashfox.onSystemThemeChange((payload) => {
+              updateLastSystemTheme(payload);
+              if (readThemePreference() === 'auto') {
+                applyTheme('auto');
+              }
+            });
+          }
         }
-      });
 
-      syncThemeFromSettings();
-
-      ipcRenderer.invoke('clashfox:appInfo').then((res) => {
-        if (res && res.ok && res.data) {
-          const version = res.data.version || '0.0.0';
-          document.getElementById('version').textContent = `${version}`;
+        async function updateVersion() {
+          if (!window.clashfox || typeof window.clashfox.getAppInfo !== 'function' || !versionEl) {
+            return;
+          }
+          try {
+            const res = await window.clashfox.getAppInfo();
+            const display = res && res.ok && res.data
+              ? (res.data.displayVersion || res.data.version || '0.0.0')
+              : '0.0.0';
+            versionEl.textContent = display;
+          } catch {
+            // ignore
+          }
         }
-      });
-      document.getElementById('closeBtn').addEventListener('click', () => {
-        window.close();
-      });
-      window.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') {
+
+        function handleClose() {
           window.close();
         }
-      });
+
+        closeBtn?.addEventListener('click', handleClose);
+        window.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') {
+            handleClose();
+          }
+        });
+
+        window.addEventListener('storage', (event) => {
+          if (event.key === SETTINGS_KEY) {
+            syncThemeFromSettings();
+          }
+        });
+
+        syncThemeFromSettings();
+        bindSystemThemeListeners();
+        updateVersion();
+      })();
     </script>
   </body>
 </html>

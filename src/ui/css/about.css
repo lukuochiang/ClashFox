@@ -118,7 +118,7 @@ body[data-theme="day"] .about-logo .logo-night {
 }
 
 .name {
-  font-size: 24px;
+  font-size: 18px;
   font-weight: 600;
   font-family: var(--font-display);
   letter-spacing: 0.5px;

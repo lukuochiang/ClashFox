@@ -1,5 +1,33 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+let appInfoCache = null;
+let appInfoPromise = null;
+
+function fetchAppInfo(force = false) {
+  if (!force && appInfoCache) {
+    return Promise.resolve(appInfoCache);
+  }
+  if (!force && appInfoPromise) {
+    return appInfoPromise;
+  }
+  appInfoPromise = ipcRenderer.invoke('clashfox:appInfo')
+    .then((response) => {
+      if (response && response.ok && response.data) {
+        appInfoCache = response;
+      }
+      return response;
+    })
+    .finally(() => {
+      appInfoPromise = null;
+    });
+  return appInfoPromise;
+}
+
+function invalidateAppInfoCache() {
+  appInfoCache = null;
+  appInfoPromise = null;
+}
+
 contextBridge.exposeInMainWorld('clashfox', {
   runCommand: (command, args = [], options = {}) => ipcRenderer.invoke('clashfox:command', command, args, options),
   detectTunConflict: () => ipcRenderer.invoke('clashfox:detectTunConflict'),
@@ -14,7 +42,11 @@ contextBridge.exposeInMainWorld('clashfox', {
   importConfig: () => ipcRenderer.invoke('clashfox:importConfig'),
   deleteConfig: (targetPath) => ipcRenderer.invoke('clashfox:deleteConfig', targetPath),
   selectDirectory: (title) => ipcRenderer.invoke('clashfox:selectDirectory', title),
-  getAppInfo: () => ipcRenderer.invoke('clashfox:appInfo'),
+  getAppInfo: (force = false) => fetchAppInfo(force),
+  refreshAppInfo: () => {
+    invalidateAppInfoCache();
+    return fetchAppInfo(true);
+  },
   checkUpdates: (options = {}) => ipcRenderer.invoke('clashfox:checkUpdates', options),
   checkKernelUpdates: (options = {}) => ipcRenderer.invoke('clashfox:checkKernelUpdates', options),
   checkHelperUpdates: (options = {}) => ipcRenderer.invoke('clashfox:checkHelperUpdates', options),

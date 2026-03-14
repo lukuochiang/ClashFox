@@ -167,6 +167,55 @@ const PRIVILEGED_COMMANDS = new Set([
   'system-proxy-disable',
   'system-proxy-status',
 ]);
+const DANGEROUS_BRIDGE_ARGS = new Set(['--config-dir', '--core-dir', '--data-dir']);
+const DANGEROUS_BRIDGE_ARG_PREFIXES = ['--config-dir=', '--core-dir=', '--data-dir='];
+const SAFE_BRIDGE_COMMANDS = new Set([
+  'status',
+  'configs',
+  'overview',
+  'traffic',
+  'providers-proxies',
+  'providers-rules',
+  'rules',
+  'overview-memory',
+  'track-connections',
+  'panel-install',
+  'panel-activate',
+  'system-proxy-status',
+  'system-proxy-enable',
+  'system-proxy-disable',
+  'mode',
+  'tun-status',
+  'tun',
+  'cores',
+  'backups',
+  'install',
+  'start',
+  'stop',
+  'restart',
+  'switch',
+  'logs',
+  'clean',
+  'delete-backups',
+]);
+
+function sanitizeBridgeArguments(args = []) {
+  const normalized = Array.isArray(args) ? args.slice() : [];
+  const cleaned = [];
+  for (let index = 0; index < normalized.length; index += 1) {
+    const value = normalized[index];
+    const text = typeof value === 'string' ? value.trim() : '';
+    if (!text) {
+      continue;
+    }
+    if (DANGEROUS_BRIDGE_ARGS.has(text) || DANGEROUS_BRIDGE_ARG_PREFIXES.some((prefix) => text.startsWith(prefix))) {
+      index += 1;
+      continue;
+    }
+    cleaned.push(value);
+  }
+  return cleaned;
+}
 const HELPER_SOCKET_PATH = '/var/run/com.clashfox.helper.sock';
 const HELPER_APP_BUNDLE_DIR = '/Applications/ClashFox.app/Contents/Resources/helper';
 const HELPER_USER_DIR = path.join(APP_DATA_DIR, 'helper');
@@ -8791,8 +8840,9 @@ function createAboutWindow() {
     title: 'About ClashFox',
     backgroundColor: '#0f1216',
     webPreferences: {
-      contextIsolation: false,
-      nodeIntegration: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: path.join(__dirname, 'preload.js'),
       devTools: false
     },
   });
@@ -8919,14 +8969,28 @@ app.whenReady().then(() => {
   ipcMain.handle('clashfox:command', async (_event, command, args = [], options = {}) => {
     const cmd = String(command || '').trim();
     const cmdArgs = Array.isArray(args) ? args : [];
-    guiMainLog('command', 'ipc command received', { cmd, args: cmdArgs });
+    const sanitizedArgs = sanitizeBridgeArguments(cmdArgs);
+    const hadDangerousArgs = sanitizedArgs.length !== cmdArgs.length;
+    if (!SAFE_BRIDGE_COMMANDS.has(cmd)) {
+      guiMainLog('command', 'ipc command rejected', {
+        cmd,
+        args: sanitizedArgs,
+        reason: 'command_not_allowed',
+      }, 'warn');
+      return { ok: false, error: 'command_not_allowed' };
+    }
+    guiMainLog('command', 'ipc command received', {
+      cmd,
+      args: sanitizedArgs,
+      argsSanitized: hadDangerousArgs,
+    });
     let result;
     if (cmd === 'configs') {
       result = listConfigFilesFromFs();
     } else if (cmd === 'kernels') {
       result = listKernelFilesFromFs();
     } else {
-      result = await runBridgeWithAutoAuth(cmd, cmdArgs, options);
+      result = await runBridgeWithAutoAuth(cmd, sanitizedArgs, options);
     }
     guiMainLog('command', 'ipc command result', {
       cmd,
@@ -9963,13 +10027,23 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('clashfox:appInfo', () => {
+    const versionValue = String(app.getVersion() || '').trim() || '0.0.0';
+    const buildNumber = getBuildNumber();
+    const normalizedBuild = Number.isFinite(buildNumber) && buildNumber > 0 ? buildNumber : 1;
+    const baseVersionMatch = versionValue.match(/^(\d+\.\d+\.\d+)/);
+    const baseVersion = baseVersionMatch ? baseVersionMatch[1] : versionValue.replace(/-.*/, '');
+    const devMode = !app.isPackaged;
+    const displayVersion = devMode
+      ? `v${baseVersion || '0.0.0'}-alpha.${normalizedBuild}`
+      : `v${versionValue}`;
     return {
       ok: true,
       data: {
         name: app.getName(),
-        version: app.getVersion(),
-        buildNumber: getBuildNumber(),
-        isDev: !app.isPackaged,
+        version: versionValue,
+        buildNumber: String(buildNumber ?? ''),
+        isDev: devMode,
+        displayVersion,
       },
     };
   });

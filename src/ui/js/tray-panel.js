@@ -23,6 +23,9 @@ const PANEL_TRAFFIC_RECONNECT_MAX_MS = 10000;
 const PANEL_WIDTH_FIXED = 260;
 const PANEL_PROVIDER_REFRESH_MS = 2500;
 let panelProviderRefreshTimer = null;
+const PANEL_MIN_HEIGHT = 200;
+const PANEL_RESIZE_DIFF_THRESHOLD = 4;
+let panelResizeScheduled = false;
 
 async function applyTrayTheme() {
   try {
@@ -476,27 +479,24 @@ async function openPanelTrafficSocket() {
   }
 }
 
-function applyPanelWidthByContent() {
+function measurePanelDimensions() {
   if (!panelRootEl) {
     return { width: PANEL_WIDTH_FIXED, height: 0 };
   }
   const width = PANEL_WIDTH_FIXED;
   panelRootEl.style.width = `${width}px`;
-  const height = Math.ceil(
-    Math.max(
-      panelRootEl.scrollHeight || 0,
-      panelRootEl.getBoundingClientRect().height || 0,
-      panelListEl ? panelListEl.scrollHeight || 0 : 0,
-    ),
-  );
+  const scrollHeight = panelRootEl.scrollHeight || 0;
+  const layoutHeight = panelRootEl.getBoundingClientRect().height || 0;
+  const listHeight = panelListEl ? panelListEl.scrollHeight || 0 : 0;
+  const height = Math.max(scrollHeight, layoutHeight, listHeight);
   return { width, height };
 }
 
-function resizePanelToContent() {
-  const metrics = applyPanelWidthByContent();
-  const width = PANEL_WIDTH_FIXED;
-  const height = Math.max(280, Math.ceil(metrics && metrics.height ? metrics.height : 0));
-  if (width === lastResizeWidth && height === lastResizeHeight) {
+function performPanelResize(metrics) {
+  const width = metrics.width;
+  const height = Math.max(PANEL_MIN_HEIGHT, Math.ceil(metrics.height || 0));
+  const heightDelta = Math.abs(height - lastResizeHeight);
+  if (width === lastResizeWidth && heightDelta < PANEL_RESIZE_DIFF_THRESHOLD) {
     return;
   }
   lastResizeWidth = width;
@@ -504,6 +504,17 @@ function resizePanelToContent() {
   if (window.clashfox && typeof window.clashfox.trayPanelResize === 'function') {
     window.clashfox.trayPanelResize({ width, height });
   }
+}
+
+function resizePanelToContent() {
+  if (panelResizeScheduled) {
+    return;
+  }
+  panelResizeScheduled = true;
+  requestAnimationFrame(() => {
+    panelResizeScheduled = false;
+    performPanelResize(measurePanelDimensions());
+  });
 }
 
 function getPanelProviderItem() {
@@ -620,9 +631,7 @@ function renderPanel() {
   panelItems.forEach((item) => {
     panelListEl.appendChild(makeRow(item));
   });
-  requestAnimationFrame(() => {
-    resizePanelToContent();
-  });
+  resizePanelToContent();
   openPanelTrafficSocket().catch(() => {});
 }
 

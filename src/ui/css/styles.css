@@ -1491,8 +1491,8 @@ body[data-page="settings"] .menu-item-row {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  /*gap: 12px;*/
+  padding: 5px 12px;
   border-radius: 12px;
   background: linear-gradient(135deg, rgba(32, 44, 62, 0.7), rgba(18, 24, 34, 0.5));
   border: 1px solid rgba(120, 136, 158, 0.25);
@@ -1543,6 +1543,7 @@ body[data-page="settings"] .menu-item-icon.folder-icon {
 body[data-page="settings"] .menu-item-body {
   display: grid;
   gap: 4px;
+  margin-left: -12px;
 }
 
 body[data-page="settings"] .menu-item-title {

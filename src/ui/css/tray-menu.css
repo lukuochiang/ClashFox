@@ -82,6 +82,7 @@ body {
   min-width: 200px;
   max-width: 360px;
   box-shadow: var(--shadow);
+  padding: 0;
 }
 
 .submenu-window .submenu-root[data-submenu-key="panel"] {

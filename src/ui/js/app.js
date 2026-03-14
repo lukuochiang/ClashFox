@@ -5122,15 +5122,19 @@ function applyAppInfo(appInfo) {
   if (appName) {
     appName.textContent = appInfo.name || 'ClashFox';
   }
-  const version = appInfo.version || '0.0.0';
-  const baseVersionMatch = String(version).match(/^(\d+\.\d+\.\d+)/);
-  const baseVersion = baseVersionMatch ? baseVersionMatch[1] : String(version).replace(/-.*/, '');
-  const isDev = Boolean(appInfo.isDev);
-  const buildNumber = Number.parseInt(appInfo.buildNumber, 10);
-  const normalizedBuild = Number.isFinite(buildNumber) && buildNumber > 0 ? buildNumber : 1;
-  const displayVersion = isDev
-    ? `v${baseVersion || '0.0.0'}-alpha.${normalizedBuild}`
-    : `v${version}`;
+  const displayVersion = typeof appInfo.displayVersion === 'string' && appInfo.displayVersion.trim()
+    ? appInfo.displayVersion
+    : (() => {
+      const version = appInfo.version || '0.0.0';
+      const baseVersionMatch = String(version).match(/^(\d+\.\d+\.\d+)/);
+      const baseVersion = baseVersionMatch ? baseVersionMatch[1] : String(version).replace(/-.*/, '');
+      const isDev = Boolean(appInfo.isDev);
+      const buildNumber = Number.parseInt(appInfo.buildNumber, 10);
+      const normalizedBuild = Number.isFinite(buildNumber) && buildNumber > 0 ? buildNumber : 1;
+      return isDev
+        ? `v${baseVersion || '0.0.0'}-alpha.${normalizedBuild}`
+        : `v${version}`;
+    })();
   if (appVersion) {
     appVersion.textContent = displayVersion;
   }
