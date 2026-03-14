@@ -1,7 +1,7 @@
 {
   "name": "ClashFox",
   "version": "0.4.6",
-  "buildNumber": 13,
+  "buildNumber": 14,
   "description": "ClashFox GUI for Mihomo",
   "license": "GPL-3.0",
   "author": "Kuochiang Lu <lukuochiang@gmail.com> (https://github.com/lukuochiang/ClashFox)",
@@ -28,15 +28,17 @@
     "electronLanguages": [
       "en"
     ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/maxmind/**/*",
+      "node_modules/mmdb-lib/**/*",
+      "node_modules/tiny-lru/**/*"
+    ],
+    "npmRebuild": false,
     "files": [
       "src/**/*",
       "static/**/*",
       "package.json",
-      "!static/helper",
-      "!static/helper/**/*",
-      "!static/scripts",
-      "!static/scripts/**/*",
-      "!**/dist/**",
       "!**/.DS_Store"
     ],
     "extraResources": [

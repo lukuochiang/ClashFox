@@ -5,6 +5,7 @@ on:
     tags:
       - "v*.*.*"
       - "v*.*.*-beta*"
+      - "v*.*.*-rc*"
   workflow_dispatch:
     inputs:
       channel:
@@ -78,6 +79,14 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Rebuild native modules
+        run: npm rebuild
+
+      - name: Debug files
+        run: |
+          ls src
+          ls node_modules/maxmind
 
       - name: Set package version from tag
         shell: bash
