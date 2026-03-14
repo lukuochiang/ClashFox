@@ -16,8 +16,8 @@ const releaseChannelEnv = String(process.env.CLASHFOX_RELEASE_CHANNEL || '').tri
 const requestedReleaseChannel = releaseChannelArg || releaseChannelEnv || '';
 const VALID_RELEASE_CHANNELS = new Set(['alpha', 'beta', 'rc', 'stable']);
 const configMode = withHelper ? 'helper' : 'no-helper';
-const tempConfigPath = path.join(ROOT, 'dist', `electron-builder.${configMode}.json`);
-const tempX64ConfigPath = path.join(ROOT, 'dist', `electron-builder.${configMode}.x64.json`);
+const tempConfigPath = path.join(ROOT, `.electron-builder.${configMode}.json`);
+const tempX64ConfigPath = path.join(ROOT, `.electron-builder.${configMode}.x64.json`);
 const effectiveAppVersion = deriveReleaseVersion(String(pkg.version || '0.0.0'), requestedReleaseChannel);
 
 function parseSemver(version) {
@@ -88,9 +88,20 @@ function renameUnpackedMacDir(fromName, toName) {
 
 function buildConfig({ includeHelper = true, forceX64Suffix = false } = {}) {
   const base = pkg.build || {};
-  const files = includeHelper || !Array.isArray(base.files)
+  const baseFiles = includeHelper || !Array.isArray(base.files)
     ? base.files
     : base.files.filter((entry) => !String(entry).includes('helper/'));
+  const files = Array.isArray(baseFiles) ? [...baseFiles] : [];
+  const runtimeDependencyFiles = Object.keys(pkg.dependencies || {}).map((name) => `node_modules/${name}/**/*`);
+  const requiredRuntimeFiles = [
+    String(pkg.main || '').trim(),
+    ...runtimeDependencyFiles,
+  ].filter(Boolean);
+  requiredRuntimeFiles.forEach((entry) => {
+    if (!files.includes(entry)) {
+      files.unshift(entry);
+    }
+  });
   const extraResources = includeHelper || !Array.isArray(base.extraResources)
     ? base.extraResources
     : base.extraResources.filter((entry) => {
