@@ -23,7 +23,7 @@ const PANEL_TRAFFIC_RECONNECT_MAX_MS = 10000;
 const PANEL_WIDTH_FIXED = 260;
 const PANEL_PROVIDER_REFRESH_MS = 2500;
 let panelProviderRefreshTimer = null;
-const PANEL_MIN_HEIGHT = 200;
+const PANEL_MIN_HEIGHT = 286;
 const PANEL_RESIZE_DIFF_THRESHOLD = 4;
 let panelResizeScheduled = false;
 
@@ -485,10 +485,9 @@ function measurePanelDimensions() {
   }
   const width = PANEL_WIDTH_FIXED;
   panelRootEl.style.width = `${width}px`;
-  const scrollHeight = panelRootEl.scrollHeight || 0;
-  const layoutHeight = panelRootEl.getBoundingClientRect().height || 0;
-  const listHeight = panelListEl ? panelListEl.scrollHeight || 0 : 0;
-  const height = Math.max(scrollHeight, layoutHeight, listHeight);
+  const height = panelListEl
+    ? (panelListEl.scrollHeight || panelListEl.getBoundingClientRect().height || 0)
+    : (panelRootEl.scrollHeight || panelRootEl.getBoundingClientRect().height || 0);
   return { width, height };
 }
 

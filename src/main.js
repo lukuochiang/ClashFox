@@ -7220,7 +7220,6 @@ function buildTraySubmenuData({
   labels,
   outboundItems,
   providerTraffic,
-  showProviderTraffic,
   dashboardEnabled,
   networkTakeoverEnabled,
   tunEnabled,
@@ -7277,7 +7276,7 @@ function buildTraySubmenuData({
       {
         type: 'panel-provider-traffic',
         payload: providerTraffic,
-        enabled: showProviderTraffic !== false,
+        enabled: true,
       },
     ],
     directory: [
@@ -7771,7 +7770,7 @@ function ensureTrayPanelWindow() {
   }
   trayPanelWindow = new BrowserWindow({
     width: 260,
-    height: 340,
+    height: 286,
     show: false,
     frame: false,
     transparent: true,
@@ -7955,7 +7954,7 @@ function computeTrayPanelBounds(width, height) {
   const area = display.workArea;
   const gap = 0;
   const targetWidth = Math.max(260, Math.round(width || 0));
-  const targetHeight = Math.max(260, Math.round(height || 0));
+  const targetHeight = Math.max(286, Math.round(height || 0));
   const maxTopWithinMain = Math.max(
     8,
     (trayPanelAnchor.rootHeight || targetHeight) - targetHeight - 8,
@@ -7996,6 +7995,55 @@ function positionTrayPanelWindow(width, height) {
     height: Math.round(height),
   };
   trayPanelWindow.setBounds(nextBounds);
+}
+
+async function openTrayPanelWindow(payload = {}) {
+  if (
+    !trayMenuVisible
+    || trayMenuClosing
+    || !trayMenuWindow
+    || trayMenuWindow.isDestroyed()
+    || !trayMenuWindow.isFocused()
+  ) {
+    return;
+  }
+  hideTraySubmenuWindow();
+  const popup = ensureTrayPanelWindow();
+  trayPanelAnchor = {
+    top: Number(payload && payload.anchorTop) || 0,
+    height: Number(payload && payload.anchorHeight) || 0,
+    rootHeight: Number(payload && payload.rootHeight) || 0,
+  };
+  const previousPanelVisible = trayPanelVisible;
+  trayPanelVisible = false;
+  let latestMenuData = trayMenuData;
+  try {
+    latestMenuData = await createTrayMenu().catch(() => trayMenuData);
+  } finally {
+    trayPanelVisible = previousPanelVisible;
+  }
+  const items = (
+    latestMenuData
+    && latestMenuData.submenus
+    && Array.isArray(latestMenuData.submenus.panel)
+  )
+    ? latestMenuData.submenus.panel
+    : (Array.isArray(payload.items) ? payload.items : []);
+  const lastWidth = Number(trayPanelLastSize && trayPanelLastSize.width) || 260;
+  const lastHeight = Number(trayPanelLastSize && trayPanelLastSize.height) || 286;
+  trayPanelLastSize = {
+    width: Math.max(260, Math.round(lastWidth)),
+    height: Math.max(286, Math.round(lastHeight)),
+  };
+  trayPanelVisible = true;
+  positionTrayPanelWindow(trayPanelLastSize.width, trayPanelLastSize.height);
+  sendTrayPanelUpdate({
+    key: 'panel',
+    items,
+  });
+  if (!popup.isVisible()) {
+    popup.show();
+  }
 }
 
 function computeTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, explicitWidth = 260) {
@@ -9236,24 +9284,12 @@ app.whenReady().then(() => {
       ? trayMenuData.submenus[key]
       : (Array.isArray(payload.items) ? payload.items : []);
     if (key === 'panel') {
-      hideTraySubmenuWindow();
-      const popup = ensureTrayPanelWindow();
-      trayPanelAnchor = {
-        top: Number(payload && payload.anchorTop) || 0,
-        height: Number(payload && payload.anchorHeight) || 0,
-        rootHeight: Number(payload && payload.rootHeight) || 0,
-      };
-      trayPanelLastSize = { width: 260, height: 340 };
-      trayPanelVisible = true;
-      positionTrayPanelWindow(trayPanelLastSize.width, trayPanelLastSize.height);
-      sendTrayPanelUpdate({
+      trayPanelLastSize = { width: 260, height: 286 };
+      await openTrayPanelWindow({
+        ...payload,
         key,
         items,
       });
-      createTrayMenu().catch(() => {});
-      if (!popup.isVisible()) {
-        popup.show();
-      }
       return;
     }
     hideTrayPanelWindow();
@@ -9289,29 +9325,8 @@ app.whenReady().then(() => {
     ) {
       return;
     }
-    const items = (trayMenuData
-      && trayMenuData.submenus
-      && Array.isArray(trayMenuData.submenus.panel))
-      ? trayMenuData.submenus.panel
-      : (Array.isArray(payload.items) ? payload.items : []);
-    hideTraySubmenuWindow();
-    const popup = ensureTrayPanelWindow();
-    trayPanelAnchor = {
-      top: Number(payload && payload.anchorTop) || 0,
-      height: Number(payload && payload.anchorHeight) || 0,
-      rootHeight: Number(payload && payload.rootHeight) || 0,
-    };
-    trayPanelLastSize = { width: 260, height: 340 };
-    trayPanelVisible = true;
-    positionTrayPanelWindow(trayPanelLastSize.width, trayPanelLastSize.height);
-    sendTrayPanelUpdate({
-      key: 'panel',
-      items,
-    });
-    createTrayMenu().catch(() => {});
-    if (!popup.isVisible()) {
-      popup.show();
-    }
+    trayPanelLastSize = { width: 260, height: 286 };
+    await openTrayPanelWindow(payload);
   });
 
   ipcMain.on('clashfox:trayMenu:closePanel', () => {
@@ -9386,7 +9401,7 @@ app.whenReady().then(() => {
       return;
     }
     const width = Math.max(260, Math.round(Number(payload && payload.width) || 0));
-    const height = Math.max(260, Math.round(Number(payload && payload.height) || 0));
+    const height = Math.max(140, Math.round(Number(payload && payload.height) || 0));
     trayPanelLastSize = { width, height };
     positionTrayPanelWindow(width, height);
     const popup = ensureTrayPanelWindow();
