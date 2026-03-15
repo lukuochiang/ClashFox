@@ -27,7 +27,7 @@ function findPackageJsonForResolvedEntry(entryPath) {
 }
 
 function buildCriticalRuntimeFiles() {
-  const files = new Set(['src/main.js']);
+  const files = new Set([pkg.main]);
   Object.keys(pkg.dependencies || {}).forEach((name) => {
     const entryPath = require.resolve(name, { paths: [ROOT] });
     files.add(toAsarRelative(entryPath));
@@ -61,10 +61,11 @@ function buildAppAsarUnpackedPath(appPath) {
 }
 
 function existsInAsarOrUnpacked(entry, asarEntries, asarUnpackedPath) {
-  if (asarEntries.has(entry)) {
+  const normalized = String(entry || '').replace(/^\/+/, '');
+  if (asarEntries.has(normalized)) {
     return true;
   }
-  const unpackedEntryPath = path.join(asarUnpackedPath, ...String(entry || '').split('/'));
+  const unpackedEntryPath = path.join(asarUnpackedPath, ...normalized.split('/'));
   return fs.existsSync(unpackedEntryPath);
 }
 
@@ -74,7 +75,7 @@ function validateAppBundle(appPath) {
     throw new Error(`Missing app.asar in ${appPath}`);
   }
   const appAsarUnpackedPath = buildAppAsarUnpackedPath(appPath);
-  const entries = new Set(asar.listPackage(appAsarPath));
+  const entries = new Set(asar.listPackage(appAsarPath).map((p) => String(p || '').replace(/^\/+/, '')));
   const missing = buildCriticalRuntimeFiles().filter((entry) => !existsInAsarOrUnpacked(entry, entries, appAsarUnpackedPath));
   if (missing.length) {
     throw new Error(
