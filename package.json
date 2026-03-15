@@ -1,7 +1,7 @@
 {
   "name": "ClashFox",
   "version": "0.4.6",
-  "buildNumber": 14,
+  "buildNumber": 15,
   "description": "ClashFox GUI for Mihomo",
   "license": "GPL-3.0",
   "author": "Kuochiang Lu <lukuochiang@gmail.com> (https://github.com/lukuochiang/ClashFox)",
@@ -11,11 +11,14 @@
     "start": "electron .",
     "dev": "node static/scripts/bump-version.js && node -e 'const p=require(\"./package.json\"); console.log(`> ClashFox@${p.version} dev (buildNumber: ${p.buildNumber})`)' && CLASHFOX_DEV=1 electron .",
     "build:mac": "node static/scripts/build-mac.js",
+    "build:mac:x64": "node static/scripts/build-mac.js --arch x64",
+    "build:mac:arm64": "node static/scripts/build-mac.js --arch arm64",
+    "build:mac:universal": "node static/scripts/build-mac.js --arch universal",
     "build:mac:alpha": "node static/scripts/build-mac.js --channel alpha",
     "build:mac:beta": "node static/scripts/build-mac.js --channel beta",
     "build:mac:rc": "node static/scripts/build-mac.js --channel rc",
     "build:mac:stable": "node static/scripts/build-mac.js --channel stable",
-    "clean:mac": "node static/scripts/clean-dist-mac.js"
+    "clean:dist": "rm -rf dist artifacts"
   },
   "devDependencies": {
     "electron": "^28.2.0",
@@ -34,11 +37,17 @@
       "node_modules/mmdb-lib/**/*",
       "node_modules/tiny-lru/**/*"
     ],
+    "afterPack": "static/scripts/after-pack.js",
+    "compression": "maximum",
     "npmRebuild": false,
     "files": [
       "src/**/*",
       "static/**/*",
       "package.json",
+      "!static/helper",
+      "!static/helper/**/*",
+      "!static/scripts",
+      "!static/scripts/**/*",
       "!**/.DS_Store"
     ],
     "extraResources": [
@@ -87,7 +96,7 @@
       "category": "public.app-category.utilities",
       "icon": "src/ui/assets/icns/logo.icns",
       "identity": null,
-      "artifactName": "${productName}-${version}(${env.CLASHFOX_BUILD_NUMBER})-mac-${arch}.${ext}",
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
       "target": [
         {
           "target": "zip",
@@ -99,25 +108,11 @@
         }
       ]
     },
-    "dmg": {
-      "window": {
-        "width": 540,
-        "height": 380
-      },
-      "contents": [
-        {
-          "x": 160,
-          "y": 160
-        },
-        {
-          "x": 380,
-          "y": 160,
-          "type": "link",
-          "path": "/Applications"
-        }
-      ],
-      "title": "ClashFox Installer"
-    }
+    "publish": [
+      {
+        "provider": "github"
+      }
+    ]
   },
   "dependencies": {
     "maxmind": "^4.3.24",

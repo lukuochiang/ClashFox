@@ -13,9 +13,9 @@ on:
         required: true
         default: "beta"
         type: choice
-        options: [beta, standard]
+        options: [beta, rc, stable]
       tag:
-        description: "Tag to build (e.g. v1.2.3 or v1.2.3-beta.1). Empty = current ref"
+        description: "Tag to build (e.g. v1.2.3 or v1.2.3-beta.1 or v1.2.3-rc.1). Empty = current ref"
         required: false
 
 permissions:
@@ -41,29 +41,26 @@ jobs:
           if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
             if [[ "$INPUT_TAG" == *"-beta"* ]]; then
               CHANNEL="beta"
+            elif [[ "$INPUT_TAG" == *"-rc"* ]]; then
+              CHANNEL="rc"
             else
-              CHANNEL="standard"
+              CHANNEL="stable"
             fi
-          fi
-
-          RELEASE_TAG="$INPUT_TAG"
-          if [[ "$CHANNEL" == "beta" ]]; then
-            PRERELEASE="true"
-            UPDATE_CHANNEL="beta"
-          else
-            PRERELEASE="false"
-            UPDATE_CHANNEL="latest"
           fi
 
           VERSION="${INPUT_TAG#v}"
           RELEASE_NAME="ClashFox ${VERSION}"
+          PRERELEASE="false"
+          if [[ "$CHANNEL" == "beta" || "$CHANNEL" == "rc" ]]; then
+            PRERELEASE="true"
+          fi
 
           echo "input_tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
-          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-          echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
-          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "update_channel=$UPDATE_CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
+          echo "release_channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
 
       - name: Checkout source
         uses: actions/checkout@v4
@@ -77,16 +74,16 @@ jobs:
           node-version: "20"
           cache: "npm"
 
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
         run: npm ci
-
-      - name: Rebuild native modules
-        run: npm rebuild
-
-      - name: Debug files
-        run: |
-          ls src
-          ls node_modules/maxmind
 
       - name: Set package version from tag
         shell: bash
@@ -96,12 +93,9 @@ jobs:
         shell: bash
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          UPDATE_CHANNEL: ${{ steps.meta.outputs.update_channel }}
-          CLASHFOX_ARTIFACT_NAME: ${{ '${productName}-${version}-mac-${arch}-helper.${ext}' }}
-          CLASHFOX_DUAL_FROM_HELPER: "1"
+          CLASHFOX_RELEASE_CHANNEL: ${{ steps.meta.outputs.release_channel }}
         run: |
           set -euo pipefail
-          export UPDATE_CHANNEL
           npm run build:mac
 
       - name: Verify zip artifacts
@@ -113,9 +107,6 @@ jobs:
             "ClashFox-${VERSION}-mac-x64.zip"
             "ClashFox-${VERSION}-mac-arm64.zip"
             "ClashFox-${VERSION}-mac-universal.zip"
-            "ClashFox-${VERSION}-mac-x64-helper.zip"
-            "ClashFox-${VERSION}-mac-arm64-helper.zip"
-            "ClashFox-${VERSION}-mac-universal-helper.zip"
           )
 
           echo "Checking expected zip outputs..."
@@ -146,7 +137,6 @@ jobs:
             -exec cp -v {} artifacts/ \;
 
           printf '%s\n' "${{ steps.meta.outputs.version }}" > artifacts/version.txt
-
           ls -al artifacts
 
       - name: Create/Update release

@@ -14,11 +14,18 @@ const releaseChannelArgIndex = process.argv.findIndex((arg) => arg === '--channe
 const releaseChannelArg = releaseChannelArgIndex >= 0 ? String(process.argv[releaseChannelArgIndex + 1] || '').trim().toLowerCase() : '';
 const releaseChannelEnv = String(process.env.CLASHFOX_RELEASE_CHANNEL || '').trim().toLowerCase();
 const requestedReleaseChannel = releaseChannelArg || releaseChannelEnv || '';
+const archArgIndex = process.argv.findIndex((arg) => arg === '--arch');
+const requestedArch = archArgIndex >= 0 ? String(process.argv[archArgIndex + 1] || '').trim().toLowerCase() : '';
 const VALID_RELEASE_CHANNELS = new Set(['alpha', 'beta', 'rc', 'stable']);
+const VALID_ARCHES = new Set(['x64', 'arm64', 'universal', 'all', '']);
 const configMode = withHelper ? 'helper' : 'no-helper';
 const tempConfigPath = path.join(ROOT, `.electron-builder.${configMode}.json`);
 const tempX64ConfigPath = path.join(ROOT, `.electron-builder.${configMode}.x64.json`);
 const effectiveAppVersion = deriveReleaseVersion(String(pkg.version || '0.0.0'), requestedReleaseChannel);
+
+if (!VALID_ARCHES.has(requestedArch)) {
+  throw new Error(`Unsupported mac build arch: ${requestedArch}`);
+}
 
 function parseSemver(version) {
   const normalized = String(version || '').trim();
@@ -70,6 +77,62 @@ function ensureDistDir() {
   fs.mkdirSync(distDir, { recursive: true });
 }
 
+function resolveVersionDirName() {
+  const releaseVersion = String(process.env.CLASHFOX_RELEASE_VERSION || '').trim();
+  const resolvedVersion = releaseVersion || String(pkg.version || '').trim();
+  return resolvedVersion ? `v${resolvedVersion}` : 'unknown';
+}
+
+function prepareDistLayout() {
+  ensureDistDir();
+  const versionDir = path.join(ROOT, 'dist', resolveVersionDirName());
+  fs.mkdirSync(versionDir, { recursive: true });
+  return versionDir;
+}
+
+function finalizeDistLayout() {
+  const distDir = path.join(ROOT, 'dist');
+  if (!fs.existsSync(distDir)) {
+    return;
+  }
+  const versionDirName = resolveVersionDirName();
+  const versionDir = path.join(distDir, versionDirName);
+  fs.mkdirSync(versionDir, { recursive: true });
+  const keepExts = new Set(['.zip', '.yml', '.yaml']);
+  const keepNames = new Set(['latest.yml']);
+  for (const name of fs.readdirSync(distDir)) {
+    const filePath = path.join(distDir, name);
+    if (name === versionDirName) {
+      continue;
+    }
+    if (name.startsWith('mac')) {
+      fs.rmSync(filePath, { recursive: true, force: true });
+      continue;
+    }
+    let stat;
+    try {
+      stat = fs.statSync(filePath);
+    } catch {
+      continue;
+    }
+    if (!stat.isFile()) {
+      continue;
+    }
+    const ext = path.extname(name);
+    if (!keepExts.has(ext) && !keepNames.has(name)) {
+      fs.unlinkSync(filePath);
+      continue;
+    }
+    if (ext === '.yml' || keepNames.has(name)) {
+      continue;
+    }
+    const destPath = path.join(versionDir, name);
+    if (destPath !== filePath) {
+      fs.renameSync(filePath, destPath);
+    }
+  }
+}
+
 function renameUnpackedMacDir(fromName, toName) {
   const fromPath = path.join(ROOT, 'dist', fromName);
   const toPath = path.join(ROOT, 'dist', toName);
@@ -88,10 +151,11 @@ function renameUnpackedMacDir(fromName, toName) {
 
 function buildConfig({ includeHelper = true, forceX64Suffix = false } = {}) {
   const base = pkg.build || {};
-  const baseFiles = includeHelper || !Array.isArray(base.files)
-    ? base.files
-    : base.files.filter((entry) => !String(entry).includes('helper/'));
-  const files = Array.isArray(baseFiles) ? [...baseFiles] : [];
+  const files = Array.isArray(base.files) ? [...base.files] : [];
+  if (!includeHelper) {
+    files.push('!static/helper');
+    files.push('!static/helper/**/*');
+  }
   const runtimeDependencyFiles = Object.keys(pkg.dependencies || {}).map((name) => `node_modules/${name}/**/*`);
   const requiredRuntimeFiles = [
     String(pkg.main || '').trim(),
@@ -167,12 +231,19 @@ function buildMac() {
     PYTHON: process.env.PYTHON || 'python3',
   };
   const commonArgs = ['--mac', 'zip'];
-  run('npx', ['electron-builder', ...commonArgs, '--x64', '--publish', 'never', '--config', tempX64ConfigPath], { env });
-  renameUnpackedMacDir('mac', 'mac-x64');
-  run('npx', ['electron-builder', ...commonArgs, '--arm64', '--publish', 'never', '--config', tempConfigPath], { env });
-  renameUnpackedMacDir('mac', 'mac-arm64');
-  run('npx', ['electron-builder', ...commonArgs, '--universal', '--publish', 'never', '--config', tempConfigPath], { env });
-  renameUnpackedMacDir('mac', 'mac-universal');
+  const buildAll = !requestedArch || requestedArch === 'all';
+  if (buildAll || requestedArch === 'x64') {
+    run('npx', ['electron-builder', ...commonArgs, '--x64', '--publish', 'never', '--config', tempX64ConfigPath], { env });
+    renameUnpackedMacDir('mac', 'mac-x64');
+  }
+  if (buildAll || requestedArch === 'arm64') {
+    run('npx', ['electron-builder', ...commonArgs, '--arm64', '--publish', 'never', '--config', tempConfigPath], { env });
+    renameUnpackedMacDir('mac', 'mac-arm64');
+  }
+  if (buildAll || requestedArch === 'universal') {
+    run('npx', ['electron-builder', ...commonArgs, '--universal', '--publish', 'never', '--config', tempConfigPath], { env });
+    renameUnpackedMacDir('mac', 'mac-universal');
+  }
 }
 
 function validateRuntimeLayout() {
@@ -267,9 +338,7 @@ function buildDualArtifactsFromUnpacked() {
   }
 }
 
-run('node', ['static/scripts/clean-dist-mac.js', '--pre']);
-
-ensureDistDir();
+prepareDistLayout();
 writeBuildConfigs();
 
 let exitCode = 0;
@@ -280,17 +349,20 @@ try {
   if (dualOutputFromHelper) {
     buildDualArtifactsFromUnpacked();
   }
-} catch {
+} catch (error) {
   exitCode = 1;
+  const message = error && error.message ? error.message : String(error);
+  process.stderr.write(`${message}\n`);
 } finally {
   cleanupNoHelperConfig();
-  const post = spawnSync('node', ['static/scripts/clean-dist-mac.js'], {
-    cwd: ROOT,
-    stdio: 'inherit',
-    shell: false,
-  });
-  if (post.status !== 0 && exitCode === 0) {
-    exitCode = post.status || 1;
+  if (exitCode === 0) {
+    try {
+      finalizeDistLayout();
+    } catch (error) {
+      exitCode = 1;
+      const message = error && error.message ? error.message : String(error);
+      process.stderr.write(`${message}\n`);
+    }
   }
 }
 

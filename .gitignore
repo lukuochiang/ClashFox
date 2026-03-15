@@ -16,3 +16,8 @@ node_modules
 dist
 
 .build
+
+.electron-builder.helper.json
+.electron-builder.helper.x64.json
+
+.gitignore
