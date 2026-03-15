@@ -710,9 +710,31 @@ function makeRow(item) {
   return row;
 }
 
+function isScrollableSubmenuKey(key = '') {
+  return String(key || '').startsWith('outbound-group:');
+}
+
+function getVisibleSubmenuItems() {
+  return submenuItems;
+}
+
 function applySubmenuWidthByContent() {
   if (!submenuRootEl) {
     return { width: SUBMENU_MIN_WIDTH, height: 0 };
+  }
+  const scrollableMode = isScrollableSubmenuKey(submenuKey);
+  if (submenuListEl) {
+    if (scrollableMode) {
+      const viewportHeight = window.screen && Number.isFinite(Number(window.screen.availHeight))
+        ? Number(window.screen.availHeight)
+        : window.innerHeight;
+      const maxHeight = Math.max(420, Math.min(760, Math.floor(viewportHeight * 0.8)));
+      submenuListEl.style.maxHeight = `${maxHeight}px`;
+      submenuListEl.style.overflowY = 'auto';
+    } else {
+      submenuListEl.style.maxHeight = '';
+      submenuListEl.style.overflowY = '';
+    }
   }
   if (submenuKey === 'panel') {
     submenuRootEl.style.width = 'max-content';
@@ -730,11 +752,18 @@ function applySubmenuWidthByContent() {
     ? Math.max(SUBMENU_PANEL_MIN_WIDTH, Math.min(measured, SUBMENU_PANEL_MAX_WIDTH))
     : Math.max(SUBMENU_MIN_WIDTH, Math.min(measured, SUBMENU_MAX_WIDTH));
   submenuRootEl.style.width = `${width}px`;
+  const listHeight = submenuListEl
+    ? Math.ceil(
+        scrollableMode
+          ? Math.max(submenuListEl.clientHeight || 0, submenuListEl.getBoundingClientRect().height || 0)
+          : Math.max(submenuListEl.scrollHeight || 0, submenuListEl.getBoundingClientRect().height || 0),
+      )
+    : 0;
   const height = Math.ceil(
     Math.max(
       submenuRootEl.scrollHeight || 0,
       submenuRootEl.getBoundingClientRect().height || 0,
-      submenuListEl ? submenuListEl.scrollHeight || 0 : 0,
+      listHeight,
     ),
   );
   return { width, height };
@@ -754,7 +783,7 @@ function resizeSubmenuToContent() {
 
 function renderSubmenu() {
   submenuListEl.innerHTML = '';
-  submenuItems.forEach((item) => {
+  getVisibleSubmenuItems().forEach((item) => {
     submenuListEl.appendChild(makeRow(item));
   });
   requestAnimationFrame(() => {
@@ -765,6 +794,9 @@ function renderSubmenu() {
 function setSubmenu(payload) {
   submenuKey = payload && payload.key ? payload.key : '';
   submenuItems = Array.isArray(payload && payload.items) ? payload.items : [];
+  if (submenuRootEl) {
+    submenuRootEl.dataset.submenuKey = submenuKey;
+  }
   renderSubmenu();
   ensureConnectivityRefresh();
   if (submenuKey === 'panel') {
@@ -827,12 +859,21 @@ if (window.clashfox && typeof window.clashfox.traySubmenuHover === 'function') {
     window.clashfox.traySubmenuHover(normalized);
   };
   if (submenuRootEl) {
+    submenuRootEl.addEventListener('mouseenter', () => sendHover(true));
     submenuRootEl.addEventListener('mousemove', () => sendHover(true));
     submenuRootEl.addEventListener('mouseleave', () => sendHover(false));
   }
-  window.addEventListener('blur', () => sendHover(false));
 }
 
 if (window.clashfox && typeof window.clashfox.traySubmenuReady === 'function') {
   window.clashfox.traySubmenuReady();
+}
+
+if (submenuListEl) {
+  submenuListEl.addEventListener('scroll', () => {
+    if (window.clashfox && typeof window.clashfox.traySubmenuHover === 'function') {
+      window.clashfox.traySubmenuHover(true);
+      lastHoverSent = true;
+    }
+  });
 }

@@ -201,6 +201,7 @@ const ICON_SVGS = {
   showMain: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 9h16"/></svg>',
   networkTakeover: '<svg viewBox="0 0 24 24"><path d="M4 10a12 12 0 0 1 16 0"/><path d="M7 13a8 8 0 0 1 10 0"/><path d="M10 16a4 4 0 0 1 4 0"/><circle cx="12" cy="19" r="1"/></svg>',
   outboundMode: '<svg viewBox="0 0 24 24"><path d="M4 8h11"/><path d="M12 5l3 3-3 3"/><path d="M20 16H9"/><path d="M12 13l-3 3 3 3"/></svg>',
+  proxyGroup: '<svg viewBox="0 0 24 24"><circle cx="7" cy="6.5" r="2.2"/><circle cx="17" cy="17.5" r="2.2"/><path d="M9.2 7h5.6a3.2 3.2 0 0 1 3.2 3.2v1.4"/><path d="M14.8 17H9.2A3.2 3.2 0 0 1 6 13.8v-1.4"/><path d="M15 7l3 3-3 3"/><path d="M9 17l-3-3 3-3"/></svg>',
   dashboard: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8 14.5a4 4 0 0 1 8 0"/><path d="M12 12l3-3"/><circle cx="9" cy="10" r="1" class="menu-icon-fill"/></svg>',
   panel: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2" fill="rgba(86,156,255,0.18)" stroke="#5ea8ff" stroke-width="1.4"/><path d="M4 10h16" stroke="#f2b663" stroke-width="1.4"/><path d="M8 14h7" stroke="#67d39c" stroke-width="1.6" stroke-linecap="round"/><path d="M8 17h5" stroke="#c78bff" stroke-width="1.6" stroke-linecap="round"/></svg>',
   trackers: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6"/><path d="M3.8 12h16.4"/><path d="M12 3.4c2.7 2.2 2.7 15 0 17.2"/><path d="M12 3.4c-2.7 2.2-2.7 15 0 17.2"/><path d="M6.2 7.1c1.7 1 3.7 1.6 5.8 1.6s4.1-.6 5.8-1.6"/><path d="M6.2 16.9c1.7-1 3.7-1.6 5.8-1.6s4.1.6 5.8 1.6"/></svg>',
@@ -980,14 +981,47 @@ function buildOutboundProxyTreeItems(payload = null) {
     items.push({
       type: 'provider-link',
       label: provider.name || '-',
+      subtitle: provider.subtitle || '',
+      iconUrl: provider.iconUrl || '',
+      iconKey: provider.iconKey || 'outboundMode',
       currentProxy: provider.currentProxy || '',
       chart: Array.isArray(provider.chart) ? provider.chart : [],
       submenu: provider.submenuKey || '',
-      rightText: String(Number(provider.proxyCount || 0)),
+      rightText: provider.currentProxy || '-',
+      chartMode: provider.chartMode || 'segmented',
       enabled: true,
     });
   });
   return items;
+}
+
+function buildProviderLinkLeading(item) {
+  const iconKey = 'proxyGroup';
+  const leading = document.createElement('div');
+  leading.className = 'menu-leading';
+  const iconUrl = String(item && item.iconUrl ? item.iconUrl : '').trim();
+  const fallbackMarkup = ICON_SVGS[iconKey] || ICON_SVGS.proxyGroup || '';
+  if (iconUrl) {
+    leading.innerHTML = fallbackMarkup;
+    const img = document.createElement('img');
+    img.className = 'menu-provider-link-icon';
+    img.alt = '';
+    img.referrerPolicy = 'no-referrer';
+    img.style.display = 'none';
+    img.src = iconUrl;
+    const applyFallback = () => {
+      leading.innerHTML = fallbackMarkup;
+    };
+    img.addEventListener('error', applyFallback, { once: true });
+    img.addEventListener('load', () => {
+      img.style.display = 'block';
+      leading.innerHTML = '';
+      leading.appendChild(img);
+    }, { once: true });
+    return leading;
+  }
+  leading.innerHTML = fallbackMarkup;
+  return leading;
 }
 
 function makeRow(item) {
@@ -1004,24 +1038,33 @@ function makeRow(item) {
     if (item.submenu) {
       row.dataset.submenuKey = String(item.submenu);
     }
-    const spacer = document.createElement('div');
-    spacer.className = 'menu-leading';
-    row.appendChild(spacer);
+    row.dataset.iconKey = String(item.iconKey || 'outboundMode');
+    row.appendChild(buildProviderLinkLeading(item));
     const content = document.createElement('div');
     content.className = 'menu-provider-link-content';
+    const head = document.createElement('div');
+    head.className = 'menu-provider-link-head';
     const title = document.createElement('div');
     title.className = 'menu-provider-link-title';
     title.textContent = item.label || '';
-    content.appendChild(title);
-    if (item.currentProxy) {
+    head.appendChild(title);
+    if (item.rightText) {
+      const right = document.createElement('div');
+      right.className = 'menu-right';
+      right.textContent = String(item.rightText || '');
+      head.appendChild(right);
+    }
+    content.appendChild(head);
+    if (item.subtitle) {
       const subtitle = document.createElement('div');
       subtitle.className = 'menu-provider-link-subtitle';
-      subtitle.textContent = String(item.currentProxy || '');
+      subtitle.textContent = String(item.subtitle || '');
       content.appendChild(subtitle);
     }
     if (Array.isArray(item.chart) && item.chart.length) {
       const chart = document.createElement('div');
       chart.className = 'menu-provider-link-chart';
+      chart.dataset.chartMode = String(item.chartMode || 'segmented');
       item.chart.forEach((segment) => {
         const bar = document.createElement('span');
         bar.className = `menu-provider-link-bar is-${String(segment && segment.status ? segment.status : 'unknown')}`;
@@ -1030,12 +1073,6 @@ function makeRow(item) {
       content.appendChild(chart);
     }
     row.appendChild(content);
-    if (item.rightText) {
-      const right = document.createElement('div');
-      right.className = 'menu-right';
-      right.textContent = String(item.rightText || '');
-      row.appendChild(right);
-    }
     const arrow = document.createElement('div');
     arrow.className = 'menu-arrow';
     arrow.textContent = '›';
@@ -1133,10 +1170,6 @@ function makeRow(item) {
     });
     return row;
   }
-
-  row.addEventListener('mouseenter', () => {
-    hideSubmenu();
-  });
 
   row.addEventListener('click', async () => {
     if (Date.now() < blockClickUntil) {
@@ -1508,17 +1541,14 @@ window.addEventListener('keydown', (event) => {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     blockClickUntil = Date.now() + 220;
-    hideSubmenu();
     startTrafficTimers();
   } else {
     suppressSubmenuUntil = Date.now() + 250;
-    hideSubmenu();
   }
 });
 
 window.addEventListener('blur', () => {
   suppressSubmenuUntil = Date.now() + 250;
-  hideSubmenu();
 });
 
 window.addEventListener('beforeunload', () => {

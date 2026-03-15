@@ -57,11 +57,18 @@ let trayMenuRefreshTimer = null;
 let trayMenuRendererReady = false;
 let trayMenuLastBuiltAt = 0;
 let trayMenuDataSignature = '';
+let trayProxyMenuCache = {
+  signature: '',
+  builtAt: 0,
+  outboundProxyCard: null,
+  outboundProviderSubmenus: {},
+};
 let trayMenuClosing = false;
 let traySubmenuWindow = null;
 let traySubmenuVisible = false;
 let traySubmenuReady = false;
 let traySubmenuHovering = false;
+let traySubmenuHoverLeaveTimer = null;
 let traySubmenuAnchor = { top: 0, height: 0, rootHeight: 0 };
 let traySubmenuLastSize = { width: 0, height: 0 };
 let traySubmenuPendingPayload = null;
@@ -97,6 +104,76 @@ function buildTrayMenuDataSignature(value = null) {
   } catch {
     return '';
   }
+}
+
+function cloneTrayProxyMenuCacheEntry(entry = null) {
+  if (!entry || typeof entry !== 'object') {
+    return {
+      outboundProxyCard: null,
+      outboundProviderSubmenus: {},
+    };
+  }
+  const outboundProxyCard = entry.outboundProxyCard && typeof entry.outboundProxyCard === 'object'
+    ? {
+        ...entry.outboundProxyCard,
+        providers: Array.isArray(entry.outboundProxyCard.providers)
+          ? entry.outboundProxyCard.providers.map((item) => (item && typeof item === 'object' ? { ...item } : item))
+          : [],
+      }
+    : null;
+  const outboundProviderSubmenus = {};
+  Object.entries(entry.outboundProviderSubmenus || {}).forEach(([key, items]) => {
+    outboundProviderSubmenus[key] = Array.isArray(items)
+      ? items.map((item) => (item && typeof item === 'object' ? { ...item } : item))
+      : [];
+  });
+  return {
+    outboundProxyCard,
+    outboundProviderSubmenus,
+  };
+}
+
+function resetTrayProxyMenuCache() {
+  trayProxyMenuCache = {
+    signature: '',
+    builtAt: 0,
+    outboundProxyCard: null,
+    outboundProviderSubmenus: {},
+  };
+}
+
+function buildTrayProxyMenuCacheEntry(rawProxies = null) {
+  const payload = rawProxies && typeof rawProxies === 'object' ? rawProxies : {};
+  const signature = buildTrayMenuDataSignature(payload.proxies || payload);
+  const proxyGroupTree = buildTrayProxyGroupTreeData(payload);
+  if (!proxyGroupTree || !Array.isArray(proxyGroupTree.providers) || !proxyGroupTree.providers.length) {
+    return {
+      signature,
+      builtAt: Date.now(),
+      outboundProxyCard: null,
+      outboundProviderSubmenus: {},
+    };
+  }
+  const outboundProxyCard = {
+    totalProviders: proxyGroupTree.totalProviders,
+    totalProxies: proxyGroupTree.totalProxies,
+    providers: proxyGroupTree.providers,
+  };
+  const outboundProviderSubmenus = {};
+  Object.entries(proxyGroupTree.submenus || {}).forEach(([submenuKey, proxyItems]) => {
+    const provider = proxyGroupTree.providers.find((item) => item && item.submenuKey === submenuKey);
+    outboundProviderSubmenus[submenuKey] = [
+      { type: 'provider', label: provider && provider.name ? provider.name : '-', rightText: provider && provider.currentProxy ? provider.currentProxy : '-' },
+      { type: 'separator' },
+      ...(Array.isArray(proxyItems) ? proxyItems : []),
+    ];
+  });
+  return {
+    signature,
+    builtAt: Date.now(),
+    outboundProxyCard,
+    outboundProviderSubmenus,
+  };
 }
 
 function truncateLogPayload(value, maxLength = 1200) {
@@ -6554,6 +6631,307 @@ function buildProviderProxyTreeData(rawData = {}) {
   };
 }
 
+async function loadControllerProxiesRaw(source = {}) {
+  try {
+    const normalizedSource = source && typeof source === 'object' ? source : {};
+    const controllerOverride = String(
+      normalizedSource.controller || normalizedSource.externalController || '',
+    ).trim();
+    const secretOverride = String(normalizedSource.secret || '').trim();
+    const { baseUrl, secret } = resolveControllerAccessFromSettings(controllerOverride, secretOverride);
+    if (!baseUrl) {
+      return { ok: false, error: 'controller_missing' };
+    }
+    const headers = {};
+    if (secret) {
+      headers.Authorization = `Bearer ${secret}`;
+    }
+    const response = await fetch(`${baseUrl}/proxies`, {
+      method: 'GET',
+      headers,
+    });
+    if (!response.ok) {
+      const details = (await response.text().catch(() => '')) || `http_status=${response.status}`;
+      return { ok: false, error: 'request_failed', details };
+    }
+    const data = await response.json();
+    return { ok: true, data };
+  } catch (error) {
+    return {
+      ok: false,
+      error: 'request_failed',
+      details: String((error && error.message) || error || 'request_failed'),
+    };
+  }
+}
+
+function normalizeTrayProxyGroupType(value = '') {
+  return String(value || '')
+    .trim()
+    .replace(/[\s_]+/g, '-')
+    .replace(/([a-z])([A-Z])/g, '$1-$2')
+    .toUpperCase();
+}
+
+function isTrayProxyGroupType(type = '') {
+  const normalized = normalizeTrayProxyGroupType(type);
+  return new Set([
+    'SELECTOR',
+    'URL-TEST',
+    'URLTEST',
+    'FALLBACK',
+    'LOAD-BALANCE',
+    'LOADBALANCE',
+    'RELAY',
+  ]).has(normalized);
+}
+
+function resolveTrayProxyDelay(node = null) {
+  if (!node || typeof node !== 'object') {
+    return null;
+  }
+  if (Number.isFinite(Number(node.delay))) {
+    return Number(node.delay);
+  }
+  const history = Array.isArray(node.history) ? node.history : [];
+  for (const entry of history) {
+    const value = Number(entry && entry.delay);
+    if (Number.isFinite(value) && value > 0) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function resolveTrayProxyGroupIconKey(groupName = '', groupType = '') {
+  const name = String(groupName || '').trim().toLowerCase();
+  const type = normalizeTrayProxyGroupType(groupType);
+  if (name.includes('手动') || name.includes('manual')) return 'proxyGroup';
+  if (type === 'FALLBACK') return 'proxyGroup';
+  if (type === 'URL-TEST') return 'proxyGroup';
+  if (type === 'LOAD-BALANCE') return 'proxyGroup';
+  if (type === 'RELAY') return 'proxyGroup';
+  if (name.includes('媒体') || name.includes('media')) return 'proxyGroup';
+  if (name.includes('智能') || name.includes('ai')) return 'proxyGroup';
+  if (name.includes('社交') || name.includes('social')) return 'proxyGroup';
+  if (name.includes('一键') || name.includes('select')) return 'proxyGroup';
+  return 'proxyGroup';
+}
+
+function resolveTrayProxyStatus(delay = null, alive = null, isCurrent = false) {
+  if (isCurrent) {
+    return 'current';
+  }
+  if (alive === false) {
+    return 'dead';
+  }
+  const value = Number(delay);
+  if (!Number.isFinite(value) || value <= 0) {
+    return alive === true ? 'fast' : 'unknown';
+  }
+  if (value <= 200) {
+    return 'fast';
+  }
+  if (value <= 500) {
+    return 'medium';
+  }
+  return 'slow';
+}
+
+function compareTrayProxyGroupOrder(a = null, b = null) {
+  const aName = String(a && a.name ? a.name : '').trim();
+  const bName = String(b && b.name ? b.name : '').trim();
+  const aManual = Number(a && a.proxyCount) > 40;
+  const bManual = Number(b && b.proxyCount) > 40;
+  if (aManual !== bManual) {
+    return aManual ? 1 : -1;
+  }
+  return aName.localeCompare(bName, 'zh-Hans-CN');
+}
+
+function buildProxyLookupMap(proxyMap = {}) {
+  const lookup = new Map();
+  Object.entries(proxyMap || {}).forEach(([key, value]) => {
+    if (!key || !value || typeof value !== 'object') {
+      return;
+    }
+    lookup.set(String(key).trim(), { key: String(key).trim(), node: value });
+    const nodeName = String(value.name || '').trim();
+    if (nodeName && !lookup.has(nodeName)) {
+      lookup.set(nodeName, { key: String(key).trim(), node: value });
+    }
+  });
+  return lookup;
+}
+
+function resolveProxyRuntime(name = '', proxyMap = {}, proxyLookup = new Map(), visited = new Set()) {
+  const key = String(name || '').trim();
+  if (!key) {
+    return {
+      path: [],
+      leafName: '',
+      delay: null,
+      alive: null,
+      node: null,
+    };
+  }
+  const resolved = proxyLookup && typeof proxyLookup.get === 'function'
+    ? proxyLookup.get(key)
+    : null;
+  const resolvedKey = resolved && resolved.key ? resolved.key : key;
+  const resolvedNode = resolved && resolved.node ? resolved.node : null;
+  if (visited.has(resolvedKey)) {
+    const loopNode = resolvedNode || (proxyMap && proxyMap[resolvedKey] && typeof proxyMap[resolvedKey] === 'object' ? proxyMap[resolvedKey] : null);
+    return {
+      path: [key],
+      leafName: key,
+      delay: resolveTrayProxyDelay(loopNode),
+      alive: typeof (loopNode && loopNode.alive) === 'boolean' ? Boolean(loopNode.alive) : null,
+      node: loopNode,
+    };
+  }
+  const nextVisited = new Set(visited);
+  nextVisited.add(resolvedKey);
+  const node = resolvedNode || (proxyMap && proxyMap[resolvedKey] && typeof proxyMap[resolvedKey] === 'object'
+    ? proxyMap[resolvedKey]
+    : null);
+  if (!node) {
+    return {
+      path: [key],
+      leafName: key,
+      delay: null,
+      alive: null,
+      node: null,
+    };
+  }
+  const nodeType = normalizeTrayProxyGroupType(node.type || '');
+  if (!isTrayProxyGroupType(nodeType)) {
+    return {
+      path: [key],
+      leafName: key,
+      delay: resolveTrayProxyDelay(node),
+      alive: typeof node.alive === 'boolean' ? Boolean(node.alive) : null,
+      node,
+    };
+  }
+  const current = String(node.now || node.current || node.selected || '').trim();
+  if (!current) {
+    return {
+      path: [key],
+      leafName: key,
+      delay: resolveTrayProxyDelay(node),
+      alive: typeof node.alive === 'boolean' ? Boolean(node.alive) : null,
+      node,
+    };
+  }
+  const nested = resolveProxyRuntime(current, proxyMap, proxyLookup, nextVisited);
+  return {
+    path: [key].concat(Array.isArray(nested.path) ? nested.path : []),
+    leafName: nested.leafName || current,
+    delay: nested.delay,
+    alive: nested.alive,
+    node: nested.node || node,
+  };
+}
+
+function buildTrayProxyGroupTreeData(rawData = {}) {
+  const payload = rawData && typeof rawData === 'object' ? rawData : {};
+  const proxyMap = payload.proxies && typeof payload.proxies === 'object'
+    ? payload.proxies
+    : payload;
+  const proxyLookup = buildProxyLookupMap(proxyMap);
+  const reservedGroupNames = new Set(['GLOBAL', 'DIRECT', 'REJECT', 'PASS', 'COMPATIBLE']);
+  const providers = [];
+  const submenus = {};
+  Object.entries(proxyMap).forEach(([key, value]) => {
+    if (!value || typeof value !== 'object') {
+      return;
+    }
+    const group = value;
+    if (group.hidden === true || String(group.hidden || '').trim().toLowerCase() === 'true') {
+      return;
+    }
+    const groupType = normalizeTrayProxyGroupType(group.type || '');
+    const candidates = Array.isArray(group.all) ? group.all.map((item) => String(item || '').trim()).filter(Boolean) : [];
+    if (!isTrayProxyGroupType(groupType) || !candidates.length) {
+      return;
+    }
+    const groupName = String(group.name || key || '').trim() || String(key || '').trim() || 'Proxy Group';
+    if (reservedGroupNames.has(groupName.toUpperCase())) {
+      return;
+    }
+    const currentProxy = String(group.now || group.current || group.selected || '').trim();
+    const iconUrl = String(group.icon || group.iconUrl || '').trim();
+    const currentRuntime = resolveProxyRuntime(currentProxy, proxyMap, proxyLookup);
+    const submenuKey = `outbound-group:${groupName}`;
+    const proxies = candidates.map((candidateName, index) => {
+      const candidateNode = proxyMap && proxyMap[candidateName] && typeof proxyMap[candidateName] === 'object'
+        ? proxyMap[candidateName]
+        : null;
+      const candidateRuntime = resolveProxyRuntime(candidateName, proxyMap, proxyLookup);
+      const delay = Number.isFinite(Number(candidateRuntime.delay))
+        ? Number(candidateRuntime.delay)
+        : resolveTrayProxyDelay(candidateNode);
+      const alive = typeof candidateRuntime.alive === 'boolean'
+        ? candidateRuntime.alive
+        : (typeof (candidateNode && candidateNode.alive) === 'boolean' ? Boolean(candidateNode.alive) : null);
+      return {
+        id: `${groupName}:${index}:${candidateName}`,
+        name: candidateName,
+        type: candidateNode && candidateNode.type ? String(candidateNode.type || '').trim() : 'Proxy',
+        alive,
+        delay,
+        isCurrent: Boolean(currentProxy) && candidateName === currentProxy,
+      };
+    });
+    const currentPath = Array.isArray(currentRuntime.path) ? currentRuntime.path.filter(Boolean) : [];
+    const leafName = String(currentRuntime.leafName || '').trim();
+    const subtitle = leafName
+      ? (currentPath.length > 1 ? `${currentPath[0]} -> ${leafName}` : leafName)
+      : currentProxy;
+    const chartMode = proxies.length > 40 ? 'manual' : 'segmented';
+    providers.push({
+      id: groupName,
+      name: groupName,
+      subtitle,
+      iconUrl,
+      iconKey: resolveTrayProxyGroupIconKey(groupName, groupType),
+      vehicleType: groupType,
+      proxyCount: proxies.length,
+      currentProxy: currentProxy || '-',
+      chartMode,
+      chart: (chartMode === 'manual' ? proxies : proxies.slice(0, 18)).map((proxy) => ({
+        status: resolveTrayProxyStatus(proxy.delay, proxy.alive, false),
+      })),
+      submenuKey,
+    });
+    submenus[submenuKey] = proxies.length
+      ? proxies.flatMap((proxy, index) => {
+          const nextItem = {
+            type: 'child',
+            label: proxy.name || '-',
+            rightText: Number.isFinite(Number(proxy.delay)) ? `${Number(proxy.delay)} ms` : '',
+            status: resolveTrayProxyStatus(proxy.delay, proxy.alive, proxy.isCurrent),
+            checked: Boolean(proxy.isCurrent),
+            action: 'proxy-select',
+            value: proxy.name || '',
+            groupName,
+            submenuKey,
+          };
+          return index >= proxies.length - 1 ? [nextItem] : [nextItem, { type: 'separator' }];
+        })
+      : [{ type: 'child', label: '-', rightText: '', status: 'unknown', enabled: false }];
+  });
+  providers.sort(compareTrayProxyGroupOrder);
+  return {
+    generatedAt: Date.now(),
+    totalProviders: providers.length,
+    totalProxies: providers.reduce((sum, provider) => sum + Number(provider.proxyCount || 0), 0),
+    providers,
+    submenus,
+  };
+}
+
 async function loadProvidersProxiesRaw() {
   const configPath = getConfigPathFromSettings();
   const args = [];
@@ -7356,6 +7734,7 @@ async function buildTrayMenuOnce() {
     connectivitySnapshot,
     tunStatusResult,
     providerTrafficResult,
+    proxiesResult,
   ] = await Promise.allSettled([
     runBridge(['status']),
     runBridge(['overview']),
@@ -7363,6 +7742,7 @@ async function buildTrayMenuOnce() {
     getConnectivityQualitySnapshot(configPath),
     runBridge(['tun-status', '--config', configPath]),
     loadProvidersProxiesRaw(),
+    loadControllerProxiesRaw(),
   ]);
   try {
     const status = statusResult.status === 'fulfilled' ? statusResult.value : null;
@@ -7484,56 +7864,31 @@ async function buildTrayMenuOnce() {
     dashboardEnabled,
     trayFeatureFlags,
   });
-  const showOutboundProxyGroups = false;
   let outboundProxyCard = null;
   const outboundProviderSubmenus = {};
-  if (showOutboundProxyGroups && trayProviderPayload.outboundProxyTree && Array.isArray(trayProviderPayload.outboundProxyTree.groups) && trayProviderPayload.outboundProxyTree.groups.length) {
-    const compatibleGroup = trayProviderPayload.outboundProxyTree.groups.find((group) => String(group.vehicleType || '').trim() === 'COMPATIBLE');
-    const providers = compatibleGroup && Array.isArray(compatibleGroup.providers) ? compatibleGroup.providers : [];
-    if (providers.length) {
-      outboundProxyCard = {
-        totalProviders: providers.length,
-        totalProxies: providers.reduce((sum, provider) => sum + (Array.isArray(provider.proxies) ? provider.proxies.length : 0), 0),
-        providers: providers.map((provider) => ({
-          id: provider.id,
-          name: provider.name,
-          proxyCount: provider.proxyCount,
-          currentProxy: provider.currentProxy || '',
-          chart: (Array.isArray(provider.proxies) ? provider.proxies : []).slice(0, 18).map((proxy) => ({
-            status: proxy && proxy.isCurrent ? 'current' : (typeof proxy.alive === 'boolean' ? (proxy.alive ? 'alive' : 'dead') : 'unknown'),
-          })),
-          submenuKey: `outbound-provider:${provider.id}`,
-        })),
-      };
-      providers.forEach((provider) => {
-        const submenuKey = `outbound-provider:${provider.id}`;
-        const proxies = Array.isArray(provider.proxies) ? provider.proxies : [];
-        const proxyItems = proxies.length
-          ? proxies.flatMap((proxy, index) => {
-              const nextItem = {
-                type: 'child',
-                label: proxy.name || '-',
-                rightText: Number.isFinite(Number(proxy.delay)) ? `${Number(proxy.delay)} ms` : '',
-                status: typeof proxy.alive === 'boolean' ? (proxy.alive ? 'alive' : 'dead') : 'unknown',
-                checked: Boolean(proxy.isCurrent),
-                action: 'proxy-select',
-                value: proxy.name || '',
-                groupName: provider.name || '',
-                submenuKey,
-              };
-              if (index >= proxies.length - 1) {
-                return [nextItem];
-              }
-              return [nextItem, { type: 'separator' }];
-            })
-          : [{ type: 'child', label: '-', rightText: '', status: 'unknown', enabled: false }];
-        outboundProviderSubmenus[submenuKey] = [
-          { type: 'provider', label: provider.name || '-', rightText: String(Number(provider.proxyCount || 0)) },
-          { type: 'separator' },
-          ...proxyItems,
-        ];
-      });
+  const rawProxies = proxiesResult.status === 'fulfilled' ? proxiesResult.value : null;
+  let proxyGroupCacheHit = false;
+  if (rawProxies && rawProxies.ok && rawProxies.data) {
+    const nextProxySignature = buildTrayMenuDataSignature((rawProxies.data && rawProxies.data.proxies) || rawProxies.data);
+    if (
+      trayProxyMenuCache.signature === nextProxySignature
+      && trayProxyMenuCache.outboundProxyCard
+    ) {
+      proxyGroupCacheHit = true;
+      const cached = cloneTrayProxyMenuCacheEntry(trayProxyMenuCache);
+      outboundProxyCard = cached.outboundProxyCard;
+      Object.assign(outboundProviderSubmenus, cached.outboundProviderSubmenus);
+    } else {
+      trayProxyMenuCache = buildTrayProxyMenuCacheEntry(rawProxies.data || {});
+      const cached = cloneTrayProxyMenuCacheEntry(trayProxyMenuCache);
+      outboundProxyCard = cached.outboundProxyCard;
+      Object.assign(outboundProviderSubmenus, cached.outboundProviderSubmenus);
     }
+  } else if (trayProxyMenuCache.outboundProxyCard) {
+    proxyGroupCacheHit = true;
+    const cached = cloneTrayProxyMenuCacheEntry(trayProxyMenuCache);
+    outboundProxyCard = cached.outboundProxyCard;
+    Object.assign(outboundProviderSubmenus, cached.outboundProviderSubmenus);
   }
   const nextMenuData = {
     header: {
@@ -7583,6 +7938,8 @@ async function buildTrayMenuOnce() {
     providerCount: trayProviderPayload.providerTraffic && Array.isArray(trayProviderPayload.providerTraffic.items)
       ? trayProviderPayload.providerTraffic.items.length
       : 0,
+    proxyGroupCacheHit,
+    proxyGroupCacheBuiltAt: Number(trayProxyMenuCache.builtAt || 0),
     dashboardEnabled,
     networkTakeoverEnabled,
     tunEnabled,
@@ -7679,13 +8036,19 @@ function ensureTrayMenuWindow() {
   trayMenuWindow.loadFile(path.join(__dirname, 'ui', 'html', 'tray-menu.html'));
   trayMenuWindow.on('blur', () => {
     trayMenuClosing = true;
-    hideTraySubmenuWindow();
-    hideTrayPanelWindow();
     setTimeout(() => {
-      if (!traySubmenuHovering && !trayPanelHovering) {
-        hideTrayMenuWindow();
+      if (traySubmenuVisible || trayPanelVisible) {
+        trayMenuClosing = false;
+        return;
       }
-    }, 40);
+      if (!traySubmenuHovering && !trayPanelHovering) {
+        hideTraySubmenuWindow();
+        hideTrayPanelWindow();
+        hideTrayMenuWindow();
+      } else {
+        trayMenuClosing = false;
+      }
+    }, 140);
   });
   trayMenuWindow.on('closed', () => {
     hideTraySubmenuWindow();
@@ -7703,6 +8066,10 @@ function ensureTrayMenuWindow() {
 }
 
 function hideTraySubmenuWindow() {
+  if (traySubmenuHoverLeaveTimer) {
+    clearTimeout(traySubmenuHoverLeaveTimer);
+    traySubmenuHoverLeaveTimer = null;
+  }
   traySubmenuVisible = false;
   traySubmenuHovering = false;
   if (traySubmenuWindow && !traySubmenuWindow.isDestroyed()) {
@@ -8333,6 +8700,8 @@ async function handleTrayMenuAction(action, payload = {}) {
       const submenu = payload && payload.submenuKey ? String(payload.submenuKey) : '';
       const response = await updateMihomoProxySelectionMain(groupName, nextProxy);
       if (response && response.ok) {
+        resetTrayProxyMenuCache();
+        trayMenuLastBuiltAt = 0;
         const rebuilt = await createTrayMenu();
         emitTrayRefresh();
         return { ok: true, submenu, data: rebuilt || trayMenuData };
@@ -9334,13 +9703,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('clashfox:traySubmenu:resize', (_event, payload = {}) => {
-    if (
-      !trayMenuVisible
-      || trayMenuClosing
-      || !trayMenuWindow
-      || trayMenuWindow.isDestroyed()
-      || !trayMenuWindow.isFocused()
-    ) {
+    if (!trayMenuVisible || !trayMenuWindow || trayMenuWindow.isDestroyed()) {
       hideTraySubmenuWindow();
       return;
     }
@@ -9356,9 +9719,15 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('clashfox:traySubmenu:hover', (_event, hovering) => {
-    traySubmenuHovering = Boolean(hovering);
-    if (!traySubmenuHovering && !trayPanelHovering && (!trayMenuWindow || trayMenuWindow.isDestroyed() || !trayMenuWindow.isFocused())) {
-      hideTrayMenuWindow();
+    const nextHovering = Boolean(hovering);
+    if (traySubmenuHoverLeaveTimer) {
+      clearTimeout(traySubmenuHoverLeaveTimer);
+      traySubmenuHoverLeaveTimer = null;
+    }
+    traySubmenuHovering = nextHovering;
+    if (nextHovering) {
+      trayMenuClosing = false;
+      return;
     }
   });
 
@@ -10010,6 +10379,7 @@ app.whenReady().then(() => {
       trayMenuData = null;
       trayMenuDataSignature = '';
       trayMenuLastBuiltAt = 0;
+      resetTrayProxyMenuCache();
       refreshTrayMenuLabelsOnly();
       await createTrayMenu();
       emitSettingsUpdated(normalizedForUi);

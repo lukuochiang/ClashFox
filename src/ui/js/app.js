@@ -8027,38 +8027,78 @@ function extractPageSectionHtml(pageHtml = '') {
   return section ? section.outerHTML : '';
 }
 
+const pageTemplateCache = new Map();
+const pageTemplatePendingMap = new Map();
+
 function savePageTemplateCache(page, sectionHtml) {
-  void page;
-  void sectionHtml;
+  const key = String(page || '').trim();
+  const markup = String(sectionHtml || '').trim();
+  if (!key || !markup) {
+    return;
+  }
+  pageTemplateCache.set(key, markup);
 }
 
 function readPageTemplateCache(page) {
-  void page;
-  return '';
+  const key = String(page || '').trim();
+  return key ? String(pageTemplateCache.get(key) || '') : '';
 }
 
 async function loadPageSectionTemplate(page, allowFetch = true) {
-  const cached = readPageTemplateCache(page);
+  const normalized = String(page || '').trim();
+  if (!normalized) {
+    return '';
+  }
+  const cached = readPageTemplateCache(normalized);
   if (cached) {
     return cached;
   }
   if (!allowFetch) {
     return '';
   }
-  const response = await fetch(new URL(`${page}.html`, window.location.href));
-  if (!response.ok) {
-    return '';
+  if (pageTemplatePendingMap.has(normalized)) {
+    return pageTemplatePendingMap.get(normalized);
   }
-  const html = await response.text();
-  const sectionHtml = extractPageSectionHtml(html);
-  if (sectionHtml) {
-    savePageTemplateCache(page, sectionHtml);
-  }
-  return sectionHtml;
+  const pending = (async () => {
+    try {
+      const response = await fetch(new URL(`${normalized}.html`, window.location.href));
+      if (!response.ok) {
+        return '';
+      }
+      const html = await response.text();
+      const sectionHtml = extractPageSectionHtml(html);
+      if (sectionHtml) {
+        savePageTemplateCache(normalized, sectionHtml);
+      }
+      return sectionHtml;
+    } finally {
+      pageTemplatePendingMap.delete(normalized);
+    }
+  })();
+  pageTemplatePendingMap.set(normalized, pending);
+  return pending;
 }
 
 async function preloadPageTemplates(excludePage = '') {
-  void excludePage;
+  const exclude = String(excludePage || '').trim();
+  const targets = Array.from(VALID_PAGES).filter((page) => page && page !== exclude && !readPageTemplateCache(page));
+  if (!targets.length) {
+    return;
+  }
+  const run = async () => {
+    for (const page of targets) {
+      await loadPageSectionTemplate(page, true).catch(() => '');
+    }
+  };
+  if (typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(() => {
+      run().catch(() => {});
+    }, { timeout: 1200 });
+    return;
+  }
+  setTimeout(() => {
+    run().catch(() => {});
+  }, 120);
 }
 
 function preventPageReloadShortcuts() {
@@ -10339,6 +10379,9 @@ async function initApp() {
   renderRecommendTable();
   if (contentRoot && contentRoot.firstElementChild) {
     contentRoot.firstElementChild.classList.add('page-section');
+    if (currentPage) {
+      savePageTemplateCache(currentPage, contentRoot.firstElementChild.outerHTML || '');
+    }
   }
   setActiveNav(currentPage);
   if (currentPage === 'dashboard') {

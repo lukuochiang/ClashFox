@@ -312,23 +312,41 @@ body {
   display: none;
 }
 
-.menu-row-provider-link .menu-leading {
-  opacity: 0;
-}
-
 .menu-row-provider-link {
   height: auto;
-  min-height: 44px;
+  min-height: 34px;
   align-items: center;
-  padding-top: 6px;
-  padding-bottom: 6px;
+  padding-top: 4px;
+  padding-bottom: 4px;
 }
 
 .menu-provider-link-content {
   flex: 1;
   min-width: 0;
   display: grid;
-  gap: 3px;
+  gap: 2px;
+}
+
+.menu-provider-link-head {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.menu-row-provider-link .menu-leading {
+  position: relative;
+  overflow: hidden;
+}
+
+.menu-provider-link-icon {
+  width: 14px;
+  height: 14px;
+  display: block;
+  object-fit: contain;
+  position: absolute;
+  inset: 0;
+  margin: auto;
 }
 
 .menu-provider-link-title {
@@ -337,8 +355,19 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
-  font-weight: 700;
-  color: rgba(232, 238, 245, 0.96);
+  font-weight: 600;
+  color: rgba(236, 242, 248, 0.98);
+}
+
+.menu-row-provider-link .menu-right {
+  max-width: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(232, 238, 245, 0.92);
+  margin-left: auto;
 }
 
 .menu-provider-link-subtitle {
@@ -346,26 +375,67 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
-  color: rgba(225, 163, 96, 0.86);
+  font-size: 9px;
+  line-height: 1.1;
+  color: rgba(160, 175, 194, 0.88);
 }
 
 .menu-provider-link-chart {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(6px, 1fr));
-  gap: 3px;
-  height: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(4px, 1fr));
+  gap: 2px;
+  height: 5px;
+  margin-top: 0;
+}
+
+.menu-provider-link-chart[data-chart-mode="manual"] {
+  display: flex;
+  gap: 0;
+  height: 6px;
+  margin-top: 0;
+  width: 100%;
+  align-self: stretch;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 171, 197, 0.2);
 }
 
 .menu-provider-link-bar {
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: rgba(148, 171, 197, 0.28);
+  background: rgba(148, 171, 197, 0.2);
+}
+
+.menu-provider-link-chart[data-chart-mode="manual"] .menu-provider-link-bar {
+  flex: 1 1 0;
+  border-radius: 0;
+}
+
+.menu-provider-link-chart[data-chart-mode="manual"] .menu-provider-link-bar:first-child {
+  border-top-left-radius: 999px;
+  border-bottom-left-radius: 999px;
+}
+
+.menu-provider-link-chart[data-chart-mode="manual"] .menu-provider-link-bar:last-child {
+  border-top-right-radius: 999px;
+  border-bottom-right-radius: 999px;
 }
 
 .menu-provider-link-bar.is-alive {
   background: linear-gradient(180deg, rgba(90, 214, 169, 0.96), rgba(47, 180, 138, 0.88));
+}
+
+.menu-provider-link-bar.is-fast {
+  background: linear-gradient(180deg, rgba(90, 214, 169, 0.96), rgba(47, 180, 138, 0.88));
+}
+
+.menu-provider-link-bar.is-medium {
+  background: linear-gradient(180deg, rgba(244, 179, 74, 0.98), rgba(225, 144, 56, 0.9));
+}
+
+.menu-provider-link-bar.is-slow {
+  background: linear-gradient(180deg, rgba(231, 134, 106, 0.94), rgba(205, 107, 81, 0.84));
 }
 
 .menu-provider-link-bar.is-dead {
@@ -527,10 +597,31 @@ body[data-theme="day"] .provider-traffic-item-meta.secondary {
 
 .submenu-root .menu-list {
   padding: 6px;
+  scrollbar-gutter: stable both-edges;
+  scrollbar-width: thin;
 }
 
 .submenu-root[data-submenu-key="panel"] .menu-list {
   padding: 0;
+  scrollbar-gutter: auto;
+  scrollbar-width: auto;
+}
+
+.submenu-root .menu-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.submenu-root .menu-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.submenu-root .menu-list::-webkit-scrollbar-thumb {
+  background: rgba(148, 171, 197, 0.34);
+  border-radius: 999px;
+}
+
+.submenu-root .menu-list:hover::-webkit-scrollbar-thumb {
+  background: rgba(148, 171, 197, 0.5);
 }
 
 .submenu-root[data-submenu-key="panel"] .menu-panel-card-host + .menu-panel-card-host {
@@ -694,9 +785,30 @@ body[data-theme="day"] .panel-card-title {
   box-shadow: 0 0 0 3px rgba(63, 204, 169, 0.14);
 }
 
+.menu-row-child.status-fast .child-bullet {
+  background: #3fcca9;
+  box-shadow: 0 0 0 3px rgba(63, 204, 169, 0.14);
+}
+
+.menu-row-child.status-medium .child-bullet {
+  background: #f0b14b;
+  box-shadow: 0 0 0 3px rgba(240, 177, 75, 0.14);
+}
+
+.menu-row-child.status-slow .child-bullet {
+  background: #d58e6c;
+  box-shadow: 0 0 0 3px rgba(213, 142, 108, 0.12);
+}
+
 .menu-row-child.status-dead .child-bullet {
   background: #d58e6c;
   box-shadow: 0 0 0 3px rgba(213, 142, 108, 0.12);
+}
+
+.menu-row-child.selected .child-bullet,
+.menu-row-child.status-current .child-bullet {
+  background: #f0b14b;
+  box-shadow: 0 0 0 3px rgba(240, 177, 75, 0.16);
 }
 
 .menu-row.disabled[data-icon-key="currentService"] .menu-leading {
@@ -714,6 +826,7 @@ body[data-theme="day"] .panel-card-title {
 .menu-row[data-icon-key="networkTakeover"] { --menu-icon-color: #38bdf8; }
 .menu-row[data-icon-key="connectivityQuality"] { --menu-icon-color: #22c55e; }
 .menu-row[data-icon-key="outboundMode"] { --menu-icon-color: #fb923c; }
+.menu-row[data-icon-key="proxyGroup"] { --menu-icon-color: #36f3e3; }
 .menu-row[data-icon-key="modeGlobal"] { --menu-icon-color: #3b82f6; }
 .menu-row[data-icon-key="modeRule"] { --menu-icon-color: #8b5cf6; }
 .menu-row[data-icon-key="modeDirect"] { --menu-icon-color: #14b8a6; }
@@ -783,8 +896,12 @@ body[data-theme="day"] .menu-provider-link-title {
   color: rgba(31, 42, 54, 0.94);
 }
 
+body[data-theme="day"] .menu-row-provider-link .menu-right {
+  color: rgba(31, 42, 54, 0.9);
+}
+
 body[data-theme="day"] .menu-provider-link-subtitle {
-  color: rgba(167, 113, 52, 0.86);
+  color: rgba(108, 123, 140, 0.86);
 }
 
 .menu-right.tag {
