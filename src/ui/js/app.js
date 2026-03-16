@@ -34,6 +34,9 @@ let topNavMoreBtn = document.getElementById('topNavMoreBtn');
 let topNavMoreMenu = document.getElementById('topNavMoreMenu');
 let navScroll = document.getElementById('navScroll');
 let primaryNav = document.getElementById('primaryNav');
+let appShell = document.querySelector('.app');
+let menuContainer = document.getElementById('menuContainer');
+let sidebarCollapseToggle = document.getElementById('sidebarCollapseToggle');
 let panels = Array.from(document.querySelectorAll('.panel'));
 let noticePop = document.getElementById('noticePop');
 let noticePopBody = document.getElementById('noticePopBody');
@@ -2056,6 +2059,7 @@ const DEFAULT_SETTINGS = {
   backupsPageSize: '10',
   configPageSize: '10',
   recommendPageSize: '10',
+  sidebarCollapsed: false,
   acceptBeta: false,
   debugMode: false,
   chartEnabled: true,
@@ -2521,6 +2525,7 @@ function applyI18n() {
     statusPill.dataset.state = 'unknown';
   }
   updateThemeToggle();
+  refreshNavButtonTooltips();
   setInstallState(state.installState);
   renderConfigTable();
   refreshCustomSelects();
@@ -3037,6 +3042,7 @@ function normalizeSettingsForUi(settings) {
   normalized.windowWidth = readAppearanceNum('windowWidth', MAIN_WINDOW_DEFAULT_WIDTH);
   normalized.windowHeight = readAppearanceNum('windowHeight', MAIN_WINDOW_DEFAULT_HEIGHT);
   normalized.mainWindowClosed = readAppearanceBool('mainWindowClosed', false);
+  normalized.sidebarCollapsed = readAppearanceBool('sidebarCollapsed', false);
   normalized.logLines = readAppearanceNum('logLines', 10);
   normalized.logAutoRefresh = readAppearanceBool('logAutoRefresh', false);
   normalized.logIntervalPreset = readAppearanceString('logIntervalPreset', '3');
@@ -3555,6 +3561,7 @@ function saveSettings(patch) {
     'windowWidth',
     'windowHeight',
     'mainWindowClosed',
+    'sidebarCollapsed',
     'generalPageSize',
     'logLines',
     'logAutoRefresh',
@@ -3659,6 +3666,40 @@ function updateThemeToggle() {
   themeToggle.dataset.tip = label;
   themeToggle.setAttribute('title', label);
   themeToggle.setAttribute('aria-label', label);
+}
+
+function refreshNavButtonTooltips() {
+  navButtons.forEach((btn) => {
+    const label = String(btn.textContent || '').trim();
+    if (!label) {
+      return;
+    }
+    btn.dataset.navLabel = label;
+    btn.removeAttribute('title');
+    btn.setAttribute('aria-label', label);
+  });
+}
+
+function applySidebarCollapsedState(collapsed = false, persist = false) {
+  const topNavMode = isTopNavMode();
+  const shouldCollapse = Boolean(collapsed) && !topNavMode;
+  if (appShell) {
+    appShell.classList.toggle('sidebar-collapsed', shouldCollapse);
+  }
+  if (menuContainer) {
+    menuContainer.classList.toggle('is-collapsed', shouldCollapse);
+  }
+  if (sidebarCollapseToggle) {
+    sidebarCollapseToggle.style.display = topNavMode ? 'none' : '';
+    const label = shouldCollapse ? 'Expand sidebar' : 'Collapse sidebar';
+    sidebarCollapseToggle.setAttribute('title', label);
+    sidebarCollapseToggle.setAttribute('aria-label', label);
+  }
+  state.settings = { ...DEFAULT_SETTINGS, ...(state.settings || {}), sidebarCollapsed: Boolean(collapsed) };
+  if (persist) {
+    saveSettings({ sidebarCollapsed: Boolean(collapsed) });
+  }
+  requestTopNavOverflowSync();
 }
 
 function applyOverviewOrder(grid) {
@@ -3937,6 +3978,7 @@ function applySettings(settings) {
   document.body.classList.remove('no-theme-transition');
   setLanguage(state.settings.lang, false, false);
   syncDebugMode(state.settings.debugMode);
+  applySidebarCollapsedState(state.settings.sidebarCollapsed, false);
   if (settingsWindowWidth) {
     settingsWindowWidth.value = state.settings.windowWidth;
   }
@@ -7464,6 +7506,9 @@ function refreshLayoutRefs() {
   topNavMoreMenu = document.getElementById('topNavMoreMenu');
   navScroll = document.getElementById('navScroll');
   primaryNav = document.getElementById('primaryNav');
+  appShell = document.querySelector('.app');
+  menuContainer = document.getElementById('menuContainer');
+  sidebarCollapseToggle = document.getElementById('sidebarCollapseToggle');
   appName = document.getElementById('appName');
   appVersion = document.getElementById('appVersion');
   themeToggle = document.getElementById('themeToggle');
@@ -7942,6 +7987,13 @@ function bindNavButtons() {
 }
 
 function bindTopbarActions() {
+  if (sidebarCollapseToggle && sidebarCollapseToggle.dataset.bound !== 'true') {
+    sidebarCollapseToggle.dataset.bound = 'true';
+    sidebarCollapseToggle.addEventListener('click', () => {
+      const nextCollapsed = !(state.settings && state.settings.sidebarCollapsed);
+      applySidebarCollapsedState(nextCollapsed, true);
+    });
+  }
   if (themeToggle && themeToggle.dataset.bound !== 'true') {
     themeToggle.dataset.bound = 'true';
     themeToggle.addEventListener('click', () => {
@@ -10373,6 +10425,7 @@ async function initApp() {
   updateScrollbarWidthVar();
   window.addEventListener('resize', () => {
     updateScrollbarWidthVar();
+    applySidebarCollapsedState(Boolean(state.settings && state.settings.sidebarCollapsed), false);
     requestTopNavOverflowSync();
   });
   bindPageEvents();

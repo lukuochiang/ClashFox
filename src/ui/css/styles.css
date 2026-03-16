@@ -163,6 +163,9 @@ body.layout-ready .app {
 }
 
 body[data-theme="day"], html[data-theme="day"] body {
+  --tooltip-bg: rgba(255, 255, 255, 0.96);
+  --tooltip-text: #1a2430;
+  --tooltip-shadow: 0 8px 22px rgba(65, 82, 104, 0.18);
   background: radial-gradient(circle at top left, #f8e7c6, transparent 60%),
     radial-gradient(circle at 30% 70%, #d9f2e9, transparent 55%),
     linear-gradient(145deg, var(--bg-1), var(--bg-2));
@@ -345,6 +348,10 @@ html[data-theme="day"] body::after {
   overflow: hidden;
 }
 
+.app.sidebar-collapsed {
+  grid-template-columns: 84px 1fr;
+}
+
 @media (min-width: 981px) {
   .app {
     height: 100vh;
@@ -362,6 +369,7 @@ html[data-theme="day"] body::after {
 }
 
 .sidebar {
+  position: relative;
   padding: 18px 10px;
   background: rgba(12, 16, 22, 0.7);
   border-right: 1px solid var(--border);
@@ -370,6 +378,13 @@ html[data-theme="day"] body::after {
   flex-direction: column;
   gap: 24px;
   justify-content: flex-start;
+}
+
+.sidebar.is-collapsed {
+  padding-left: 8px;
+  padding-right: 8px;
+  gap: 18px;
+  align-items: center;
 }
 
 body[data-theme="day"] .sidebar {
@@ -382,8 +397,68 @@ body[data-theme="day"] .sidebar {
   align-items: center;
 }
 
+.sidebar.is-collapsed .brand {
+  width: 100%;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .brand-copy {
   min-width: 0;
+}
+
+.sidebar.is-collapsed .brand-copy {
+  display: none;
+}
+
+.sidebar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar.is-collapsed .sidebar-actions {
+  margin-left: 0;
+  flex-direction: column;
+}
+
+.sidebar-collapse-toggle {
+  position: absolute;
+  top: 58px;
+  right: -10px;
+  z-index: 6;
+  width: 28px;
+  height: 40px;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0;
+  color: rgba(204, 216, 230, 0.9);
+  background: transparent !important;
+  box-shadow: none !important;
+  appearance: none;
+}
+
+.sidebar-collapse-toggle svg {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.2s ease;
+}
+
+.sidebar.is-collapsed .sidebar-collapse-toggle svg {
+  transform: rotate(180deg);
+}
+
+.sidebar-collapse-toggle:hover,
+.sidebar-collapse-toggle:focus-visible {
+  color: var(--ink);
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.sidebar.is-collapsed .sidebar-theme-toggle {
+  display: none;
 }
 
 .sidebar-theme-toggle {
@@ -492,6 +567,13 @@ body[data-theme="day"] .brand-mark .logo-night {
   min-width: 0;
 }
 
+.sidebar.is-collapsed .nav-scroll,
+.sidebar.is-collapsed .nav,
+.sidebar.is-collapsed .nav-bottom {
+  width: 100%;
+  align-items: center;
+}
+
 .menu-brand-divider {
   display: none;
 }
@@ -523,6 +605,64 @@ body[data-theme="day"] .brand-mark .logo-night {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.sidebar.is-collapsed .nav-btn {
+  position: relative;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  justify-content: center;
+  padding: 0;
+  gap: 0;
+  font-size: 0;
+  color: transparent;
+}
+
+.sidebar.is-collapsed .nav-btn[data-tray-action]::after {
+  content: none;
+  width: 0;
+  height: 0;
+  margin: 0;
+}
+
+.sidebar.is-collapsed .nav-btn::before {
+  width: 18px;
+  height: 18px;
+  mask-size: 18px 18px;
+  -webkit-mask-size: 18px 18px;
+}
+
+.sidebar.is-collapsed .nav-btn:hover::after,
+.sidebar.is-collapsed .nav-btn:focus-visible::after {
+  content: attr(data-nav-label);
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 10px);
+  transform: translateX(-50%);
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: var(--tooltip-bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--tooltip-shadow);
+  color: var(--tooltip-text);
+  width: auto;
+  height: auto;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 80;
+  mask: none;
+  -webkit-mask: none;
+  overflow: visible;
+}
+
+@media (max-width: 980px) {
+  .sidebar-collapse-toggle {
+    display: none;
+  }
 }
 
 .nav-btn:focus {
@@ -904,14 +1044,17 @@ body[data-page="overview"] .panel-grid {
 }
 
 .overview-summary-strip {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: nowrap;
   gap: 0;
   margin-bottom: 14px;
   padding: 10px 0;
   border-radius: 18px;
   border: 1px solid rgba(164, 180, 200, 0.18);
   background: linear-gradient(180deg, rgba(31, 40, 52, 0.82), rgba(25, 33, 43, 0.78));
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
 }
 
 .overview-summary-item {
@@ -919,8 +1062,13 @@ body[data-page="overview"] .panel-grid {
   justify-items: center;
   gap: 6px;
   padding: 8px 14px;
-  min-width: 0;
+  flex: 1 0 0;
+  min-width: 125px;
   position: relative;
+}
+
+.overview-summary-strip::-webkit-scrollbar {
+  display: none;
 }
 
 .overview-summary-item + .overview-summary-item::before {
@@ -1042,27 +1190,6 @@ body[data-theme="day"] .overview-summary-value {
 .overview-card[data-module="running"],
 .overview-card[data-module="network"] {
   align-self: start;
-}
-
-@media (max-width: 1100px) {
-  .overview-summary-strip {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .overview-summary-item:nth-child(4)::before {
-    display: none;
-  }
-}
-
-@media (max-width: 720px) {
-  .overview-summary-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .overview-summary-item:nth-child(3)::before,
-  .overview-summary-item:nth-child(5)::before {
-    display: none;
-  }
 }
 
 .overview-title {
@@ -2998,9 +3125,9 @@ body[data-theme="day"] .quick-group {
 }
 
 .quick-stack-row .cf-select {
-  flex: 0 0 116px;
-  width: 116px;
-  min-width: 116px;
+  flex: 0 0 106px;
+  width: 106px;
+  min-width: 106px;
   margin-left: auto;
 }
 
@@ -4057,16 +4184,6 @@ body[data-page="kernel"] #kernel.panel .pagination {
   pointer-events: none;
   transition: opacity 0.2s ease;
   z-index: 2;
-}
-
-/* 日间模式下的tooltip样式 */
-body[data-theme="day"] [data-tip-key]:hover::after {
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
-}
-
-body[data-theme="day"] .btn.has-tip::before {
-  border-color: rgba(0, 0, 0, 0.8) transparent transparent transparent;
 }
 
 .btn.has-tip:not([data-tip])::after,

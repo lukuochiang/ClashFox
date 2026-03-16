@@ -330,6 +330,11 @@ let connectivityQualityCache = {
   tone: 'neutral',
   updatedAt: 0,
 };
+let overviewPublicIpCache = {
+  internet: '',
+  proxy: '',
+  updatedAt: 0,
+};
 let connectivityQualityFetchPromise = null;
 const HELPER_UPDATE_CACHE_TTL_MS = 3 * 60 * 1000;
 let helperUpdateCache = {
@@ -3061,9 +3066,36 @@ async function fetchPublicIpViaCurl(url, { proxyPort = '', useProxy = false } = 
   const normalizedProxyPort = String(proxyPort || '').trim();
   if (useProxy && normalizedProxyPort) {
     args.unshift('--proxy', `http://127.0.0.1:${normalizedProxyPort}`, '--noproxy', '');
+  } else {
+    args.unshift('--proxy', '', '--noproxy', '*');
   }
   const output = await execFileText('/usr/bin/curl', args, 4000);
   return extractIpFromPayload(output);
+}
+
+async function fetchPublicIpWithFallback({ proxyPort = '', useProxy = false } = {}) {
+  const endpoints = useProxy
+    ? [
+        'https://api.ip.sb/jsonip',
+        'https://api.ipapi.is/',
+        'https://api.ipify.org?format=json',
+        'https://ipv4.icanhazip.com/',
+      ]
+    : [
+        'https://myip.ipip.net/json',
+        'https://api.ipify.org?format=json',
+        'https://api.ipapi.is/',
+        'https://ipv4.icanhazip.com/',
+      ];
+  for (const endpoint of endpoints) {
+    const separator = endpoint.includes('?') ? '&' : '?';
+    const requestUrl = `${endpoint}${separator}t=${Date.now()}`;
+    const ip = await fetchPublicIpViaCurl(requestUrl, { proxyPort, useProxy });
+    if (ip) {
+      return ip;
+    }
+  }
+  return '';
 }
 
 async function buildOverviewNetworkSnapshot() {
@@ -3079,22 +3111,30 @@ async function buildOverviewNetworkSnapshot() {
     (settings && (settings.mixedPort ?? settings.port))
       ?? '',
   ).trim();
-  const now = Date.now();
   const [routerMs, dnsMs, internetMs, internetIp, proxyIp] = await Promise.all([
     measurePingLatency(routerTarget),
     measureDnsLatency(),
     measurePingLatency('1.1.1.1'),
-    fetchPublicIpViaCurl(`https://api.ipapi.is/?t=${now}`, { useProxy: false }),
-    fetchPublicIpViaCurl(`https://api.ip.sb/ip?t=${now}`, { proxyPort: proxyPortCandidate, useProxy: true }),
+    fetchPublicIpWithFallback({ useProxy: false }),
+    fetchPublicIpWithFallback({ proxyPort: proxyPortCandidate, useProxy: true }),
   ]);
+  if (internetIp) {
+    overviewPublicIpCache.internet = internetIp;
+  }
+  if (proxyIp) {
+    overviewPublicIpCache.proxy = proxyIp;
+  }
+  if (internetIp || proxyIp) {
+    overviewPublicIpCache.updatedAt = Date.now();
+  }
   return {
     ok: true,
     data: {
       networkName: networkName || preferredNetwork.device || defaultRoute.interfaceName || '-',
       localIp: localIp || '',
-      proxyIp: proxyIp || '',
-      internetIp: internetIp || '',
-      internetIp4: internetIp || '',
+      proxyIp: proxyIp || overviewPublicIpCache.proxy || '',
+      internetIp: internetIp || overviewPublicIpCache.internet || '',
+      internetIp4: internetIp || overviewPublicIpCache.internet || '',
       internetMs: internetMs || '',
       dnsMs: dnsMs || '',
       routerMs: routerMs || '',

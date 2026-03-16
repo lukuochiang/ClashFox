@@ -24,6 +24,7 @@ const I18N = {
       "logs": "Logs",
       "dashboard": "Dashboard",
       "trackers": "Trackers",
+      "foxboard": "Foxboard",
       "settings": "Settings",
       "help": "Help"
     },
@@ -482,6 +483,7 @@ const I18N = {
       "logs": "日志",
       "dashboard": "仪表盘",
       "trackers": "追踪器",
+      "foxboard": "Foxboard",
       "settings": "设置",
       "help": "帮助"
     },
@@ -940,6 +942,7 @@ const I18N = {
       "logs": "ログ",
       "dashboard": "ダッシュボード",
       "trackers": "接続トラッカー",
+      "foxboard": "Foxboard",
       "settings": "設定",
       "help": "ヘルプ"
     },
@@ -1398,6 +1401,7 @@ const I18N = {
       "logs": "로그",
       "dashboard": "대시보드",
       "trackers": "연결 추적",
+      "foxboard": "Foxboard",
       "settings": "설정",
       "help": "도움말"
     },
@@ -1856,6 +1860,7 @@ const I18N = {
       "logs": "Journaux",
       "dashboard": "Tableau de bord",
       "trackers": "Suivi des connexions",
+      "foxboard": "Foxboard",
       "settings": "Paramètres",
       "help": "Aide"
     },
@@ -2314,6 +2319,7 @@ const I18N = {
       "logs": "Logs",
       "dashboard": "Dashboard",
       "trackers": "Verbindungen",
+      "foxboard": "Foxboard",
       "settings": "Einstellungen",
       "help": "Hilfe"
     },
@@ -2772,6 +2778,7 @@ const I18N = {
       "logs": "Журналы",
       "dashboard": "Панель управления",
       "trackers": "Отслеживание",
+      "foxboard": "Foxboard",
       "settings": "Настройки",
       "help": "Помощь"
     },
