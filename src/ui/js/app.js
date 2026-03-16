@@ -6546,7 +6546,7 @@ function formatFoxRankUsageValue(totalSeconds = 0) {
   const days = Math.floor(totalMinutes / 1440);
   const hours = Math.floor((totalMinutes % 1440) / 60);
   const minutes = totalMinutes % 60;
-  return `${days}天 ${hours}小时 ${minutes}分钟`;
+  return `${days}d ${hours}h ${minutes}m`;
 }
 
 function getTodayKey() {

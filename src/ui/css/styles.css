@@ -945,7 +945,7 @@ body[data-theme="day"] .sidebar {
 .sidebar-collapse-toggle {
   position: absolute;
   top: -4px;
-  right: -11px;
+  right: -14px;
   z-index: 6;
   width: 28px;
   height: 40px;
@@ -956,6 +956,15 @@ body[data-theme="day"] .sidebar {
   background: transparent !important;
   box-shadow: none !important;
   appearance: none;
+  -webkit-appearance: none;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+  font: inherit;
+  cursor: pointer;
+  outline: none;
+  transform: none;
+  transition: color 0.18s ease;
 }
 
 .sidebar-collapse-toggle svg {
@@ -974,6 +983,8 @@ body[data-theme="day"] .sidebar {
   background: transparent !important;
   border-color: transparent !important;
   box-shadow: none !important;
+  outline: none;
+  transform: none;
 }
 
 .sidebar.is-collapsed .sidebar-theme-toggle {

@@ -21,3 +21,5 @@ dist
 .electron-builder.helper.x64.json
 
 .gitignore
+
+design
