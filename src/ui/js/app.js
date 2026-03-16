@@ -1,3 +1,5 @@
+import { SidebarFoxDivider } from './sidebar-fox-divider.js';
+
 const appLocaleUtils = globalThis.CLASHFOX_LOCALE_UTILS || {};
 const detectSystemLocale = typeof appLocaleUtils.detectSystemLocale === 'function'
   ? appLocaleUtils.detectSystemLocale
@@ -36,6 +38,7 @@ let navScroll = document.getElementById('navScroll');
 let primaryNav = document.getElementById('primaryNav');
 let appShell = document.querySelector('.app');
 let menuContainer = document.getElementById('menuContainer');
+let sidebarFoxDividerHost = document.getElementById('sidebarFoxDividerHost');
 let sidebarCollapseToggle = document.getElementById('sidebarCollapseToggle');
 let panels = Array.from(document.querySelectorAll('.panel'));
 let noticePop = document.getElementById('noticePop');
@@ -77,6 +80,7 @@ let foxRankLogList = document.getElementById('foxRankLogList');
 let foxRankBadgeList = document.getElementById('foxRankBadgeList');
 let foxRankCopySummaryBtn = document.getElementById('foxRankCopySummaryBtn');
 let foxRankExportPngBtn = document.getElementById('foxRankExportPngBtn');
+let sidebarFoxDivider = null;
 let noticePopTimer = null;
 let topNavOverflowRaf = null;
 
@@ -4882,6 +4886,43 @@ function setNodeHtmlIfChanged(node, value) {
   node.innerHTML = next;
 }
 
+function resolveSidebarFoxDividerState() {
+  const mihomoStatus = state && state.mihomoStatus ? state.mihomoStatus : null;
+  const statusSource = mihomoStatus && typeof mihomoStatus.source === 'string' ? mihomoStatus.source : 'init';
+  if (!state || statusSource === 'init') {
+    return 'normal';
+  }
+  return state.coreRunning ? 'active' : 'issue';
+}
+
+function syncSidebarFoxDividerState() {
+  if (!sidebarFoxDivider) {
+    return;
+  }
+  sidebarFoxDivider.setState(resolveSidebarFoxDividerState());
+}
+
+function ensureSidebarFoxDivider() {
+  if (!sidebarFoxDividerHost) {
+    if (sidebarFoxDivider) {
+      sidebarFoxDivider.destroy();
+      sidebarFoxDivider = null;
+    }
+    return;
+  }
+  const currentContainer = sidebarFoxDivider && sidebarFoxDivider.container ? sidebarFoxDivider.container : null;
+  if (currentContainer !== sidebarFoxDividerHost) {
+    if (sidebarFoxDivider) {
+      sidebarFoxDivider.destroy();
+    }
+    sidebarFoxDivider = new SidebarFoxDivider(sidebarFoxDividerHost, {
+      state: resolveSidebarFoxDividerState(),
+    });
+    return;
+  }
+  syncSidebarFoxDividerState();
+}
+
 function hydrateOverviewIdentityFromSettings() {
   const persistedVersion = readKernelVersionFromSettings();
   applyKernelVersionDisplay(persistedVersion);
@@ -5587,6 +5628,7 @@ function cacheMihomoStatusForUi(running, source = 'status') {
     source: String(source || 'status'),
     updatedAt: new Date().toISOString(),
   };
+  state.mihomoStatus = snapshot;
   if (!state.settings) {
     state.settings = { ...DEFAULT_SETTINGS };
   }
@@ -5611,6 +5653,7 @@ function applyKernelRunningState(running, source = 'status') {
     state.coreRunningUpdatedAt = now;
     cacheMihomoStatusForUi(true, source);
     syncRunningIndicators(true);
+    syncSidebarFoxDividerState();
     syncQuickActionButtons();
     return;
   }
@@ -5625,6 +5668,7 @@ function applyKernelRunningState(running, source = 'status') {
   state.coreRunningUpdatedAt = now;
   cacheMihomoStatusForUi(false, source);
   syncRunningIndicators(false);
+  syncSidebarFoxDividerState();
   syncQuickActionButtons();
 }
 
@@ -8056,6 +8100,7 @@ function refreshLayoutRefs() {
   primaryNav = document.getElementById('primaryNav');
   appShell = document.querySelector('.app');
   menuContainer = document.getElementById('menuContainer');
+  sidebarFoxDividerHost = document.getElementById('sidebarFoxDividerHost');
   sidebarCollapseToggle = document.getElementById('sidebarCollapseToggle');
   appName = document.getElementById('appName');
   appVersion = document.getElementById('appVersion');
@@ -8083,6 +8128,7 @@ function refreshLayoutRefs() {
   foxRankBadgeList = document.getElementById('foxRankBadgeList');
   foxRankCopySummaryBtn = document.getElementById('foxRankCopySummaryBtn');
   foxRankExportPngBtn = document.getElementById('foxRankExportPngBtn');
+  ensureSidebarFoxDivider();
 }
 
 function setTopNavOverflowItemVisible(action = '', visible = false) {
@@ -8889,6 +8935,7 @@ async function loadLayoutParts() {
   bindNavButtons();
   bindTopbarActions();
   setLayoutReady();
+  ensureSidebarFoxDivider();
   renderFoxRankPanel();
 
   const sudoRoot = document.getElementById('sudoRoot');
