@@ -1,21 +1,21 @@
 :root {
   color-scheme: light dark;
-  --bg-1: #0f151d;
-  --bg-2: #1b2430;
-  --panel: #151c24;
-  --panel-soft: #1c2530;
-  --accent: #f4b34a;
-  --accent-strong: #ff7a4a;
-  --mint: #8ce0c6;
-  --ink: #e9eef3;
-  --muted: #93a4b7;
-  --border: rgba(148, 171, 197, 0.2);
-  --line: rgba(148, 171, 197, 0.2);
+  --bg-1: #0b1421;
+  --bg-2: #162435;
+  --panel: #111b29;
+  --panel-soft: #192638;
+  --accent: #63b7ff;
+  --accent-strong: #2f85e8;
+  --mint: #67d6bd;
+  --ink: #e8f0f8;
+  --muted: #92a7bd;
+  --border: rgba(132, 157, 188, 0.22);
+  --line: rgba(132, 157, 188, 0.18);
   --check: #49d17d;
   --icon: #d7dde8;
   --shadow: 0 14px 32px rgba(0, 0, 0, 0.35);
-  --row-hover: rgba(244, 179, 74, 0.12);
-  --row-selected: rgba(244, 179, 74, 0.22);
+  --row-hover: rgba(99, 183, 255, 0.1);
+  --row-selected: rgba(67, 140, 212, 0.22);
   --header-status: #8ce0c6;
   --chart-down: #53b8ff;
   --chart-down-glow: rgba(83, 184, 255, 0.26);
@@ -23,6 +23,14 @@
   --chart-up-glow: rgba(216, 140, 255, 0.24);
   --chart-bar-base: rgba(132, 151, 177, 0.14);
   --chart-baseline: rgba(124, 152, 184, 0.28);
+  --latency-good: #3fcca9;
+  --latency-good-glow: rgba(63, 204, 169, 0.14);
+  --latency-medium: #65b8ff;
+  --latency-medium-glow: rgba(101, 184, 255, 0.14);
+  --latency-slow: #6f96e8;
+  --latency-slow-glow: rgba(111, 150, 232, 0.14);
+  --latency-dead: #8393aa;
+  --latency-dead-glow: rgba(131, 147, 170, 0.12);
   --font-display: "Georgia", "Times New Roman", serif;
   --font-body: "Trebuchet MS", "Verdana", sans-serif;
 }
@@ -48,7 +56,10 @@ body {
 .menu-root,
 .submenu-root {
   border-radius: 12px;
-  background: linear-gradient(150deg, var(--panel), var(--panel-soft));
+  background:
+    radial-gradient(circle at top right, rgba(42, 96, 153, 0.16), transparent 38%),
+    radial-gradient(circle at bottom left, rgba(39, 128, 118, 0.12), transparent 34%),
+    linear-gradient(150deg, var(--panel), var(--panel-soft));
   border: 1px solid var(--border);
   box-shadow: none;
   padding: 8px 0;
@@ -423,28 +434,28 @@ body {
 }
 
 .menu-provider-link-bar.is-alive {
-  background: linear-gradient(180deg, rgba(90, 214, 169, 0.96), rgba(47, 180, 138, 0.88));
+  background: linear-gradient(180deg, rgba(94, 220, 178, 0.96), rgba(49, 185, 144, 0.88));
 }
 
 .menu-provider-link-bar.is-fast {
-  background: linear-gradient(180deg, rgba(90, 214, 169, 0.96), rgba(47, 180, 138, 0.88));
+  background: linear-gradient(180deg, rgba(94, 220, 178, 0.96), rgba(49, 185, 144, 0.88));
 }
 
 .menu-provider-link-bar.is-medium {
-  background: linear-gradient(180deg, rgba(244, 179, 74, 0.98), rgba(225, 144, 56, 0.9));
+  background: linear-gradient(180deg, rgba(111, 195, 255, 0.98), rgba(79, 157, 235, 0.9));
 }
 
 .menu-provider-link-bar.is-slow {
-  background: linear-gradient(180deg, rgba(231, 134, 106, 0.94), rgba(205, 107, 81, 0.84));
+  background: linear-gradient(180deg, rgba(124, 155, 238, 0.94), rgba(93, 124, 212, 0.84));
 }
 
 .menu-provider-link-bar.is-dead {
-  background: linear-gradient(180deg, rgba(231, 134, 106, 0.94), rgba(205, 107, 81, 0.84));
+  background: linear-gradient(180deg, rgba(136, 151, 175, 0.9), rgba(103, 117, 139, 0.84));
 }
 
 .menu-provider-link-bar.is-current {
-  background: linear-gradient(180deg, rgba(244, 179, 74, 0.98), rgba(225, 144, 56, 0.9));
-  box-shadow: 0 0 0 1px rgba(244, 179, 74, 0.2);
+  background: linear-gradient(180deg, rgba(111, 195, 255, 0.98), rgba(79, 157, 235, 0.9));
+  box-shadow: 0 0 0 1px rgba(101, 184, 255, 0.2);
 }
 
 .menu-provider-link-bar.is-unknown {
@@ -651,7 +662,7 @@ body[data-theme="day"] .panel-card-title {
 .menu-row.clickable:hover,
 .menu-row.expanded {
   background: var(--row-hover);
-  border-color: rgba(244, 179, 74, 0.4);
+  border-color: rgba(99, 183, 255, 0.28);
 }
 
 .menu-row.selected {
@@ -659,7 +670,7 @@ body[data-theme="day"] .panel-card-title {
 }
 
 .menu-row.selected .menu-label {
-  color: #f2e5cb;
+  color: #dbeeff;
 }
 
 .menu-row.disabled {
@@ -669,7 +680,7 @@ body[data-theme="day"] .panel-card-title {
 .menu-row-section {
   height: 20px;
   padding: 0 7px;
-  color: rgba(198, 176, 150, 0.82);
+  color: rgba(127, 170, 220, 0.84);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -731,8 +742,8 @@ body[data-theme="day"] .panel-card-title {
   border-radius: 50%;
   border: 2px solid rgba(147, 164, 183, 0.42);
   border-top-color: rgba(233, 238, 243, 0.98);
-  border-right-color: rgba(244, 179, 74, 0.92);
-  box-shadow: 0 0 0 1px rgba(244, 179, 74, 0.12);
+  border-right-color: rgba(99, 183, 255, 0.92);
+  box-shadow: 0 0 0 1px rgba(99, 183, 255, 0.12);
   animation: tray-spin 0.62s linear infinite;
 }
 
@@ -777,38 +788,38 @@ body[data-theme="day"] .panel-card-title {
 }
 
 .provider-bullet {
-  background: rgba(225, 163, 96, 0.72);
+  background: rgba(93, 176, 242, 0.74);
 }
 
 .menu-row-child.status-alive .child-bullet {
-  background: #3fcca9;
-  box-shadow: 0 0 0 3px rgba(63, 204, 169, 0.14);
+  background: var(--latency-good);
+  box-shadow: 0 0 0 3px var(--latency-good-glow);
 }
 
 .menu-row-child.status-fast .child-bullet {
-  background: #3fcca9;
-  box-shadow: 0 0 0 3px rgba(63, 204, 169, 0.14);
+  background: var(--latency-good);
+  box-shadow: 0 0 0 3px var(--latency-good-glow);
 }
 
 .menu-row-child.status-medium .child-bullet {
-  background: #f0b14b;
-  box-shadow: 0 0 0 3px rgba(240, 177, 75, 0.14);
+  background: var(--latency-medium);
+  box-shadow: 0 0 0 3px var(--latency-medium-glow);
 }
 
 .menu-row-child.status-slow .child-bullet {
-  background: #d58e6c;
-  box-shadow: 0 0 0 3px rgba(213, 142, 108, 0.12);
+  background: var(--latency-slow);
+  box-shadow: 0 0 0 3px var(--latency-slow-glow);
 }
 
 .menu-row-child.status-dead .child-bullet {
-  background: #d58e6c;
-  box-shadow: 0 0 0 3px rgba(213, 142, 108, 0.12);
+  background: var(--latency-dead);
+  box-shadow: 0 0 0 3px var(--latency-dead-glow);
 }
 
 .menu-row-child.selected .child-bullet,
 .menu-row-child.status-current .child-bullet {
-  background: #f0b14b;
-  box-shadow: 0 0 0 3px rgba(240, 177, 75, 0.16);
+  background: var(--latency-medium);
+  box-shadow: 0 0 0 3px rgba(101, 184, 255, 0.16);
 }
 
 .menu-row.disabled[data-icon-key="currentService"] .menu-leading {
@@ -822,27 +833,27 @@ body[data-theme="day"] .panel-card-title {
 .menu-row[data-icon-key="showMain"] { --menu-icon-color: #5eb7ff; }
 .menu-row[data-icon-key="dashboard"] { --menu-icon-color: #58baff; }
 .menu-row[data-icon-key="trackers"] { --menu-icon-color: #3b82f6; }
-.menu-row[data-icon-key="foxboard"] { --menu-icon-color: #ff9a67; }
+.menu-row[data-icon-key="foxboard"] { --menu-icon-color: #5ab6ff; }
 .menu-row[data-icon-key="networkTakeover"] { --menu-icon-color: #38bdf8; }
 .menu-row[data-icon-key="connectivityQuality"] { --menu-icon-color: #22c55e; }
-.menu-row[data-icon-key="outboundMode"] { --menu-icon-color: #fb923c; }
+.menu-row[data-icon-key="outboundMode"] { --menu-icon-color: #58aaf6; }
 .menu-row[data-icon-key="proxyGroup"] { --menu-icon-color: #36f3e3; }
 .menu-row[data-icon-key="modeGlobal"] { --menu-icon-color: #3b82f6; }
-.menu-row[data-icon-key="modeRule"] { --menu-icon-color: #8b5cf6; }
+.menu-row[data-icon-key="modeRule"] { --menu-icon-color: #6ca7ff; }
 .menu-row[data-icon-key="modeDirect"] { --menu-icon-color: #14b8a6; }
-.menu-row[data-icon-key="kernelManager"] { --menu-icon-color: #ff9f43; }
+.menu-row[data-icon-key="kernelManager"] { --menu-icon-color: #67d6bd; }
 .menu-row[data-icon-key="kernelStart"] { --menu-icon-color: #22c55e; }
 .menu-row[data-icon-key="kernelStop"] { --menu-icon-color: #ef4444; }
-.menu-row[data-icon-key="kernelRestart"] { --menu-icon-color: #f59e0b; }
-.menu-row[data-icon-key="settings"] { --menu-icon-color: #f97316; }
-.menu-row[data-icon-key="checkUpdate"] { --menu-icon-color: #fbbf24; }
+.menu-row[data-icon-key="kernelRestart"] { --menu-icon-color: #52d1c4; }
+.menu-row[data-icon-key="settings"] { --menu-icon-color: #7cb8ff; }
+.menu-row[data-icon-key="checkUpdate"] { --menu-icon-color: #7ab8ff; }
 .menu-row[data-icon-key="quit"] { --menu-icon-color: #fb7185; }
-.menu-row[data-icon-key="systemProxy"] { --menu-icon-color: #f59e0b; }
+.menu-row[data-icon-key="systemProxy"] { --menu-icon-color: #59b2ff; }
 .menu-row[data-icon-key="tun"] { --menu-icon-color: #14b8a6; }
 .menu-row[data-icon-key="currentService"] { --menu-icon-color: #60a5fa; }
 .menu-row[data-icon-key="copyShellExport"] { --menu-icon-color: #a78bfa; }
-.menu-row[data-icon-key="directory"] { --menu-icon-color: #f59e0b; }
-.menu-row[data-icon-key="folder"] { --menu-icon-color: #facc15; }
+.menu-row[data-icon-key="directory"] { --menu-icon-color: #61b7ff; }
+.menu-row[data-icon-key="folder"] { --menu-icon-color: #79d6c0; }
 .menu-row[data-icon-key="userDir"] { --menu-icon-color: #2dd4bf; }
 .menu-row[data-icon-key="configDir"] { --menu-icon-color: #38bdf8; }
 .menu-row[data-icon-key="workDir"] { --menu-icon-color: #22c55e; }

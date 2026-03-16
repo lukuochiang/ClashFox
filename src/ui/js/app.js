@@ -4823,6 +4823,54 @@ function setNodeTextIfChanged(node, value) {
   node.textContent = next;
 }
 
+function syncOverflowTooltip(node, options = {}) {
+  if (!node) {
+    return;
+  }
+  const {
+    position = 'bottom',
+    tipKey = 'overflow',
+  } = options;
+  const applyTooltip = () => {
+    const text = String(node.textContent || '').trim();
+    const isOverflowing = node.scrollWidth > node.clientWidth || node.scrollHeight > node.clientHeight;
+    if (text && isOverflowing) {
+      node.dataset.tipKey = tipKey;
+      node.dataset.tip = text;
+      node.dataset.position = position;
+      node.setAttribute('aria-label', text);
+    } else {
+      delete node.dataset.tipKey;
+      delete node.dataset.tip;
+      delete node.dataset.position;
+      node.removeAttribute('aria-label');
+    }
+  };
+  requestAnimationFrame(applyTooltip);
+}
+
+function syncStaticTooltip(node, value, options = {}) {
+  if (!node) {
+    return;
+  }
+  const {
+    position = 'bottom',
+    tipKey = 'tooltip',
+  } = options;
+  const text = String(value ?? '').trim();
+  if (text) {
+    node.dataset.tipKey = tipKey;
+    node.dataset.tip = text;
+    node.dataset.position = position;
+    node.setAttribute('aria-label', text);
+  } else {
+    delete node.dataset.tipKey;
+    delete node.dataset.tip;
+    delete node.dataset.position;
+    node.removeAttribute('aria-label');
+  }
+}
+
 function setNodeHtmlIfChanged(node, value) {
   if (!node) {
     return;
@@ -6546,7 +6594,7 @@ function formatFoxRankUsageValue(totalSeconds = 0) {
   const days = Math.floor(totalMinutes / 1440);
   const hours = Math.floor((totalMinutes % 1440) / 60);
   const minutes = totalMinutes % 60;
-  return `${days}d ${hours}h ${minutes}m`;
+  return `${days}d:${hours}h:${minutes}m`;
 }
 
 function getTodayKey() {
@@ -6705,7 +6753,7 @@ function renderFoxRankDetailPanel(snapshot = null) {
     setNodeTextIfChanged(foxRankDetailTier, data.tier.name);
   }
   if (foxRankDetailLevel) {
-    setNodeTextIfChanged(foxRankDetailLevel, `Lv. ${data.tier.index + 1}`);
+    setNodeTextIfChanged(foxRankDetailLevel, `Lv.${data.tier.index + 1}`);
   }
   if (foxRankDetailXp) {
     setNodeTextIfChanged(foxRankDetailXp, `${data.delta} / ${data.span} XP`);
@@ -6828,12 +6876,17 @@ function renderFoxRankPanel() {
   }
   if (foxRankUsageValue) {
     setNodeTextIfChanged(foxRankUsageValue, snapshot.usageText);
+    syncStaticTooltip(foxRankUsageValue, snapshot.usageText, { position: 'bottom', tipKey: 'fox-rank-usage' });
   }
   if (foxRankStabilityValue) {
-    setNodeTextIfChanged(foxRankStabilityValue, `${snapshot.stabilityDays}d`);
+    const stabilityText = `${snapshot.stabilityDays}d`;
+    setNodeTextIfChanged(foxRankStabilityValue, stabilityText);
+    syncStaticTooltip(foxRankStabilityValue, stabilityText, { position: 'bottom', tipKey: 'fox-rank-stability' });
   }
   if (foxRankQualityValue) {
-    setNodeTextIfChanged(foxRankQualityValue, `${snapshot.qualityLabel} • ${Math.round(snapshot.qualityScore * 100)}%`);
+    const qualityText = `${snapshot.qualityLabel} • ${Math.round(snapshot.qualityScore * 100)}%`;
+    setNodeTextIfChanged(foxRankQualityValue, qualityText);
+    syncStaticTooltip(foxRankQualityValue, qualityText, { position: 'bottom', tipKey: 'fox-rank-quality' });
   }
   renderFoxRankDetailPanel(snapshot);
 }
