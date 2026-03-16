@@ -29,13 +29,15 @@ This repository includes an Electron GUI that wraps the ClashFox Mihomo Toolkit 
 ## App Screenshots
 ## 应用截图
 
-| Overview | Kernel |
-| --- | --- |
+| Overview                                                                      | Kernel                                                                    |
+|-------------------------------------------------------------------------------|---------------------------------------------------------------------------|
 | <img alt="Overview" src="src/ui/assets/screenshot/overview.png" width="420"/> | <img alt="Kernel" src="src/ui/assets/screenshot/kernel.png" width="420"/> |
-| Config | Logs |
-| <img alt="Config" src="src/ui/assets/screenshot/config.png" width="420"/> | <img alt="Logs" src="src/ui/assets/screenshot/logs.png" width="420"/> |
-| Settings | Help |
-| <img alt="Settings" src="src/ui/assets/screenshot/settings.png" width="420"/> | <img alt="Help" src="src/ui/assets/screenshot/help.png" width="420"/> |
+| Config                                                                        | Logs                                                                      |
+| <img alt="Config" src="src/ui/assets/screenshot/config.png" width="420"/>     | <img alt="Logs" src="src/ui/assets/screenshot/logs.png" width="420"/>     |
+| Settings                                                                      | Help                                                                      |
+| <img alt="Settings" src="src/ui/assets/screenshot/settings.png" width="420"/> | <img alt="Help" src="src/ui/assets/screenshot/help.png" width="420"/>     |
+| Trackers                                                                      | Foxboard                                                                  |
+| <img alt="Settings" src="src/ui/assets/screenshot/trackers.png" width="420"/> | <img alt="Help" src="src/ui/assets/screenshot/foxboard.png" width="420"/> |
 
 ## Acknowledgements
 

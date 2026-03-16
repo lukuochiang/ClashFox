@@ -1162,6 +1162,10 @@ body[data-theme="day"] .brand-mark .logo-night {
   align-items: center;
 }
 
+.sidebar.is-collapsed .sidebar-fox-divider-host {
+  display: none;
+}
+
 .menu-brand-divider {
   display: none;
 }
@@ -1320,6 +1324,12 @@ body[data-theme="day"] .brand-mark .logo-night {
   margin-top: 0;
   padding-top: 0;
   border-top: 0;
+}
+
+.sidebar.is-collapsed .nav-bottom {
+  /*margin-top: 4px;*/
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
 }
 
 .nav-btn {
