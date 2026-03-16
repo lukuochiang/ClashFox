@@ -46,6 +46,7 @@ let contentRoot = document.getElementById('contentRoot');
 let currentPage = document.body ? document.body.dataset.page : '';
 const VALID_PAGES = new Set(['overview', 'kernel', 'config', 'logs', 'settings', 'help', 'dashboard']);
 const FOX_RANK_STORAGE_KEY = 'clashfox-fox-rank-state';
+const FOX_RANK_USAGE_RESET_VERSION = '2026-03-16-reset-usage-v1';
 const FOX_RANK_TIERS = [
   { name: 'Fox Pup', minXp: 0, colorStart: '#ffd86a', colorEnd: '#ffb347' },
   { name: 'Trail Fox', minXp: 400, colorStart: '#ff8f57', colorEnd: '#ff5e44' },
@@ -2276,6 +2277,7 @@ const state = {
   settings: { ...DEFAULT_SETTINGS },
 };
 state.foxRank = loadFoxRankFromStorage();
+saveFoxRankToStorage();
 
 const CORE_STARTUP_ESTIMATE_MIN_MS = 900;
 const CORE_STARTUP_ESTIMATE_MAX_MS = 10000;
@@ -6403,17 +6405,23 @@ function loadFoxRankFromStorage() {
         stableDays: 0,
         lastStableDay: '',
         lastUsageBaseSec: 0,
+        lastUsageTickSec: 0,
+        usageResetVersion: FOX_RANK_USAGE_RESET_VERSION,
         qualityScore: 0,
         unlockedBadges: [],
         freshUnlockedBadges: [],
       };
     }
     const parsed = JSON.parse(payload);
+    const usageResetVersion = String(parsed.usageResetVersion || '');
+    const shouldResetUsage = usageResetVersion !== FOX_RANK_USAGE_RESET_VERSION;
     return {
-      totalUsageSec: Number(parsed.totalUsageSec) || 0,
+      totalUsageSec: shouldResetUsage ? 0 : (Number(parsed.totalUsageSec) || 0),
       stableDays: Number(parsed.stableDays) || 0,
       lastStableDay: String(parsed.lastStableDay || ''),
       lastUsageBaseSec: 0,
+      lastUsageTickSec: 0,
+      usageResetVersion: FOX_RANK_USAGE_RESET_VERSION,
       qualityScore: Number(parsed.qualityScore) || 0,
       unlockedBadges: Array.isArray(parsed.unlockedBadges) ? parsed.unlockedBadges.map((item) => String(item || '')) : [],
       freshUnlockedBadges: [],
@@ -6424,6 +6432,8 @@ function loadFoxRankFromStorage() {
       stableDays: 0,
       lastStableDay: '',
       lastUsageBaseSec: 0,
+      lastUsageTickSec: 0,
+      usageResetVersion: FOX_RANK_USAGE_RESET_VERSION,
       qualityScore: 0,
       unlockedBadges: [],
       freshUnlockedBadges: [],
@@ -6440,6 +6450,7 @@ function saveFoxRankToStorage() {
       totalUsageSec: state.foxRank.totalUsageSec,
       stableDays: state.foxRank.stableDays,
       lastStableDay: state.foxRank.lastStableDay,
+      usageResetVersion: state.foxRank.usageResetVersion || FOX_RANK_USAGE_RESET_VERSION,
       unlockedBadges: Array.isArray(state.foxRank.unlockedBadges) ? state.foxRank.unlockedBadges : [],
     }));
   } catch {
@@ -6530,16 +6541,12 @@ function computeFoxRankQualityScore(data) {
 }
 
 function formatFoxRankUsageValue(totalSeconds = 0) {
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  if (!hours && !minutes) {
-    return '0h';
-  }
-  if (!hours) {
-    return `${minutes}m`;
-  }
-  const padMinutes = String(minutes).padStart(2, '0');
-  return `${hours}h ${padMinutes}m`;
+  const normalizedSeconds = Math.max(0, Number.isFinite(totalSeconds) ? totalSeconds : 0);
+  const totalMinutes = Math.floor(normalizedSeconds / 60);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  return `${days}天 ${hours}小时 ${minutes}分钟`;
 }
 
 function getTodayKey() {
@@ -6570,18 +6577,18 @@ function getFoxRankSnapshot() {
 function getFoxRankBadgeItems(snapshot) {
   return [
     { id: 'connection-keeper', name: 'Connection Keeper', desc: `${snapshot.stabilityDays} stable days`, unlocked: snapshot.stabilityDays >= 1 },
-    { id: 'long-run', name: 'Long Run', desc: `${snapshot.usageText} active usage`, unlocked: snapshot.xp >= 200 },
-    { id: 'quality-eye', name: 'Quality Eye', desc: `${Math.round(snapshot.qualityScore * 100)}% network quality`, unlocked: snapshot.qualityScore >= 0.6 },
+    { id: 'long-run', name: 'Long Run', desc: snapshot.usageText, unlocked: snapshot.xp >= 200 },
+    { id: 'quality-eye', name: 'Quality Eye', desc: `${Math.round(snapshot.qualityScore * 100)}% quality`, unlocked: snapshot.qualityScore >= 0.6 },
     { id: 'tier-climber', name: 'Tier Climber', desc: `${snapshot.tier.name} reached`, unlocked: snapshot.tier.index >= 2 },
   ];
 }
 
 function getFoxRankLogItems(snapshot) {
   return [
-    { label: 'Rank Core Updated', value: `${snapshot.delta}/${snapshot.span} XP in current tier` },
-    { label: 'Stability Index', value: `${snapshot.stabilityDays} days without critical drop` },
-    { label: 'Network Grade', value: `${snapshot.qualityLabel} • ${Math.round(snapshot.qualityScore * 100)}%` },
-    { label: 'Usage Record', value: snapshot.usageText },
+    { label: 'Rank XP', value: `${snapshot.delta}/${snapshot.span} XP` },
+    { label: 'Stability', value: `${snapshot.stabilityDays} stable days` },
+    { label: 'Network', value: `${snapshot.qualityLabel} • ${Math.round(snapshot.qualityScore * 100)}%` },
+    { label: 'Usage', value: snapshot.usageText },
   ];
 }
 
@@ -6736,8 +6743,8 @@ function openFoxRankDetailModal() {
     return;
   }
   renderFoxRankDetailPanel();
-  foxRankDetailModal.classList.add('show');
-  foxRankDetailModal.setAttribute('aria-hidden', 'false');
+  foxRankDetailModal.hidden = false;
+  document.body.classList.add('fox-rank-detail-open');
   if (state.foxRank && Array.isArray(state.foxRank.freshUnlockedBadges) && state.foxRank.freshUnlockedBadges.length) {
     setTimeout(() => {
       if (!state.foxRank) {
@@ -6754,8 +6761,8 @@ function closeFoxRankDetailModal() {
   if (!foxRankDetailModal) {
     return;
   }
-  foxRankDetailModal.classList.remove('show');
-  foxRankDetailModal.setAttribute('aria-hidden', 'true');
+  foxRankDetailModal.hidden = true;
+  document.body.classList.remove('fox-rank-detail-open');
 }
 
 function updateFoxRankFromOverviewSnapshot(data) {
@@ -6764,15 +6771,23 @@ function updateFoxRankFromOverviewSnapshot(data) {
   }
   const running = Boolean(data.running);
   const uptime = Number.parseFloat(data.uptimeSec);
+  const nowSec = Date.now() / 1000;
   if (running && Number.isFinite(uptime) && uptime >= 0) {
     const lastBase = state.foxRank.lastUsageBaseSec || 0;
+    const lastTick = state.foxRank.lastUsageTickSec || 0;
     const delta = uptime - lastBase;
-    if (delta > 0) {
-      state.foxRank.totalUsageSec += delta;
-    } else if (!lastBase) {
-      state.foxRank.totalUsageSec += uptime;
+    if (!lastBase || delta <= 0) {
+      state.foxRank.lastUsageBaseSec = uptime;
+    } else {
+      // Prevent double-counting on refresh/reconnect by capping to elapsed wall time.
+      const wallDelta = Math.max(0, nowSec - lastTick);
+      const safeDelta = Math.min(delta, wallDelta + 2);
+      if (safeDelta > 0) {
+        state.foxRank.totalUsageSec += safeDelta;
+      }
+      state.foxRank.lastUsageBaseSec = uptime;
     }
-    state.foxRank.lastUsageBaseSec = uptime;
+    state.foxRank.lastUsageTickSec = nowSec;
     if (uptime >= 300) {
       const today = getTodayKey();
       if (state.foxRank.lastStableDay !== today) {
@@ -6782,6 +6797,7 @@ function updateFoxRankFromOverviewSnapshot(data) {
     }
   } else {
     state.foxRank.lastUsageBaseSec = 0;
+    state.foxRank.lastUsageTickSec = 0;
   }
   state.foxRank.qualityScore = computeFoxRankQualityScore(data);
   syncFoxRankUnlockedBadges(getFoxRankSnapshot());
@@ -7960,6 +7976,24 @@ function getSelectedBackupIndex() {
   return selectedRow ? selectedRow.dataset.index : null;
 }
 
+function mountFoxRankDetailModalToBody() {
+  const modalNodes = Array.from(document.querySelectorAll('#foxRankDetailModal'));
+  if (!modalNodes.length) {
+    foxRankDetailModal = null;
+    return;
+  }
+  const modal = modalNodes[modalNodes.length - 1];
+  modalNodes.slice(0, -1).forEach((node) => {
+    if (node && node !== modal && node.parentNode) {
+      node.parentNode.removeChild(node);
+    }
+  });
+  if (modal.parentElement !== document.body) {
+    document.body.appendChild(modal);
+  }
+  foxRankDetailModal = modal;
+}
+
 function refreshLayoutRefs() {
   navButtons = Array.from(document.querySelectorAll('.nav-btn'));
   topNavMore = document.getElementById('topNavMore');
@@ -7984,7 +8018,7 @@ function refreshLayoutRefs() {
   foxRankUsageValue = document.getElementById('foxRankUsageValue');
   foxRankStabilityValue = document.getElementById('foxRankStabilityValue');
   foxRankQualityValue = document.getElementById('foxRankQualityValue');
-  foxRankDetailModal = document.getElementById('foxRankDetailModal');
+  mountFoxRankDetailModalToBody();
   foxRankDetailClose = document.getElementById('foxRankDetailClose');
   foxRankDetailTier = document.getElementById('foxRankDetailTier');
   foxRankDetailLevel = document.getElementById('foxRankDetailLevel');
@@ -8871,7 +8905,7 @@ if (foxRankDetailClose && foxRankDetailClose.dataset.bound !== 'true') {
 if (foxRankDetailModal && foxRankDetailModal.dataset.bound !== 'true') {
   foxRankDetailModal.dataset.bound = 'true';
   foxRankDetailModal.addEventListener('click', (event) => {
-    if (event.target === foxRankDetailModal) {
+    if (event.target === foxRankDetailModal || event.target.classList.contains('fox-rank-detail-backdrop')) {
       closeFoxRankDetailModal();
     }
   });
@@ -8979,7 +9013,9 @@ if (document.body && document.body.dataset.topologyKeyBound !== 'true') {
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
       setTopologyHoverKey('');
-      closeFoxRankDetailModal();
+      if (foxRankDetailModal && !foxRankDetailModal.hidden) {
+        closeFoxRankDetailModal();
+      }
     }
   });
 }
