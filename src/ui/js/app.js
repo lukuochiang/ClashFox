@@ -45,6 +45,37 @@ let noticePopTitle = document.getElementById('noticePopTitle');
 let contentRoot = document.getElementById('contentRoot');
 let currentPage = document.body ? document.body.dataset.page : '';
 const VALID_PAGES = new Set(['overview', 'kernel', 'config', 'logs', 'settings', 'help', 'dashboard']);
+const FOX_RANK_STORAGE_KEY = 'clashfox-fox-rank-state';
+const FOX_RANK_TIERS = [
+  { name: 'Fox Pup', minXp: 0, colorStart: '#ffd86a', colorEnd: '#ffb347' },
+  { name: 'Trail Fox', minXp: 400, colorStart: '#ff8f57', colorEnd: '#ff5e44' },
+  { name: 'Lunar Fox', minXp: 900, colorStart: '#8ac1ff', colorEnd: '#5e9bff' },
+  { name: 'Ember Fox', minXp: 1600, colorStart: '#ffb36a', colorEnd: '#ff8f57' },
+  { name: 'Star Fox', minXp: 2400, colorStart: '#c685ff', colorEnd: '#8d6dff' },
+  { name: 'Apex Fox', minXp: 3400, colorStart: '#7df3d2', colorEnd: '#4bc6ff' },
+];
+
+let foxRankPanel = document.getElementById('foxRankPanel');
+let foxRankCard = document.getElementById('foxRankCard');
+let foxRankTierName = document.getElementById('foxRankTierName');
+let foxRankLevelText = document.getElementById('foxRankLevelText');
+let foxRankProgressFill = document.getElementById('foxRankProgressFill');
+let foxRankProgressText = document.getElementById('foxRankProgressText');
+let foxRankUsageValue = document.getElementById('foxRankUsageValue');
+let foxRankStabilityValue = document.getElementById('foxRankStabilityValue');
+let foxRankQualityValue = document.getElementById('foxRankQualityValue');
+let foxRankDetailModal = document.getElementById('foxRankDetailModal');
+let foxRankDetailClose = document.getElementById('foxRankDetailClose');
+let foxRankDetailTier = document.getElementById('foxRankDetailTier');
+let foxRankDetailLevel = document.getElementById('foxRankDetailLevel');
+let foxRankDetailXp = document.getElementById('foxRankDetailXp');
+let foxRankDetailUsage = document.getElementById('foxRankDetailUsage');
+let foxRankDetailStability = document.getElementById('foxRankDetailStability');
+let foxRankDetailQuality = document.getElementById('foxRankDetailQuality');
+let foxRankLogList = document.getElementById('foxRankLogList');
+let foxRankBadgeList = document.getElementById('foxRankBadgeList');
+let foxRankCopySummaryBtn = document.getElementById('foxRankCopySummaryBtn');
+let foxRankExportPngBtn = document.getElementById('foxRankExportPngBtn');
 let noticePopTimer = null;
 let topNavOverflowRaf = null;
 
@@ -2244,6 +2275,7 @@ const state = {
   configDefault: '',
   settings: { ...DEFAULT_SETTINGS },
 };
+state.foxRank = loadFoxRankFromStorage();
 
 const CORE_STARTUP_ESTIMATE_MIN_MS = 900;
 const CORE_STARTUP_ESTIMATE_MAX_MS = 10000;
@@ -6285,6 +6317,7 @@ function updateOverviewUI(data) {
     }
   }
   applyOverviewNetworkSnapshot(data);
+  updateFoxRankFromOverviewSnapshot(data);
 }
 
 function applyOverviewNetworkSnapshot(data) {
@@ -6359,6 +6392,434 @@ function applyOverviewNetworkSnapshot(data) {
     setOverviewCopyButtonVisible(overviewInternetIpCopy, Boolean(text && text !== '-'));
   }
   cacheOverviewNetworkFromState();
+}
+
+function loadFoxRankFromStorage() {
+  try {
+    const payload = localStorage.getItem(FOX_RANK_STORAGE_KEY);
+    if (!payload) {
+      return {
+        totalUsageSec: 0,
+        stableDays: 0,
+        lastStableDay: '',
+        lastUsageBaseSec: 0,
+        qualityScore: 0,
+        unlockedBadges: [],
+        freshUnlockedBadges: [],
+      };
+    }
+    const parsed = JSON.parse(payload);
+    return {
+      totalUsageSec: Number(parsed.totalUsageSec) || 0,
+      stableDays: Number(parsed.stableDays) || 0,
+      lastStableDay: String(parsed.lastStableDay || ''),
+      lastUsageBaseSec: 0,
+      qualityScore: Number(parsed.qualityScore) || 0,
+      unlockedBadges: Array.isArray(parsed.unlockedBadges) ? parsed.unlockedBadges.map((item) => String(item || '')) : [],
+      freshUnlockedBadges: [],
+    };
+  } catch {
+    return {
+      totalUsageSec: 0,
+      stableDays: 0,
+      lastStableDay: '',
+      lastUsageBaseSec: 0,
+      qualityScore: 0,
+      unlockedBadges: [],
+      freshUnlockedBadges: [],
+    };
+  }
+}
+
+function saveFoxRankToStorage() {
+  if (!state.foxRank) {
+    return;
+  }
+  try {
+    localStorage.setItem(FOX_RANK_STORAGE_KEY, JSON.stringify({
+      totalUsageSec: state.foxRank.totalUsageSec,
+      stableDays: state.foxRank.stableDays,
+      lastStableDay: state.foxRank.lastStableDay,
+      unlockedBadges: Array.isArray(state.foxRank.unlockedBadges) ? state.foxRank.unlockedBadges : [],
+    }));
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function computeFoxRankXp() {
+  if (!state.foxRank) {
+    return 0;
+  }
+  const usageXp = Math.floor((state.foxRank.totalUsageSec || 0) / 600);
+  const stabilityXp = (state.foxRank.stableDays || 0) * 20;
+  const qualityXp = Math.round((state.foxRank.qualityScore || 0) * 120);
+  return usageXp + stabilityXp + qualityXp;
+}
+
+function getFoxRankTierForXp(xp) {
+  for (let i = FOX_RANK_TIERS.length - 1; i >= 0; i -= 1) {
+    const tier = FOX_RANK_TIERS[i];
+    if (xp >= tier.minXp) {
+      const nextTier = FOX_RANK_TIERS[i + 1];
+      const nextMin = nextTier ? nextTier.minXp : tier.minXp + 800;
+      const range = Math.max(nextMin - tier.minXp, 1);
+      return {
+        ...tier,
+        index: i,
+        nextMinXp: nextMin,
+        range,
+      };
+    }
+  }
+  const first = FOX_RANK_TIERS[0];
+  const next = FOX_RANK_TIERS[1];
+  const fallbackNext = next ? next.minXp : first.minXp + 200;
+  return {
+    ...first,
+    index: 0,
+    nextMinXp: fallbackNext,
+    range: Math.max(fallbackNext - first.minXp, 1),
+  };
+}
+
+function getFoxRankQualityLabel(score) {
+  if (score >= 0.85) {
+    return 'Pristine';
+  }
+  if (score >= 0.6) {
+    return 'Solid';
+  }
+  if (score >= 0.35) {
+    return 'Steady';
+  }
+  return 'Bronze';
+}
+
+function getLatencyValue(data, keys) {
+  if (!data || !Array.isArray(keys)) {
+    return null;
+  }
+  for (const key of keys) {
+    const raw = data[key];
+    if (raw !== undefined && raw !== null) {
+      const value = Number.parseFloat(raw);
+      if (Number.isFinite(value)) {
+        return value;
+      }
+    }
+  }
+  return null;
+}
+
+function computeFoxRankQualityScore(data) {
+  const values = [
+    getLatencyValue(data, ['internetMs', 'internet', 'internetLatency']),
+    getLatencyValue(data, ['dnsMs', 'dns', 'dnsLatency']),
+    getLatencyValue(data, ['routerMs', 'router', 'gatewayMs', 'routerLatency']),
+  ].filter((value) => Number.isFinite(value) && value >= 0);
+  if (!values.length) {
+    return state.foxRank ? (state.foxRank.qualityScore || 0) : 0;
+  }
+  const normalized = values.reduce((sum, value) => {
+    const delta = Math.max(0, value - 30);
+    const capped = Math.min(1, Math.max(0, 1 - (delta / 170)));
+    return sum + capped;
+  }, 0);
+  return Math.min(1, Math.max(0, normalized / values.length));
+}
+
+function formatFoxRankUsageValue(totalSeconds = 0) {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  if (!hours && !minutes) {
+    return '0h';
+  }
+  if (!hours) {
+    return `${minutes}m`;
+  }
+  const padMinutes = String(minutes).padStart(2, '0');
+  return `${hours}h ${padMinutes}m`;
+}
+
+function getTodayKey() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function getFoxRankSnapshot() {
+  const xp = computeFoxRankXp();
+  const tier = getFoxRankTierForXp(xp);
+  const delta = Math.max(0, Math.round(xp - tier.minXp));
+  const span = Math.max(tier.range, 1);
+  const usageText = formatFoxRankUsageValue(state.foxRank ? state.foxRank.totalUsageSec : 0);
+  const stabilityDays = state.foxRank ? (state.foxRank.stableDays || 0) : 0;
+  const qualityScore = state.foxRank ? (state.foxRank.qualityScore || 0) : 0;
+  const qualityLabel = getFoxRankQualityLabel(qualityScore);
+  return {
+    xp,
+    tier,
+    delta,
+    span,
+    usageText,
+    stabilityDays,
+    qualityScore,
+    qualityLabel,
+  };
+}
+
+function getFoxRankBadgeItems(snapshot) {
+  return [
+    { id: 'connection-keeper', name: 'Connection Keeper', desc: `${snapshot.stabilityDays} stable days`, unlocked: snapshot.stabilityDays >= 1 },
+    { id: 'long-run', name: 'Long Run', desc: `${snapshot.usageText} active usage`, unlocked: snapshot.xp >= 200 },
+    { id: 'quality-eye', name: 'Quality Eye', desc: `${Math.round(snapshot.qualityScore * 100)}% network quality`, unlocked: snapshot.qualityScore >= 0.6 },
+    { id: 'tier-climber', name: 'Tier Climber', desc: `${snapshot.tier.name} reached`, unlocked: snapshot.tier.index >= 2 },
+  ];
+}
+
+function getFoxRankLogItems(snapshot) {
+  return [
+    { label: 'Rank Core Updated', value: `${snapshot.delta}/${snapshot.span} XP in current tier` },
+    { label: 'Stability Index', value: `${snapshot.stabilityDays} days without critical drop` },
+    { label: 'Network Grade', value: `${snapshot.qualityLabel} • ${Math.round(snapshot.qualityScore * 100)}%` },
+    { label: 'Usage Record', value: snapshot.usageText },
+  ];
+}
+
+function syncFoxRankUnlockedBadges(snapshot) {
+  if (!state.foxRank) {
+    return;
+  }
+  const unlockedBefore = new Set(Array.isArray(state.foxRank.unlockedBadges) ? state.foxRank.unlockedBadges : []);
+  const freshUnlocked = [];
+  getFoxRankBadgeItems(snapshot).forEach((badge) => {
+    if (badge.unlocked && !unlockedBefore.has(badge.id)) {
+      unlockedBefore.add(badge.id);
+      freshUnlocked.push(badge.id);
+    }
+  });
+  state.foxRank.unlockedBadges = Array.from(unlockedBefore);
+  state.foxRank.freshUnlockedBadges = freshUnlocked;
+}
+
+function buildFoxRankSummaryText(snapshot = null) {
+  const data = snapshot || getFoxRankSnapshot();
+  return [
+    `Fox Rank ${data.tier.name} (Lv. ${data.tier.index + 1})`,
+    `XP: ${data.delta} / ${data.span}`,
+    `Usage: ${data.usageText}`,
+    `Stability: ${data.stabilityDays}d`,
+    `Quality: ${data.qualityLabel} • ${Math.round(data.qualityScore * 100)}%`,
+  ].join('\n');
+}
+
+async function copyFoxRankSummary(snapshot = null) {
+  const text = buildFoxRankSummaryText(snapshot);
+  try {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const input = document.createElement('textarea');
+      input.value = text;
+      input.setAttribute('readonly', 'true');
+      input.style.position = 'absolute';
+      input.style.left = '-9999px';
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
+    }
+    showToast('Fox Rank summary copied', 'info');
+  } catch {
+    showToast('Copy failed', 'error');
+  }
+}
+
+function exportFoxRankCardPng(snapshot = null) {
+  const data = snapshot || getFoxRankSnapshot();
+  const canvas = document.createElement('canvas');
+  canvas.width = 980;
+  canvas.height = 560;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    showToast('Export failed', 'error');
+    return;
+  }
+
+  const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+  gradient.addColorStop(0, '#1c2836');
+  gradient.addColorStop(1, '#101722');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '700 54px Trebuchet MS';
+  ctx.fillText('ClashFox • Fox Rank', 64, 104);
+  ctx.font = '700 82px Trebuchet MS';
+  ctx.fillStyle = '#8ac1ff';
+  ctx.fillText(data.tier.name, 64, 210);
+  ctx.font = '700 40px Trebuchet MS';
+  ctx.fillStyle = '#f5f9ff';
+  ctx.fillText(`Lv. ${data.tier.index + 1}`, 760, 104);
+  ctx.font = '600 32px Trebuchet MS';
+  ctx.fillStyle = '#d9e6f4';
+  ctx.fillText(`XP ${data.delta} / ${data.span}`, 64, 278);
+  ctx.fillText(`Usage ${data.usageText}`, 64, 340);
+  ctx.fillText(`Stability ${data.stabilityDays}d`, 64, 394);
+  ctx.fillText(`Quality ${data.qualityLabel} • ${Math.round(data.qualityScore * 100)}%`, 64, 448);
+
+  const anchor = document.createElement('a');
+  anchor.href = canvas.toDataURL('image/png');
+  anchor.download = `clashfox-fox-rank-lv${data.tier.index + 1}.png`;
+  anchor.click();
+  showToast('Fox Rank PNG exported', 'info');
+}
+
+async function runFoxRankActionWithButton(button, idleLabel, busyLabel, action) {
+  if (!button || typeof action !== 'function') {
+    return;
+  }
+  const originalLabel = String(idleLabel || button.textContent || '').trim();
+  button.disabled = true;
+  button.textContent = busyLabel;
+  try {
+    await action();
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
+  }
+}
+
+function renderFoxRankDetailPanel(snapshot = null) {
+  if (!foxRankDetailModal || !state.foxRank) {
+    return;
+  }
+  const data = snapshot || getFoxRankSnapshot();
+  if (foxRankDetailTier) {
+    setNodeTextIfChanged(foxRankDetailTier, data.tier.name);
+  }
+  if (foxRankDetailLevel) {
+    setNodeTextIfChanged(foxRankDetailLevel, `Lv. ${data.tier.index + 1}`);
+  }
+  if (foxRankDetailXp) {
+    setNodeTextIfChanged(foxRankDetailXp, `${data.delta} / ${data.span} XP`);
+  }
+  if (foxRankDetailUsage) {
+    setNodeTextIfChanged(foxRankDetailUsage, data.usageText);
+  }
+  if (foxRankDetailStability) {
+    setNodeTextIfChanged(foxRankDetailStability, `${data.stabilityDays}d`);
+  }
+  if (foxRankDetailQuality) {
+    setNodeTextIfChanged(foxRankDetailQuality, `${data.qualityLabel} • ${Math.round(data.qualityScore * 100)}%`);
+  }
+  if (foxRankLogList) {
+    foxRankLogList.innerHTML = getFoxRankLogItems(data)
+      .map((item, index) => `<div class="fox-rank-log-item" style="animation-delay:${index * 60}ms"><span class="fox-rank-log-index">${index + 1}</span><div class="fox-rank-log-main"><strong>${escapeLogCell(item.label)}</strong><span>${escapeLogCell(item.value)}</span></div></div>`)
+      .join('');
+  }
+  if (foxRankBadgeList) {
+    const freshSet = new Set(state.foxRank && Array.isArray(state.foxRank.freshUnlockedBadges)
+      ? state.foxRank.freshUnlockedBadges
+      : []);
+    foxRankBadgeList.innerHTML = getFoxRankBadgeItems(data)
+      .map((item, index) => {
+        const status = item.unlocked ? 'Unlocked' : 'Locked';
+        const classNames = `fox-rank-badge-item ${item.unlocked ? 'is-unlocked' : 'is-locked'}${freshSet.has(item.id) ? ' unlocked-fresh' : ''}`;
+        return `<div class="${classNames}" style="animation-delay:${index * 70}ms"><div class="fox-rank-badge-main"><strong>${escapeLogCell(item.name)}</strong><span>${escapeLogCell(item.desc)}</span></div><em class="fox-rank-badge-status">${escapeLogCell(status)}</em></div>`;
+      })
+      .join('');
+  }
+}
+
+function openFoxRankDetailModal() {
+  if (!foxRankDetailModal) {
+    return;
+  }
+  renderFoxRankDetailPanel();
+  foxRankDetailModal.classList.add('show');
+  foxRankDetailModal.setAttribute('aria-hidden', 'false');
+  if (state.foxRank && Array.isArray(state.foxRank.freshUnlockedBadges) && state.foxRank.freshUnlockedBadges.length) {
+    setTimeout(() => {
+      if (!state.foxRank) {
+        return;
+      }
+      state.foxRank.freshUnlockedBadges = [];
+      renderFoxRankDetailPanel();
+      saveFoxRankToStorage();
+    }, 900);
+  }
+}
+
+function closeFoxRankDetailModal() {
+  if (!foxRankDetailModal) {
+    return;
+  }
+  foxRankDetailModal.classList.remove('show');
+  foxRankDetailModal.setAttribute('aria-hidden', 'true');
+}
+
+function updateFoxRankFromOverviewSnapshot(data) {
+  if (!data || !state.foxRank) {
+    return;
+  }
+  const running = Boolean(data.running);
+  const uptime = Number.parseFloat(data.uptimeSec);
+  if (running && Number.isFinite(uptime) && uptime >= 0) {
+    const lastBase = state.foxRank.lastUsageBaseSec || 0;
+    const delta = uptime - lastBase;
+    if (delta > 0) {
+      state.foxRank.totalUsageSec += delta;
+    } else if (!lastBase) {
+      state.foxRank.totalUsageSec += uptime;
+    }
+    state.foxRank.lastUsageBaseSec = uptime;
+    if (uptime >= 300) {
+      const today = getTodayKey();
+      if (state.foxRank.lastStableDay !== today) {
+        state.foxRank.stableDays = Math.min(365, (state.foxRank.stableDays || 0) + 1);
+        state.foxRank.lastStableDay = today;
+      }
+    }
+  } else {
+    state.foxRank.lastUsageBaseSec = 0;
+  }
+  state.foxRank.qualityScore = computeFoxRankQualityScore(data);
+  syncFoxRankUnlockedBadges(getFoxRankSnapshot());
+  saveFoxRankToStorage();
+  renderFoxRankPanel();
+}
+
+function renderFoxRankPanel() {
+  if (!foxRankPanel || !state.foxRank) {
+    return;
+  }
+  const snapshot = getFoxRankSnapshot();
+  const { tier, delta, span } = snapshot;
+  if (foxRankTierName) {
+    setNodeTextIfChanged(foxRankTierName, tier.name);
+    foxRankTierName.style.color = tier.colorStart || '#ffd86a';
+  }
+  if (foxRankLevelText) {
+    setNodeTextIfChanged(foxRankLevelText, `Lv. ${tier.index + 1}`);
+  }
+  if (foxRankProgressText) {
+    setNodeTextIfChanged(foxRankProgressText, `${delta} / ${span} XP`);
+  }
+  if (foxRankProgressFill) {
+    const progress = Math.min(1, Math.max(0, delta / span));
+    foxRankProgressFill.style.width = `${Math.round(progress * 100)}%`;
+    foxRankProgressFill.style.background = `linear-gradient(135deg, ${tier.colorStart}, ${tier.colorEnd})`;
+  }
+  if (foxRankUsageValue) {
+    setNodeTextIfChanged(foxRankUsageValue, snapshot.usageText);
+  }
+  if (foxRankStabilityValue) {
+    setNodeTextIfChanged(foxRankStabilityValue, `${snapshot.stabilityDays}d`);
+  }
+  if (foxRankQualityValue) {
+    setNodeTextIfChanged(foxRankQualityValue, `${snapshot.qualityLabel} • ${Math.round(snapshot.qualityScore * 100)}%`);
+  }
+  renderFoxRankDetailPanel(snapshot);
 }
 
 async function loadStatusSilently() {
@@ -7514,6 +7975,27 @@ function refreshLayoutRefs() {
   themeToggle = document.getElementById('themeToggle');
   refreshStatusBtn = document.getElementById('refreshStatus');
   statusPill = document.getElementById('statusPill');
+  foxRankPanel = document.getElementById('foxRankPanel');
+  foxRankCard = document.getElementById('foxRankCard');
+  foxRankTierName = document.getElementById('foxRankTierName');
+  foxRankLevelText = document.getElementById('foxRankLevelText');
+  foxRankProgressFill = document.getElementById('foxRankProgressFill');
+  foxRankProgressText = document.getElementById('foxRankProgressText');
+  foxRankUsageValue = document.getElementById('foxRankUsageValue');
+  foxRankStabilityValue = document.getElementById('foxRankStabilityValue');
+  foxRankQualityValue = document.getElementById('foxRankQualityValue');
+  foxRankDetailModal = document.getElementById('foxRankDetailModal');
+  foxRankDetailClose = document.getElementById('foxRankDetailClose');
+  foxRankDetailTier = document.getElementById('foxRankDetailTier');
+  foxRankDetailLevel = document.getElementById('foxRankDetailLevel');
+  foxRankDetailXp = document.getElementById('foxRankDetailXp');
+  foxRankDetailUsage = document.getElementById('foxRankDetailUsage');
+  foxRankDetailStability = document.getElementById('foxRankDetailStability');
+  foxRankDetailQuality = document.getElementById('foxRankDetailQuality');
+  foxRankLogList = document.getElementById('foxRankLogList');
+  foxRankBadgeList = document.getElementById('foxRankBadgeList');
+  foxRankCopySummaryBtn = document.getElementById('foxRankCopySummaryBtn');
+  foxRankExportPngBtn = document.getElementById('foxRankExportPngBtn');
 }
 
 function setTopNavOverflowItemVisible(action = '', visible = false) {
@@ -8320,6 +8802,7 @@ async function loadLayoutParts() {
   bindNavButtons();
   bindTopbarActions();
   setLayoutReady();
+  renderFoxRankPanel();
 
   const sudoRoot = document.getElementById('sudoRoot');
   const confirmRoot = document.getElementById('confirmRoot');
@@ -8376,6 +8859,34 @@ function bindPageEvents() {
 if (noticePopClose && noticePopClose.dataset.bound !== 'true') {
   noticePopClose.dataset.bound = 'true';
   noticePopClose.addEventListener('click', hideNoticePop);
+}
+if (foxRankCard && foxRankCard.dataset.bound !== 'true') {
+  foxRankCard.dataset.bound = 'true';
+  foxRankCard.addEventListener('click', openFoxRankDetailModal);
+}
+if (foxRankDetailClose && foxRankDetailClose.dataset.bound !== 'true') {
+  foxRankDetailClose.dataset.bound = 'true';
+  foxRankDetailClose.addEventListener('click', closeFoxRankDetailModal);
+}
+if (foxRankDetailModal && foxRankDetailModal.dataset.bound !== 'true') {
+  foxRankDetailModal.dataset.bound = 'true';
+  foxRankDetailModal.addEventListener('click', (event) => {
+    if (event.target === foxRankDetailModal) {
+      closeFoxRankDetailModal();
+    }
+  });
+}
+if (foxRankCopySummaryBtn && foxRankCopySummaryBtn.dataset.bound !== 'true') {
+  foxRankCopySummaryBtn.dataset.bound = 'true';
+  foxRankCopySummaryBtn.addEventListener('click', () => {
+    runFoxRankActionWithButton(foxRankCopySummaryBtn, 'Copy Summary', 'Copying...', () => copyFoxRankSummary());
+  });
+}
+if (foxRankExportPngBtn && foxRankExportPngBtn.dataset.bound !== 'true') {
+  foxRankExportPngBtn.dataset.bound = 'true';
+  foxRankExportPngBtn.addEventListener('click', () => {
+    runFoxRankActionWithButton(foxRankExportPngBtn, 'Export PNG', 'Exporting...', () => exportFoxRankCardPng());
+  });
 }
 if (document.body && document.body.dataset.proxyConfigActionBound !== 'true') {
   document.body.dataset.proxyConfigActionBound = 'true';
@@ -8468,6 +8979,7 @@ if (document.body && document.body.dataset.topologyKeyBound !== 'true') {
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
       setTopologyHoverKey('');
+      closeFoxRankDetailModal();
     }
   });
 }

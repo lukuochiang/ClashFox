@@ -37,10 +37,92 @@
     <button class="nav-btn" id="navFoxboard" data-tray-action="open-foxboard" data-i18n="nav.foxboard">Foxboard</button>
   </nav>
 
+  <section class="fox-rank-panel" id="foxRankPanel">
+    <button class="fox-rank-card" id="foxRankCard" type="button" aria-label="Open Fox Rank details">
+      <div class="fox-rank-header">
+        <div class="fox-rank-head-main">
+          <div class="fox-rank-label">Fox Rank</div>
+          <div class="fox-rank-tier" id="foxRankTierName">Fox Pup</div>
+        </div>
+        <div class="fox-rank-level" id="foxRankLevelText">Lv. 01</div>
+      </div>
+      <div class="fox-rank-progress">
+        <div class="fox-rank-progress-track">
+          <div class="fox-rank-progress-fill" id="foxRankProgressFill"></div>
+        </div>
+        <div class="fox-rank-progress-text" id="foxRankProgressText">0 / 200 XP</div>
+      </div>
+      <div class="fox-rank-metrics">
+        <div class="fox-rank-metric">
+          <div class="fox-rank-metric-label">Usage</div>
+          <div class="fox-rank-metric-value" id="foxRankUsageValue">0h</div>
+        </div>
+        <div class="fox-rank-metric">
+          <div class="fox-rank-metric-label">Stability</div>
+          <div class="fox-rank-metric-value" id="foxRankStabilityValue">0d</div>
+        </div>
+        <div class="fox-rank-metric">
+          <div class="fox-rank-metric-label">Quality</div>
+          <div class="fox-rank-metric-value" id="foxRankQualityValue">Bronze</div>
+        </div>
+      </div>
+    </button>
+  </section>
+
   <nav class="nav nav-bottom">
     <button class="nav-btn" id="navSettingsMain" data-page="settings" data-i18n="nav.settings">Settings</button>
     <button class="nav-btn" id="navHelpMain" data-page="help" data-i18n="nav.help">Help</button>
   </nav>
+</div>
+
+<div class="modal fox-rank-detail-modal" id="foxRankDetailModal" aria-hidden="true">
+  <div class="modal-card fox-rank-detail-card">
+    <div class="fox-rank-detail-head">
+      <div class="fox-rank-detail-title-wrap">
+        <div class="fox-rank-detail-kicker">Fox Rank</div>
+        <div class="fox-rank-detail-title" id="foxRankDetailTier">Fox Pup</div>
+        <div class="fox-rank-detail-subtitle">Daily accumulation, long-term honor.</div>
+      </div>
+      <button class="fox-rank-detail-close" id="foxRankDetailClose" type="button" aria-label="Close">×</button>
+    </div>
+
+    <div class="fox-rank-detail-hero">
+      <div class="fox-rank-detail-level" id="foxRankDetailLevel">Lv. 1</div>
+      <div class="fox-rank-detail-xp" id="foxRankDetailXp">0 / 200 XP</div>
+    </div>
+
+    <div class="fox-rank-detail-grid">
+      <div class="fox-rank-detail-stat">
+        <span>Usage</span>
+        <strong id="foxRankDetailUsage">0h</strong>
+      </div>
+      <div class="fox-rank-detail-stat">
+        <span>Stability</span>
+        <strong id="foxRankDetailStability">0d</strong>
+      </div>
+      <div class="fox-rank-detail-stat">
+        <span>Quality</span>
+        <strong id="foxRankDetailQuality">Bronze • 0%</strong>
+      </div>
+    </div>
+
+    <div class="fox-rank-detail-body">
+      <section class="fox-rank-detail-section fox-rank-detail-section-log">
+        <h4>Growth Log</h4>
+        <div class="fox-rank-log-list" id="foxRankLogList"></div>
+      </section>
+
+      <section class="fox-rank-detail-section fox-rank-detail-section-badges">
+        <h4>Badge Wall</h4>
+        <div class="fox-rank-badge-list" id="foxRankBadgeList"></div>
+      </section>
+    </div>
+
+    <section class="fox-rank-detail-actions">
+      <button class="btn" id="foxRankCopySummaryBtn" type="button">Copy Summary</button>
+      <button class="btn primary" id="foxRankExportPngBtn" type="button">Export PNG</button>
+    </section>
+  </div>
 </div>
 
 <div class="top-nav-more" id="topNavMore">
