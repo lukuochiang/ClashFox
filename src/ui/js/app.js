@@ -2659,10 +2659,63 @@ function closeActiveCustomSelect() {
   if (!activeCustomSelectEntry) {
     return;
   }
+  const { wrapper, menu, trigger } = activeCustomSelectEntry;
+  if (wrapper && menu && menu.parentNode !== wrapper) {
+    wrapper.appendChild(menu);
+  }
+  if (wrapper) {
+    wrapper.style.zIndex = '';
+  }
+  menu.classList.remove('is-floating');
+  menu.removeAttribute('data-placement');
+  menu.style.top = '';
+  menu.style.left = '';
+  menu.style.width = '';
+  menu.style.maxHeight = '';
+  menu.style.visibility = '';
   activeCustomSelectEntry.wrapper.classList.remove('is-open');
-  activeCustomSelectEntry.menu.hidden = true;
-  activeCustomSelectEntry.trigger.setAttribute('aria-expanded', 'false');
+  menu.hidden = true;
+  trigger.setAttribute('aria-expanded', 'false');
   activeCustomSelectEntry = null;
+}
+
+function positionCustomSelectMenu(entry) {
+  if (!entry || !entry.trigger || !entry.menu || entry.menu.hidden) {
+    return;
+  }
+  const overlayRoot = document.getElementById('overlayRoot') || document.body;
+  const { wrapper, trigger, menu } = entry;
+  if (overlayRoot && menu.parentNode !== overlayRoot) {
+    overlayRoot.appendChild(menu);
+  }
+  menu.classList.add('is-floating');
+  menu.style.visibility = 'hidden';
+  const triggerRect = trigger.getBoundingClientRect();
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const gap = 6;
+  const edgePadding = 8;
+  const naturalHeight = Math.min(menu.scrollHeight || 0, 260);
+  const spaceBelow = Math.max(0, viewportHeight - triggerRect.bottom - edgePadding - gap);
+  const spaceAbove = Math.max(0, triggerRect.top - edgePadding - gap);
+  const openUpward = spaceBelow < Math.min(180, naturalHeight || 180) && spaceAbove > spaceBelow;
+  const maxHeight = Math.max(120, Math.min(260, openUpward ? spaceAbove : spaceBelow));
+  const menuHeight = Math.min(Math.max(naturalHeight, 0), maxHeight);
+  const rawTop = openUpward
+    ? triggerRect.top - gap - menuHeight
+    : triggerRect.bottom + gap;
+  const top = Math.max(edgePadding, Math.min(rawTop, viewportHeight - edgePadding - menuHeight));
+  const width = Math.max(Math.round(triggerRect.width), 80);
+  const left = Math.max(edgePadding, Math.min(triggerRect.left, viewportWidth - edgePadding - width));
+  menu.dataset.placement = openUpward ? 'top' : 'bottom';
+  menu.style.top = `${Math.round(top)}px`;
+  menu.style.left = `${Math.round(left)}px`;
+  menu.style.width = `${width}px`;
+  menu.style.maxHeight = `${Math.round(maxHeight)}px`;
+  menu.style.visibility = '';
+  if (wrapper) {
+    wrapper.style.zIndex = '61';
+  }
 }
 
 function refreshCustomSelectEntry(entry) {
@@ -2739,7 +2792,7 @@ function initCustomSelects(root = document) {
         return;
       }
       const target = event.target instanceof Node ? event.target : null;
-      if (target && activeCustomSelectEntry.wrapper.contains(target)) {
+      if (target && (activeCustomSelectEntry.wrapper.contains(target) || activeCustomSelectEntry.menu.contains(target))) {
         return;
       }
       closeActiveCustomSelect();
@@ -2753,6 +2806,11 @@ function initCustomSelects(root = document) {
         closeActiveCustomSelect();
       }
     });
+    document.addEventListener('scroll', () => {
+      if (activeCustomSelectEntry) {
+        positionCustomSelectMenu(activeCustomSelectEntry);
+      }
+    }, true);
     window.addEventListener('resize', () => {
       closeActiveCustomSelect();
     });
@@ -2802,6 +2860,7 @@ function initCustomSelects(root = document) {
       wrapper.classList.add('is-open');
       menu.hidden = false;
       trigger.setAttribute('aria-expanded', 'true');
+      positionCustomSelectMenu(entry);
       const selectedItem = menu.querySelector('.cf-select-option.is-selected:not(:disabled)')
         || menu.querySelector('.cf-select-option:not(:disabled)');
       if (selectedItem && typeof selectedItem.focus === 'function') {
@@ -2813,7 +2872,18 @@ function initCustomSelects(root = document) {
       if (activeCustomSelectEntry === entry) {
         closeActiveCustomSelect();
       } else {
+        if (menu.parentNode !== wrapper) {
+          wrapper.appendChild(menu);
+        }
+        menu.classList.remove('is-floating');
+        menu.removeAttribute('data-placement');
+        menu.style.top = '';
+        menu.style.left = '';
+        menu.style.width = '';
+        menu.style.maxHeight = '';
+        menu.style.visibility = '';
         wrapper.classList.remove('is-open');
+        wrapper.style.zIndex = '';
         menu.hidden = true;
         trigger.setAttribute('aria-expanded', 'false');
       }

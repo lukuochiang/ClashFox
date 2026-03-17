@@ -6087,6 +6087,7 @@ select {
   position: relative;
   flex: 1;
   min-width: 85px;
+  z-index: 0;
 }
 
 .cf-native-select {
@@ -6176,6 +6177,12 @@ select {
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35);
   z-index: 60;
   padding: 4px;
+}
+
+.cf-select-menu.is-floating {
+  position: fixed;
+  top: 0;
+  left: 0;
 }
 
 .cf-select-option {
