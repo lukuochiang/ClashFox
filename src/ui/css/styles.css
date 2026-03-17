@@ -2170,9 +2170,12 @@ body[data-theme="day"] .brand-mark .logo-night {
 }
 
 .sidebar.is-collapsed .nav-bottom {
-  /*margin-top: 4px;*/
-  padding-top: 10px;
+  margin-top: auto;
+  padding-top: 0;
   border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .nav-btn {
@@ -6102,6 +6105,7 @@ select {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(126, 149, 177, 0.28);
   color: var(--ink);
+  font-size: 13px;
   height: var(--control-height);
   padding: 0 var(--control-padding-x);
   border-radius: var(--control-radius);
@@ -6217,6 +6221,11 @@ body[data-theme="day"] .cf-select-trigger {
   font-size: 13px;
   border-color: rgba(154, 177, 203, 0.5);
   box-shadow: 0 8px 18px rgba(58, 88, 120, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+body[data-theme="night"] .cf-select-trigger {
+  color: var(--ink);
+  font-size: 13px;
 }
 
 body[data-theme="day"] .cf-select-trigger:hover,
