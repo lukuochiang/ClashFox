@@ -51,6 +51,7 @@ const TILE_PROVIDERS = [
   {
     name: 'Carto Voyager',
     url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    urlDark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     options: {
       maxZoom: 10,
       minZoom: 2,
@@ -457,7 +458,11 @@ function switchToProvider(nextIndex) {
     tileLayer = null;
   }
 
-  tileLayer = L.tileLayer(provider.url, provider.options || {});
+  // 根据当前主题选择合适的瓦片 URL（深色或浅色）
+  const currentTheme = resolveThemeMode(themePreference);
+  const tileUrl = (currentTheme === 'night' && provider.urlDark) ? provider.urlDark : provider.url;
+
+  tileLayer = L.tileLayer(tileUrl, provider.options || {});
   tileLayer.on('tileload', () => {
     hasAnyTileLoaded = true;
     allProvidersFailed = false;
@@ -809,12 +814,16 @@ function bindSettingsListeners() {
       lastSystemDark = payload.dark;
       if (themePreference === 'auto') {
         applyThemeMode('auto');
+        // 主题切换时重新加载地图瓦片
+        switchToProvider(activeProviderIndex);
       }
     });
   }
   if (window.clashfox && typeof window.clashfox.onSettingsUpdated === 'function') {
     unsubscribeSettingsUpdated = window.clashfox.onSettingsUpdated((settings = {}) => {
       applySettingsPayload(settings);
+      // 主题设置更新时重新加载地图瓦片
+      switchToProvider(activeProviderIndex);
     });
   }
   if (window.matchMedia) {
@@ -823,6 +832,8 @@ function bindSettingsListeners() {
       lastSystemDark = Boolean(event.matches);
       if (themePreference === 'auto') {
         applyThemeMode('auto');
+        // 主题切换时重新加载地图瓦片
+        switchToProvider(activeProviderIndex);
       }
     });
   }
