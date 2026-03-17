@@ -39,12 +39,23 @@
 
   <section class="fox-rank-panel" id="foxRankPanel">
     <button class="fox-rank-card" id="foxRankCard" type="button" aria-label="Open Fox Rank details">
+      <div class="fox-rank-ambient" aria-hidden="true">
+        <span class="fox-rank-halo fox-rank-halo-a"></span>
+        <span class="fox-rank-halo fox-rank-halo-b"></span>
+        <span class="fox-rank-particle fox-rank-particle-a"></span>
+        <span class="fox-rank-particle fox-rank-particle-b"></span>
+        <span class="fox-rank-particle fox-rank-particle-c"></span>
+      </div>
       <div class="fox-rank-header">
         <div class="fox-rank-head-main">
-          <div class="fox-rank-label">Fox Rank</div>
+          <div class="fox-rank-label" data-fox-rank-ui="title">Fox Rank</div>
           <div class="fox-rank-tier" id="foxRankTierName">Fox Pup</div>
         </div>
         <div class="fox-rank-level" id="foxRankLevelText">Lv. 01</div>
+      </div>
+      <div class="fox-rank-status-row">
+        <div class="fox-rank-boost" id="foxRankBoostHint">Rank Boost +0%</div>
+        <div class="fox-rank-warning" id="foxRankWarningChip" hidden>Ascend soon</div>
       </div>
       <div class="fox-rank-progress">
         <div class="fox-rank-progress-track">
@@ -54,17 +65,21 @@
       </div>
       <div class="fox-rank-metrics">
         <div class="fox-rank-metric">
-          <div class="fox-rank-metric-label">Usage</div>
+          <div class="fox-rank-metric-label" data-fox-rank-ui="usage">Usage</div>
           <div class="fox-rank-metric-value" id="foxRankUsageValue">0h</div>
         </div>
         <div class="fox-rank-metric">
-          <div class="fox-rank-metric-label">Stability</div>
+          <div class="fox-rank-metric-label" data-fox-rank-ui="stability">Stability</div>
           <div class="fox-rank-metric-value" id="foxRankStabilityValue">0d</div>
         </div>
         <div class="fox-rank-metric">
-          <div class="fox-rank-metric-label">Quality</div>
+          <div class="fox-rank-metric-label" data-fox-rank-ui="quality">Quality</div>
           <div class="fox-rank-metric-value" id="foxRankQualityValue">Bronze</div>
         </div>
+      </div>
+      <div class="fox-rank-footer">
+        <div class="fox-rank-footer-pill"><span data-fox-rank-ui="explore">Explore</span> <strong id="foxRankExploreCount">0</strong></div>
+        <div class="fox-rank-footer-pill" id="foxRankSkinHint">Skin: Campfire</div>
       </div>
     </button>
   </section>
@@ -82,9 +97,9 @@
   <div class="fox-rank-detail-card">
     <div class="fox-rank-detail-head">
       <div class="fox-rank-detail-title-wrap">
-        <div class="fox-rank-detail-kicker">Fox Rank</div>
+        <div class="fox-rank-detail-kicker" data-fox-rank-ui="title">Fox Rank</div>
         <div class="fox-rank-detail-title" id="foxRankDetailTier">Fox Pup</div>
-        <div class="fox-rank-detail-subtitle">Daily accumulation.</div>
+        <div class="fox-rank-detail-subtitle" id="foxRankDetailSubtitle">Daily accumulation.</div>
       </div>
       <button class="fox-rank-detail-close" id="foxRankDetailClose" type="button" aria-label="Close">×</button>
     </div>
@@ -96,35 +111,75 @@
 
     <div class="fox-rank-detail-grid">
       <div class="fox-rank-detail-stat">
-        <span>Usage</span>
+        <span data-fox-rank-ui="usage">Usage</span>
         <strong id="foxRankDetailUsage">0h</strong>
       </div>
       <div class="fox-rank-detail-stat">
-        <span>Stability</span>
+        <span data-fox-rank-ui="stability">Stability</span>
         <strong id="foxRankDetailStability">0d</strong>
       </div>
       <div class="fox-rank-detail-stat">
-        <span>Quality</span>
+        <span data-fox-rank-ui="quality">Quality</span>
         <strong id="foxRankDetailQuality">Bronze • 0%</strong>
+      </div>
+      <div class="fox-rank-detail-stat">
+        <span data-fox-rank-ui="explore">Explore</span>
+        <strong id="foxRankDetailExplore">0 hops</strong>
+      </div>
+      <div class="fox-rank-detail-stat">
+        <span data-fox-rank-ui="rankBoost">Rank Boost</span>
+        <strong id="foxRankDetailBoost">+0%</strong>
       </div>
     </div>
 
     <div class="fox-rank-detail-body">
-      <section class="fox-rank-detail-section fox-rank-detail-section-log">
-        <h4>Growth Log</h4>
-        <div class="fox-rank-log-list" id="foxRankLogList"></div>
+      <section class="fox-rank-detail-section fox-rank-detail-section-weekly">
+        <h4 data-fox-rank-ui="weeklyReview">Weekly Review</h4>
+        <div class="fox-rank-weekly-card" id="foxRankWeeklyCard"></div>
       </section>
 
-      <section class="fox-rank-detail-section fox-rank-detail-section-badges">
-        <h4>Badge Wall</h4>
-        <div class="fox-rank-badge-list" id="foxRankBadgeList"></div>
+      <section class="fox-rank-detail-section fox-rank-detail-section-progression">
+        <div class="fox-rank-section-tabs" id="foxRankSectionTabs">
+          <button class="active" id="foxRankTabLog" type="button" data-fox-rank-tab="log" data-fox-rank-ui="growthLog">Growth Log</button>
+          <button type="button" id="foxRankTabBadges" data-fox-rank-tab="badges" data-fox-rank-ui="badgeWall">Badge Wall</button>
+          <button type="button" id="foxRankTabSkins" data-fox-rank-tab="skins" data-fox-rank-ui="skinUnlocks">Skin Unlocks</button>
+        </div>
+        <div class="fox-rank-tab-panel active" id="foxRankTabPanelLog" data-fox-rank-panel="log">
+          <div class="fox-rank-log-list" id="foxRankLogList"></div>
+        </div>
+        <div class="fox-rank-tab-panel" id="foxRankTabPanelBadges" data-fox-rank-panel="badges" hidden>
+          <div class="fox-rank-badge-list" id="foxRankBadgeList"></div>
+        </div>
+        <div class="fox-rank-tab-panel" id="foxRankTabPanelSkins" data-fox-rank-panel="skins" hidden>
+          <div class="fox-rank-skin-list" id="foxRankSkinList"></div>
+        </div>
+      </section>
+
+      <section class="fox-rank-detail-section fox-rank-detail-section-share">
+        <h4 data-fox-rank-ui="shareCard">Share Card</h4>
+        <div class="fox-rank-share-preview" id="foxRankSharePreview"></div>
       </section>
     </div>
 
     <section class="fox-rank-detail-actions">
-      <button class="btn" id="foxRankCopySummaryBtn" type="button">Copy Summary</button>
-      <button class="btn primary" id="foxRankExportPngBtn" type="button">Export PNG</button>
+      <button class="btn" id="foxRankCopySummaryBtn" type="button" data-fox-rank-ui="copySummary">Copy Summary</button>
+      <button class="btn primary" id="foxRankExportPngBtn" type="button" data-fox-rank-ui="exportPng">Export PNG</button>
     </section>
+  </div>
+</div>
+
+<div class="fox-rank-brief-modal" id="foxRankBriefModal" hidden>
+  <div class="fox-rank-brief-backdrop"></div>
+  <div class="fox-rank-brief-card">
+    <div class="fox-rank-brief-kicker" data-fox-rank-ui="dailyBrief">Daily Fox Rank Brief</div>
+    <div class="fox-rank-brief-title" id="foxRankBriefTitle">Camp log synced</div>
+    <div class="fox-rank-brief-summary" id="foxRankBriefSummary">Your Fox Rank is warming up.</div>
+    <div class="fox-rank-brief-metrics" id="foxRankBriefMetrics"></div>
+    <div class="fox-rank-brief-boost" id="foxRankBriefBoost">Rank Boost +0%</div>
+    <div class="fox-rank-brief-actions">
+      <button class="btn" id="foxRankBriefClose" type="button" data-fox-rank-ui="later">Later</button>
+      <button class="btn primary" id="foxRankBriefOpenDetail" type="button" data-fox-rank-ui="openDetail">Open Fox Rank</button>
+    </div>
   </div>
 </div>
 
