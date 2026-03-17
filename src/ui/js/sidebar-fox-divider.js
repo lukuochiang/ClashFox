@@ -20,14 +20,14 @@ export class SidebarFoxDivider {
     this.state = 'normal';           // 当前状态
     this.hovered = false;            // 鼠标是否悬停
     this.direction = 1;              // 移动方向: 1=向右, -1=向左
-    this.progress = 0.18;            // 移动进度 (0-1)
+    this.progress = 0;               // 移动进度 (0-1)，0=最左端，1=最右端
     this.phase = 0;                  // 动画相位，用于计算浮动
     this.lastTs = 0;                 // 上一次动画帧时间戳
     this.earTimer = null;            // 耳朵抽动定时器
     this.earResetTimer = null;       // 耳朵抽动重置定时器
     this.frameId = 0;                // 动画帧ID
     this.foxWidth = 38;              // 狐狸宽度（像素）
-    this.edgePadding = 18;           // 边缘内边距（像素）
+    this.edgePadding = 0;            // 边缘内边距（像素），0 表示贴边移动
     this.range = 0;                  // 狐狸可移动范围
     this.handleEnter = this.handleEnter.bind(this);
     this.handleLeave = this.handleLeave.bind(this);
@@ -195,9 +195,9 @@ export class SidebarFoxDivider {
       return;
     }
     const width = this.root.clientWidth || 0;
-    // 计算可移动范围：容器宽度 - 狐狸宽度 - 左右内边距
-    // 最小范围设为36px
-    this.range = Math.max(36, width - this.foxWidth - this.edgePadding * 2);
+    // 计算可移动范围：允许狐狸超出边界 10px
+    // progress=0 时狐狸左侧超出 10px，progress=1 时狐狸右侧超出 10px
+    this.range = width - this.foxWidth + 20; // 左右各超出 10px
   }
 
   /**
@@ -270,8 +270,8 @@ export class SidebarFoxDivider {
 
     // 使用smoothstep函数（3t² - 2t³）使移动更平滑
     const eased = this.progress * this.progress * (3 - 2 * this.progress);
-    // 计算X坐标：左内边距 + 范围 * 平滑进度
-    const x = this.edgePadding + this.range * eased;
+    // 计算X坐标：从 -10px 到 width-foxWidth+10px，让狐狸稍微超出边界
+    const x = -10 + this.range * eased;
     // 计算垂直浮动（Y坐标）：
     // - 悬停时：-1.6px (向上浮动)
     // - issue状态：固定0.9px

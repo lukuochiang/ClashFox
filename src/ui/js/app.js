@@ -1965,6 +1965,7 @@ let backupTableFull = document.getElementById('backupTableFull');
 let kernelCurrentTable = document.getElementById('kernelCurrentTable');
 let configsRefresh = document.getElementById('configsRefresh');
 let configsImport = document.getElementById('configsImport');
+let configsReload = document.getElementById('configsReload');
 let configTable = document.getElementById('configTable');
 let configPrev = document.getElementById('configPrev');
 let configNext = document.getElementById('configNext');
@@ -9301,6 +9302,7 @@ function refreshPageRefs() {
   kernelCurrentTable = document.getElementById('kernelCurrentTable');
   configsRefresh = document.getElementById('configsRefresh');
   configsImport = document.getElementById('configsImport');
+  configsReload = document.getElementById('configsReload');
   configTable = document.getElementById('configTable');
   configPrev = document.getElementById('configPrev');
   configNext = document.getElementById('configNext');
@@ -10814,6 +10816,39 @@ async function handleConfigBrowse() {
   }, result && result.error && result.error !== 'cancelled' ? 'warn' : 'log');
 }
 
+async function handleConfigReload() {
+  guiLog('config', 'reload requested');
+  const button = configsReload;
+  if (button) {
+    button.disabled = true;
+  }
+  try {
+    const response = await reloadMihomoConfig(getMihomoApiSource());
+    if (!response || !response.ok) {
+      const detail = response && (response.details || response.error)
+        ? `: ${String(response.details || response.error)}`
+        : '';
+      guiLog('config', 'reload failed', {
+        error: response && response.error ? response.error : 'reload_config_failed',
+      }, 'warn');
+      showToast(`${ti('labels.configReloadFailed', 'Reload config failed')}${detail}`, 'error');
+      return;
+    }
+    guiLog('config', 'reload completed');
+    showToast(ti('labels.configReloaded', 'Config reloaded'), 'info');
+    await loadConfigs(true);
+  } catch (error) {
+    guiLog('config', 'reload failed', {
+      error: String(error && error.message ? error.message : error || ''),
+    }, 'warn');
+    showToast(ti('labels.configReloadFailed', 'Reload config failed'), 'error');
+  } finally {
+    if (button) {
+      button.disabled = false;
+    }
+  }
+}
+
 async function handleConfigImport() {
   if (!window.clashfox || typeof window.clashfox.importConfig !== 'function') {
     return;
@@ -11481,6 +11516,9 @@ if (configsRefresh) {
     guiLog('config', 'refresh requested');
     loadConfigs(true);
   });
+}
+if (configsReload) {
+  configsReload.addEventListener('click', handleConfigReload);
 }
 if (configsImport) {
   configsImport.addEventListener('click', handleConfigImport);

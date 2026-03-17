@@ -117,6 +117,7 @@ const I18N = {
       "config": "Config Path",
       "browse": "Browse",
       "import": "Import Config",
+      "reload": "Reload Config",
       "refresh": "Refresh",
       "delete": "Delete",
       "recommendationsTitle": "Recommended Configs"
@@ -346,6 +347,8 @@ const I18N = {
       "configDeleteFailed": "Delete config failed.",
       "configDeleteCurrent": "Cannot delete current config.",
       "configImported": "Config imported.",
+      "configReloaded": "Config reloaded.",
+      "configReloadFailed": "Reload config failed.",
       "kernelCopied": "Kernel version copied.",
       "copied": "Copied.",
       "copyFailed": "Copy failed.",
@@ -581,6 +584,7 @@ const I18N = {
       "config": "配置路径",
       "browse": "浏览",
       "import": "导入配置",
+      "reload": "重载配置",
       "refresh": "刷新",
       "delete": "删除",
       "recommendationsTitle": "推荐配置"
@@ -810,6 +814,8 @@ const I18N = {
       "configDeleteFailed": "删除配置失败。",
       "configDeleteCurrent": "不能删除当前配置。",
       "configImported": "配置已导入。",
+      "configReloaded": "配置已重载。",
+      "configReloadFailed": "重载配置失败。",
       "kernelCopied": "内核版本已复制。",
       "copied": "已复制。",
       "copyFailed": "复制失败。",
