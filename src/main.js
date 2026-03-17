@@ -10433,6 +10433,100 @@ app.whenReady().then(() => {
     return { ok: true, path: APP_DATA_DIR };
   });
 
+  async function cleanLogFiles(mode = 'all') {
+    try {
+      ensureAppDirs();
+      const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
+      let logDir = path.join(APP_DATA_DIR, 'logs');
+
+      if (fs.existsSync(settingsPath)) {
+        try {
+          const settingsContent = fs.readFileSync(settingsPath, 'utf-8');
+          const settings = JSON.parse(settingsContent);
+          if (settings && settings.userDataPaths && settings.userDataPaths.logDir) {
+            logDir = String(settings.userDataPaths.logDir);
+          }
+        } catch (e) {
+          guiMainLog('cleanLogs', 'failed to parse settings', { error: e.message }, 'warn');
+        }
+      }
+
+      if (!fs.existsSync(logDir)) {
+        guiMainLog('cleanLogs', 'log directory not found', { logDir }, 'warn');
+        return { ok: true, cleaned: 0 };
+      }
+
+      let cleanedCount = 0;
+      const files = fs.readdirSync(logDir);
+
+      if (mode === 'all') {
+        for (const file of files) {
+          if (file.startsWith('clashfox.log.') && (file.endsWith('.log') || file.endsWith('.gz'))) {
+            const filePath = path.join(logDir, file);
+            try {
+              fs.unlinkSync(filePath);
+              cleanedCount++;
+              guiMainLog('cleanLogs', 'deleted file', { file });
+            } catch (e) {
+              guiMainLog('cleanLogs', 'failed to delete file', { file, error: e.message }, 'error');
+            }
+          }
+        }
+      } else if (mode === '7d') {
+        const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        for (const file of files) {
+          if (file.startsWith('clashfox.log.') && (file.endsWith('.log') || file.endsWith('.gz'))) {
+            const filePath = path.join(logDir, file);
+            try {
+              const stats = fs.statSync(filePath);
+              const fileAge = now - stats.mtimeMs;
+              if (fileAge > sevenDaysMs) {
+                fs.unlinkSync(filePath);
+                cleanedCount++;
+                guiMainLog('cleanLogs', 'deleted old file (7d)', { file, ageDays: Math.floor(fileAge / (24 * 60 * 60 * 1000)) });
+              }
+            } catch (e) {
+              guiMainLog('cleanLogs', 'failed to delete old file', { file, error: e.message }, 'error');
+            }
+          }
+        }
+      } else if (mode === '30d') {
+        const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        for (const file of files) {
+          if (file.startsWith('clashfox.log.') && (file.endsWith('.log') || file.endsWith('.gz'))) {
+            const filePath = path.join(logDir, file);
+            try {
+              const stats = fs.statSync(filePath);
+              const fileAge = now - stats.mtimeMs;
+              if (fileAge > thirtyDaysMs) {
+                fs.unlinkSync(filePath);
+                cleanedCount++;
+                guiMainLog('cleanLogs', 'deleted old file (30d)', { file, ageDays: Math.floor(fileAge / (24 * 60 * 60 * 1000)) });
+              }
+            } catch (e) {
+              guiMainLog('cleanLogs', 'failed to delete old file', { file, error: e.message }, 'error');
+            }
+          }
+        }
+      } else {
+        guiMainLog('cleanLogs', 'invalid mode', { mode }, 'warn');
+        return { ok: false, error: 'invalid_mode' };
+      }
+
+      guiMainLog('cleanLogs', 'completed', { mode, cleanedCount });
+      return { ok: true, cleanedCount };
+    } catch (error) {
+      guiMainLog('cleanLogs', 'failed', { error: error.message }, 'error');
+      return { ok: false, error: error.message };
+    }
+  }
+
+  ipcMain.handle('clashfox:cleanLogs', async (_event, mode = 'all') => {
+    return await cleanLogFiles(mode);
+  });
+
   ipcMain.handle('clashfox:setDebugMode', (_event, enabled) => {
     const next = Boolean(enabled);
     if (globalSettings.debugMode === next) {

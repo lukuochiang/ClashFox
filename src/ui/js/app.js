@@ -11651,9 +11651,16 @@ if (cleanBtn) {
     }
 
     const mode = cleanModeSelect ? String(cleanModeSelect.value || 'all') : 'all';
-    const response = await runCommand('clean', ['--mode', mode]);
+    let response;
+    if (window.clashfox && typeof window.clashfox.cleanLogs === 'function') {
+      response = await window.clashfox.cleanLogs(mode);
+    } else {
+      response = { ok: false, error: 'cleanLogs function not available' };
+    }
+
     if (response.ok) {
-      showToast(t('labels.cleanDone'));
+      const count = response.cleanedCount !== undefined ? ` (${response.cleanedCount} files)` : '';
+      showToast(t('labels.cleanDone') + count);
     } else {
       showToast(response.error || ti('labels.cleanFailed', 'Clean failed'), 'error');
     }
