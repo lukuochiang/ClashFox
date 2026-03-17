@@ -1287,13 +1287,18 @@ function listKernelFilesFromFs() {
   try {
     const coreDir = resolveCoreDirectoryFromSettings();
     fs.mkdirSync(coreDir, { recursive: true });
-    const items = fs.readdirSync(coreDir, { withFileTypes: true })
+    const backupDir = path.join(coreDir, 'cfox-backup');
+    fs.mkdirSync(backupDir, { recursive: true });
+    
+    // Read files from both core directory and backup directory
+    const items = [];
+    
+    // Read from core directory
+    const coreFiles = fs.readdirSync(coreDir, { withFileTypes: true })
       .filter((entry) => entry && (entry.isFile() || entry.isSymbolicLink()))
       .filter((entry) => {
         const name = String(entry.name || '');
-        return name === 'mihomo'
-          || name.startsWith('mihomo-darwin-')
-          || name.startsWith('mihomo.backup.');
+        return name === 'mihomo' || name.startsWith('mihomo-darwin-');
       })
       .map((entry) => {
         const filePath = path.join(coreDir, entry.name);
@@ -1303,6 +1308,97 @@ function listKernelFilesFromFs() {
           path: filePath,
           modified: formatFileModifiedTime(stat.mtime),
           modifiedAt: stat.mtimeMs || stat.mtime.getTime() || 0,
+          size: String(stat.size || 0),
+        };
+      });
+    
+    items.push(...coreFiles);
+    
+    // Read from backup directory
+    const backupFiles = fs.readdirSync(backupDir, { withFileTypes: true })
+      .filter((entry) => entry && entry.isFile())
+      .filter((entry) => {
+        const name = String(entry.name || '');
+        return name.startsWith('mihomo.backup.');
+      })
+      .map((entry) => {
+        const filePath = path.join(backupDir, entry.name);
+        const stat = fs.statSync(filePath);
+        return {
+          name: entry.name,
+          path: filePath,
+          modified: formatFileModifiedTime(stat.mtime),
+          modifiedAt: stat.mtimeMs || stat.mtime.getTime() || 0,
+          size: String(stat.size || 0),
+        };
+      });
+    
+    items.push(...backupFiles);
+    
+    // Sort by modified time descending
+    items.sort((a, b) => {
+      const delta = Number(b.modifiedAt || 0) - Number(a.modifiedAt || 0);
+      if (delta !== 0) {
+        return delta;
+      }
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+    
+    const result = items.map(({ modifiedAt, ...rest }) => rest);
+    
+    guiMainLog('kernel', 'listKernelFilesFromFs success', {
+      coreDir,
+      backupDir,
+      count: result.length,
+    });
+    return { ok: true, data: result };
+  } catch (error) {
+    guiMainLog('kernel', 'listKernelFilesFromFs failed', {
+      message: String(error && error.message ? error.message : error || ''),
+    }, 'error');
+    return {
+      ok: false,
+      error: 'kernels_read_failed',
+      details: String(error && error.message ? error.message : error || ''),
+    };
+  }
+}
+
+function listBackupFilesFromFs() {
+  try {
+    const coreDir = resolveCoreDirectoryFromSettings();
+    const backupDir = path.join(coreDir, 'cfox-backup');
+    fs.mkdirSync(backupDir, { recursive: true });
+    
+    const items = fs.readdirSync(backupDir, { withFileTypes: true })
+      .filter((entry) => entry && entry.isFile())
+      .filter((entry) => {
+        const name = String(entry.name || '');
+        return name.startsWith('mihomo.backup.');
+      })
+      .map((entry) => {
+        const filePath = path.join(backupDir, entry.name);
+        const stat = fs.statSync(filePath);
+        
+        // Extract version and timestamp from filename
+        // Format: mihomo.backup.mihomo-darwin-amd64-v1.19.0.20241218_123456
+        const name = entry.name;
+        const backupRe = /^mihomo\.backup\.(mihomo-darwin-(amd64|arm64)-.+)\.([0-9]{8}_[0-9]{6})$/;
+        const match = name.match(backupRe);
+        
+        let version = '';
+        let timestamp = '';
+        if (match) {
+          version = match[1];
+          timestamp = match[2];
+        }
+        
+        return {
+          name: name,
+          version: version,
+          timestamp: timestamp,
+          path: filePath,
+          modifiedAt: stat.mtimeMs || stat.mtime.getTime() || 0,
         };
       })
       .sort((a, b) => {
@@ -1311,20 +1407,26 @@ function listKernelFilesFromFs() {
           return delta;
         }
         return String(a.name || '').localeCompare(String(b.name || ''));
-      })
-      .map(({ modifiedAt, ...rest }) => rest);
-    guiMainLog('kernel', 'listKernelFilesFromFs success', {
-      coreDir,
-      count: items.length,
+      });
+    
+    // Add index to each item
+    const result = items.map((item, index) => ({
+      index: index + 1,
+      ...item,
+    }));
+    
+    guiMainLog('kernel', 'listBackupFilesFromFs success', {
+      backupDir,
+      count: result.length,
     });
-    return { ok: true, data: items };
+    return { ok: true, data: result };
   } catch (error) {
-    guiMainLog('kernel', 'listKernelFilesFromFs failed', {
+    guiMainLog('kernel', 'listBackupFilesFromFs failed', {
       message: String(error && error.message ? error.message : error || ''),
     }, 'error');
     return {
       ok: false,
-      error: 'kernels_read_failed',
+      error: 'backups_read_failed',
       details: String(error && error.message ? error.message : error || ''),
     };
   }
@@ -9444,8 +9546,10 @@ app.whenReady().then(() => {
     let result;
     if (cmd === 'configs') {
       result = listConfigFilesFromFs();
-    } else if (cmd === 'kernels') {
+    } else if (cmd === 'cores') {
       result = listKernelFilesFromFs();
+    } else if (cmd === 'backups') {
+      result = listBackupFilesFromFs();
     } else {
       result = await runBridgeWithAutoAuth(cmd, sanitizedArgs, options);
     }

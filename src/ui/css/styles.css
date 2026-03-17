@@ -2171,7 +2171,7 @@ body[data-theme="day"] .brand-mark .logo-night {
 
 .sidebar.is-collapsed .nav-bottom {
   margin-top: auto;
-  padding-top: 0;
+  padding-top: 18px;
   border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
