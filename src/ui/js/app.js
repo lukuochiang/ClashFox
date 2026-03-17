@@ -7136,31 +7136,35 @@ function exportFoxRankCardPng(snapshot = null) {
   ctx.fillStyle = textColor;
   ctx.fillText(`XP ${data.delta} / ${data.span}`, 64, 258);
 
-  // 本周 XP
+  // 本周 XP - 右对齐，与进度条右边缘对齐
   ctx.fillStyle = '#8ac1ff';
-  ctx.fillText(`📈 +${weeklyReview.xpGain} XP 本周`, 480, 258);
+  ctx.textAlign = 'right';
+  ctx.fillText(`📈 +${weeklyReview.xpGain} XP 本周`, 864, 258);
+  ctx.textAlign = 'left';
 
-  // 指标数据 - 左侧两行左对齐，右侧两行右对齐
+  // 指标数据 - 两行两列布局：左两列左对齐，右两列右对齐
   const metrics = [
     { label: foxRankText('usage', 'Usage'), value: data.usageText },
-    { label: foxRankText('stability', 'Stability'), value: `${data.stabilityDays}d` },
     { label: foxRankText('quality', 'Quality'), value: `${data.qualityLabel} • ${Math.round(data.qualityScore * 100)}%` },
+    { label: foxRankText('stability', 'Stability'), value: `${data.stabilityDays}d` },
     { label: foxRankText('explore', 'Explore'), value: `${data.explorationCount} hops` },
   ];
 
   metrics.forEach((metric, index) => {
-    const y = 318 + index * 52;
+    const row = Math.floor(index / 2);
+    const col = index % 2;
+    const y = 318 + row * 52;
     ctx.font = '600 28px system-ui, -apple-system, sans-serif';
 
-    if (index < 2) {
+    if (col === 0) {
       // 左侧列：左对齐
       ctx.fillStyle = textColor;
       ctx.fillText(`${metric.label} ${metric.value}`, 64, y);
     } else {
-      // 右侧列：右对齐
+      // 右侧列：右对齐，与进度条右边缘对齐
       ctx.textAlign = 'right';
       ctx.fillStyle = textColor;
-      ctx.fillText(`${metric.label} ${metric.value}`, 916, y);
+      ctx.fillText(`${metric.label} ${metric.value}`, 864, y);
       ctx.textAlign = 'left';
     }
   });

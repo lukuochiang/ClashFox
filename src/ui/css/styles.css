@@ -2180,8 +2180,9 @@ body[data-theme="day"] .brand-mark .logo-night {
   border: 1px solid transparent;
   color: var(--muted);
   padding: 8px 14px;
+  height: 32px;
   text-align: left;
-  border-radius: 12px;
+  border-radius: 10px;
   cursor: pointer;
   font-size: 14px;
   transition: all 0.2s ease;
@@ -2880,7 +2881,7 @@ body[data-theme="day"] .overview-summary-value {
 }
 
 .metric-value {
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -3078,7 +3079,7 @@ body[data-theme="day"] .overview-summary-value {
 }
 
 .meta-value {
-  font-size: 13px;
+  font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
