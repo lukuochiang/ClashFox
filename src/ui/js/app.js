@@ -1972,6 +1972,7 @@ let configPageInfo = document.getElementById('configPageInfo');
 let configPageSize = document.getElementById('configPageSize');
 let kernelTable = document.getElementById('kernelTable');
 let kernelRefresh = document.getElementById('kernelRefresh');
+let kernelRestart = document.getElementById('kernelRestart');
 let kernelPrev = document.getElementById('kernelPrev');
 let kernelNext = document.getElementById('kernelNext');
 let kernelPageInfo = document.getElementById('kernelPageInfo');
@@ -4058,6 +4059,11 @@ function bindOverviewDrag() {
 
 function updateTipPosition(el) {
   if (!el || !contentRoot) {
+    return;
+  }
+  // Respect pre-set position attribute if it exists
+  const presetPosition = el.dataset.position;
+  if (presetPosition && ['top', 'bottom', 'left', 'right'].includes(presetPosition)) {
     return;
   }
   const rootRect = contentRoot.getBoundingClientRect();
@@ -8551,6 +8557,31 @@ async function deleteKernelBackupByPath(targetPath, backupName = '') {
   }
 }
 
+async function restartKernel() {
+  const confirmed = await promptConfirm({
+    title: t('confirm.restartKernelTitle'),
+    body: t('confirm.restartKernelBody'),
+    confirmLabel: t('confirm.restartKernelConfirm'),
+    confirmTone: 'primary',
+  });
+  if (!confirmed) {
+    return;
+  }
+  
+  try {
+    const source = resolveMihomoApiSourceFromState(state);
+    const response = await reloadMihomoCore(source, window.clashfox);
+    if (response.ok) {
+      showToast(t('labels.restartSuccess'));
+      await loadStatus();
+    } else {
+      showToast(response.error || ti('labels.restartFailed', 'Restart failed'), 'error');
+    }
+  } catch (error) {
+    showToast(ti('labels.restartFailed', 'Restart failed'), 'error');
+  }
+}
+
 async function loadConfigs(showToastOnSuccess = false) {
   guiLog('config', 'loadConfigs start', { showToastOnSuccess });
   const response = await runCommand('configs');
@@ -9277,6 +9308,7 @@ function refreshPageRefs() {
   configPageSize = document.getElementById('configPageSize');
   kernelTable = document.getElementById('kernelTable');
   kernelRefresh = document.getElementById('kernelRefresh');
+  kernelRestart = document.getElementById('kernelRestart');
   kernelPrev = document.getElementById('kernelPrev');
   kernelNext = document.getElementById('kernelNext');
   kernelPageInfo = document.getElementById('kernelPageInfo');
@@ -10921,6 +10953,12 @@ if (overviewBrowseConfig) {
 if (overviewConfigReset) {
   overviewConfigReset.addEventListener('click', () => {
     resetConfigPath();
+  });
+}
+
+if (kernelRestart) {
+  kernelRestart.addEventListener('click', async () => {
+    await restartKernel();
   });
 }
 

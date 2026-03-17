@@ -1315,7 +1315,7 @@ body[data-theme="day"] .fox-rank-log-index {
 /* 进度条样式 */
 .fox-rank-share-progress {
   height: 6px;
-  background: rgba(255, 255, 255, 0.1);
+  background: #e3e8ed;;
   border-radius: 3px;
   overflow: hidden;
   /*margin: 12px 0;*/
@@ -1383,7 +1383,7 @@ body[data-theme="day"] .fox-rank-log-index {
   gap: 12px;
   /*margin-top: 16px;*/
   /*padding-top: 16px;*/
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  /*border-top: 1px solid rgba(255, 255, 255, 0.08);*/
   font-size: 0.7rem;
 }
 
@@ -2249,6 +2249,8 @@ body[data-theme="day"] .brand-mark .logo-night {
 
 .sidebar.is-collapsed .nav-btn:hover,
 .sidebar.is-collapsed .nav-btn:focus-visible {
+  background: var(--active-soft-bg);
+  border-color: var(--active-soft-border);
   z-index: 90;
 }
 
