@@ -2121,7 +2121,7 @@ const DEFAULT_SETTINGS = {
   port: 7890,
   socksPort: 7891,
   allowLan: true,
-  overviewOrder: [],
+  overviewOrder: ['quick-actions', 'outbound-mode', 'running', 'network', 'conn-live', 'network-history', 'network-topology', 'provider-subscription', 'rules-overview'],
   logLines: 10,
   logAutoRefresh: false,
   logIntervalPreset: '3',
@@ -3833,12 +3833,13 @@ function applyOverviewOrder(grid) {
   let order = Array.isArray(state.settings && state.settings[orderKey])
     ? state.settings[orderKey]
     : [];
-  if (order.length === 0) {
-    return;
-  }
   const cards = Array.from(grid.querySelectorAll('[draggable="true"][data-module]'));
   if (cards.length === 0) {
     return;
+  }
+  // 如果settings中没有order，使用HTML中定义的默认顺序
+  if (order.length === 0) {
+    order = cards.map(card => card.dataset.module);
   }
   const cardMap = new Map(cards.map((card) => [card.dataset.module, card]));
   const fragment = document.createDocumentFragment();
