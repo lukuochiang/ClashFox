@@ -821,6 +821,70 @@ body[data-theme="day"] .fox-rank-metric-value {
   z-index: 1;
 }
 
+/* Detail card ambient effects */
+.fox-rank-detail-ambient {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.fox-rank-detail-halo,
+.fox-rank-detail-particle {
+  position: absolute;
+  display: block;
+}
+
+.fox-rank-detail-halo {
+  border-radius: 999px;
+  filter: blur(8px);
+  opacity: 0.38;
+}
+
+.fox-rank-detail-halo-a {
+  width: 180px;
+  height: 180px;
+  top: -60px;
+  right: -40px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--fox-rank-aura-start) 65%, transparent) 0%, transparent 72%);
+  animation: fox-rank-halo-float 7s ease-in-out infinite;
+}
+
+.fox-rank-detail-halo-b {
+  width: 200px;
+  height: 200px;
+  left: -50px;
+  bottom: -70px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--fox-rank-aura-end) 46%, transparent) 0%, transparent 72%);
+  animation: fox-rank-halo-float 8s ease-in-out infinite reverse;
+}
+
+.fox-rank-detail-particle {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.68);
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.34);
+  animation: fox-rank-particle-drift 6s linear infinite;
+}
+
+.fox-rank-detail-particle-a {
+  top: 60px;
+  right: 100px;
+}
+
+.fox-rank-detail-particle-b {
+  top: 120px;
+  right: 180px;
+  animation-duration: 7s;
+}
+
+.fox-rank-detail-particle-c {
+  bottom: 80px;
+  left: 100px;
+  animation-duration: 8s;
+}
+
 .fox-rank-detail-modal:not([hidden]) .fox-rank-detail-card {
   transform: translateY(0) scale(1);
 }
@@ -1210,10 +1274,201 @@ body[data-theme="day"] .fox-rank-log-index {
     0 12px 24px rgba(0, 0, 0, 0.12);
 }
 
+/* 分享卡容器增强 */
+.fox-rank-share-preview {
+  border-radius: 16px;
+  /*padding: 24px;*/
+  position: relative;
+  overflow: hidden;
+  animation: fadeInUp 0.4s ease-out;
+}
+
+/* 背景装饰动画 */
+.fox-rank-share-preview::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 100%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(138, 193, 255, 0.1) 0%, transparent 70%);
+  animation: float 8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  50% { transform: translate(-10px, 10px) rotate(5deg); }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 进度条样式 */
+.fox-rank-share-progress {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+  /*margin: 12px 0;*/
+}
+
+.fox-rank-share-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #8ac1ff, #5e9bff);
+  transition: width 0.5s ease;
+  border-radius: 3px;
+}
+
+/* 元数据行 */
+.fox-rank-share-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  /*margin-bottom: 16px;*/
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.fox-rank-share-meta .badge {
+  background: rgba(138, 193, 255, 0.2);
+  color: #8ac1ff;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+/* 指标项网格 */
+.fox-rank-share-lines {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.metric-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  transition: all 0.2s ease;
+  font-size: 0.75rem;
+}
+
+.metric-item:hover {
+  transform: scale(1.02);
+  background: rgba(138, 193, 255, 0.08);
+}
+
+.metric-item i {
+  font-size: 1rem;
+  opacity: 0.7;
+}
+
+/* 底部区域 */
+.fox-rank-share-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  /*margin-top: 16px;*/
+  /*padding-top: 16px;*/
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.7rem;
+}
+
+.skin-badge,
+.boost-badge {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.skin-badge {
+  background: linear-gradient(135deg, rgba(255, 184, 108, 0.2), rgba(255, 143, 85, 0.2));
+  color: #ffb86c;
+}
+
+.boost-badge {
+  background: linear-gradient(135deg, rgba(138, 193, 255, 0.2), rgba(94, 155, 255, 0.2));
+  color: #8ac1ff;
+}
+
+/* 趋势指示器 */
+.trend {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.trend.positive {
+  background: rgba(125, 243, 210, 0.2);
+  color: #7df3d2;
+}
+
+.trend.negative {
+  background: rgba(255, 107, 107, 0.2);
+  color: #ff6b6b;
+}
+
+.trend.neutral {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--muted);
+}
+
+/* 徽章墙 */
+.fox-rank-share-badges {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.badge-mini {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(198, 133, 255, 0.2), rgba(141, 109, 255, 0.2));
+  font-size: 1.2rem;
+  cursor: help;
+}
+
+/* 日间模式适配 */
+body[data-theme="day"] .fox-rank-share-preview::before {
+  background: radial-gradient(circle, rgba(127, 172, 242, 0.15) 0%, transparent 70%);
+}
+
+body[data-theme="day"] .metric-item {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+body[data-theme="day"] .metric-item:hover {
+  background: rgba(127, 172, 242, 0.1);
+}
+
+
 body[data-theme="day"] .fox-rank-share-preview {
-  background:
-    radial-gradient(120% 120% at 100% 0%, rgba(127, 172, 242, 0.12) 0%, rgba(127, 172, 242, 0) 50%),
-    linear-gradient(145deg, rgba(242, 247, 253, 0.98), rgba(236, 243, 251, 0.98));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(243, 248, 253, 0.9));
+  /*background:*/
+  /*  radial-gradient(120% 120% at 100% 0%, rgba(127, 172, 242, 0.12) 0%, rgba(127, 172, 242, 0) 50%),*/
+  /*  linear-gradient(145deg, rgba(242, 247, 253, 0.98), rgba(236, 243, 251, 0.98));*/
 }
 
 .fox-rank-share-head {

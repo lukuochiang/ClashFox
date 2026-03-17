@@ -55,7 +55,7 @@
       </div>
       <div class="fox-rank-status-row">
         <div class="fox-rank-boost" id="foxRankBoostHint">Rank Boost +0%</div>
-        <div class="fox-rank-warning" id="foxRankWarningChip" hidden>Ascend soon</div>
+        <div class="fox-rank-warning" id="foxRankWarningChip">Ascend soon</div>
       </div>
       <div class="fox-rank-progress">
         <div class="fox-rank-progress-track">
@@ -94,7 +94,14 @@
 
 <div class="fox-rank-detail-modal" id="foxRankDetailModal" hidden>
   <div class="fox-rank-detail-backdrop"></div>
-  <div class="fox-rank-detail-card">
+  <div class="fox-rank-detail-card" id="foxRankDetailCard">
+    <div class="fox-rank-detail-ambient" aria-hidden="true">
+      <span class="fox-rank-detail-halo fox-rank-detail-halo-a"></span>
+      <span class="fox-rank-detail-halo fox-rank-detail-halo-b"></span>
+      <span class="fox-rank-detail-particle fox-rank-detail-particle-a"></span>
+      <span class="fox-rank-detail-particle fox-rank-detail-particle-b"></span>
+      <span class="fox-rank-detail-particle fox-rank-detail-particle-c"></span>
+    </div>
     <div class="fox-rank-detail-head">
       <div class="fox-rank-detail-title-wrap">
         <div class="fox-rank-detail-kicker" data-fox-rank-ui="title">Fox Rank</div>

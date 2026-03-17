@@ -81,6 +81,7 @@ let foxRankWarningChip = document.getElementById('foxRankWarningChip');
 let foxRankExploreCount = document.getElementById('foxRankExploreCount');
 let foxRankSkinHint = document.getElementById('foxRankSkinHint');
 let foxRankDetailModal = document.getElementById('foxRankDetailModal');
+let foxRankDetailCard = document.getElementById('foxRankDetailCard');
 let foxRankDetailClose = document.getElementById('foxRankDetailClose');
 let foxRankDetailTier = document.getElementById('foxRankDetailTier');
 let foxRankDetailSubtitle = document.getElementById('foxRankDetailSubtitle');
@@ -7008,44 +7009,202 @@ function exportFoxRankCardPng(snapshot = null) {
   const data = snapshot || getFoxRankSnapshot();
   const canvas = document.createElement('canvas');
   canvas.width = 980;
-  canvas.height = 560;
+  canvas.height = 580;
   const ctx = canvas.getContext('2d');
   if (!ctx) {
     showToast(foxRankText('exportFailed', 'Export failed'), 'error');
     return;
   }
 
-  const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-  gradient.addColorStop(0, '#1c2836');
-  gradient.addColorStop(1, '#101722');
-  ctx.fillStyle = gradient;
+  const isLightTheme = state.theme === 'day';
+  const weeklyReview = getFoxRankWeeklyReview(data);
+  const tier = FOX_RANK_TIERS[data.tier.index] || FOX_RANK_TIERS[0];
+
+  // 背景渐变 - 使用等级主题色
+  const bgGradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+  if (isLightTheme) {
+    bgGradient.addColorStop(0, '#f5f9ff');
+    bgGradient.addColorStop(1, '#e8f2ff');
+  } else {
+    bgGradient.addColorStop(0, '#1c2836');
+    bgGradient.addColorStop(1, '#101722');
+  }
+  ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '700 54px Trebuchet MS';
-  ctx.fillText(`ClashFox • ${foxRankText('title', 'Fox Rank')}`, 64, 104);
-  ctx.font = '700 82px Trebuchet MS';
-  ctx.fillStyle = '#8ac1ff';
-  ctx.fillText(data.tier.name, 64, 210);
-  ctx.font = '700 40px Trebuchet MS';
-  ctx.fillStyle = '#f5f9ff';
-  ctx.fillText(formatFoxRankText('levelPrefix', { level: data.tier.index + 1 }, `Lv. ${data.tier.index + 1}`), 760, 104);
-  ctx.font = '600 32px Trebuchet MS';
-  ctx.fillStyle = '#d9e6f4';
-  ctx.fillText(`XP ${data.delta} / ${data.span}`, 64, 278);
-  ctx.fillText(`${foxRankText('usage', 'Usage')} ${data.usageText}`, 64, 340);
-  ctx.fillText(`${foxRankText('stability', 'Stability')} ${data.stabilityDays}d`, 64, 394);
-  ctx.fillText(`${foxRankText('quality', 'Quality')} ${formatFoxRankText('qualityPct', { label: data.qualityLabel, value: Math.round(data.qualityScore * 100) }, `${data.qualityLabel} • ${Math.round(data.qualityScore * 100)}%`)}`, 64, 448);
-  ctx.fillText(`${foxRankText('explore', 'Explore')} ${formatFoxRankText('hops', { count: data.explorationCount }, `${data.explorationCount} hops`)}`, 64, 502);
-  ctx.fillText(`${data.boost.label} • ${data.activeSkin.name}`, 480, 278);
-  ctx.fillText(`${foxRankText('weeklyReview', 'Weekly Review')} +${getFoxRankWeeklyReview(data).xpGain} XP`, 480, 340);
-  ctx.fillText(formatFoxRankText('activeSkinShort', { skin: foxRankText('skin', 'Skin'), name: data.activeSkin.name }, `Skin: ${data.activeSkin.name}`), 480, 394);
+  // 装饰图案 - 使用等级主题色
+  ctx.globalAlpha = 0.03;
+  ctx.fillStyle = tier.colorStart;
+  ctx.beginPath();
+  ctx.arc(canvas.width, 0, 300, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1.0;
 
+  // 光晕效果 A - 右上角（大光晕）
+  ctx.globalAlpha = 0.38;
+  const haloAGradient = ctx.createRadialGradient(canvas.width - 40, -60, 0, canvas.width - 40, -60, 90);
+  haloAGradient.addColorStop(0, tier.colorStart);
+  haloAGradient.addColorStop(0.72, 'transparent');
+  ctx.fillStyle = haloAGradient;
+  ctx.beginPath();
+  ctx.arc(canvas.width - 40, -60, 90, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 光晕效果 B - 左下角（大光晕）
+  const haloBGradient = ctx.createRadialGradient(-50, canvas.height + 70, 0, -50, canvas.height + 70, 100);
+  haloBGradient.addColorStop(0, tier.colorEnd);
+  haloBGradient.addColorStop(0.72, 'transparent');
+  ctx.fillStyle = haloBGradient;
+  ctx.beginPath();
+  ctx.arc(-50, canvas.height + 70, 100, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 光晕效果 C - 左上角（中等光晕）
+  ctx.globalAlpha = 0.32;
+  const haloCGradient = ctx.createRadialGradient(40, 50, 0, 40, 50, 60);
+  haloCGradient.addColorStop(0, tier.colorStart);
+  haloCGradient.addColorStop(0.65, 'transparent');
+  ctx.fillStyle = haloCGradient;
+  ctx.beginPath();
+  ctx.arc(40, 50, 60, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1.0;
+
+  // 粒子效果 - 白色发光粒子
+  const particles = [
+    { x: 100, y: 80, r: 6 },
+    { x: 180, y: 140, r: 6 },
+    { x: 100, y: 500, r: 6 },
+    { x: 700, y: 100, r: 5 },
+  ];
+  particles.forEach((p) => {
+    // 粒子核心
+    ctx.globalAlpha = 0.68;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 粒子光晕
+    ctx.globalAlpha = 0.34;
+    const glowGradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 14);
+    glowGradient.addColorStop(0, 'rgba(255, 255, 255, 0.38)');
+    glowGradient.addColorStop(1, 'transparent');
+    ctx.fillStyle = glowGradient;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1.0;
+
+  // 标题
+  const textColor = isLightTheme ? '#1c2836' : '#ffffff';
+  const mutedColor = isLightTheme ? '#6b7280' : '#9ca3af';
+
+  ctx.fillStyle = textColor;
+  ctx.font = '700 42px system-ui, -apple-system, sans-serif';
+  ctx.fillText(`ClashFox • ${foxRankText('title', 'Fox Rank')}`, 64, 88);
+
+  // 等级名称
+  ctx.font = 'bold 82px system-ui, -apple-system, sans-serif';
+  ctx.fillStyle = tier.colorStart;
+  ctx.fillText(data.tier.name, 64, 182);
+
+  // 等级索引
+  ctx.font = 'bold 36px system-ui, -apple-system, sans-serif';
+  ctx.fillStyle = mutedColor;
+  ctx.fillText(formatFoxRankText('levelPrefix', { level: data.tier.index + 1 }, `Lv. ${data.tier.index + 1}`), 720, 88);
+
+  // 进度条背景
+  const progressBarWidth = 800;
+  const progressBarHeight = 10;
+  const progressY = 210;
+  ctx.fillStyle = isLightTheme ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.1)';
+  roundRect(ctx, 64, progressY, progressBarWidth, progressBarHeight, 5);
+
+  // 进度条填充
+  const progress = data.delta / data.span;
+  const progressGradient = ctx.createLinearGradient(64, progressY, 64 + progressBarWidth * progress, progressY);
+  progressGradient.addColorStop(0, tier.colorStart);
+  progressGradient.addColorStop(1, tier.colorEnd);
+  ctx.fillStyle = progressGradient;
+  roundRect(ctx, 64, progressY, progressBarWidth * progress, progressBarHeight, 5);
+
+  // XP 文本
+  ctx.font = '600 28px system-ui, -apple-system, sans-serif';
+  ctx.fillStyle = textColor;
+  ctx.fillText(`XP ${data.delta} / ${data.span}`, 64, 258);
+
+  // 本周 XP
+  ctx.fillStyle = '#8ac1ff';
+  ctx.fillText(`📈 +${weeklyReview.xpGain} XP 本周`, 480, 258);
+
+  // 指标数据 - 左侧两行左对齐，右侧两行右对齐
+  const metrics = [
+    { label: foxRankText('usage', 'Usage'), value: data.usageText },
+    { label: foxRankText('stability', 'Stability'), value: `${data.stabilityDays}d` },
+    { label: foxRankText('quality', 'Quality'), value: `${data.qualityLabel} • ${Math.round(data.qualityScore * 100)}%` },
+    { label: foxRankText('explore', 'Explore'), value: `${data.explorationCount} hops` },
+  ];
+
+  metrics.forEach((metric, index) => {
+    const y = 318 + index * 52;
+    ctx.font = '600 28px system-ui, -apple-system, sans-serif';
+
+    if (index < 2) {
+      // 左侧列：左对齐
+      ctx.fillStyle = textColor;
+      ctx.fillText(`${metric.label} ${metric.value}`, 64, y);
+    } else {
+      // 右侧列：右对齐
+      ctx.textAlign = 'right';
+      ctx.fillStyle = textColor;
+      ctx.fillText(`${metric.label} ${metric.value}`, 916, y);
+      ctx.textAlign = 'left';
+    }
+  });
+
+  // 底部信息
+  const footerY = 540;
+  ctx.font = '600 26px system-ui, -apple-system, sans-serif';
+
+  // 皮肤
+  ctx.fillStyle = '#ffb86c';
+  ctx.fillText(`🦊 ${data.activeSkin.name}`, 64, footerY);
+
+  // Boost
+  ctx.fillStyle = '#8ac1ff';
+  ctx.fillText(data.boost.label, 300, footerY);
+
+  // 品牌信息 - 换行显示在右侧
+  ctx.font = '24px system-ui, -apple-system, sans-serif';
+  ctx.fillStyle = mutedColor;
+  ctx.textAlign = 'right';
+  ctx.fillText('Powered by ClashFox', 916, footerY + 32);
+  ctx.textAlign = 'left';
+
+  // 导出
   const anchor = document.createElement('a');
   anchor.href = canvas.toDataURL('image/png');
-  anchor.download = `clashfox-fox-rank-lv${data.tier.index + 1}.png`;
+  anchor.download = `clashfox-fox-rank-lv${data.tier.index + 1}-${Date.now()}.png`;
   anchor.click();
   showToast(foxRankText('pngExported', 'Fox Rank PNG exported'), 'info');
+}
+
+// 辅助函数：绘制圆角矩形
+function roundRect(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+  ctx.fill();
 }
 
 async function runFoxRankActionWithButton(button, idleLabel, busyLabel, action) {
@@ -7234,10 +7393,110 @@ function renderFoxRankDetailPanel(snapshot = null) {
       .join('');
   }
   if (foxRankSharePreview) {
-    foxRankSharePreview.innerHTML = `<div class="fox-rank-share-head"><strong>${escapeLogCell(data.tier.name)}</strong><span>${escapeLogCell(formatFoxRankText('levelPrefix', { level: data.tier.index + 1 }, `Lv. ${data.tier.index + 1}`))}</span></div><div class="fox-rank-share-lines"><span>${escapeLogCell(data.boost.label)}</span><span>${escapeLogCell(formatFoxRankText('qualityShare', { label: data.qualityLabel, value: Math.round(data.qualityScore * 100) }, `${data.qualityLabel} • ${Math.round(data.qualityScore * 100)}% quality`))}</span><span>${escapeLogCell(formatFoxRankText('exploreSkinShare', { explore: formatFoxRankText('routeHops', { count: data.explorationCount }, `${data.explorationCount} explorations`), skin: data.activeSkin.name }, `${data.explorationCount} explorations • ${data.activeSkin.name}`))}</span></div>`;
+    // foxRankSharePreview.innerHTML = `<div class="fox-rank-share-head"><strong>${escapeLogCell(data.tier.name)}</strong><span>${escapeLogCell(formatFoxRankText('levelPrefix', { level: data.tier.index + 1 }, `Lv. ${data.tier.index + 1}`))}</span></div><div class="fox-rank-share-lines"><span>${escapeLogCell(data.boost.label)}</span><span>${escapeLogCell(formatFoxRankText('qualityShare', { label: data.qualityLabel, value: Math.round(data.qualityScore * 100) }, `${data.qualityLabel} • ${Math.round(data.qualityScore * 100)}% quality`))}</span><span>${escapeLogCell(formatFoxRankText('exploreSkinShare', { explore: formatFoxRankText('routeHops', { count: data.explorationCount }, `${data.explorationCount} explorations`), skin: data.activeSkin.name }, `${data.explorationCount} explorations • ${data.activeSkin.name}`))}</span></div>`;
+    const weeklyReview = getFoxRankWeeklyReview(data);
+    const tierColor = getFoxRankTierColor(data.tier.index);
+
+    foxRankSharePreview.innerHTML = `
+      <div class="fox-rank-share-head">
+        <strong style="color: ${tierColor}">${escapeLogCell(data.tier.name)}</strong>
+        <span>${escapeLogCell(formatFoxRankText('levelPrefix', { level: data.tier.index + 1 }, `Lv. ${data.tier.index + 1}`))}</span>
+      </div>
+      <div class="fox-rank-share-progress">
+        <div class="fox-rank-share-progress-fill" style="width: ${Math.round(data.progress * 100)}%; background: linear-gradient(90deg, ${tierColor}, ${adjustColor(tierColor, -20)})"></div>
+      </div>
+      <div class="fox-rank-share-meta">
+        <span>XP ${data.delta} / ${data.span}</span>
+        <span class="badge">📈 +${weeklyReview.xpGain} XP 本周</span>
+      </div>
+      <div class="fox-rank-share-lines">
+        <span class="metric-item">
+          <i>⏱️</i>
+          ${escapeLogCell(data.usageText)}
+          ${renderTrendBadge(data.usageSec, data.previousUsageSec)}
+        </span>
+        <span class="metric-item">
+          <i>🛡️</i>
+          ${escapeLogCell(data.stabilityDays)}d 稳定
+          ${renderTrendBadge(data.stabilityDays, data.previousStabilityDays)}
+        </span>
+        <span class="metric-item">
+          <i>⭐</i>
+          ${escapeLogCell(data.qualityLabel)} • ${Math.round(data.qualityScore * 100)}%
+        </span>
+        <span class="metric-item">
+          <i>🧭</i>
+          ${escapeLogCell(data.explorationCount)} 探索
+          ${renderTrendBadge(data.explorationCount, data.previousExplorationCount)}
+        </span>
+      </div>
+      <div class="fox-rank-share-footer">
+        <span class="skin-badge">${data.activeSkin.name}</span>
+        <span class="boost-badge">${data.boost.label}</span>
+      </div>
+      ${renderShareBadges(data)}
+    `;
   }
   setFoxRankDetailTab(foxRankActiveTab);
   renderFoxRankBriefModal(data);
+}
+
+// 辅助函数：获取等级颜色
+function getFoxRankTierColor(tierIndex) {
+  const tier = FOX_RANK_TIERS[tierIndex] || FOX_RANK_TIERS[0];
+  return tier.colorStart || '#8ac1ff';
+}
+
+// 辅助函数：调整颜色亮度
+function adjustColor(hex, percent) {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const amt = Math.round(2.55 * percent);
+  const R = (num >> 16) + amt;
+  const G = (num >> 8 & 0x00FF) + amt;
+  const B = (num & 0x0000FF) + amt;
+  return '#' + (0x1000000 +
+      (R < 255 ? (R < 1 ? 0 : R) : 255) * 0x10000 +
+      (G < 255 ? (G < 1 ? 0 : G) : 255) * 0x100 +
+      (B < 255 ? (B < 1 ? 0 : B) : 255)
+  ).toString(16).slice(1);
+}
+
+// 辅助函数：渲染趋势指示器
+function renderTrendBadge(current, previous) {
+  if (previous === undefined || previous === null) {
+    return '';
+  }
+  const diff = current - previous;
+  if (diff === 0) return '<span class="trend neutral">→</span>';
+  const icon = diff > 0 ? '↑' : '↓';
+  const className = diff > 0 ? 'positive' : 'negative';
+  return `<span class="trend ${className}" title="较上周 ${diff > 0 ? '+' : ''}${diff}">${icon} ${Math.abs(diff)}</span>`;
+}
+
+// 辅助函数：渲染徽章
+function renderShareBadges(data) {
+  const badges = state.foxRank?.badges || [];
+  const recent = badges.slice(0, 4);
+  if (!recent.length) return '';
+
+  const badgeIcons = {
+    'first-blood': '🩸',
+    'streak-master': '🔥',
+    'explorer': '🧭',
+    'quality-king': '👑',
+    'speed-demon': '⚡',
+    'night-owl': '🦉'
+  };
+
+  return `
+    <div class="fox-rank-share-badges">
+      ${recent.map(b => `
+        <div class="badge-mini" title="${b.name}">
+          <span>${badgeIcons[b.id] || '🏆'}</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
 }
 
 function openFoxRankDetailModal() {
@@ -7363,9 +7622,8 @@ function renderFoxRankPanel(snapshot = null, options = {}) {
     setNodeTextIfChanged(foxRankBoostHint, data.boost.label);
   }
   if (foxRankWarningChip) {
-    const shouldWarn = data.progress >= 0.8;
-    foxRankWarningChip.hidden = !shouldWarn;
-    setNodeTextIfChanged(foxRankWarningChip, shouldWarn ? foxRankText('ascendSoon', 'Ascend soon') : '');
+    foxRankWarningChip.hidden = false;
+    setNodeTextIfChanged(foxRankWarningChip, foxRankText('upgrading', '升级中'));
   }
   if (foxRankExploreCount) {
     setNodeTextIfChanged(foxRankExploreCount, String(data.explorationCount));
@@ -7377,6 +7635,10 @@ function renderFoxRankPanel(snapshot = null, options = {}) {
     foxRankCard.classList.toggle('is-ascend-near', data.progress >= 0.8);
     foxRankCard.style.setProperty('--fox-rank-aura-start', tier.colorStart);
     foxRankCard.style.setProperty('--fox-rank-aura-end', tier.colorEnd);
+  }
+  if (foxRankDetailCard) {
+    foxRankDetailCard.style.setProperty('--fox-rank-aura-start', tier.colorStart);
+    foxRankDetailCard.style.setProperty('--fox-rank-aura-end', tier.colorEnd);
   }
   renderFoxRankDetailPanel(data);
   if (!suppressBrief) {
@@ -8589,6 +8851,7 @@ function refreshLayoutRefs() {
   foxRankSkinHint = document.getElementById('foxRankSkinHint');
   mountFoxRankDetailModalToBody();
   mountFoxRankBriefModalToBody();
+  foxRankDetailCard = document.getElementById('foxRankDetailCard');
   foxRankDetailClose = document.getElementById('foxRankDetailClose');
   foxRankDetailTier = document.getElementById('foxRankDetailTier');
   foxRankDetailSubtitle = document.getElementById('foxRankDetailSubtitle');
