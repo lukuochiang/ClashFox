@@ -1935,9 +1935,9 @@ let overviewNetworkRefresh = document.getElementById('overviewNetworkRefresh');
 
 let githubUser = document.getElementById('githubUser');
 let installBtn = document.getElementById('installBtn');
+let updateBtn = document.getElementById('updateBtn');
 let installStatus = document.getElementById('installStatus');
 let installCurrentKernel = document.getElementById('installCurrentKernel');
-let installProgress = document.getElementById('installProgress');
 let installVersionRow = document.getElementById('installVersionRow');
 let installVersion = document.getElementById('installVersion');
 let cancelInstallBtn = document.getElementById('cancelInstallBtn');
@@ -2021,6 +2021,7 @@ let updateGuideModal = document.getElementById('updateGuideModal');
 let updateGuideTitle = document.getElementById('updateGuideTitle');
 let updateGuideBody = document.getElementById('updateGuideBody');
 let updateGuideClose = document.getElementById('updateGuideClose');
+let updateGuidePrimaryBtn = document.getElementById('updateGuidePrimaryBtn');
 let updateGuideReleaseBtn = document.getElementById('updateGuideReleaseBtn');
 let updateGuideAlphaBtn = document.getElementById('updateGuideAlphaBtn');
 let appName = document.getElementById('appName');
@@ -4536,16 +4537,19 @@ function promptConfirm({ title, body, confirmLabel, confirmTone = 'danger' }) {
 function promptUpdateGuide({
   title,
   body,
+  primaryLabel = '',
   releaseLabel = '',
   alphaLabel = '',
 }) {
-  if (!updateGuideModal || !updateGuideTitle || !updateGuideBody || !updateGuideClose || !updateGuideReleaseBtn || !updateGuideAlphaBtn) {
+  if (!updateGuideModal || !updateGuideTitle || !updateGuideBody || !updateGuideClose || !updateGuidePrimaryBtn || !updateGuideReleaseBtn || !updateGuideAlphaBtn) {
     return Promise.resolve(null);
   }
   updateGuideTitle.textContent = title || ti('help.appUpdateChoicesTitle', 'Update Options');
   updateGuideBody.textContent = body || ti('help.updateGuideHint', 'Choose a version channel to continue.');
+  updateGuidePrimaryBtn.textContent = primaryLabel || ti('install.updateDialogPrimaryAction', 'Update Kernel');
   updateGuideReleaseBtn.textContent = releaseLabel || formatAppUpdateChannelText('help.appUpdateOpenChannelAction', 'Open {channel}', 'stable');
   updateGuideAlphaBtn.textContent = alphaLabel || formatAppUpdateChannelText('help.appUpdateOpenChannelAction', 'Open {channel}', 'alpha');
+  updateGuidePrimaryBtn.classList.toggle('is-hidden', !primaryLabel);
   updateGuideReleaseBtn.classList.toggle('is-hidden', !releaseLabel);
   updateGuideAlphaBtn.classList.toggle('is-hidden', !alphaLabel);
   updateGuideModal.classList.add('show');
@@ -4556,6 +4560,7 @@ function promptUpdateGuide({
       updateGuideModal.classList.remove('show');
       updateGuideModal.setAttribute('aria-hidden', 'true');
       updateGuideClose.removeEventListener('click', onClose);
+      updateGuidePrimaryBtn.removeEventListener('click', onPrimary);
       updateGuideReleaseBtn.removeEventListener('click', onRelease);
       updateGuideAlphaBtn.removeEventListener('click', onAlpha);
       updateGuideModal.removeEventListener('keydown', onKeydown);
@@ -4565,6 +4570,11 @@ function promptUpdateGuide({
     const onClose = () => {
       cleanup();
       resolve(null);
+    };
+
+    const onPrimary = () => {
+      cleanup();
+      resolve('primary');
     };
 
     const onRelease = () => {
@@ -4590,6 +4600,9 @@ function promptUpdateGuide({
     };
 
     updateGuideClose.addEventListener('click', onClose);
+    if (!updateGuidePrimaryBtn.classList.contains('is-hidden')) {
+      updateGuidePrimaryBtn.addEventListener('click', onPrimary);
+    }
     if (!updateGuideReleaseBtn.classList.contains('is-hidden')) {
       updateGuideReleaseBtn.addEventListener('click', onRelease);
     }
@@ -4599,7 +4612,9 @@ function promptUpdateGuide({
     updateGuideModal.addEventListener('keydown', onKeydown);
     updateGuideModal.addEventListener('click', onBackdrop);
 
-    if (!updateGuideReleaseBtn.classList.contains('is-hidden')) {
+    if (!updateGuidePrimaryBtn.classList.contains('is-hidden')) {
+      updateGuidePrimaryBtn.focus();
+    } else if (!updateGuideReleaseBtn.classList.contains('is-hidden')) {
       updateGuideReleaseBtn.focus();
     } else if (!updateGuideAlphaBtn.classList.contains('is-hidden')) {
       updateGuideAlphaBtn.focus();
@@ -4877,7 +4892,7 @@ async function handleOverviewTextCopy(value) {
 
 function setInstallState(nextState, errorMessage = '') {
   state.installState = nextState;
-  if (!installStatus || !installProgress) {
+  if (!installStatus) {
     return;
   }
   let message = t('install.ready');
@@ -4891,8 +4906,12 @@ function setInstallState(nextState, errorMessage = '') {
 
   installStatus.textContent = message;
   installStatus.dataset.state = nextState;
-  installProgress.classList.toggle('show', nextState === 'loading');
-  installBtn.disabled = nextState === 'loading';
+  if (installBtn) {
+    installBtn.disabled = nextState === 'loading';
+  }
+  if (updateBtn) {
+    updateBtn.disabled = nextState === 'loading';
+  }
   githubUser.disabled = nextState === 'loading';
   if (cancelInstallBtn) {
     cancelInstallBtn.style.display = nextState === 'loading' ? 'block' : 'none';
@@ -4903,6 +4922,87 @@ function setInstallState(nextState, errorMessage = '') {
   }
   if (nextState === 'idle') {
     applyKernelUpdateInstallHint();
+  }
+}
+
+async function performMihomoInstall(mode = 'install') {
+  setInstallState('loading');
+  const githubUserValue = githubUser ? githubUser.value : 'vernesong';
+  const installMode = typeof mode === 'string' ? mode : (mode && mode.mode) || 'install';
+  const targetChannel = (mode && typeof mode === 'object' && mode.channel) ? mode.channel : 'default';
+  const versionValue = (
+    installMode === 'install'
+    && githubUserValue === 'MetaCubeX'
+    && installVersion
+    && installVersion.value.trim()
+  ) ? installVersion.value.trim() : '';
+
+  if (typeof window.clashfox.installMihomo !== 'function') {
+    setInstallState('error', 'installMihomo_not_available');
+    showToast(t('install.notAvailable'), 'error');
+    return;
+  }
+
+  const unsubscribeProgress = window.clashfox.onInstallMihomoProgress((progress) => {
+    if (progress.status === 'downloading') {
+      const percentage = typeof progress.progress === 'number' ? progress.progress : 0;
+      if (installStatus) {
+        installStatus.textContent = ti('install.downloading', 'Downloading {progress}...')
+          .replace('{progress}', `${percentage}%`);
+      }
+    } else if (progress.status === 'fetching_version' && installStatus) {
+      installStatus.textContent = t('install.fetchingVersion', 'Fetching version info...');
+    } else if (progress.status === 'extracting' && installStatus) {
+      installStatus.textContent = t('install.extracting', 'Extracting...');
+    } else if (progress.status === 'installing' && installStatus) {
+      installStatus.textContent = t('install.installing', 'Installing...');
+    }
+  });
+
+  const response = await window.clashfox.installMihomo({
+    githubUser: githubUserValue,
+    version: versionValue,
+    channel: targetChannel,
+  });
+
+  unsubscribeProgress();
+
+  if (response.ok) {
+    if (response.skipped) {
+      setInstallState('idle');
+      const versionDisplay = formatKernelVersionForDisplay(
+        response.version || '',
+        githubUserValue,
+        targetChannel === 'alpha' || String(response.version || '').toLowerCase().includes('alpha'),
+      );
+      const resolvedVersion = versionDisplay || response.version || '-';
+      const message = response.skipReason === 'backup_exists'
+        ? ti('install.skipBackupExists', 'Backup already exists for version: {version}')
+        : ti('install.skipCurrentVersion', 'Current kernel is already version: {version}');
+      showToast(message.replace('{version}', resolvedVersion), 'info');
+      refreshKernelUpdateNotice(true);
+      return;
+    }
+    setInstallState('success');
+    showNoticePop(`${t('labels.installSuccess')} ${t('labels.installConfigHint')}`, 'success');
+    loadKernels();
+    loadStatus();
+    refreshKernelUpdateNotice(true);
+    setTimeout(() => {
+      if (state.installState === 'success') {
+        setInstallState('idle');
+      }
+    }, 1200);
+    return;
+  }
+
+  const isErrorCancelled = response.error === 'INSTALL_CANCELLED';
+  if (isErrorCancelled) {
+    setInstallState('idle');
+    showToast(t('install.cancelled'), 'info');
+  } else {
+    setInstallState('error', response.error || '');
+    showToast(response.error || t('install.failed'), 'error');
   }
 }
 
@@ -5199,13 +5299,15 @@ function applyKernelUpdateInstallHint() {
   }
   const info = state.kernelUpdateInfo;
   if (info && info.status === 'checking') {
-    installStatus.textContent = ti('install.kernelChecking', `Checking updates from ${info.source || 'source'}...`);
+    installStatus.textContent = ti('install.kernelChecking', `Checking updates from ${info.source || 'source'}...`)
+      .replace('{source}', info.source || 'source');
     installStatus.dataset.state = 'loading';
     return;
   }
   if (info && info.ok && info.status === 'update_available' && info.latestVersion) {
     const latestDisplay = formatKernelVersionForDisplay(info.latestVersion, info.source, Boolean(info.prerelease));
-    installStatus.textContent = ti('install.kernelUpdateAvailable', `Kernel update available: ${latestDisplay}`);
+    installStatus.textContent = ti('install.kernelUpdateAvailable', `Kernel update available: ${latestDisplay}`)
+      .replace('{version}', latestDisplay);
     installStatus.dataset.state = 'warn';
     return;
   }
@@ -5213,10 +5315,10 @@ function applyKernelUpdateInstallHint() {
     info
     && info.ok
     && info.latestVersion
-    && String(info.source || '').toLowerCase() === 'vernesong'
   ) {
     const latestDisplay = formatKernelVersionForDisplay(info.latestVersion, info.source, Boolean(info.prerelease));
-    installStatus.textContent = ti('install.kernelLatestVersion', `Latest version: ${latestDisplay}`);
+    installStatus.textContent = ti('install.kernelLatestVersion', 'Latest version: {version}')
+      .replace('{version}', latestDisplay);
     installStatus.dataset.state = 'ready';
     return;
   }
@@ -5301,7 +5403,8 @@ async function refreshKernelUpdateNotice(force = false) {
       state.kernelUpdateNotifiedVersion = result.latestVersion;
       const latestDisplay = formatKernelVersionForDisplay(result.latestVersion, source, Boolean(result.prerelease));
       showNoticePop(
-        ti('install.kernelUpdateAvailable', `Kernel update available: ${latestDisplay}`),
+        ti('install.kernelUpdateAvailable', `Kernel update available: ${latestDisplay}`)
+          .replace('{version}', latestDisplay),
         'info',
       );
     }
@@ -8391,7 +8494,7 @@ function renderKernelTable() {
   const items = state.kernels || [];
   const backupItems = [];
   let currentItem = null;
-  const backupRe = /^mihomo\.backup\.(mihomo-darwin-(amd64|arm64)-.+)\.([0-9]{8}_[0-9]{6})$/;
+  const backupRe = /^mihomo\.backup\.(mihomo-darwin-(amd64|arm64|x64)-.+)\.([0-9]{8}_[0-9]{6})$/;
 
   items.forEach((item) => {
     const name = item && item.name ? item.name : '';
@@ -9270,9 +9373,9 @@ function refreshPageRefs() {
 
   githubUser = document.getElementById('githubUser');
   installBtn = document.getElementById('installBtn');
+  updateBtn = document.getElementById('updateBtn');
   installStatus = document.getElementById('installStatus');
   installCurrentKernel = document.getElementById('installCurrentKernel');
-  installProgress = document.getElementById('installProgress');
   installVersionRow = document.getElementById('installVersionRow');
   installVersion = document.getElementById('installVersion');
   cancelInstallBtn = document.getElementById('cancelInstallBtn');
@@ -9356,6 +9459,7 @@ function refreshPageRefs() {
   updateGuideTitle = document.getElementById('updateGuideTitle');
   updateGuideBody = document.getElementById('updateGuideBody');
   updateGuideClose = document.getElementById('updateGuideClose');
+  updateGuidePrimaryBtn = document.getElementById('updateGuidePrimaryBtn');
   updateGuideReleaseBtn = document.getElementById('updateGuideReleaseBtn');
   updateGuideAlphaBtn = document.getElementById('updateGuideAlphaBtn');
   appName = document.getElementById('appName');
@@ -10705,30 +10809,27 @@ if (helperLogsRevealBtn) {
 
 if (installBtn) {
   installBtn.addEventListener('click', async () => {
-    setInstallState('loading');
-    const args = ['--github-user', githubUser ? githubUser.value : 'vernesong'];
-    if (githubUser && githubUser.value === 'MetaCubeX' && installVersion && installVersion.value.trim()) {
-      args.push('--version', installVersion.value.trim());
+    await performMihomoInstall('install');
+  });
+}
+
+if (updateBtn) {
+  updateBtn.addEventListener('click', async () => {
+    const source = normalizeKernelSource((githubUser && githubUser.value) || '') || 'vernesong';
+    const choice = await promptUpdateGuide({
+      title: ti('install.updateDialogTitle', 'Update Kernel'),
+      body: ti('install.updateDialogBody', 'Choose an update channel to continue.'),
+      primaryLabel: ti('install.updateDialogPrimaryAction', 'Update Kernel'),
+      releaseLabel: source === 'vernesong' ? '' : ti('install.updateDialogReleaseAction', 'Update to Release'),
+      alphaLabel: ti('install.updateDialogAlphaAction', 'Update to Alpha'),
+    });
+    if (!choice) {
+      return;
     }
-    await maybeNotifyHelperAuthFallback('install');
-    const response = await runCommandWithSudo('install', args);
-    if (response.ok) {
-      setInstallState('success');
-      showNoticePop(`${t('labels.installSuccess')} ${t('labels.installConfigHint')}`, 'success');
-      loadKernels();
-      loadStatus();
-      refreshKernelUpdateNotice(true);
-      setTimeout(() => {
-        if (state.installState === 'success') {
-          setInstallState('idle');
-        }
-      }, 1200);
-    } else if (response.error === 'cancelled') {
-        setInstallState('idle');
-        showToast(t('install.cancelSuccess'), 'info');
-      } else {
-      setInstallState('error', response.error || '');
-    }
+    const channel = choice === 'release'
+      ? 'release'
+      : (choice === 'alpha' ? 'alpha' : 'default');
+    await performMihomoInstall({ mode: 'update', channel });
   });
 }
 

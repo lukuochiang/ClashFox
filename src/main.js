@@ -4,6 +4,7 @@ const path = require('path');
 const https = require('https');
 const dns = require('dns');
 const net = require('net');
+const zlib = require('zlib');
 const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme, shell, Tray, session, clipboard, screen } = require('electron');
 const { spawn, spawnSync, execFile } = require('child_process');
 
@@ -88,6 +89,8 @@ let worldwidePreloadWindow = null;
 let mainWindowResizePersistTimer = null;
 let suppressMainWindowSizeApplyUntil = 0;
 let currentInstallProcess = null; // 仅用于跟踪安装进程，支持取消功能
+let installCancelRequested = false; // 用于 JS 实现的安装取消功能
+let isJsInstalling = false; // 标记是否正在进行 JS 安装
 let globalSettings = {
   debugMode: true, // 是否启用调试模式
 };
@@ -1383,14 +1386,14 @@ function listBackupFilesFromFs() {
         // Extract version and timestamp from filename
         // Format: mihomo.backup.mihomo-darwin-amd64-v1.19.0.20241218_123456
         const name = entry.name;
-        const backupRe = /^mihomo\.backup\.(mihomo-darwin-(amd64|arm64)-.+)\.([0-9]{8}_[0-9]{6})$/;
+        const backupRe = /^mihomo\.backup\.(mihomo-darwin-(amd64|arm64|x64)-.+)\.([0-9]{8}_[0-9]{6})$/;
         const match = name.match(backupRe);
         
         let version = '';
         let timestamp = '';
         if (match) {
           version = match[1];
-          timestamp = match[2];
+          timestamp = match[3];
         }
         
         return {
@@ -1444,8 +1447,129 @@ function buildUniqueFilePath(targetDir, fileName) {
   return candidate;
 }
 
+function parseCommandOptionValues(args = [], flag = '') {
+  const result = [];
+  const targetFlag = String(flag || '').trim();
+  if (!targetFlag) {
+    return result;
+  }
+  for (let index = 0; index < args.length; index += 1) {
+    const current = String(args[index] || '').trim();
+    if (current !== targetFlag) {
+      continue;
+    }
+    const next = String(args[index + 1] || '').trim();
+    if (next) {
+      result.push(next);
+      index += 1;
+    }
+  }
+  return result;
+}
+
+function isPathInsideDirectory(targetPath = '', parentDir = '') {
+  const resolvedTarget = path.resolve(String(targetPath || '').trim());
+  const resolvedParent = path.resolve(String(parentDir || '').trim());
+  return resolvedTarget === resolvedParent || resolvedTarget.startsWith(`${resolvedParent}${path.sep}`);
+}
+
+function deleteBackupFilesFromFs(paths = []) {
+  try {
+    const coreDir = resolveCoreDirectoryFromSettings();
+    const backupDir = path.join(coreDir, 'cfox-backup');
+    fs.mkdirSync(backupDir, { recursive: true });
+    const targets = Array.isArray(paths)
+      ? paths.map((item) => String(item || '').trim()).filter(Boolean)
+      : [];
+    if (!targets.length) {
+      return { ok: false, error: 'delete_empty' };
+    }
+    let deletedCount = 0;
+    for (const target of targets) {
+      if (!isPathInsideDirectory(target, backupDir)) {
+        return { ok: false, error: 'invalid_backup_path', details: target };
+      }
+      const baseName = path.basename(target);
+      if (!baseName.startsWith('mihomo.backup.')) {
+        return { ok: false, error: 'invalid_backup_file', details: baseName };
+      }
+      if (!fs.existsSync(target)) {
+        continue;
+      }
+      fs.unlinkSync(target);
+      deletedCount += 1;
+    }
+    return { ok: true, deletedCount };
+  } catch (error) {
+    return {
+      ok: false,
+      error: 'delete_backups_failed',
+      details: String(error && error.message ? error.message : error || ''),
+    };
+  }
+}
+
+function switchKernelBackupFromFs(index = 0) {
+  try {
+    const safeIndex = Number.parseInt(String(index || ''), 10);
+    if (!Number.isFinite(safeIndex) || safeIndex <= 0) {
+      return { ok: false, error: 'invalid_backup_index' };
+    }
+    const backupList = listBackupFilesFromFs();
+    if (!backupList || backupList.ok === false) {
+      return backupList || { ok: false, error: 'backups_read_failed' };
+    }
+    const selected = Array.isArray(backupList.data)
+      ? backupList.data.find((item) => Number(item.index) === safeIndex)
+      : null;
+    if (!selected || !selected.path) {
+      return { ok: false, error: 'backup_not_found' };
+    }
+
+    const coreDir = resolveCoreDirectoryFromSettings();
+    const backupDir = path.join(coreDir, 'cfox-backup');
+    const activeCore = path.join(coreDir, 'mihomo');
+    fs.mkdirSync(coreDir, { recursive: true });
+    fs.mkdirSync(backupDir, { recursive: true });
+
+    if (!isPathInsideDirectory(selected.path, backupDir)) {
+      return { ok: false, error: 'invalid_backup_path', details: selected.path };
+    }
+
+    fs.copyFileSync(selected.path, activeCore);
+    fs.chmodSync(activeCore, 0o755);
+    return {
+      ok: true,
+      selected: selected.name || path.basename(selected.path),
+      path: activeCore,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: 'switch_failed',
+      details: String(error && error.message ? error.message : error || ''),
+    };
+  }
+}
+
 function normalizeVersionTag(version) {
   return String(version || '').trim().replace(/^v/i, '');
+}
+
+function formatBackupTimestamp(date = new Date()) {
+  const value = date instanceof Date ? date : new Date(date);
+  const year = String(value.getFullYear());
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  const hours = String(value.getHours()).padStart(2, '0');
+  const minutes = String(value.getMinutes()).padStart(2, '0');
+  const seconds = String(value.getSeconds()).padStart(2, '0');
+  return `${year}${month}${day}_${hours}${minutes}${seconds}`;
+}
+
+function normalizeKernelArchLabel(arch = '') {
+  const value = String(arch || '').trim().toLowerCase();
+  return value === 'arm64' ? 'arm64' : 'amd64';
 }
 
 function parseVersion(version) {
@@ -2550,6 +2674,982 @@ async function checkForUpdates({ manual = false, acceptBeta } = {}) {
       currentVersion,
       error: err && err.message ? err.message : 'CHECK_UPDATE_FAILED',
     };
+  }
+}
+
+async function downloadKernelFile(url, destPath, onProgress) {
+  return new Promise((resolve, reject) => {
+    let downloadedBytes = 0;
+    let totalBytes = 0;
+    let req = null;
+    let file = null;
+    let settled = false;
+
+    const removePartialFile = () => {
+      if (fs.existsSync(destPath)) {
+        try {
+          fs.unlinkSync(destPath);
+        } catch {}
+      }
+    };
+
+    const rejectOnce = (err) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (req) {
+        try {
+          req.destroy();
+        } catch {}
+      }
+      if (file) {
+        try {
+          file.destroy();
+        } catch {}
+      }
+      removePartialFile();
+      reject(err);
+    };
+
+    const resolveOnce = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve();
+    };
+
+    const checkCancel = () => {
+      if (installCancelRequested) {
+        rejectOnce(new Error('INSTALL_CANCELLED'));
+        return true;
+      }
+      return false;
+    };
+
+    const requestDownload = (currentUrl, redirectCount = 0) => {
+      if (checkCancel()) {
+        return;
+      }
+      if (redirectCount > 5) {
+        rejectOnce(new Error('Too many redirects'));
+        return;
+      }
+
+      req = https.get(currentUrl, {
+        headers: {
+          'User-Agent': `ClashFox/${app.getVersion() || '0.0.0'}`,
+          Accept: 'application/octet-stream,*/*',
+        },
+      }, (res) => {
+        const statusCode = Number(res.statusCode || 0);
+
+        guiMainLog('install-mihomo', 'Download response', {
+          url: currentUrl,
+          statusCode,
+          contentLength: res.headers['content-length'],
+          location: res.headers.location,
+          contentType: res.headers['content-type']
+        });
+
+        if (statusCode >= 300 && statusCode < 400 && res.headers.location) {
+          const nextUrl = new URL(res.headers.location, currentUrl).toString();
+          res.resume();
+          guiMainLog('install-mihomo', 'Following redirect', {
+            from: currentUrl,
+            to: nextUrl,
+            statusCode
+          });
+          requestDownload(nextUrl, redirectCount + 1);
+          return;
+        }
+
+        if (statusCode < 200 || statusCode >= 300) {
+          res.resume();
+          guiMainLog('install-mihomo', 'Download failed', {
+            url: currentUrl,
+            statusCode,
+            statusMessage: res.statusMessage
+          }, 'error');
+          rejectOnce(new Error(`HTTP_${statusCode}`));
+          return;
+        }
+
+        const contentLength = res.headers['content-length'];
+        totalBytes = contentLength !== undefined && contentLength !== null ? Number(contentLength) : 0;
+        if (contentLength !== undefined && contentLength !== null && totalBytes === 0) {
+          res.resume();
+          guiMainLog('install-mihomo', 'Download rejected', {
+            url: currentUrl,
+            reason: 'Content-Length is 0',
+            contentLength
+          }, 'error');
+          rejectOnce(new Error('Download failed: server returned empty content'));
+          return;
+        }
+
+        guiMainLog('install-mihomo', 'Download started', {
+          url: currentUrl,
+          totalBytes: totalBytes || 'unknown',
+          contentLength,
+          destPath
+        });
+
+        if (!res.readable) {
+          res.resume();
+          guiMainLog('install-mihomo', 'Download rejected', {
+            url: currentUrl,
+            reason: 'Response is not readable'
+          }, 'error');
+          rejectOnce(new Error('Download failed: response not readable'));
+          return;
+        }
+
+        removePartialFile();
+        file = fs.createWriteStream(destPath);
+        res.pipe(file);
+
+        res.on('data', (chunk) => {
+          if (checkCancel()) {
+            return;
+          }
+          downloadedBytes += chunk.length;
+          if (typeof onProgress === 'function' && totalBytes > 0) {
+            onProgress(downloadedBytes, totalBytes);
+          }
+        });
+
+        res.on('end', () => {
+          if (checkCancel() || settled) {
+            return;
+          }
+          guiMainLog('install-mihomo', 'Download stream ended', {
+            downloadedBytes,
+            totalBytes,
+            incomplete: totalBytes > 0 && downloadedBytes < totalBytes
+          });
+        });
+
+        res.on('error', (err) => {
+          if (checkCancel() || settled) {
+            return;
+          }
+          guiMainLog('install-mihomo', 'Download stream error', {
+            error: err.message
+          }, 'error');
+          rejectOnce(new Error(`Download error: ${err.message}`));
+        });
+
+        file.on('finish', () => {
+          if (checkCancel() || settled) {
+            return;
+          }
+          file.close(() => {
+            if (settled) {
+              return;
+            }
+            if (downloadedBytes === 0) {
+              guiMainLog('install-mihomo', 'Download failed', {
+                reason: 'File finished but no data written',
+                destPath,
+                downloadedBytes
+              }, 'error');
+              rejectOnce(new Error('Download failed: file is empty'));
+              return;
+            }
+            if (totalBytes > 0 && downloadedBytes !== totalBytes) {
+              guiMainLog('install-mihomo', 'Download size mismatch', {
+                expected: totalBytes,
+                received: downloadedBytes,
+                destPath
+              }, 'error');
+              rejectOnce(new Error(`Download size mismatch: expected ${totalBytes} bytes, got ${downloadedBytes}`));
+              return;
+            }
+            guiMainLog('install-mihomo', 'Download file finished successfully', {
+              destPath,
+              downloadedBytes,
+              totalBytes: totalBytes || 'unknown'
+            });
+            resolveOnce();
+          });
+        });
+
+        file.on('error', (err) => {
+          if (settled) {
+            return;
+          }
+          guiMainLog('install-mihomo', 'Download file error', {
+            destPath,
+            error: err.message
+          }, 'error');
+          rejectOnce(new Error(`File write error: ${err.message}`));
+        });
+      });
+
+      req.on('error', (err) => {
+        if (checkCancel() || settled) {
+          return;
+        }
+        guiMainLog('install-mihomo', 'Download request error', {
+          url: currentUrl,
+          error: err.message
+        }, 'error');
+        rejectOnce(new Error(`Request error: ${err.message}`));
+      });
+
+      req.on('timeout', () => {
+        if (checkCancel() || settled) {
+          return;
+        }
+        guiMainLog('install-mihomo', 'Download timeout', { url: currentUrl }, 'error');
+        rejectOnce(new Error('Download timeout'));
+      });
+
+      req.setTimeout(120000);
+    };
+
+    requestDownload(url);
+  });
+}
+
+function readInstalledKernelVersionRaw(activeCore = '') {
+  const target = String(activeCore || '').trim();
+  if (!target || !fs.existsSync(target)) {
+    return '';
+  }
+  try {
+    const result = spawnSync(target, ['-v'], { encoding: 'utf8', timeout: 3000 });
+    const stdout = String((result && result.stdout) || '').trim();
+    if (!stdout) {
+      return '';
+    }
+    const line = stdout.split(/\r?\n/).map((item) => item.trim()).find(Boolean) || '';
+    const parsed = parseKernelVersionDetails(line);
+    return (parsed && parsed.version) ? parsed.version : line;
+  } catch {
+    return '';
+  }
+}
+
+async function resolveInstallVersionBranch({
+  githubUser = 'vernesong',
+  version = '',
+  channel = 'default',
+  currentVersion = '',
+} = {}) {
+  const explicitVersion = String(version || '').trim();
+  if (explicitVersion) {
+    if (/^(?:v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/i.test(explicitVersion)) {
+      return /^v/i.test(explicitVersion) ? explicitVersion : `v${explicitVersion}`;
+    }
+    return explicitVersion;
+  }
+
+  const normalizedChannel = String(channel || 'default').trim().toLowerCase();
+  if (normalizedChannel === 'alpha') {
+    return 'Prerelease-Alpha';
+  }
+  if (normalizedChannel === 'release') {
+    const releases = await fetchJson(KERNEL_RELEASE_API[githubUser] || KERNEL_RELEASE_API.vernesong);
+    const latestRelease = pickLatestKernelRelease(releases, false);
+    const tagName = String((latestRelease && (latestRelease.tag_name || latestRelease.name)) || '').trim();
+    if (!tagName) {
+      throw new Error('NO_RELEASE_FOUND');
+    }
+    return tagName;
+  }
+  if (githubUser === 'vernesong') {
+    return 'Prerelease-Alpha';
+  }
+
+  const normalizedCurrentVersion = String(currentVersion || '').trim();
+  if (!normalizedCurrentVersion) {
+    return 'Prerelease-Alpha';
+  }
+
+  const updateInfo = await checkKernelUpdates({
+    source: githubUser,
+    currentVersion: normalizedCurrentVersion,
+  });
+  if (!updateInfo || updateInfo.ok === false) {
+    return 'Prerelease-Alpha';
+  }
+  if (updateInfo.prerelease) {
+    return 'Prerelease-Alpha';
+  }
+  if (updateInfo.latestVersion) {
+    return `v${normalizeVersionTag(updateInfo.latestVersion)}`;
+  }
+  return 'Prerelease-Alpha';
+}
+
+function buildReleaseTagCandidates(versionBranch = '') {
+  const normalized = String(versionBranch || '').trim();
+  if (!normalized) {
+    return [];
+  }
+  const candidates = [normalized];
+  if (/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/i.test(normalized)) {
+    candidates.push(normalized.replace(/^v/i, ''));
+  } else if (/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/i.test(normalized)) {
+    candidates.unshift(`v${normalized}`);
+  }
+  return Array.from(new Set(candidates.filter(Boolean)));
+}
+
+async function fetchGithubReleaseByTagCandidates(githubUser = 'vernesong', versionBranch = '') {
+  const candidates = buildReleaseTagCandidates(versionBranch);
+  let lastError = null;
+  for (const candidate of candidates) {
+    const apiUrl = `https://api.github.com/repos/${githubUser}/mihomo/releases/tags/${candidate}`;
+    try {
+      const apiResult = await new Promise((resolve, reject) => {
+        https.get(apiUrl, {
+          headers: {
+            'User-Agent': `ClashFox/${app.getVersion() || '0.0.0'}`,
+            Accept: 'application/vnd.github.v3+json',
+          },
+        }, (res) => {
+          const statusCode = Number(res.statusCode || 0);
+          if (statusCode >= 300 && statusCode < 400 && res.headers.location) {
+            res.resume();
+            https.get(res.headers.location, {
+              headers: {
+                'User-Agent': `ClashFox/${app.getVersion() || '0.0.0'}`,
+                Accept: 'application/vnd.github.v3+json',
+              },
+            }, (redirectRes) => {
+              let data = '';
+              redirectRes.on('data', (chunk) => { data += chunk; });
+              redirectRes.on('end', () => {
+                try {
+                  const json = JSON.parse(data);
+                  resolve(json);
+                } catch (err) {
+                  reject(new Error(`Failed to parse API response: ${err.message}`));
+                }
+              });
+            }).on('error', reject);
+            return;
+          }
+          if (statusCode < 200 || statusCode >= 300) {
+            res.resume();
+            reject(new Error(`HTTP_${statusCode}`));
+            return;
+          }
+          let data = '';
+          res.on('data', (chunk) => { data += chunk; });
+          res.on('end', () => {
+            try {
+              const json = JSON.parse(data);
+              resolve(json);
+            } catch (err) {
+              reject(new Error(`Failed to parse API response: ${err.message}`));
+            }
+          });
+        }).on('error', reject).setTimeout(15000, () => {
+          reject(new Error('API request timeout'));
+        });
+      });
+      return { ok: true, data: apiResult, tag: candidate };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  return {
+    ok: false,
+    error: lastError ? String(lastError.message || lastError) : 'HTTP_404',
+  };
+}
+
+async function fetchVersionInfoByBranchCandidates(githubUser = 'vernesong', versionBranch = '') {
+  const candidates = buildReleaseTagCandidates(versionBranch);
+  let lastError = null;
+  for (const candidate of candidates) {
+    const versionUrl = `https://github.com/${githubUser}/mihomo/releases/download/${candidate}/version.txt`;
+    try {
+      const versionInfo = await fetchText(versionUrl, 10000);
+      return {
+        ok: true,
+        versionInfo,
+        versionUrl,
+        resolvedBranch: candidate,
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  return {
+    ok: false,
+    error: lastError ? String(lastError.message || lastError) : 'HTTP_404',
+  };
+}
+
+function extractInstallVersionHash(versionInfo = '', versionBranch = '') {
+  const raw = String(versionInfo || '');
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return '';
+  }
+  if (String(versionBranch || '').trim() === 'Prerelease-Alpha') {
+    const prereleaseMatch = trimmed.match(/alpha(?:-smart)?-[0-9a-f]+/i);
+    if (prereleaseMatch && prereleaseMatch[0]) {
+      return prereleaseMatch[0];
+    }
+  }
+  const firstNonEmptyLine = trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
+  return firstNonEmptyLine || '';
+}
+
+function normalizeInstallVersionIdentity(value = '') {
+  return String(value || '').trim().replace(/^v/i, '').toLowerCase();
+}
+
+function currentKernelMatchesVersion(currentVersion = '', targetVersion = '') {
+  const current = normalizeInstallVersionIdentity(currentVersion);
+  const target = normalizeInstallVersionIdentity(targetVersion);
+  if (!current || !target) {
+    return false;
+  }
+  return current === target || current.includes(target) || target.includes(current);
+}
+
+function backupKernelExists(backupDir = '', kernelName = '') {
+  const targetDir = String(backupDir || '').trim();
+  const targetName = String(kernelName || '').trim();
+  if (!targetDir || !targetName || !fs.existsSync(targetDir)) {
+    return false;
+  }
+  try {
+    const prefix = `mihomo.backup.${targetName}.`;
+    return fs.readdirSync(targetDir).some((entry) => String(entry || '').startsWith(prefix));
+  } catch {
+    return false;
+  }
+}
+
+async function installMihomo({ githubUser = 'vernesong', version = '', channel = 'default', onProgress } = {}) {
+  isJsInstalling = true;
+  installCancelRequested = false;
+
+  try {
+    const validGithubUser = githubUser === 'MetaCubeX' ? 'MetaCubeX' : 'vernesong';
+
+    const coreDir = path.join(APP_DATA_DIR, 'core');
+    const backupDir = path.join(coreDir, 'cfox-backup');
+    const activeCore = path.join(coreDir, 'mihomo');
+    const currentVersion = readInstalledKernelVersionRaw(activeCore);
+
+    const versionBranch = await resolveInstallVersionBranch({
+      githubUser: validGithubUser,
+      version,
+      channel,
+      currentVersion,
+    });
+
+    ensureAppDirs();
+    fs.mkdirSync(backupDir, { recursive: true });
+
+    let resolvedVersionBranch = versionBranch;
+    let versionUrl = `https://github.com/${validGithubUser}/mihomo/releases/download/${resolvedVersionBranch}/version.txt`;
+
+    if (typeof onProgress === 'function') {
+      onProgress({ status: 'fetching_version' });
+    }
+
+    let versionInfo = '';
+    let allowApiOnlyFallback = false;
+    guiMainLog('install-mihomo', 'Fetching version info', {
+      url: versionUrl,
+      versionBranch: resolvedVersionBranch
+    });
+
+    try {
+      const versionLookup = await fetchVersionInfoByBranchCandidates(validGithubUser, resolvedVersionBranch);
+      if (!versionLookup || versionLookup.ok === false) {
+        throw new Error(versionLookup && versionLookup.error ? versionLookup.error : 'HTTP_404');
+      }
+      versionInfo = String(versionLookup.versionInfo || '');
+      resolvedVersionBranch = versionLookup.resolvedBranch || resolvedVersionBranch;
+      versionUrl = versionLookup.versionUrl || versionUrl;
+      guiMainLog('install-mihomo', 'Version info fetched', {
+        versionInfo: versionInfo.trim(),
+        versionInfoRaw: JSON.stringify(versionInfo),
+        length: versionInfo.length,
+        trimmedLength: versionInfo.trim().length,
+        resolvedVersionBranch,
+        url: versionUrl,
+      });
+    } catch (err) {
+      if (String(err && err.message ? err.message : '').includes('HTTP_404')) {
+        allowApiOnlyFallback = true;
+        guiMainLog('install-mihomo', 'Version info missing, switching to GitHub API lookup', {
+          error: err.message,
+          url: versionUrl,
+          versionBranch: resolvedVersionBranch,
+        }, 'warn');
+      } else {
+        guiMainLog('install-mihomo', 'Failed to fetch version info', {
+          error: err.message,
+          url: versionUrl
+        }, 'error');
+        return { ok: false, error: `Failed to fetch version info: ${err.message}` };
+      }
+    }
+
+    if (installCancelRequested) {
+      return { ok: false, error: 'INSTALL_CANCELLED' };
+    }
+
+    if ((!versionInfo || /not found/i.test(versionInfo)) && !allowApiOnlyFallback) {
+      guiMainLog('install-mihomo', 'Version not found', {
+        versionInfo,
+        versionInfoRaw: JSON.stringify(versionInfo),
+        url: versionUrl
+      }, 'error');
+      return { ok: false, error: 'Version not found' };
+    }
+
+    const trimmedVersion = String(versionInfo).trim();
+    const versionLines = trimmedVersion.split(/\r?\n/);
+    let versionHash = extractInstallVersionHash(versionInfo, versionBranch);
+    let resolvedKernelName = '';
+    let resolvedDownloadUrl = '';
+
+    guiMainLog('install-mihomo', 'Version parsing', {
+      trimmedVersion,
+      versionLines,
+      versionHash,
+      versionHashLength: versionHash.length
+    });
+
+    if (!versionHash) {
+      guiMainLog('install-mihomo', 'Invalid version hash, trying GitHub API fallback', {
+        versionInfo: versionInfo.trim(),
+        versionLines,
+        reason: 'Could not extract a valid install version identifier from version.txt'
+      }, 'warn');
+
+      // Fallback: Use GitHub API to get kernel info
+      try {
+        const arch = os.arch() === 'arm64' ? 'arm64' : 'amd64';
+        const apiLookup = await fetchGithubReleaseByTagCandidates(validGithubUser, resolvedVersionBranch);
+        if (!apiLookup || apiLookup.ok === false || !apiLookup.data) {
+          throw new Error(apiLookup && apiLookup.error ? apiLookup.error : 'HTTP_404');
+        }
+        const apiResult = apiLookup.data;
+
+        if (!apiResult || !apiResult.assets) {
+          throw new Error('Invalid API response: no assets found');
+        }
+
+        // Find kernel file matching architecture
+        const kernelAsset = apiResult.assets.find(asset =>
+          asset.name.includes('mihomo-darwin-' + arch) && asset.name.endsWith('.gz')
+        );
+
+        if (!kernelAsset) {
+          throw new Error(`Kernel not found for architecture: ${arch}`);
+        }
+
+        // Extract version from filename
+        const versionMatch = kernelAsset.name.match(/^mihomo-darwin-(?:amd64|arm64)-(.+)\.gz$/i);
+
+        if (!versionMatch || !versionMatch[1]) {
+          throw new Error('Could not extract version from kernel filename');
+        }
+
+        versionHash = versionMatch[1];
+
+        guiMainLog('install-mihomo', 'GitHub API fallback succeeded', {
+          versionHash,
+          kernelName: kernelAsset.name,
+          downloadUrl: kernelAsset.browser_download_url,
+          fileSize: kernelAsset.size
+        });
+        resolvedKernelName = kernelAsset.name.replace(/\.gz$/i, '');
+        resolvedDownloadUrl = kernelAsset.browser_download_url;
+
+      } catch (apiErr) {
+        guiMainLog('install-mihomo', 'GitHub API fallback failed', {
+          error: apiErr.message
+        }, 'error');
+        return { ok: false, error: `Invalid version hash and API fallback failed: ${apiErr.message}` };
+      }
+    }
+
+    const arch = os.arch() === 'arm64' ? 'arm64' : 'amd64';
+    const kernelName = resolvedKernelName || `mihomo-darwin-${arch}-${versionHash}`;
+    const downloadUrl = resolvedDownloadUrl || `https://github.com/${validGithubUser}/mihomo/releases/download/${resolvedVersionBranch}/${kernelName}.gz`;
+
+    if (currentKernelMatchesVersion(currentVersion, versionHash)) {
+      guiMainLog('install-mihomo', 'Skipped installation because current kernel matches target version', {
+        currentVersion,
+        targetVersion: versionHash,
+        kernelName,
+      });
+      return {
+        ok: true,
+        skipped: true,
+        skipReason: 'current_version_same',
+        version: versionHash,
+        arch,
+        githubUser: validGithubUser,
+      };
+    }
+
+    if (backupKernelExists(backupDir, kernelName)) {
+      guiMainLog('install-mihomo', 'Skipped installation because backup already exists for target version', {
+        kernelName,
+        backupDir,
+      });
+      return {
+        ok: true,
+        skipped: true,
+        skipReason: 'backup_exists',
+        version: versionHash,
+        arch,
+        githubUser: validGithubUser,
+      };
+    }
+
+    guiMainLog('install-mihomo', 'Download URL constructed', {
+      kernelName,
+      downloadUrl,
+      arch
+    });
+
+    if (typeof onProgress === 'function') {
+      onProgress({ status: 'downloading', version: versionHash });
+    }
+
+    // Pre-check download URL with HEAD request
+    guiMainLog('install-mihomo', 'Pre-checking download URL', {
+      url: downloadUrl
+    });
+
+    try {
+      const headCheck = await new Promise((resolve, reject) => {
+        const headReq = https.request(downloadUrl, {
+          method: 'HEAD',
+          headers: {
+            'User-Agent': `ClashFox/${app.getVersion() || '0.0.0'}`,
+          },
+        }, (res) => {
+          const statusCode = Number(res.statusCode || 0);
+          guiMainLog('install-mihomo', 'HEAD request response', {
+            url: downloadUrl,
+            statusCode,
+            contentLength: res.headers['content-length'],
+            contentType: res.headers['content-type']
+          });
+
+          if (statusCode >= 300 && statusCode < 400 && res.headers.location) {
+            res.resume();
+            guiMainLog('install-mihomo', 'HEAD request redirect', {
+              from: downloadUrl,
+              to: res.headers.location,
+              statusCode
+            });
+            // Follow redirect
+            https.request(res.headers.location, {
+              method: 'HEAD',
+              headers: {
+                'User-Agent': `ClashFox/${app.getVersion() || '0.0.0'}`,
+              },
+            }, (redirectRes) => {
+              guiMainLog('install-mihomo', 'Redirect HEAD response', {
+                url: res.headers.location,
+                statusCode: redirectRes.statusCode,
+                contentLength: redirectRes.headers['content-length']
+              });
+
+              if (redirectRes.statusCode < 200 || redirectRes.statusCode >= 300) {
+                redirectRes.resume();
+                reject(new Error(`HTTP_${redirectRes.statusCode} (redirect)`));
+                return;
+              }
+
+              const contentLength = Number(redirectRes.headers['content-length'] || 0);
+              if (contentLength === 0) {
+                redirectRes.resume();
+                reject(new Error('Server reports Content-Length: 0'));
+                return;
+              }
+
+              resolve({
+                ok: true,
+                statusCode: redirectRes.statusCode,
+                contentLength,
+                finalUrl: res.headers.location
+              });
+            }).on('error', reject).end();
+            return;
+          }
+
+          if (statusCode < 200 || statusCode >= 300) {
+            res.resume();
+            reject(new Error(`HTTP_${statusCode}`));
+            return;
+          }
+
+          const contentLength = Number(res.headers['content-length'] || 0);
+          if (contentLength === 0) {
+            res.resume();
+            reject(new Error('Server reports Content-Length: 0'));
+            return;
+          }
+
+          resolve({
+            ok: true,
+            statusCode,
+            contentLength,
+            finalUrl: downloadUrl
+          });
+        });
+
+        headReq.on('error', (err) => {
+          reject(new Error(`HEAD request failed: ${err.message}`));
+        });
+
+        headReq.setTimeout(15000, () => {
+          headReq.destroy();
+          reject(new Error('HEAD request timeout'));
+        });
+
+        headReq.end();
+      });
+
+      guiMainLog('install-mihomo', 'URL pre-check passed', {
+        statusCode: headCheck.statusCode,
+        expectedSize: headCheck.contentLength,
+        finalUrl: headCheck.finalUrl
+      });
+    } catch (err) {
+      guiMainLog('install-mihomo', 'URL pre-check failed', {
+        url: downloadUrl,
+        error: err.message
+      }, 'error');
+      return { ok: false, error: `URL pre-check failed: ${err.message}` };
+    }
+
+      const tmpGzPath = path.join(APP_DATA_DIR, 'runtime', 'mihomo-download.gz');
+      const tmpCorePath = path.join(APP_DATA_DIR, 'runtime', 'mihomo-tmp');
+
+      try {
+        guiMainLog('install-mihomo', 'Starting download', {
+          url: downloadUrl,
+          destPath: tmpGzPath
+        });
+
+        await downloadKernelFile(downloadUrl, tmpGzPath, (downloaded, total) => {
+          if (installCancelRequested) {
+            throw new Error('INSTALL_CANCELLED');
+          }
+          if (typeof onProgress === 'function') {
+            onProgress({
+              status: 'downloading',
+              version: versionHash,
+              downloaded,
+              total,
+              progress: total > 0 ? Math.round((downloaded / total) * 100) : 0
+            });
+          }
+        });
+
+        if (installCancelRequested) {
+          return { ok: false, error: 'INSTALL_CANCELLED' };
+        }
+
+        // Verify downloaded file
+        if (!fs.existsSync(tmpGzPath)) {
+          guiMainLog('install-mihomo', 'Download verification failed', { error: 'file not created' }, 'error');
+          return { ok: false, error: 'Download failed: file not created' };
+        }
+
+        const fileStats = fs.statSync(tmpGzPath);
+        guiMainLog('install-mihomo', 'Download completed - verifying file', {
+          fileSize: fileStats.size,
+          path: tmpGzPath,
+          mtime: fileStats.mtime.toISOString(),
+          ctime: fileStats.ctime.toISOString()
+        });
+
+        // Check minimum expected size for a valid gzip file (at least 20 bytes for header + some data)
+        const MIN_GZIP_SIZE = 20;
+        if (fileStats.size < MIN_GZIP_SIZE) {
+          fs.unlinkSync(tmpGzPath);
+          guiMainLog('install-mihomo', 'Download verification failed', {
+            error: 'file is too small',
+            actualSize: fileStats.size,
+            minExpectedSize: MIN_GZIP_SIZE,
+            downloadUrl
+          }, 'error');
+          return { ok: false, error: `Download failed: file is too small (${fileStats.size} bytes, expected at least ${MIN_GZIP_SIZE} bytes)` };
+        }
+
+        if (fileStats.size === 0) {
+          fs.unlinkSync(tmpGzPath);
+          guiMainLog('install-mihomo', 'Download verification failed', {
+            error: 'file is empty',
+            downloadUrl,
+            kernelName
+          }, 'error');
+          return { ok: false, error: 'Download failed: file is empty. This may be caused by:' };
+        }
+
+        // Verify it's a gzip file by checking magic number
+        try {
+          const fd = fs.openSync(tmpGzPath, 'r');
+          const buffer = Buffer.alloc(2);
+          fs.readSync(fd, buffer, 0, 2, 0);
+          fs.closeSync(fd);
+
+          if (buffer[0] !== 0x1f || buffer[1] !== 0x8b) {
+            fs.unlinkSync(tmpGzPath);
+            guiMainLog('install-mihomo', 'Download verification failed', {
+              error: 'Not a valid gzip file',
+              magic: buffer.toString('hex')
+            }, 'error');
+            return { ok: false, error: 'Download failed: invalid gzip file' };
+          }
+
+          guiMainLog('install-mihomo', 'Gzip file verified', {
+            magic: buffer.toString('hex')
+          });
+        } catch (err) {
+          guiMainLog('install-mihomo', 'Gzip verification error', {
+            error: err.message
+          }, 'error');
+          // Continue anyway, let gunzip handle it
+        }
+
+      if (typeof onProgress === 'function') {
+        onProgress({ status: 'extracting', version: versionHash });
+      }
+
+      const gzip = zlib.createGunzip();
+      const input = fs.createReadStream(tmpGzPath);
+      const output = fs.createWriteStream(tmpCorePath);
+
+      guiMainLog('install-mihomo', 'Starting decompression', {
+        input: tmpGzPath,
+        inputSize: fileStats.size,
+        output: tmpCorePath
+      });
+
+      await new Promise((resolve, reject) => {
+        let decompressedBytes = 0;
+
+        input.pipe(gzip).pipe(output);
+        output.on('finish', () => {
+          guiMainLog('install-mihomo', 'Decompression finished', {
+            decompressedBytes
+          });
+          resolve();
+        });
+        output.on('error', (err) => {
+          guiMainLog('install-mihomo', 'Decompression output error', {
+            error: err.message,
+            stack: err.stack
+          }, 'error');
+          reject(new Error(`Decompression failed: ${err.message}`));
+        });
+        input.on('error', (err) => {
+          guiMainLog('install-mihomo', 'Decompression input error', {
+            error: err.message,
+            stack: err.stack
+          }, 'error');
+          reject(new Error(`Failed to read downloaded file: ${err.message}`));
+        });
+        gzip.on('error', (err) => {
+          guiMainLog('install-mihomo', 'Gzip decompression error', {
+            error: err.message,
+            code: err.code,
+            stack: err.stack
+          }, 'error');
+          reject(new Error(`Gzip error: ${err.message}`));
+        });
+        gzip.on('data', (chunk) => {
+          decompressedBytes += chunk.length;
+        });
+      });
+
+      if (installCancelRequested) {
+        return { ok: false, error: 'INSTALL_CANCELLED' };
+      }
+
+      // Verify extracted file
+      if (!fs.existsSync(tmpCorePath)) {
+        guiMainLog('install-mihomo', 'Decompression verification failed', { error: 'output file not created' }, 'error');
+        return { ok: false, error: 'Decompression failed: output file not created' };
+      }
+
+      const extractedStats = fs.statSync(tmpCorePath);
+      guiMainLog('install-mihomo', 'Decompression completed', {
+        fileSize: extractedStats.size,
+        path: tmpCorePath
+      });
+
+      if (extractedStats.size === 0) {
+        fs.unlinkSync(tmpCorePath);
+        guiMainLog('install-mihomo', 'Decompression verification failed', { error: 'output file is empty' }, 'error');
+        return { ok: false, error: 'Decompression failed: output file is empty' };
+      }
+
+      fs.chmodSync(tmpCorePath, 0o755);
+      guiMainLog('install-mihomo', 'File permissions set', { path: tmpCorePath });
+
+      if (typeof onProgress === 'function') {
+        onProgress({ status: 'installing', version: versionHash });
+      }
+
+      if (installCancelRequested) {
+        return { ok: false, error: 'INSTALL_CANCELLED' };
+      }
+
+      fs.copyFileSync(tmpCorePath, activeCore);
+      fs.chmodSync(activeCore, 0o755);
+
+      const backupTimestamp = formatBackupTimestamp();
+      const newBackupPath = path.join(backupDir, `mihomo.backup.${kernelName}.${backupTimestamp}`);
+      fs.copyFileSync(activeCore, newBackupPath);
+
+      if (typeof onProgress === 'function') {
+        onProgress({ status: 'complete', version: versionHash });
+      }
+
+      return {
+        ok: true,
+        version: versionHash,
+        arch,
+        githubUser: validGithubUser,
+      };
+    } finally {
+      if (fs.existsSync(tmpGzPath)) {
+        fs.unlinkSync(tmpGzPath);
+      }
+      if (fs.existsSync(tmpCorePath)) {
+        fs.unlinkSync(tmpCorePath);
+      }
+    }
+  } catch (err) {
+    guiMainLog('install-mihomo', 'Installation error', {
+      error: err && err.message ? err.message : 'Unknown error',
+      stack: err && err.stack ? err.stack : undefined
+    }, 'error');
+    return {
+      ok: false,
+      error: err && err.message ? err.message : 'INSTALL_FAILED',
+    };
+  } finally {
+    isJsInstalling = false;
+    installCancelRequested = false;
   }
 }
 
@@ -9550,6 +10650,12 @@ app.whenReady().then(() => {
       result = listKernelFilesFromFs();
     } else if (cmd === 'backups') {
       result = listBackupFilesFromFs();
+    } else if (cmd === 'switch') {
+      const indexValues = parseCommandOptionValues(sanitizedArgs, '--index');
+      result = switchKernelBackupFromFs(indexValues[0] || '');
+    } else if (cmd === 'delete-backups') {
+      const targetPaths = parseCommandOptionValues(sanitizedArgs, '--path');
+      result = deleteBackupFilesFromFs(targetPaths);
     } else {
       result = await runBridgeWithAutoAuth(cmd, sanitizedArgs, options);
     }
@@ -9958,19 +11064,22 @@ app.whenReady().then(() => {
     hideTrayPanelWindow();
   });
   
-  // 处理取消命令，只取消安装进程
+  // 处理取消命令，支持 Bash 进程和 JS 实现的安装
   ipcMain.handle('clashfox:cancelCommand', () => {
+    // 优先处理 Bash 进程安装
     if (currentInstallProcess) {
       const pid = currentInstallProcess.pid;
-      // console.log('[cancelCommand] Cancelling install process with PID:', pid);
       try {
-        // 发送SIGINT信号终止安装进程
         currentInstallProcess.kill('SIGINT');
         return { ok: true, message: 'Install cancellation initiated' };
       } catch (err) {
-        // console.error('[cancelCommand] Error cancelling install process:', err);
         return { ok: false, error: 'cancel_error', details: err.message };
       }
+    }
+    // 处理 JS 实现的安装取消
+    if (isJsInstalling) {
+      installCancelRequested = true;
+      return { ok: true, message: 'JS installation cancellation requested' };
     }
     return { ok: false, error: 'no_install_command_running' };
   });
@@ -10692,6 +11801,30 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:checkKernelUpdates', async (_event, options = {}) => {
     return checkKernelUpdates(options || {});
+  });
+
+  ipcMain.handle('clashfox:install-mihomo', async (event, options = {}) => {
+    const githubUser = options.githubUser || 'vernesong';
+    const version = options.version || '';
+    const channel = options.channel || 'default';
+
+    // Progress callback function
+    const onProgress = (progress) => {
+      event.sender.send('clashfox:install-mihomo:progress', progress);
+    };
+
+    guiMainLog('install-mihomo', 'Starting installation', { githubUser, version, channel });
+
+    const result = await installMihomo({ githubUser, version, channel, onProgress });
+
+    if (result.ok) {
+      guiMainLog('install-mihomo', 'Installation completed successfully', result);
+      await listKernelFilesFromFs();
+    } else {
+      guiMainLog('install-mihomo', 'Installation failed', { error: result.error }, 'error');
+    }
+
+    return result;
   });
 
   ipcMain.handle('clashfox:checkHelperUpdates', async (_event, options = {}) => {

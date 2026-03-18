@@ -431,6 +431,33 @@ export async function reloadMihomoConfig(source = {}, bridge) {
   ]);
 }
 
+export async function flushMihomoDnsCache(source = {}, bridge) {
+  return runConfigRequestCandidates(source, [
+    {
+      method: 'POST',
+      path: '/cache/dns/flush',
+    },
+  ]);
+}
+
+export async function flushMihomoFakeIpCache(source = {}, bridge) {
+  return runConfigRequestCandidates(source, [
+    {
+      method: 'POST',
+      path: '/cache/fakeip/flush',
+    },
+  ]);
+}
+
+export async function updateMihomoGeoData(source = {}, bridge) {
+  return runConfigRequestCandidates(source, [
+    {
+      method: 'POST',
+      path: '/configs/geo',
+    },
+  ]);
+}
+
 function requireBridgeMethod(bridge, methodName) {
   const api = getBridge(bridge);
   if (!api || typeof api[methodName] !== 'function') {

@@ -49,6 +49,15 @@ contextBridge.exposeInMainWorld('clashfox', {
   },
   checkUpdates: (options = {}) => ipcRenderer.invoke('clashfox:checkUpdates', options),
   checkKernelUpdates: (options = {}) => ipcRenderer.invoke('clashfox:checkKernelUpdates', options),
+  installMihomo: (options = {}) => ipcRenderer.invoke('clashfox:install-mihomo', options),
+  onInstallMihomoProgress: (handler) => {
+    if (typeof handler !== 'function') {
+      return () => {};
+    }
+    const listener = (_event, payload) => handler(payload);
+    ipcRenderer.on('clashfox:install-mihomo:progress', listener);
+    return () => ipcRenderer.removeListener('clashfox:install-mihomo:progress', listener);
+  },
   checkHelperUpdates: (options = {}) => ipcRenderer.invoke('clashfox:checkHelperUpdates', options),
   installHelper: () => ipcRenderer.invoke('clashfox:installHelper'),
   uninstallHelper: () => ipcRenderer.invoke('clashfox:uninstallHelper'),
