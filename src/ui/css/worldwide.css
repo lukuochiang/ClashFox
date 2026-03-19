@@ -190,14 +190,33 @@ body {
   pointer-events: auto !important;
 }
 
+/* 重置Leaflet marker的默认样式，防止圆圈效果 */
+.leaflet-marker-icon {
+  box-shadow: none !important;
+}
+
+/* 只在远程节点上应用圆圈样式 */
+.remote-pulse-marker svg {
+  display: block !important;
+  filter: drop-shadow(0 0 3px rgba(47, 143, 216, 0.5));
+}
+
+/* Local Mac节点不应该有任何圆形装饰 */
+.world-local-computer-icon::before,
+.world-local-computer-icon::after {
+  content: none !important;
+  display: none !important;
+}
+
 /* Local Mac 节点 - 完全禁用所有动画效果 */
 .world-local-computer-icon {
-  background: transparent;
-  border: 0;
-  display: grid;
-  place-items: center;
+  background: transparent !important;
+  border: none !important;
+  display: grid !important;
+  place-items: center !important;
   animation: none !important;
   transition: none !important;
+  box-shadow: none !important;
 }
 
 .world-local-computer-icon *,
@@ -211,6 +230,21 @@ body {
 .world-local-computer-core svg path {
   animation: none !important;
   transition: none !important;
+  box-shadow: none !important;
+}
+
+/* 特别禁用pulse相关的样式 */
+.world-local-computer-icon .remote-pulse-circle,
+.world-local-computer-icon circle,
+.world-local-computer-icon .remote-pulse-marker {
+  display: none !important;
+  animation: none !important;
+  transition: none !important;
+}
+
+/* 确保.world-local-computer-icon不会包含任何circle元素 */
+.world-local-computer-icon svg circle {
+  display: none !important;
 }
 
 .world-link-path {
@@ -248,6 +282,7 @@ body {
     radial-gradient(circle at 40% 35%, rgba(152, 199, 236, 0.94), rgba(61, 111, 158, 0.96) 70%),
     linear-gradient(160deg, #25496a, #1a324b);
   box-shadow: 0 0 0 2px rgba(15, 27, 38, 0.22), 0 8px 18px rgba(0, 0, 0, 0.34);
+  position: relative !important;
 }
 
 .world-local-computer-core svg {
@@ -258,6 +293,25 @@ body {
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+/* 确保world-local-computer-icon的外层容器没有额外的圆圈 */
+.world-local-computer-icon > .leaflet-marker-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* 远程端点呼吸灯标记 */
+.remote-pulse-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.remote-pulse-marker svg {
+  display: block !important;
+  filter: drop-shadow(0 0 3px rgba(47, 143, 216, 0.5));
 }
 
 html[data-theme="day"] body {
