@@ -246,10 +246,6 @@ function buildMac() {
   }
 }
 
-function validateRuntimeLayout() {
-  run('node', ['static/scripts/validate-runtime-layout.js']);
-}
-
 function validateBuiltArtifacts() {
   run('node', ['static/scripts/validate-packaged-mac.js']);
 }
@@ -343,7 +339,6 @@ writeBuildConfigs();
 
 let exitCode = 0;
 try {
-  validateRuntimeLayout();
   buildMac();
   validateBuiltArtifacts();
   if (dualOutputFromHelper) {

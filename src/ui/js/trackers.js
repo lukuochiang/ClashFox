@@ -510,9 +510,9 @@ function initMap() {
   }
   switchToProvider(0);
 
-  pointsLayer = L.layerGroup().addTo(map);
-  linksLayer = L.layerGroup().addTo(map);
-  flowLayer = L.layerGroup().addTo(map);
+  linksLayer = L.layerGroup({ zIndex: 10 }).addTo(map);
+  flowLayer = L.layerGroup({ zIndex: 20 }).addTo(map);
+  pointsLayer = L.layerGroup({ zIndex: 30 }).addTo(map);
   return map;
 }
 
@@ -611,10 +611,11 @@ function drawSnapshot(snapshot) {
     const marker = L.circleMarker([lat, lon], {
       radius: Math.min(12, Math.max(4, 3.8 + Math.log2(Number(point.count || 1) + 1))),
       color: '#35587a',
-      fillColor: '#6b8fb3',
+      fillColor: '#f6f7f8',
       fillOpacity: 0.96,
       weight: 2.1,
-      renderer: canvasRenderer || undefined,
+      renderer: undefined, // 使用 SVG 渲染，层级在 Canvas 之上
+      pane: 'markerPane', // markerPane zIndex: 600
     });
     marker.bindTooltip(`${pointLabel(point)} · ${Number(point.count || 0)} ${getI18nValue('worldwide.labels.connections', 'conns')}`, {
       direction: 'top',
@@ -633,6 +634,7 @@ function drawSnapshot(snapshot) {
       className: 'world-link-path',
       interactive: false,
       renderer: canvasRenderer || undefined,
+      pane: 'overlayPane', // overlayPane zIndex: 400
     }).addTo(linksLayer);
     flowCandidates.push({
       from: localLatLng,

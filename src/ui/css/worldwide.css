@@ -186,6 +186,33 @@ body {
   display: none !important;
 }
 
+.pulse-marker {
+  pointer-events: auto !important;
+}
+
+/* Local Mac 节点 - 完全禁用所有动画效果 */
+.world-local-computer-icon {
+  background: transparent;
+  border: 0;
+  display: grid;
+  place-items: center;
+  animation: none !important;
+  transition: none !important;
+}
+
+.world-local-computer-icon *,
+.world-local-computer-icon svg,
+.world-local-computer-icon svg *,
+.world-local-computer-core,
+.world-local-computer-core *,
+.world-local-computer-core svg,
+.world-local-computer-core svg *,
+.world-local-computer-core svg rect,
+.world-local-computer-core svg path {
+  animation: none !important;
+  transition: none !important;
+}
+
 .world-link-path {
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -208,13 +235,6 @@ body {
   font-size: 10px;
   line-height: 1.2;
   white-space: nowrap;
-}
-
-.world-local-computer-icon {
-  background: transparent;
-  border: 0;
-  display: grid;
-  place-items: center;
 }
 
 .world-local-computer-core {
@@ -296,6 +316,8 @@ html[data-theme="day"] .worldwide-detail-title {
 html[data-theme="day"] #worldwideDetailBody {
   color: #284359;
 }
+
+
 
 .world-link-flow {
   filter: drop-shadow(0 0 2px rgba(150, 232, 255, 0.52));

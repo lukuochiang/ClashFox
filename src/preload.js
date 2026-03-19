@@ -69,6 +69,8 @@ contextBridge.exposeInMainWorld('clashfox', {
   openHelperLogs: () => ipcRenderer.invoke('clashfox:openHelperLogs'),
   openPath: (targetPath) => ipcRenderer.invoke('clashfox:openPath', targetPath),
   getOverviewNetworkSnapshot: () => ipcRenderer.invoke('clashfox:getOverviewNetworkSnapshot'),
+  installPanel: (preset) => ipcRenderer.invoke('clashfox:installPanel', preset),
+  activatePanel: (panelName) => ipcRenderer.invoke('clashfox:activatePanel', panelName),
   getMihomoVersion: (source = {}) => ipcRenderer.invoke('clashfox:getMihomoVersion', source),
   getMihomoConfigs: (source = {}) => ipcRenderer.invoke('clashfox:getMihomoConfigs', source),
   updateMihomoConfig: (patch = {}, source = {}) => ipcRenderer.invoke('clashfox:updateMihomoConfig', patch, source),

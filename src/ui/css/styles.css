@@ -6330,8 +6330,13 @@ body[data-page="settings"] .proxy-config-columns .form-row > label:first-child {
 }
 
 body[data-page="settings"] .proxy-config-header-actions {
-  gap: 6px;
   flex: 0 0 auto;
+  margin-top: -13px;
+}
+
+body[data-page="settings"] .panel-manager-header-actions {
+  flex: 0 0 auto;
+  margin-top: -13px;
 }
 
 body[data-page="settings"] .proxy-config-header-actions .icon-btn {

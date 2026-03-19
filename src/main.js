@@ -33,19 +33,6 @@ function ensureAppDirs() {
   }
 }
 
-function getBridgePath() {
-  const candidates = [
-    path.join(ROOT_DIR, 'static', 'scripts', 'gui_bridge.sh'),
-    path.join(process.resourcesPath || '', 'scripts', 'gui_bridge.sh'),
-    path.join(ROOT_DIR, 'scripts', 'gui_bridge.sh'),
-  ];
-  for (const candidate of candidates) {
-    if (candidate && fs.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-  return path.join(ROOT_DIR, 'static', 'scripts', 'gui_bridge.sh');
-}
 let mainWindow = null;
 let tray = null;
 let trayMenuWindow = null;
@@ -94,12 +81,6 @@ let isJsInstalling = false; // 标记是否正在进行 JS 安装
 let globalSettings = {
   debugMode: true, // 是否启用调试模式
 };
-function guiMainLog(scope, message, payload = null, level = 'log') {
-  void scope;
-  void message;
-  void payload;
-  void level;
-}
 
 function buildTrayMenuDataSignature(value = null) {
   try {
@@ -189,50 +170,6 @@ function truncateLogPayload(value, maxLength = 1200) {
 
 let helperRequestSeq = 0;
 
-function nextHelperRequestId() {
-  helperRequestSeq += 1;
-  return `helper-${Date.now()}-${helperRequestSeq}`;
-}
-
-function resolveHelperRequestKind(command = '', method = 'GET', path = '') {
-  const normalizedCommand = String(command || '').trim().toLowerCase();
-  const normalizedMethod = String(method || '').trim().toUpperCase();
-  const normalizedPath = String(path || '').trim();
-  if (normalizedCommand === 'status' && normalizedMethod === 'GET' && normalizedPath === '/v1/core/status') {
-    return 'auto';
-  }
-  if (normalizedCommand === 'ping' && normalizedMethod === 'GET' && normalizedPath === '/health') {
-    return 'auto';
-  }
-  return 'manual';
-}
-
-function shouldSuppressHelperRequestLog(command = '', method = 'GET', path = '', level = 'log', ok = true) {
-  if (level !== 'log') {
-    return false;
-  }
-  if (resolveHelperRequestKind(command, method, path) === 'auto' && ok) {
-    return true;
-  }
-  return false;
-}
-
-function resolveMihomoRequestKind(method = 'GET', url = '') {
-  const normalizedMethod = String(method || '').trim().toUpperCase();
-  const normalizedUrl = String(url || '').trim();
-  if (normalizedMethod === 'GET' && /\/configs(?:\?|$)/i.test(normalizedUrl)) {
-    return 'auto';
-  }
-  return 'manual';
-}
-
-function shouldSuppressMihomoRequestLog(method = 'GET', url = '', level = 'log', ok = true) {
-  if (level !== 'log') {
-    return false;
-  }
-  return resolveMihomoRequestKind(method, url) === 'auto' && ok;
-}
-
 let isQuitting = false;
 const CORE_STARTUP_ESTIMATE_MIN_MS = 900;
 const CORE_STARTUP_ESTIMATE_MAX_MS = 10000;
@@ -246,6 +183,7 @@ const PRIVILEGED_COMMANDS = new Set([
   'system-proxy-enable',
   'system-proxy-disable',
   'system-proxy-status',
+  'track-connections'
 ]);
 const DANGEROUS_BRIDGE_ARGS = new Set(['--config-dir', '--core-dir', '--data-dir']);
 const DANGEROUS_BRIDGE_ARG_PREFIXES = ['--config-dir=', '--core-dir=', '--data-dir='];
@@ -321,6 +259,20 @@ const KERNEL_BETA_VERSION_TXT_URL = {
   vernesong: 'https://github.com/vernesong/mihomo/releases/download/Prerelease-Alpha/version.txt',
   MetaCubeX: 'https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/version.txt',
 };
+const PANEL_PRESETS = {
+  zashboard: {
+    name: 'zashboard',
+    displayName: 'Zashboard',
+    url: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
+    'external-ui-url': 'ui',
+  },
+  metacubexd: {
+    name: 'metacubexd',
+    displayName: 'MetaCubeXD',
+    url: 'https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz',
+    'external-ui-url': 'ui',
+  },
+};
 const DEFAULT_MAIN_WINDOW_WIDTH = 980;
 const DEFAULT_MAIN_WINDOW_HEIGHT = 640;
 const MIN_MAIN_WINDOW_WIDTH = 980;
@@ -379,7 +331,7 @@ const I18N = require(path.join(APP_PATH, 'src', 'ui', 'locales', 'i18n.js'));
 const {
   normalizeLocaleCode,
   resolveLocaleFromSettings,
-} = require(path.join(APP_PATH, 'src', 'ui', 'js', 'locale-utils.js'));
+} = require(path.join(APP_PATH, 'src', 'ui', 'utils', 'locale-utils.js'));
 
 function resolveTrayLang() {
   const settings = readAppSettings();
@@ -1269,15 +1221,8 @@ function listConfigFilesFromFs() {
         return String(a.name || '').localeCompare(String(b.name || ''));
       })
       .map(({ modifiedAt, ...rest }) => rest);
-    guiMainLog('config', 'listConfigFilesFromFs success', {
-      configDir,
-      count: items.length,
-    });
     return { ok: true, data: items };
   } catch (error) {
-    guiMainLog('config', 'listConfigFilesFromFs failed', {
-      message: String(error && error.message ? error.message : error || ''),
-    }, 'error');
     return {
       ok: false,
       error: 'configs_read_failed',
@@ -1348,17 +1293,8 @@ function listKernelFilesFromFs() {
     });
     
     const result = items.map(({ modifiedAt, ...rest }) => rest);
-    
-    guiMainLog('kernel', 'listKernelFilesFromFs success', {
-      coreDir,
-      backupDir,
-      count: result.length,
-    });
     return { ok: true, data: result };
   } catch (error) {
-    guiMainLog('kernel', 'listKernelFilesFromFs failed', {
-      message: String(error && error.message ? error.message : error || ''),
-    }, 'error');
     return {
       ok: false,
       error: 'kernels_read_failed',
@@ -1417,16 +1353,8 @@ function listBackupFilesFromFs() {
       index: index + 1,
       ...item,
     }));
-    
-    guiMainLog('kernel', 'listBackupFilesFromFs success', {
-      backupDir,
-      count: result.length,
-    });
     return { ok: true, data: result };
   } catch (error) {
-    guiMainLog('kernel', 'listBackupFilesFromFs failed', {
-      message: String(error && error.message ? error.message : error || ''),
-    }, 'error');
     return {
       ok: false,
       error: 'backups_read_failed',
@@ -2745,33 +2673,15 @@ async function downloadKernelFile(url, destPath, onProgress) {
       }, (res) => {
         const statusCode = Number(res.statusCode || 0);
 
-        guiMainLog('install-mihomo', 'Download response', {
-          url: currentUrl,
-          statusCode,
-          contentLength: res.headers['content-length'],
-          location: res.headers.location,
-          contentType: res.headers['content-type']
-        });
-
         if (statusCode >= 300 && statusCode < 400 && res.headers.location) {
           const nextUrl = new URL(res.headers.location, currentUrl).toString();
           res.resume();
-          guiMainLog('install-mihomo', 'Following redirect', {
-            from: currentUrl,
-            to: nextUrl,
-            statusCode
-          });
           requestDownload(nextUrl, redirectCount + 1);
           return;
         }
 
         if (statusCode < 200 || statusCode >= 300) {
           res.resume();
-          guiMainLog('install-mihomo', 'Download failed', {
-            url: currentUrl,
-            statusCode,
-            statusMessage: res.statusMessage
-          }, 'error');
           rejectOnce(new Error(`HTTP_${statusCode}`));
           return;
         }
@@ -2780,28 +2690,12 @@ async function downloadKernelFile(url, destPath, onProgress) {
         totalBytes = contentLength !== undefined && contentLength !== null ? Number(contentLength) : 0;
         if (contentLength !== undefined && contentLength !== null && totalBytes === 0) {
           res.resume();
-          guiMainLog('install-mihomo', 'Download rejected', {
-            url: currentUrl,
-            reason: 'Content-Length is 0',
-            contentLength
-          }, 'error');
           rejectOnce(new Error('Download failed: server returned empty content'));
           return;
         }
 
-        guiMainLog('install-mihomo', 'Download started', {
-          url: currentUrl,
-          totalBytes: totalBytes || 'unknown',
-          contentLength,
-          destPath
-        });
-
         if (!res.readable) {
           res.resume();
-          guiMainLog('install-mihomo', 'Download rejected', {
-            url: currentUrl,
-            reason: 'Response is not readable'
-          }, 'error');
           rejectOnce(new Error('Download failed: response not readable'));
           return;
         }
@@ -2824,20 +2718,12 @@ async function downloadKernelFile(url, destPath, onProgress) {
           if (checkCancel() || settled) {
             return;
           }
-          guiMainLog('install-mihomo', 'Download stream ended', {
-            downloadedBytes,
-            totalBytes,
-            incomplete: totalBytes > 0 && downloadedBytes < totalBytes
-          });
         });
 
         res.on('error', (err) => {
           if (checkCancel() || settled) {
             return;
           }
-          guiMainLog('install-mihomo', 'Download stream error', {
-            error: err.message
-          }, 'error');
           rejectOnce(new Error(`Download error: ${err.message}`));
         });
 
@@ -2850,28 +2736,13 @@ async function downloadKernelFile(url, destPath, onProgress) {
               return;
             }
             if (downloadedBytes === 0) {
-              guiMainLog('install-mihomo', 'Download failed', {
-                reason: 'File finished but no data written',
-                destPath,
-                downloadedBytes
-              }, 'error');
               rejectOnce(new Error('Download failed: file is empty'));
               return;
             }
             if (totalBytes > 0 && downloadedBytes !== totalBytes) {
-              guiMainLog('install-mihomo', 'Download size mismatch', {
-                expected: totalBytes,
-                received: downloadedBytes,
-                destPath
-              }, 'error');
               rejectOnce(new Error(`Download size mismatch: expected ${totalBytes} bytes, got ${downloadedBytes}`));
               return;
             }
-            guiMainLog('install-mihomo', 'Download file finished successfully', {
-              destPath,
-              downloadedBytes,
-              totalBytes: totalBytes || 'unknown'
-            });
             resolveOnce();
           });
         });
@@ -2880,10 +2751,6 @@ async function downloadKernelFile(url, destPath, onProgress) {
           if (settled) {
             return;
           }
-          guiMainLog('install-mihomo', 'Download file error', {
-            destPath,
-            error: err.message
-          }, 'error');
           rejectOnce(new Error(`File write error: ${err.message}`));
         });
       });
@@ -2892,10 +2759,6 @@ async function downloadKernelFile(url, destPath, onProgress) {
         if (checkCancel() || settled) {
           return;
         }
-        guiMainLog('install-mihomo', 'Download request error', {
-          url: currentUrl,
-          error: err.message
-        }, 'error');
         rejectOnce(new Error(`Request error: ${err.message}`));
       });
 
@@ -2903,11 +2766,152 @@ async function downloadKernelFile(url, destPath, onProgress) {
         if (checkCancel() || settled) {
           return;
         }
-        guiMainLog('install-mihomo', 'Download timeout', { url: currentUrl }, 'error');
         rejectOnce(new Error('Download timeout'));
       });
 
       req.setTimeout(120000);
+    };
+
+    requestDownload(url);
+  });
+}
+
+async function downloadPanelFile(url, destPath, onProgress) {
+  return new Promise((resolve, reject) => {
+    let downloadedBytes = 0;
+    let totalBytes = 0;
+    let req = null;
+    let file = null;
+    let settled = false;
+
+    const removePartialFile = () => {
+      if (fs.existsSync(destPath)) {
+        try {
+          fs.unlinkSync(destPath);
+        } catch {}
+      }
+    };
+
+    const rejectOnce = (err) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (req) {
+        try {
+          req.destroy();
+        } catch {}
+      }
+      if (file) {
+        try {
+          file.destroy();
+        } catch {}
+      }
+      removePartialFile();
+      reject(err);
+    };
+
+    const resolveOnce = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve();
+    };
+
+    const requestDownload = (currentUrl, redirectCount = 0) => {
+      if (redirectCount > 5) {
+        rejectOnce(new Error('Too many redirects'));
+        return;
+      }
+
+      req = https.get(currentUrl, {
+        headers: {
+          'User-Agent': `ClashFox/${app.getVersion() || '0.0.0'}`,
+          Accept: 'application/octet-stream,*/*',
+        },
+      }, (res) => {
+        const statusCode = Number(res.statusCode || 0);
+
+        if (statusCode >= 300 && statusCode < 400 && res.headers.location) {
+          const nextUrl = new URL(res.headers.location, currentUrl).toString();
+          res.resume();
+          requestDownload(nextUrl, redirectCount + 1);
+          return;
+        }
+
+        if (statusCode < 200 || statusCode >= 300) {
+          res.resume();
+          rejectOnce(new Error(`HTTP_${statusCode}`));
+          return;
+        }
+
+        const contentLength = res.headers['content-length'];
+        totalBytes = contentLength !== undefined && contentLength !== null ? Number(contentLength) : 0;
+        if (contentLength !== undefined && contentLength !== null && totalBytes === 0) {
+          res.resume();
+          rejectOnce(new Error('Download failed: server returned empty content'));
+          return;
+        }
+
+        if (!res.readable) {
+          res.resume();
+          rejectOnce(new Error('Download failed: response not readable'));
+          return;
+        }
+
+        removePartialFile();
+        file = fs.createWriteStream(destPath);
+        res.pipe(file);
+
+        res.on('data', (chunk) => {
+          downloadedBytes += chunk.length;
+          if (typeof onProgress === 'function' && totalBytes > 0) {
+            onProgress(downloadedBytes, totalBytes);
+          }
+        });
+
+        res.on('error', (err) => {
+          if (settled) {
+            return;
+          }
+          rejectOnce(new Error(`Download error: ${err.message}`));
+        });
+
+        file.on('finish', () => {
+          if (settled) {
+            return;
+          }
+          file.close(() => {
+            if (settled) {
+              return;
+            }
+            if (downloadedBytes === 0) {
+              rejectOnce(new Error('Download failed: file is empty'));
+              return;
+            }
+            if (totalBytes > 0 && downloadedBytes !== totalBytes) {
+              rejectOnce(new Error(`Download size mismatch: expected ${totalBytes} bytes, got ${downloadedBytes}`));
+              return;
+            }
+            resolveOnce();
+          });
+        });
+
+        file.on('error', (err) => {
+          if (settled) {
+            return;
+          }
+          rejectOnce(new Error(`File write error: ${err.message}`));
+        });
+      });
+
+      req.on('error', (err) => {
+        if (settled) {
+          return;
+        }
+        rejectOnce(new Error(`Request error: ${err.message}`));
+      });
     };
 
     requestDownload(url);
@@ -3164,10 +3168,6 @@ async function installMihomo({ githubUser = 'vernesong', version = '', channel =
 
     let versionInfo = '';
     let allowApiOnlyFallback = false;
-    guiMainLog('install-mihomo', 'Fetching version info', {
-      url: versionUrl,
-      versionBranch: resolvedVersionBranch
-    });
 
     try {
       const versionLookup = await fetchVersionInfoByBranchCandidates(validGithubUser, resolvedVersionBranch);
@@ -3177,27 +3177,10 @@ async function installMihomo({ githubUser = 'vernesong', version = '', channel =
       versionInfo = String(versionLookup.versionInfo || '');
       resolvedVersionBranch = versionLookup.resolvedBranch || resolvedVersionBranch;
       versionUrl = versionLookup.versionUrl || versionUrl;
-      guiMainLog('install-mihomo', 'Version info fetched', {
-        versionInfo: versionInfo.trim(),
-        versionInfoRaw: JSON.stringify(versionInfo),
-        length: versionInfo.length,
-        trimmedLength: versionInfo.trim().length,
-        resolvedVersionBranch,
-        url: versionUrl,
-      });
     } catch (err) {
       if (String(err && err.message ? err.message : '').includes('HTTP_404')) {
         allowApiOnlyFallback = true;
-        guiMainLog('install-mihomo', 'Version info missing, switching to GitHub API lookup', {
-          error: err.message,
-          url: versionUrl,
-          versionBranch: resolvedVersionBranch,
-        }, 'warn');
       } else {
-        guiMainLog('install-mihomo', 'Failed to fetch version info', {
-          error: err.message,
-          url: versionUrl
-        }, 'error');
         return { ok: false, error: `Failed to fetch version info: ${err.message}` };
       }
     }
@@ -3207,11 +3190,6 @@ async function installMihomo({ githubUser = 'vernesong', version = '', channel =
     }
 
     if ((!versionInfo || /not found/i.test(versionInfo)) && !allowApiOnlyFallback) {
-      guiMainLog('install-mihomo', 'Version not found', {
-        versionInfo,
-        versionInfoRaw: JSON.stringify(versionInfo),
-        url: versionUrl
-      }, 'error');
       return { ok: false, error: 'Version not found' };
     }
 
@@ -3221,19 +3199,7 @@ async function installMihomo({ githubUser = 'vernesong', version = '', channel =
     let resolvedKernelName = '';
     let resolvedDownloadUrl = '';
 
-    guiMainLog('install-mihomo', 'Version parsing', {
-      trimmedVersion,
-      versionLines,
-      versionHash,
-      versionHashLength: versionHash.length
-    });
-
     if (!versionHash) {
-      guiMainLog('install-mihomo', 'Invalid version hash, trying GitHub API fallback', {
-        versionInfo: versionInfo.trim(),
-        versionLines,
-        reason: 'Could not extract a valid install version identifier from version.txt'
-      }, 'warn');
 
       // Fallback: Use GitHub API to get kernel info
       try {
@@ -3265,20 +3231,10 @@ async function installMihomo({ githubUser = 'vernesong', version = '', channel =
         }
 
         versionHash = versionMatch[1];
-
-        guiMainLog('install-mihomo', 'GitHub API fallback succeeded', {
-          versionHash,
-          kernelName: kernelAsset.name,
-          downloadUrl: kernelAsset.browser_download_url,
-          fileSize: kernelAsset.size
-        });
         resolvedKernelName = kernelAsset.name.replace(/\.gz$/i, '');
         resolvedDownloadUrl = kernelAsset.browser_download_url;
 
       } catch (apiErr) {
-        guiMainLog('install-mihomo', 'GitHub API fallback failed', {
-          error: apiErr.message
-        }, 'error');
         return { ok: false, error: `Invalid version hash and API fallback failed: ${apiErr.message}` };
       }
     }
@@ -3288,11 +3244,6 @@ async function installMihomo({ githubUser = 'vernesong', version = '', channel =
     const downloadUrl = resolvedDownloadUrl || `https://github.com/${validGithubUser}/mihomo/releases/download/${resolvedVersionBranch}/${kernelName}.gz`;
 
     if (currentKernelMatchesVersion(currentVersion, versionHash)) {
-      guiMainLog('install-mihomo', 'Skipped installation because current kernel matches target version', {
-        currentVersion,
-        targetVersion: versionHash,
-        kernelName,
-      });
       return {
         ok: true,
         skipped: true,
@@ -3304,10 +3255,6 @@ async function installMihomo({ githubUser = 'vernesong', version = '', channel =
     }
 
     if (backupKernelExists(backupDir, kernelName)) {
-      guiMainLog('install-mihomo', 'Skipped installation because backup already exists for target version', {
-        kernelName,
-        backupDir,
-      });
       return {
         ok: true,
         skipped: true,
@@ -3318,20 +3265,11 @@ async function installMihomo({ githubUser = 'vernesong', version = '', channel =
       };
     }
 
-    guiMainLog('install-mihomo', 'Download URL constructed', {
-      kernelName,
-      downloadUrl,
-      arch
-    });
-
     if (typeof onProgress === 'function') {
       onProgress({ status: 'downloading', version: versionHash });
     }
 
     // Pre-check download URL with HEAD request
-    guiMainLog('install-mihomo', 'Pre-checking download URL', {
-      url: downloadUrl
-    });
 
     try {
       const headCheck = await new Promise((resolve, reject) => {
@@ -3342,20 +3280,9 @@ async function installMihomo({ githubUser = 'vernesong', version = '', channel =
           },
         }, (res) => {
           const statusCode = Number(res.statusCode || 0);
-          guiMainLog('install-mihomo', 'HEAD request response', {
-            url: downloadUrl,
-            statusCode,
-            contentLength: res.headers['content-length'],
-            contentType: res.headers['content-type']
-          });
 
           if (statusCode >= 300 && statusCode < 400 && res.headers.location) {
             res.resume();
-            guiMainLog('install-mihomo', 'HEAD request redirect', {
-              from: downloadUrl,
-              to: res.headers.location,
-              statusCode
-            });
             // Follow redirect
             https.request(res.headers.location, {
               method: 'HEAD',
@@ -3363,11 +3290,6 @@ async function installMihomo({ githubUser = 'vernesong', version = '', channel =
                 'User-Agent': `ClashFox/${app.getVersion() || '0.0.0'}`,
               },
             }, (redirectRes) => {
-              guiMainLog('install-mihomo', 'Redirect HEAD response', {
-                url: res.headers.location,
-                statusCode: redirectRes.statusCode,
-                contentLength: redirectRes.headers['content-length']
-              });
 
               if (redirectRes.statusCode < 200 || redirectRes.statusCode >= 300) {
                 redirectRes.resume();
@@ -3424,17 +3346,7 @@ async function installMihomo({ githubUser = 'vernesong', version = '', channel =
 
         headReq.end();
       });
-
-      guiMainLog('install-mihomo', 'URL pre-check passed', {
-        statusCode: headCheck.statusCode,
-        expectedSize: headCheck.contentLength,
-        finalUrl: headCheck.finalUrl
-      });
     } catch (err) {
-      guiMainLog('install-mihomo', 'URL pre-check failed', {
-        url: downloadUrl,
-        error: err.message
-      }, 'error');
       return { ok: false, error: `URL pre-check failed: ${err.message}` };
     }
 
@@ -3442,10 +3354,6 @@ async function installMihomo({ githubUser = 'vernesong', version = '', channel =
       const tmpCorePath = path.join(APP_DATA_DIR, 'runtime', 'mihomo-tmp');
 
       try {
-        guiMainLog('install-mihomo', 'Starting download', {
-          url: downloadUrl,
-          destPath: tmpGzPath
-        });
 
         await downloadKernelFile(downloadUrl, tmpGzPath, (downloaded, total) => {
           if (installCancelRequested) {
@@ -3468,38 +3376,20 @@ async function installMihomo({ githubUser = 'vernesong', version = '', channel =
 
         // Verify downloaded file
         if (!fs.existsSync(tmpGzPath)) {
-          guiMainLog('install-mihomo', 'Download verification failed', { error: 'file not created' }, 'error');
           return { ok: false, error: 'Download failed: file not created' };
         }
 
         const fileStats = fs.statSync(tmpGzPath);
-        guiMainLog('install-mihomo', 'Download completed - verifying file', {
-          fileSize: fileStats.size,
-          path: tmpGzPath,
-          mtime: fileStats.mtime.toISOString(),
-          ctime: fileStats.ctime.toISOString()
-        });
 
         // Check minimum expected size for a valid gzip file (at least 20 bytes for header + some data)
         const MIN_GZIP_SIZE = 20;
         if (fileStats.size < MIN_GZIP_SIZE) {
           fs.unlinkSync(tmpGzPath);
-          guiMainLog('install-mihomo', 'Download verification failed', {
-            error: 'file is too small',
-            actualSize: fileStats.size,
-            minExpectedSize: MIN_GZIP_SIZE,
-            downloadUrl
-          }, 'error');
           return { ok: false, error: `Download failed: file is too small (${fileStats.size} bytes, expected at least ${MIN_GZIP_SIZE} bytes)` };
         }
 
         if (fileStats.size === 0) {
           fs.unlinkSync(tmpGzPath);
-          guiMainLog('install-mihomo', 'Download verification failed', {
-            error: 'file is empty',
-            downloadUrl,
-            kernelName
-          }, 'error');
           return { ok: false, error: 'Download failed: file is empty. This may be caused by:' };
         }
 
@@ -3512,20 +3402,9 @@ async function installMihomo({ githubUser = 'vernesong', version = '', channel =
 
           if (buffer[0] !== 0x1f || buffer[1] !== 0x8b) {
             fs.unlinkSync(tmpGzPath);
-            guiMainLog('install-mihomo', 'Download verification failed', {
-              error: 'Not a valid gzip file',
-              magic: buffer.toString('hex')
-            }, 'error');
             return { ok: false, error: 'Download failed: invalid gzip file' };
           }
-
-          guiMainLog('install-mihomo', 'Gzip file verified', {
-            magic: buffer.toString('hex')
-          });
         } catch (err) {
-          guiMainLog('install-mihomo', 'Gzip verification error', {
-            error: err.message
-          }, 'error');
           // Continue anyway, let gunzip handle it
         }
 
@@ -3537,42 +3416,20 @@ async function installMihomo({ githubUser = 'vernesong', version = '', channel =
       const input = fs.createReadStream(tmpGzPath);
       const output = fs.createWriteStream(tmpCorePath);
 
-      guiMainLog('install-mihomo', 'Starting decompression', {
-        input: tmpGzPath,
-        inputSize: fileStats.size,
-        output: tmpCorePath
-      });
-
       await new Promise((resolve, reject) => {
         let decompressedBytes = 0;
 
         input.pipe(gzip).pipe(output);
         output.on('finish', () => {
-          guiMainLog('install-mihomo', 'Decompression finished', {
-            decompressedBytes
-          });
           resolve();
         });
         output.on('error', (err) => {
-          guiMainLog('install-mihomo', 'Decompression output error', {
-            error: err.message,
-            stack: err.stack
-          }, 'error');
           reject(new Error(`Decompression failed: ${err.message}`));
         });
         input.on('error', (err) => {
-          guiMainLog('install-mihomo', 'Decompression input error', {
-            error: err.message,
-            stack: err.stack
-          }, 'error');
           reject(new Error(`Failed to read downloaded file: ${err.message}`));
         });
         gzip.on('error', (err) => {
-          guiMainLog('install-mihomo', 'Gzip decompression error', {
-            error: err.message,
-            code: err.code,
-            stack: err.stack
-          }, 'error');
           reject(new Error(`Gzip error: ${err.message}`));
         });
         gzip.on('data', (chunk) => {
@@ -3586,24 +3443,17 @@ async function installMihomo({ githubUser = 'vernesong', version = '', channel =
 
       // Verify extracted file
       if (!fs.existsSync(tmpCorePath)) {
-        guiMainLog('install-mihomo', 'Decompression verification failed', { error: 'output file not created' }, 'error');
         return { ok: false, error: 'Decompression failed: output file not created' };
       }
 
       const extractedStats = fs.statSync(tmpCorePath);
-      guiMainLog('install-mihomo', 'Decompression completed', {
-        fileSize: extractedStats.size,
-        path: tmpCorePath
-      });
 
       if (extractedStats.size === 0) {
         fs.unlinkSync(tmpCorePath);
-        guiMainLog('install-mihomo', 'Decompression verification failed', { error: 'output file is empty' }, 'error');
         return { ok: false, error: 'Decompression failed: output file is empty' };
       }
 
       fs.chmodSync(tmpCorePath, 0o755);
-      guiMainLog('install-mihomo', 'File permissions set', { path: tmpCorePath });
 
       if (typeof onProgress === 'function') {
         onProgress({ status: 'installing', version: versionHash });
@@ -3639,10 +3489,6 @@ async function installMihomo({ githubUser = 'vernesong', version = '', channel =
       }
     }
   } catch (err) {
-    guiMainLog('install-mihomo', 'Installation error', {
-      error: err && err.message ? err.message : 'Unknown error',
-      stack: err && err.stack ? err.stack : undefined
-    }, 'error');
     return {
       ok: false,
       error: err && err.message ? err.message : 'INSTALL_FAILED',
@@ -3953,6 +3799,49 @@ function readProxyPortsFromConfigPath(configPath = '') {
     return { port, socksPort };
   } catch {
     return { port: '', socksPort: '' };
+  }
+}
+
+function readControllerAccessFromConfigPath(configPath = '') {
+  try {
+    if (!configPath || !fs.existsSync(configPath)) {
+      return { controller: '', secret: '' };
+    }
+    const raw = String(fs.readFileSync(configPath, 'utf8') || '');
+    const targetKeys = new Set(['external-controller', 'secret']);
+    const values = {};
+    const lines = raw.split(/\r?\n/);
+    for (const line of lines) {
+      const trimmed = String(line || '').trim();
+      if (!trimmed || trimmed.startsWith('#')) {
+        continue;
+      }
+      const separatorIndex = trimmed.indexOf(':');
+      if (separatorIndex <= 0) {
+        continue;
+      }
+      const key = trimmed.slice(0, separatorIndex).trim();
+      if (!targetKeys.has(key)) {
+        continue;
+      }
+      let value = trimmed.slice(separatorIndex + 1).trim();
+      const commentIndex = value.indexOf('#');
+      if (commentIndex >= 0) {
+        value = value.slice(0, commentIndex).trim();
+      }
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith('\'') && value.endsWith('\''))) {
+        value = value.slice(1, -1).trim();
+      }
+      if (value) {
+        values[key] = value;
+      }
+    }
+    return {
+      controller: String(values['external-controller'] || '').trim(),
+      secret: String(values.secret || '').trim(),
+    };
+  } catch {
+    return { controller: '', secret: '' };
   }
 }
 
@@ -4298,6 +4187,189 @@ async function fetchPublicIpWithFallback({ proxyPort = '', useProxy = false } = 
     }
   }
   return '';
+}
+
+function getPanelUiDir() {
+  return path.join(APP_DATA_DIR, 'data', 'ui');
+}
+
+function getPanelDir(panelName) {
+  return path.join(getPanelUiDir(), String(panelName || '').trim());
+}
+
+function normalizePanelRoot(panelDir) {
+  const indexPath = path.join(panelDir, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return;
+  }
+  let entries = [];
+  try {
+    entries = fs.readdirSync(panelDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  const subdirs = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+  if (subdirs.length !== 1) {
+    return;
+  }
+  const candidateDir = path.join(panelDir, subdirs[0]);
+  const candidateIndex = path.join(candidateDir, 'index.html');
+  if (!fs.existsSync(candidateIndex)) {
+    return;
+  }
+  try {
+    for (const entry of fs.readdirSync(candidateDir)) {
+      const from = path.join(candidateDir, entry);
+      const to = path.join(panelDir, entry);
+      if (fs.existsSync(to)) {
+        fs.rmSync(to, { recursive: true, force: true });
+      }
+      fs.renameSync(from, to);
+    }
+    fs.rmSync(candidateDir, { recursive: true, force: true });
+  } catch {
+    // ignore promotion errors
+  }
+}
+
+function resolvePanelPreset(preset = {}) {
+  if (typeof preset === 'string') {
+    return PANEL_PRESETS[String(preset || '').trim().toLowerCase()] || null;
+  }
+  const panelName = String((preset && preset.name) || '').trim().toLowerCase();
+  if (panelName && PANEL_PRESETS[panelName]) {
+    return {
+      ...PANEL_PRESETS[panelName],
+      ...(preset && typeof preset === 'object' ? preset : {}),
+      name: panelName,
+    };
+  }
+  if (preset && typeof preset === 'object') {
+    return preset;
+  }
+  return null;
+}
+
+async function installPanelMain(preset = {}) {
+  const resolvedPreset = resolvePanelPreset(preset);
+  const panelName = String((resolvedPreset && resolvedPreset.name) || '').trim();
+  const panelUrl = String((resolvedPreset && resolvedPreset.url) || '').trim();
+  const forceInstall = Boolean(resolvedPreset && resolvedPreset.force);
+
+  if (!panelName || !panelUrl) {
+    return { ok: false, error: 'missing_panel_info' };
+  }
+
+  const panelUiDir = getPanelUiDir();
+  const panelDir = getPanelDir(panelName);
+
+  // 检查面板是否已安装
+  if (!forceInstall && fs.existsSync(panelDir)) {
+    const files = fs.readdirSync(panelDir);
+    if (files.length > 0) {
+      return { ok: true, installed: false, skipped: true, path: panelDir };
+    }
+  }
+
+  // 创建 UI 目录
+  if (forceInstall && fs.existsSync(panelDir)) {
+    try {
+      fs.rmSync(panelDir, { recursive: true, force: true });
+    } catch {
+      // ignore removal errors and retry via mkdir
+    }
+  }
+  await fs.promises.mkdir(panelUiDir, { recursive: true });
+  await fs.promises.mkdir(panelDir, { recursive: true });
+
+  // 下载压缩包到临时文件（复用内核下载逻辑以支持重定向）
+  const tempFile = path.join(app.getPath('temp'), `panel-${Date.now()}.tmp`);
+  try {
+    await downloadPanelFile(panelUrl, tempFile);
+  } catch (error) {
+    try { fs.unlinkSync(tempFile); } catch (e) { /* ignore */ }
+    return { ok: false, error: 'download_failed', details: String(error && error.message ? error.message : error || '') };
+  }
+
+  const isTarGz = panelUrl.endsWith('.tar.gz') || panelUrl.endsWith('.tgz');
+
+  try {
+    if (isTarGz) {
+      // 使用 tar 解压（需要检查系统是否支持）
+      await new Promise((resolve, reject) => {
+        const child = spawn('tar', ['-xzf', tempFile, '-C', panelDir]);
+        child.on('close', (code) => {
+          if (code === 0) resolve();
+          else reject(new Error(`tar exited with code ${code}`));
+        });
+        child.on('error', reject);
+      });
+    } else {
+      // 使用 unzip 解压（需要检查系统是否支持）
+      await new Promise((resolve, reject) => {
+        const child = spawn('unzip', ['-q', tempFile, '-d', panelDir]);
+        child.on('close', (code) => {
+          if (code === 0) resolve();
+          else reject(new Error(`unzip exited with code ${code}`));
+        });
+        child.on('error', reject);
+      });
+    }
+  } catch (error) {
+    try { fs.unlinkSync(tempFile); } catch (e) { /* ignore */ }
+    return { ok: false, error: 'extract_failed', details: error.message };
+  } finally {
+    try { fs.unlinkSync(tempFile); } catch (e) { /* ignore */ }
+  }
+
+  normalizePanelRoot(panelDir);
+
+  return { ok: true, installed: true, path: panelDir };
+}
+
+async function activatePanelMain(panelName = '') {
+  const panelNameTrimmed = String(panelName || '').trim();
+  if (!panelNameTrimmed) {
+    return { ok: false, error: 'missing_panel_info' };
+  }
+
+  const panelDir = getPanelDir(panelNameTrimmed);
+  const indexPath = path.join(panelDir, 'index.html');
+
+  if (!fs.existsSync(panelDir) || !fs.existsSync(indexPath)) {
+    return { ok: false, error: 'panel_missing' };
+  }
+
+  try {
+    let content = await fs.promises.readFile(indexPath, 'utf-8');
+
+    // 替换绝对路径为相对路径
+    const replacements = [
+      [/"\/assets\//g, '"assets/'],
+      [/"\/_nuxt\//g, '"_nuxt/'],
+      [/"\/_fonts\//g, '"_fonts/'],
+      [/"\/registerSW\.js"/g, '"registerSW.js"'],
+      [/"\/manifest\.webmanifest"/g, '"manifest.webmanifest"'],
+      [/"\/favicon\.ico"/g, '"favicon.ico"'],
+      [/"\/favicon\.svg"/g, '"favicon.svg"'],
+      [/'\/assets\//g, "'assets/"],
+      [/'\/_nuxt\//g, "'_nuxt/"],
+      [/'\/_fonts\//g, "'_fonts/"],
+      [/'\/registerSW\.js'/g, "'registerSW.js'"],
+      [/'\/manifest\.webmanifest'/g, "'manifest.webmanifest'"],
+      [/'\/favicon\.ico'/g, "'favicon.ico'"],
+      [/'\/favicon\.svg'/g, "'favicon.svg'"],
+    ];
+
+    for (const [pattern, replacement] of replacements) {
+      content = content.replace(new RegExp(pattern), replacement);
+    }
+
+    await fs.promises.writeFile(indexPath, content, 'utf-8');
+    return { ok: true, configured: true, path: panelDir };
+  } catch (error) {
+    return { ok: false, error: 'config_update_failed', details: error.message };
+  }
 }
 
 async function buildOverviewNetworkSnapshot() {
@@ -5153,12 +5225,43 @@ async function refreshNetworkSubmenuState() {
 function getControllerArgsFromSettings() {
   const settings = readAppSettings();
   const args = [];
-  const controller = settings && typeof settings.externalController === 'string'
+  let controller = settings && typeof settings.externalController === 'string'
     ? settings.externalController.trim()
     : '';
-  const secret = settings && typeof settings.secret === 'string'
+  let secret = settings && typeof settings.secret === 'string'
     ? settings.secret.trim()
     : '';
+  const configPath = getConfigPathFromSettings();
+  let configController = '';
+  let configSecret = '';
+  if ((!controller || !secret) && configPath) {
+    const configAccess = readControllerAccessFromConfigPath(configPath);
+    configController = configAccess.controller;
+    configSecret = configAccess.secret;
+    if (!controller && configController) {
+      controller = configController;
+    }
+    if (!secret && configSecret) {
+      secret = configSecret;
+    }
+  }
+  if (!controller) {
+    controller = '127.0.0.1:9090';
+  }
+  if (!secret) {
+    secret = 'clashfox';
+  }
+  if ((configController && !settings.externalController) || (configSecret && !settings.secret)) {
+    const nextSettings = { ...settings };
+    if (configController && !nextSettings.externalController) {
+      nextSettings.externalController = configController;
+    }
+    if (configSecret && !nextSettings.secret) {
+      nextSettings.secret = configSecret;
+    }
+    writeAppSettings(nextSettings);
+    emitSettingsUpdated(nextSettings);
+  }
   if (controller) {
     args.push('--controller', controller);
   }
@@ -5271,64 +5374,6 @@ function applyTrayIconForState({ active = true } = {}) {
 
 function isTrayActiveState({ systemProxyEnabled = false, tunEnabled = false } = {}) {
   return Boolean(systemProxyEnabled || tunEnabled);
-}
-
-function runBridgeWithSystemAuth(bridgeArgs = []) {
-  return new Promise((resolve) => {
-    const bridgePath = getBridgePath();
-    if (!fs.existsSync(bridgePath)) {
-      resolve({ ok: false, error: 'script_missing', details: bridgePath });
-      return;
-    }
-    const cwd = app.isPackaged ? APP_DATA_DIR : ROOT_DIR;
-    const quote = (value) => `'${String(value || '').replace(/'/g, `'\\''`)}'`;
-    const command = `cd ${quote(cwd)}; /bin/bash ${quote(bridgePath)} ${bridgeArgs.map((arg) => quote(arg)).join(' ')}`;
-    const script = [
-      'try',
-      `set out to do shell script ${JSON.stringify(command)} with administrator privileges`,
-      'return out',
-      'on error errMsg number errNum',
-      `return "${SYSTEM_AUTH_ERROR_PREFIX}:" & (errNum as text) & ":" & errMsg`,
-      'end try',
-    ].join('\n');
-    execFile('osascript', ['-e', script], { timeout: 180 * 1000 }, (error, stdout) => {
-      if (error) {
-        resolve({
-          ok: false,
-          error: 'system_auth_failed',
-          details: error.message || String(error),
-        });
-        return;
-      }
-      try {
-        const output = String(stdout || '').trim();
-        if (output.startsWith(`${SYSTEM_AUTH_ERROR_PREFIX}:`)) {
-          const payload = output.slice(SYSTEM_AUTH_ERROR_PREFIX.length + 1);
-          const firstColonIndex = payload.indexOf(':');
-          const errNumRaw = firstColonIndex >= 0 ? payload.slice(0, firstColonIndex) : payload;
-          const errMsg = firstColonIndex >= 0 ? payload.slice(firstColonIndex + 1).trim() : '';
-          const errNum = Number.parseInt(String(errNumRaw || '').trim(), 10);
-          if (errNum === -128) {
-            resolve({ ok: false, error: 'sudo_required' });
-            return;
-          }
-          resolve({
-            ok: false,
-            error: 'system_auth_failed',
-            details: errMsg || 'system_authorization_failed',
-          });
-          return;
-        }
-        resolve(parseBridgeOutput(output));
-      } catch {
-        resolve({
-          ok: false,
-          error: 'system_auth_failed',
-          details: String(stdout || '').trim(),
-        });
-      }
-    });
-  });
 }
 
 function normalizeBridgeArgs(args = [], options = {}) {
@@ -5526,153 +5571,38 @@ async function runBridgeViaHelperApi(bridgeArgs = []) {
   };
 
   const respondFromHelper = async (pathname, method = 'GET', payload = null) => {
-    const requestId = nextHelperRequestId();
-    const kind = resolveHelperRequestKind(commandType, method, pathname);
-    if (!shouldSuppressHelperRequestLog(commandType, method, pathname, 'log', true)) {
-      guiMainLog('helper-api', 'request', {
-        requestId,
-        kind,
-        method,
-        path: pathname,
-        command: commandType,
-        payload: truncateLogPayload(payload ? JSON.stringify(payload) : ''),
-      });
-    }
     const response = await sendHelperRequest(pathname, method, payload);
     if (!response) {
-      guiMainLog('helper-api', 'response', {
-        requestId,
-        kind,
-        method,
-        path: pathname,
-        command: commandType,
-        ok: false,
-        error: 'helper_unreachable',
-      }, 'warn');
       return { ok: false, error: 'helper_unreachable' };
     }
     const statusCode = Number(response.statusCode || 0);
     const isHttpOk = statusCode >= 200 && statusCode < 300;
     const textBody = String(response.body || '').trim();
     if (!textBody) {
-      if (!shouldSuppressHelperRequestLog(commandType, method, pathname, 'log', isHttpOk)) {
-        guiMainLog('helper-api', 'response', {
-          requestId,
-          kind,
-          method,
-          path: pathname,
-          command: commandType,
-          statusCode,
-          ok: isHttpOk,
-          body: '',
-        });
-      }
       return isHttpOk ? { ok: true, data: {} } : { ok: false, error: `http_${statusCode || 0}` };
     }
     try {
       const parsed = parseBridgeOutput(textBody);
       if (!parsed || typeof parsed !== 'object') {
-        if (!shouldSuppressHelperRequestLog(commandType, method, pathname, 'log', isHttpOk)) {
-          guiMainLog('helper-api', 'response', {
-            requestId,
-            kind,
-            method,
-            path: pathname,
-            command: commandType,
-            statusCode,
-            ok: isHttpOk,
-            shape: typeof parsed,
-            body: truncateLogPayload(textBody),
-          });
-        }
         return isHttpOk ? { ok: true, data: parsed } : { ok: false, error: 'helper_unreachable' };
       }
       if (parsed.ok === true) {
-        if (!shouldSuppressHelperRequestLog(commandType, method, pathname, 'log', true)) {
-          guiMainLog('helper-api', 'response', {
-            requestId,
-            kind,
-            method,
-            path: pathname,
-            command: commandType,
-            statusCode,
-            ok: true,
-            body: truncateLogPayload(JSON.stringify(parsed)),
-          });
-        }
         return parsed;
       }
       if (parsed.ok === false || parsed.error) {
-        guiMainLog('helper-api', 'response', {
-          requestId,
-          kind,
-          method,
-          path: pathname,
-          command: commandType,
-          statusCode,
-          ok: false,
-          error: parsed.error || 'helper_error',
-          body: truncateLogPayload(JSON.stringify(parsed)),
-        }, 'warn');
         return parsed;
       }
       if (parsed.status === 'ok' || parsed.success === true) {
-        if (!shouldSuppressHelperRequestLog(commandType, method, pathname, 'log', true)) {
-          guiMainLog('helper-api', 'response', {
-            requestId,
-            kind,
-            method,
-            path: pathname,
-            command: commandType,
-            statusCode,
-            ok: true,
-            body: truncateLogPayload(JSON.stringify(parsed)),
-          });
-        }
         return {
           ok: true,
           data: Object.prototype.hasOwnProperty.call(parsed, 'data') ? parsed.data : parsed,
         };
       }
       if (isHttpOk) {
-        if (!shouldSuppressHelperRequestLog(commandType, method, pathname, 'log', true)) {
-          guiMainLog('helper-api', 'response', {
-            requestId,
-            kind,
-            method,
-            path: pathname,
-            command: commandType,
-            statusCode,
-            ok: true,
-            body: truncateLogPayload(JSON.stringify(parsed)),
-          });
-        }
         return { ok: true, data: parsed };
       }
-      guiMainLog('helper-api', 'response', {
-        requestId,
-        kind,
-        method,
-        path: pathname,
-        command: commandType,
-        statusCode,
-        ok: false,
-        error: 'helper_unreachable',
-        body: truncateLogPayload(JSON.stringify(parsed)),
-      }, 'warn');
       return parsed;
     } catch {
-      guiMainLog('helper-api', 'response', {
-        requestId,
-        kind,
-        method,
-        path: pathname,
-        command: commandType,
-        statusCode,
-        ok: isHttpOk,
-        error: isHttpOk ? 'parse_warning' : 'parse_error',
-        body: truncateLogPayload(textBody),
-      }, isHttpOk ? 'warn' : 'error');
       if (isHttpOk) {
         return { ok: true, data: textBody };
       }
@@ -6046,31 +5976,8 @@ async function runBridgeWithAutoAuth(command, args = [], options = {}) {
     return { ok: false, error: 'unknown_command' };
   }
   const cmdArgs = Array.isArray(args) ? args : [];
-  guiMainLog('bridge', 'command start', {
-    command: cmd,
-    args: cmdArgs,
-  });
   let result = await runBridge([cmd, ...cmdArgs], options);
-  let source = resolveBridgeResultSource(result);
-  if (
-    result
-    && result.error === 'sudo_required'
-    && process.platform === 'darwin'
-    && PRIVILEGED_COMMANDS.has(cmd)
-  ) {
-    guiMainLog('bridge', 'command escalated to system auth', {
-      command: cmd,
-    }, 'warn');
-    result = await runBridgeWithSystemAuth([cmd, ...cmdArgs]);
-    source = 'system-auth';
-  }
   await syncBridgeResultToSettings(cmd, result);
-  guiMainLog('bridge', 'command completed', {
-    command: cmd,
-    ok: Boolean(result && result.ok),
-    error: result && result.ok ? '' : String((result && result.error) || '').trim(),
-    source,
-  }, result && result.ok ? 'log' : 'warn');
   return result;
 }
 
@@ -6320,21 +6227,9 @@ async function runControllerConfigRequestMain(source = {}, candidates = []) {
         headers.Authorization = `Bearer ${secret}`;
       }
       const requestUrl = `${baseUrl}${candidate.path || '/configs'}`;
-      const requestId = `main-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const kind = resolveMihomoRequestKind(candidate.method || 'GET', requestUrl);
       const logHeaders = { ...headers };
       if (Object.prototype.hasOwnProperty.call(logHeaders, 'Authorization')) {
         logHeaders.Authorization = '[redacted]';
-      }
-      if (!shouldSuppressMihomoRequestLog(candidate.method || 'GET', requestUrl, 'log', true)) {
-        guiMainLog('mihomo-api', 'request', {
-          requestId,
-          kind,
-          method: candidate.method || 'GET',
-          url: requestUrl,
-          headers: logHeaders,
-          body: truncateLogPayload(candidate.body === undefined ? '' : JSON.stringify(candidate.body)),
-        });
       }
       try {
         const resp = await fetch(requestUrl, {
@@ -6343,38 +6238,11 @@ async function runControllerConfigRequestMain(source = {}, candidates = []) {
           body: candidate.body === undefined ? undefined : JSON.stringify(candidate.body),
         });
         if (resp.ok) {
-          if (!shouldSuppressMihomoRequestLog(candidate.method || 'GET', requestUrl, 'log', true)) {
-            guiMainLog('mihomo-api', 'response', {
-              requestId,
-              kind,
-              method: candidate.method || 'GET',
-              url: requestUrl,
-              ok: true,
-              status: resp.status,
-            });
-          }
           return { ok: true };
         }
         const details = (await resp.text().catch(() => '')) || `http_status=${resp.status}`;
-        guiMainLog('mihomo-api', 'response', {
-          requestId,
-          kind,
-          method: candidate.method || 'GET',
-          url: requestUrl,
-          ok: false,
-          status: resp.status,
-          details: truncateLogPayload(details),
-        }, 'warn');
         lastError = { ok: false, error: 'request_failed', details };
       } catch (error) {
-        guiMainLog('mihomo-api', 'response', {
-          requestId,
-          kind,
-          method: candidate.method || 'GET',
-          url: requestUrl,
-          ok: false,
-          error: truncateLogPayload(String((error && error.message) || error || 'request_failed')),
-        }, 'warn');
         lastError = {
           ok: false,
           error: 'request_failed',
@@ -6393,8 +6261,6 @@ async function runControllerConfigRequestMain(source = {}, candidates = []) {
 }
 
 async function getControllerConfigsMain(source = {}) {
-  const requestId = `main-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const kind = 'auto';
   try {
     const normalizedSource = source && typeof source === 'object' ? source : {};
     const controllerOverride = String(
@@ -6414,54 +6280,17 @@ async function getControllerConfigsMain(source = {}) {
     if (Object.prototype.hasOwnProperty.call(logHeaders, 'Authorization')) {
       logHeaders.Authorization = '[redacted]';
     }
-    if (!shouldSuppressMihomoRequestLog('GET', requestUrl, 'log', true)) {
-      guiMainLog('mihomo-api', 'request', {
-        requestId,
-        kind,
-        method: 'GET',
-        url: requestUrl,
-        headers: logHeaders,
-        body: '',
-      });
-    }
     const resp = await fetch(requestUrl, {
       method: 'GET',
       headers,
     });
     if (!resp.ok) {
       const details = (await resp.text().catch(() => '')) || `http_status=${resp.status}`;
-      guiMainLog('mihomo-api', 'response', {
-        requestId,
-        method: 'GET',
-        url: requestUrl,
-        ok: false,
-        status: resp.status,
-        details: truncateLogPayload(details),
-      }, 'warn');
       return { ok: false, error: 'request_failed', details };
     }
     const data = await resp.json();
-    if (!shouldSuppressMihomoRequestLog('GET', requestUrl, 'log', true)) {
-      guiMainLog('mihomo-api', 'response', {
-        requestId,
-        kind,
-        method: 'GET',
-        url: requestUrl,
-        ok: true,
-        status: resp.status,
-        data: truncateLogPayload(JSON.stringify(data)),
-      });
-    }
     return { ok: true, data };
   } catch (error) {
-    guiMainLog('mihomo-api', 'response', {
-      requestId,
-      kind,
-      method: 'GET',
-      url: 'unknown',
-      ok: false,
-      error: truncateLogPayload(String((error && error.message) || error || 'request_failed')),
-    }, 'warn');
     return {
       ok: false,
       error: 'request_failed',
@@ -6471,8 +6300,6 @@ async function getControllerConfigsMain(source = {}) {
 }
 
 async function getControllerVersionMain(source = {}) {
-  const requestId = `main-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const kind = 'manual';
   try {
     const normalizedSource = source && typeof source === 'object' ? source : {};
     const controllerOverride = String(
@@ -6492,37 +6319,12 @@ async function getControllerVersionMain(source = {}) {
     if (Object.prototype.hasOwnProperty.call(logHeaders, 'Authorization')) {
       logHeaders.Authorization = '[redacted]';
     }
-    guiMainLog('mihomo-api', 'request', {
-      requestId,
-      kind,
-      method: 'GET',
-      url: requestUrl,
-      headers: logHeaders,
-    });
     const resp = await fetch(requestUrl, { method: 'GET', headers });
     if (!resp.ok) {
       const details = (await resp.text().catch(() => '')) || `http_status=${resp.status}`;
-      guiMainLog('mihomo-api', 'response', {
-        requestId,
-        kind,
-        method: 'GET',
-        url: requestUrl,
-        ok: false,
-        status: resp.status,
-        details: truncateLogPayload(details),
-      }, 'warn');
       return { ok: false, error: 'request_failed', details };
     }
     const data = await resp.json().catch(() => ({}));
-    guiMainLog('mihomo-api', 'response', {
-      requestId,
-      kind,
-      method: 'GET',
-      url: requestUrl,
-      ok: true,
-      status: resp.status,
-      data: truncateLogPayload(JSON.stringify(data)),
-    });
     return { ok: true, data };
   } catch (error) {
     return {
@@ -6629,52 +6431,8 @@ function detectTunConflictLikely() {
 async function runTrayCommand(command, args = [], labels = TRAY_I18N.en, sudoPass = '') {
   let effectiveSudoPass = sudoPass || '';
   let result = await runBridgeWithAutoAuth(command, args, { sudoPass: effectiveSudoPass });
-  if (!result || !result.ok) {
-    if (result && result.error === 'sudo_required') {
-      await dialog.showMessageBox({
-        type: 'warning',
-        buttons: [labels.ok || 'OK'],
-        title: labels.errorTitle || 'Operation Cancelled',
-        message: labels.sudoRequired || 'Administrator authorization was not granted.',
-      });
-      return { ok: false };
-    }
-    if (result && result.error === 'sudo_invalid') {
-      await dialog.showMessageBox({
-        type: 'error',
-        buttons: [labels.ok || 'OK'],
-        title: labels.errorTitle || 'Operation Failed',
-        message: labels.sudoInvalid || 'Password incorrect.',
-      });
-      return { ok: false };
-    }
-    const message = (result && (result.details || result.error || result.message))
-      ? String(result.details || result.error || result.message)
-      : 'Unknown error';
-    await dialog.showMessageBox({
-      type: 'error',
-      buttons: [labels.ok || 'OK'],
-      title: labels.errorTitle || 'Operation Failed',
-      message: `${labels.commandFailed || 'Command failed'}: ${command}`,
-      detail: message,
-    });
-    return { ok: false };
-  }
   return { ok: true, sudoPass: effectiveSudoPass, result };
 }
-
-async function confirmTrayRestart(labels) {
-  const response = await dialog.showMessageBox({
-    type: 'warning',
-    buttons: [labels.cancel || 'Cancel', labels.restartKernel],
-    defaultId: 1,
-    cancelId: 0,
-    message: labels.restartKernel,
-    detail: labels.restartConfirm || 'Are you sure you want to restart the kernel?',
-  });
-  return response.response === 1;
-}
-
 async function getKernelRunning(labels) {
   const result = await runBridgeWithAutoAuth('status');
   if (result && result.ok) {
@@ -7026,7 +6784,7 @@ async function resolveSelfGeoPoint() {
   }
   let geo = null;
   try {
-    const overview = await runBridgeWithAutoAuth('overview');
+    const overview = await buildOverviewNetworkSnapshot();
     const internetIp = overview && overview.ok && overview.data
       ? String(overview.data.internetIp || overview.data.internetIp4 || '').trim()
       : '';
@@ -7046,7 +6804,7 @@ async function resolveSelfGeoPoint() {
 async function buildWorldwideSnapshot(options = {}) {
   const limit = clampWorldwideNumber(options.limit, 60, 1000, WORLDWIDE_TRACK_LIMIT);
   const maxPoints = clampWorldwideNumber(options.maxPoints, 20, 200, WORLDWIDE_MAX_POINTS);
-  const commandResult = await runBridgeWithAutoAuth('track-connections', ['--limit', String(limit)]);
+  const commandResult = await loadControllerConnectionsRaw({}, { limit });
   if (!commandResult || !commandResult.ok) {
     return {
       ok: false,
@@ -7056,7 +6814,7 @@ async function buildWorldwideSnapshot(options = {}) {
   }
 
   const payload = (commandResult.data && typeof commandResult.data === 'object') ? commandResult.data : {};
-  const rawTracks = Array.isArray(payload.tracks) ? payload.tracks : [];
+  const rawTracks = Array.isArray(payload.tracks) ? payload.tracks : normalizeConnectionsPayloadToTracks(payload);
   const dedup = new Map();
   for (const item of rawTracks) {
     if (!item || typeof item !== 'object') {
@@ -7209,6 +6967,36 @@ function parseDashboardTimestamp(value = '') {
   return Number.isFinite(stamp) ? stamp : 0;
 }
 
+function normalizeConnectionsPayloadToTracks(payload = {}) {
+  const connections = Array.isArray(payload && payload.connections) ? payload.connections : [];
+  return connections.map((connection) => {
+    const entry = connection && typeof connection === 'object' ? connection : {};
+    const meta = entry.metadata && typeof entry.metadata === 'object'
+      ? entry.metadata
+      : (entry.meta && typeof entry.meta === 'object' ? entry.meta : {});
+    const chains = Array.isArray(entry.chains) ? entry.chains : [];
+    const outbound = chains.length
+      ? String(chains[chains.length - 1] || '').trim()
+      : String(entry.chain || entry.proxy || entry.proxyName || meta.proxy || '').trim();
+    return {
+      id: String(entry.id || meta.id || '').trim(),
+      host: String(meta.host || '').trim(),
+      ip: String(meta.destinationIP || meta.ip || meta.dstIP || '').trim(),
+      port: Number(meta.destinationPort || meta.port || meta.dstPort || 0),
+      outbound: outbound || 'DIRECT',
+      rule: String(entry.rule || entry.ruleType || '').trim(),
+      network: String(meta.network || meta.type || entry.type || '').trim().toUpperCase(),
+      process: String(meta.process || entry.process || '').trim(),
+      processPath: String(meta.processPath || entry.processPath || '').trim(),
+      sourceIp: String(meta.sourceIP || meta.srcIP || '').trim(),
+      sourcePort: Number(meta.sourcePort || meta.srcPort || 0),
+      upload: Number(entry.upload || 0),
+      download: Number(entry.download || 0),
+      start: entry.start || entry.startedAt || entry.time || '',
+    };
+  });
+}
+
 function trimDashboardState(now = Date.now()) {
   const minAliveAt = now - DASHBOARD_HISTORY_MAX_AGE_MS;
   while (dashboardRecentRequests.length > DASHBOARD_RECENT_LIMIT) {
@@ -7339,7 +7127,7 @@ function updateDashboardDnsRecord(record = {}, now = Date.now()) {
 async function buildDashboardSnapshot(options = {}) {
   const limit = Math.max(60, Math.min(Number(options.limit) || DASHBOARD_TRACK_LIMIT, 1200));
   const now = Date.now();
-  const trackResult = await runBridgeWithAutoAuth('track-connections', ['--limit', String(limit)]);
+  const trackResult = await loadControllerConnectionsRaw({}, { limit });
   if (!trackResult || !trackResult.ok) {
     return {
       ok: false,
@@ -7349,7 +7137,7 @@ async function buildDashboardSnapshot(options = {}) {
   }
 
   const payload = trackResult && trackResult.data && typeof trackResult.data === 'object' ? trackResult.data : {};
-  const tracks = Array.isArray(payload.tracks) ? payload.tracks : [];
+  const tracks = Array.isArray(payload.tracks) ? payload.tracks : normalizeConnectionsPayloadToTracks(payload);
   const currentKeys = new Set();
   const currentRecords = [];
   for (const track of tracks) {
@@ -7907,6 +7695,44 @@ async function loadControllerProxiesRaw(source = {}) {
   }
 }
 
+async function loadControllerConnectionsRaw(source = {}, options = {}) {
+  try {
+    const normalizedSource = source && typeof source === 'object' ? source : {};
+    const controllerOverride = String(
+      normalizedSource.controller || normalizedSource.externalController || '',
+    ).trim();
+    const secretOverride = String(normalizedSource.secret || '').trim();
+    const { baseUrl, secret } = resolveControllerAccessFromSettings(controllerOverride, secretOverride);
+    if (!baseUrl) {
+      return { ok: false, error: 'controller_missing' };
+    }
+    const headers = {};
+    if (secret) {
+      headers.Authorization = `Bearer ${secret}`;
+    }
+    const response = await fetch(`${baseUrl}/connections`, {
+      method: 'GET',
+      headers,
+    });
+    if (!response.ok) {
+      const details = (await response.text().catch(() => '')) || `http_status=${response.status}`;
+      return { ok: false, error: 'request_failed', details };
+    }
+    const data = await response.json();
+    const limit = options && Number.isFinite(Number(options.limit)) ? Number(options.limit) : 0;
+    if (limit > 0 && Array.isArray(data && data.connections)) {
+      data.connections = data.connections.slice(0, limit);
+    }
+    return { ok: true, data };
+  } catch (error) {
+    return {
+      ok: false,
+      error: 'request_failed',
+      details: String((error && error.message) || error || 'request_failed'),
+    };
+  }
+}
+
 function normalizeTrayProxyGroupType(value = '') {
   return String(value || '')
     .trim()
@@ -8363,7 +8189,7 @@ function openWorldwideWindow() {
       webPreferences: {
         contextIsolation: true,
         preload: path.join(__dirname, 'preload.js'),
-        devTools: false,
+        devTools: globalSettings.debugMode,
       },
     });
 
@@ -8384,10 +8210,10 @@ function openWorldwideWindow() {
     windowRef.webContents.on('before-input-event', (event, input) => {
       const key = String(input.key || '').toLowerCase();
       const isDevToolsCombo =
-        (input.control && input.shift && key === 'i') ||
-        (input.meta && input.alt && key === 'i') ||
-        key === 'f12';
-      if (isDevToolsCombo) {
+        (input.control && input.shift && key === 'i')
+        || (input.meta && input.alt && key === 'i')
+        || key === 'f12';
+      if (isDevToolsCombo && !globalSettings.debugMode) {
         event.preventDefault();
       }
     });
@@ -8403,14 +8229,9 @@ function openWorldwideWindow() {
 
 function openFoxboardWindow() {
   try {
-    guiMainLog('foxboard', 'open requested', {
-      hasWindow: Boolean(foxboardWindow && !foxboardWindow.isDestroyed()),
-      hasPreloadWindow: Boolean(foxboardPreloadWindow && !foxboardPreloadWindow.isDestroyed()),
-    });
     if (foxboardWindow && !foxboardWindow.isDestroyed()) {
       foxboardWindow.show();
       foxboardWindow.focus();
-      guiMainLog('foxboard', 'focused existing window');
       return;
     }
     if (foxboardPreloadWindow && !foxboardPreloadWindow.isDestroyed()) {
@@ -8430,7 +8251,6 @@ function openFoxboardWindow() {
       }
       foxboardWindow.show();
       foxboardWindow.focus();
-      guiMainLog('foxboard', 'promoted preload window');
       return;
     }
     foxboardWindow = new BrowserWindow({
@@ -8446,7 +8266,7 @@ function openFoxboardWindow() {
       webPreferences: {
         contextIsolation: true,
         preload: path.join(__dirname, 'preload.js'),
-        devTools: false,
+        devTools: globalSettings.debugMode,
       },
     });
     const windowRef = foxboardWindow;
@@ -8463,7 +8283,6 @@ function openFoxboardWindow() {
       });
     }
     windowRef.on('closed', () => {
-      guiMainLog('foxboard', 'window closed');
       if (foxboardWindow === windowRef) {
         foxboardWindow = null;
       }
@@ -8482,23 +8301,17 @@ function openFoxboardWindow() {
         (input.control && input.shift && key === 'i')
         || (input.meta && input.alt && key === 'i')
         || key === 'f12';
-      if (isDevToolsCombo) {
+      if (isDevToolsCombo && !globalSettings.debugMode) {
         event.preventDefault();
       }
     });
     windowRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'dashboard.html'));
-    guiMainLog('foxboard', 'window created');
   } catch {
-    guiMainLog('foxboard', 'open failed', null, 'error');
   }
 }
 
 function preloadFoxboardWindow() {
   try {
-    guiMainLog('foxboard', 'preload requested', {
-      hasWindow: Boolean(foxboardWindow && !foxboardWindow.isDestroyed()),
-      hasPreloadWindow: Boolean(foxboardPreloadWindow && !foxboardPreloadWindow.isDestroyed()),
-    });
     if (
       (foxboardWindow && !foxboardWindow.isDestroyed())
       || (foxboardPreloadWindow && !foxboardPreloadWindow.isDestroyed())
@@ -8518,12 +8331,11 @@ function preloadFoxboardWindow() {
       webPreferences: {
         contextIsolation: true,
         preload: path.join(__dirname, 'preload.js'),
-        devTools: false,
+        devTools: globalSettings.debugMode,
       },
     });
     const preloadRef = foxboardPreloadWindow;
     preloadRef.on('closed', () => {
-      guiMainLog('foxboard', 'preload window closed');
       if (foxboardPreloadWindow === preloadRef) {
         foxboardPreloadWindow = null;
       }
@@ -8542,14 +8354,12 @@ function preloadFoxboardWindow() {
         (input.control && input.shift && key === 'i')
         || (input.meta && input.alt && key === 'i')
         || key === 'f12';
-      if (isDevToolsCombo) {
+      if (isDevToolsCombo && !globalSettings.debugMode) {
         event.preventDefault();
       }
     });
     preloadRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'dashboard.html'));
-    guiMainLog('foxboard', 'preload window created');
   } catch {
-    guiMainLog('foxboard', 'preload failed', null, 'error');
     if (foxboardPreloadWindow && !foxboardPreloadWindow.isDestroyed()) {
       foxboardPreloadWindow.close();
     }
@@ -8602,7 +8412,7 @@ function preloadWorldwideWindow() {
       webPreferences: {
         contextIsolation: true,
         preload: path.join(__dirname, 'preload.js'),
-        devTools: false,
+        devTools: globalSettings.debugMode,
       },
     });
     const preloadRef = worldwidePreloadWindow;
@@ -8625,7 +8435,7 @@ function preloadWorldwideWindow() {
         (input.control && input.shift && key === 'i')
         || (input.meta && input.alt && key === 'i')
         || key === 'f12';
-      if (isDevToolsCombo) {
+      if (isDevToolsCombo && !globalSettings.debugMode) {
         event.preventDefault();
       }
     });
@@ -8930,7 +8740,6 @@ async function buildTrayMenuOnce() {
   if (process.platform !== 'darwin') {
     return;
   }
-  guiMainLog('tray', 'build started');
   const labels = getTrayLabels();
   const uiLabels = getUiLabels();
   const configPath = getConfigPathFromSettings();
@@ -9172,20 +8981,6 @@ async function buildTrayMenuOnce() {
   trayMenuData = nextMenuData;
   trayMenuDataSignature = nextSignature;
   trayMenuLastBuiltAt = Date.now();
-  guiMainLog('tray', 'build completed', {
-    items: Array.isArray(items) ? items.length : 0,
-    showTrackers: trayFeatureFlags.showTrackers,
-    showFoxboard: trayFeatureFlags.showFoxboard,
-    showProviderTraffic,
-    providerCount: trayProviderPayload.providerTraffic && Array.isArray(trayProviderPayload.providerTraffic.items)
-      ? trayProviderPayload.providerTraffic.items.length
-      : 0,
-    proxyGroupCacheHit,
-    proxyGroupCacheBuiltAt: Number(trayProxyMenuCache.builtAt || 0),
-    dashboardEnabled,
-    networkTakeoverEnabled,
-    tunEnabled,
-  });
   if (changed && trayMenuWindow && !trayMenuWindow.isDestroyed()) {
     trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
   }
@@ -9201,11 +8996,9 @@ async function buildTrayMenuOnce() {
 async function createTrayMenu() {
   if (trayMenuBuildInProgress) {
     trayMenuBuildPending = true;
-    guiMainLog('tray', 'build skipped, pending rerun');
     return trayMenuData;
   }
   trayMenuBuildInProgress = true;
-  guiMainLog('tray', 'build loop entered');
   try {
     do {
       trayMenuBuildPending = false;
@@ -9214,7 +9007,6 @@ async function createTrayMenu() {
     return trayMenuData;
   } finally {
     trayMenuBuildInProgress = false;
-    guiMainLog('tray', 'build loop exited');
   }
 }
 
@@ -9802,10 +9594,6 @@ function toggleTrayMenuWindow() {
 }
 
 async function handleTrayMenuAction(action, payload = {}) {
-  guiMainLog('tray', 'action requested', {
-    action,
-    payload,
-  });
   const labels = getTrayLabels();
   const uiLabels = getUiLabels();
   const configPath = getConfigPathFromSettings();
@@ -10079,7 +9867,6 @@ function applyDevToolsState() {
   applyAppMenu();
 }
 
-
 if (process.env.CLASHFOX_DEV === '1') {
   // Hot reload for main + renderer during local development.
   // eslint-disable-next-line global-require
@@ -10098,193 +9885,28 @@ function runBridge(args, options = {}) {
       try {
         const normalized = normalizeBridgeArgs(args, options);
         const bridgeArgs = normalized.args;
-        const sudoPass = normalized.sudoPass;
         // console.log('[runBridge] Running command:', args);
-        const commandType = bridgeArgs[0];
 
         const helperResult = await runBridgeViaHelper(bridgeArgs);
         if (helperResult) {
-          if (!(helperResult && helperResult.ok === false && helperResult.error === 'unsupported_command')) {
-            resolve(helperResult);
-            return;
-          }
-        }
-
-        const startBridgeProcess = () => {
-
-      // 1. 如果是安装命令，终止当前正在运行的安装进程（如果有）
-      const isInstallCommand = commandType === 'install' || commandType === 'panel-install';
-      
-      if (isInstallCommand && currentInstallProcess) {
-        const oldPid = currentInstallProcess.pid;
-        // console.log('[runBridge] Terminating existing install process with PID:', oldPid);
-        try {
-          currentInstallProcess.kill(); // 直接终止，不等待优雅终止
-        } catch (err) {
-          // console.error('[runBridge] Error terminating existing install process:', err);
-        }
-        // 立即清空引用，为新进程做准备
-        currentInstallProcess = null;
-      }
-      
-      // 2. 启动新进程
-      const bridgePath = getBridgePath();
-      if (!fs.existsSync(bridgePath)) {
-        resolve({ ok: false, error: 'script_missing', details: bridgePath });
-        return;
-      }
-      try {
-        fs.accessSync(bridgePath, fs.constants.X_OK);
-      } catch {
-        try {
-          fs.chmodSync(bridgePath, 0o755);
-        } catch (err) {
-          resolve({ ok: false, error: 'script_not_executable', details: err.message });
+          resolve(helperResult);
           return;
         }
-      }
-      const cwd = app.isPackaged ? APP_DATA_DIR : ROOT_DIR;
-      const childEnv = { ...process.env };
-      if (sudoPass) {
-        childEnv.CLASHFOX_SUDO_PASS = sudoPass;
-      }
-      const child = spawn('bash', [bridgePath, ...bridgeArgs], { cwd, env: childEnv });
-      const processId = child.pid;
-      
-      // 只跟踪安装进程
-      if (isInstallCommand) {
-        currentInstallProcess = child;
-        // console.log('[runBridge] Tracking install process with PID:', processId);
-      }
-      
-      // console.log('[runBridge] Started new', commandType, 'process with PID:', processId);
-      
-      // 3. 进程输出和终止处理
-      let stdout = '';
-      let stderr = '';
-      let resolved = false;
-      
-      // 超时保护
-      const timeoutMs = isInstallCommand ? 180000 : 30000;
-      const timeout = setTimeout(() => {
-        if (!resolved && child) {
-          // console.log('[runBridge] Process timeout, killing PID:', processId);
-          try {
-            child.kill();
-          } catch (err) {
-            // console.error('[runBridge] Error killing timed-out process:', err);
-          }
-        }
-      }, timeoutMs);
-
-      // 输出收集
-      if (child.stdout) {
-        child.stdout.on('data', (chunk) => {
-          const text = chunk.toString();
-          stdout += text;
-          if (isInstallCommand) {
-            const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-            lines.forEach((line) => {
-              const phaseInfo = detectInstallPhaseFromLine(line);
-              if (phaseInfo) {
-                emitMainCoreAction({
-                  action: 'install',
-                  phase: phaseInfo.phase,
-                  message: phaseInfo.message,
-                  raw: line,
-                });
-              }
-            });
-          }
+        // Helper 不可用或返回空结果
+        resolve({
+          ok: false,
+          error: 'helper_unavailable',
+          details: 'Helper is not installed or not responding'
         });
-      }
-
-      if (child.stderr) {
-        child.stderr.on('data', (chunk) => {
-          stderr += chunk.toString();
-        });
-      }
-
-      // 进程终止处理
-      const handleTermination = (code, signal) => {
-        if (resolved) return;
-        resolved = true;
-        
-        clearTimeout(timeout);
-        
-        // 只在当前进程是这个安装进程时才清空引用
-        if (isInstallCommand && currentInstallProcess === child) {
-          currentInstallProcess = null;
-          // console.log('[runBridge] Cleared install process reference for PID:', processId);
-        }
-        
-        const output = stdout.trim();
-        
-        // 检查是否为取消操作
-        if (signal === 'SIGINT' || (code && code > 128)) {
-          resolve({ 
-            ok: false, 
-            error: 'cancelled', 
-            details: 'Operation was cancelled by user' 
-          });
-          return;
-        }
-        
-        // 处理输出
-        if (!output) {
-          resolve({ 
-            ok: false, 
-            error: 'empty_output', 
-            details: stderr.trim() 
-          });
-          return;
-        }
-        
-        try {
-          const parsed = parseBridgeOutput(output);
-          resolve(parsed);
-        } catch (err) {
-          console.error('[runBridge] JSON parse error:', err);
-          resolve({
-            ok: false,
-            error: 'parse_error',
-            details: output
-          });
-        }
-      };
-      
-      // 监听进程事件
-      child.on('close', handleTermination);
-      child.on('exit', handleTermination);
-      
-      child.on('error', (err) => {
-        if (resolved) return;
-        resolved = true;
-        
-        clearTimeout(timeout);
-        
-        if (isInstallCommand && currentInstallProcess === child) {
-          currentInstallProcess = null;
-          // console.log('[runBridge] Cleared install process reference for PID:', processId, '(error case)');
-        }
-        
-        resolve({ 
-          ok: false, 
-          error: 'process_error', 
-          details: err.message 
-        });
-      });
-        };
-        startBridgeProcess();
       } catch (err) {
         console.error('[runBridge] unexpected error:', {
           args,
           message: err && err.message ? err.message : String(err),
         });
-        resolve({ 
-          ok: false, 
-          error: 'unexpected_error', 
-          details: err.message 
+        resolve({
+          ok: false,
+          error: 'unexpected_error',
+          details: err.message
         });
       }
     })();
@@ -10631,18 +10253,8 @@ app.whenReady().then(() => {
     const sanitizedArgs = sanitizeBridgeArguments(cmdArgs);
     const hadDangerousArgs = sanitizedArgs.length !== cmdArgs.length;
     if (!SAFE_BRIDGE_COMMANDS.has(cmd)) {
-      guiMainLog('command', 'ipc command rejected', {
-        cmd,
-        args: sanitizedArgs,
-        reason: 'command_not_allowed',
-      }, 'warn');
       return { ok: false, error: 'command_not_allowed' };
     }
-    guiMainLog('command', 'ipc command received', {
-      cmd,
-      args: sanitizedArgs,
-      argsSanitized: hadDangerousArgs,
-    });
     let result;
     if (cmd === 'configs') {
       result = listConfigFilesFromFs();
@@ -10659,11 +10271,6 @@ app.whenReady().then(() => {
     } else {
       result = await runBridgeWithAutoAuth(cmd, sanitizedArgs, options);
     }
-    guiMainLog('command', 'ipc command result', {
-      cmd,
-      ok: Boolean(result && result.ok),
-      error: result && result.error ? result.error : '',
-    });
     if (result && result.ok && ['start', 'stop', 'restart', 'system-proxy-enable', 'system-proxy-disable'].includes(command)) {
       await createTrayMenu();
     }
@@ -10703,6 +10310,30 @@ app.whenReady().then(() => {
       return {
         ok: false,
         error: 'overview_network_snapshot_failed',
+        details: String(error && error.message ? error.message : error || ''),
+      };
+    }
+  });
+
+  ipcMain.handle('clashfox:installPanel', async (_event, preset) => {
+    try {
+      return await installPanelMain(preset);
+    } catch (error) {
+      return {
+        ok: false,
+        error: 'panel_install_failed',
+        details: String(error && error.message ? error.message : error || ''),
+      };
+    }
+  });
+
+  ipcMain.handle('clashfox:activatePanel', async (_event, panelName) => {
+    try {
+      return await activatePanelMain(panelName);
+    } catch (error) {
+      return {
+        ok: false,
+        error: 'panel_activate_failed',
         details: String(error && error.message ? error.message : error || ''),
       };
     }
@@ -10853,11 +10484,6 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:trayMenu:action', async (_event, action, payload = {}) => {
     const result = await handleTrayMenuAction(action, payload);
-    guiMainLog('tray', 'action completed', {
-      action,
-      ok: Boolean(result && result.ok),
-      error: result && result.ok ? '' : String((result && result.error) || '').trim(),
-    }, result && result.ok ? 'log' : 'warn');
     const skipRebuildActions = new Set(['toggle-system-proxy', 'toggle-tun']);
     if (!skipRebuildActions.has(String(action || '').trim())) {
       createTrayMenu().catch(() => {});
@@ -11085,7 +10711,6 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('clashfox:selectConfig', async () => {
-    guiMainLog('ipc-file', 'selectConfig requested');
     const result = await dialog.showOpenDialog({
       title: 'Select Config File',
       properties: ['openFile'],
@@ -11096,23 +10721,14 @@ app.whenReady().then(() => {
     });
 
     if (result.canceled || result.filePaths.length === 0) {
-      guiMainLog('ipc-file', 'selectConfig cancelled');
       return { ok: false, error: 'cancelled' };
     }
-
-    guiMainLog('ipc-file', 'selectConfig completed', {
-      path: result.filePaths[0],
-    });
     return { ok: true, path: result.filePaths[0] };
   });
 
   ipcMain.handle('clashfox:deleteConfig', async (_event, targetPath) => {
-    guiMainLog('ipc-file', 'deleteConfig requested', {
-      targetPath: String(targetPath || ''),
-    });
     try {
       if (!targetPath || typeof targetPath !== 'string') {
-        guiMainLog('ipc-file', 'deleteConfig failed', { error: 'invalid_path' }, 'warn');
         return { ok: false, error: 'invalid_path' };
       }
       const resolvedTarget = path.resolve(String(targetPath));
@@ -11120,10 +10736,6 @@ app.whenReady().then(() => {
       const normalizedDir = path.resolve(configDir);
       const dirPrefix = `${normalizedDir}${path.sep}`;
       if (!(resolvedTarget === normalizedDir || resolvedTarget.startsWith(dirPrefix))) {
-        guiMainLog('ipc-file', 'deleteConfig failed', {
-          targetPath: resolvedTarget,
-          error: 'outside_config_dir',
-        }, 'warn');
         return { ok: false, error: 'outside_config_dir' };
       }
       const settings = readAppSettings();
@@ -11131,43 +10743,23 @@ app.whenReady().then(() => {
         ? path.resolve(settings.configFile)
         : '';
       if (currentConfig && resolvedTarget === currentConfig) {
-        guiMainLog('ipc-file', 'deleteConfig failed', {
-          targetPath: resolvedTarget,
-          error: 'current_config',
-        }, 'warn');
         return { ok: false, error: 'current_config' };
       }
       if (!fs.existsSync(resolvedTarget)) {
-        guiMainLog('ipc-file', 'deleteConfig failed', {
-          targetPath: resolvedTarget,
-          error: 'not_found',
-        }, 'warn');
         return { ok: false, error: 'not_found' };
       }
       const stat = fs.statSync(resolvedTarget);
       if (!stat.isFile()) {
-        guiMainLog('ipc-file', 'deleteConfig failed', {
-          targetPath: resolvedTarget,
-          error: 'not_file',
-        }, 'warn');
         return { ok: false, error: 'not_file' };
       }
       fs.unlinkSync(resolvedTarget);
-      guiMainLog('ipc-file', 'deleteConfig completed', {
-        targetPath: resolvedTarget,
-      });
       return { ok: true, path: resolvedTarget };
     } catch (err) {
-      guiMainLog('ipc-file', 'deleteConfig threw', {
-        targetPath: String(targetPath || ''),
-        error: err && err.message ? err.message : 'delete_failed',
-      }, 'error');
       return { ok: false, error: err && err.message ? err.message : 'delete_failed' };
     }
   });
 
   ipcMain.handle('clashfox:importConfig', async () => {
-    guiMainLog('ipc-file', 'importConfig requested');
     const selection = await dialog.showOpenDialog({
       title: 'Import Config File',
       properties: ['openFile'],
@@ -11177,7 +10769,6 @@ app.whenReady().then(() => {
       ],
     });
     if (selection.canceled || selection.filePaths.length === 0) {
-      guiMainLog('ipc-file', 'importConfig cancelled');
       return { ok: false, error: 'cancelled' };
     }
     const sourcePath = selection.filePaths[0];
@@ -11188,10 +10779,6 @@ app.whenReady().then(() => {
       const sourceName = path.basename(sourcePath);
       const targetPath = buildUniqueFilePath(targetDir, sourceName);
       fs.copyFileSync(sourcePath, targetPath);
-      guiMainLog('ipc-file', 'importConfig completed', {
-        sourcePath,
-        targetPath,
-      });
       return {
         ok: true,
         data: {
@@ -11202,31 +10789,19 @@ app.whenReady().then(() => {
         },
       };
     } catch (err) {
-      guiMainLog('ipc-file', 'importConfig threw', {
-        sourcePath,
-        error: err && err.message ? err.message : 'import_failed',
-      }, 'error');
       return { ok: false, error: err && err.message ? err.message : 'import_failed' };
     }
   });
 
   ipcMain.handle('clashfox:selectDirectory', async (_event, title) => {
-    guiMainLog('ipc-file', 'selectDirectory requested', {
-      title: String(title || ''),
-    });
     const result = await dialog.showOpenDialog({
       title: title || 'Select Directory',
       properties: ['openDirectory', 'createDirectory'],
     });
 
     if (result.canceled || result.filePaths.length === 0) {
-      guiMainLog('ipc-file', 'selectDirectory cancelled');
       return { ok: false, error: 'cancelled' };
     }
-
-    guiMainLog('ipc-file', 'selectDirectory completed', {
-      path: result.filePaths[0],
-    });
     return { ok: true, path: result.filePaths[0] };
   });
 
@@ -11236,33 +10811,20 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('clashfox:openExternal', async (_event, url) => {
-    guiMainLog('ipc-file', 'openExternal requested', {
-      url: String(url || ''),
-    });
     if (!url || typeof url !== 'string') {
-      guiMainLog('ipc-file', 'openExternal failed', { error: 'invalid_url' }, 'warn');
       return { ok: false };
     }
     try {
       await shell.openExternal(url);
-      guiMainLog('ipc-file', 'openExternal completed', { url });
       return { ok: true };
     } catch (err) {
-      guiMainLog('ipc-file', 'openExternal threw', {
-        url,
-        error: err && err.message ? err.message : '',
-      }, 'error');
       return { ok: false, error: err.message };
     }
   });
 
   ipcMain.handle('clashfox:revealInFinder', (_event, targetPath) => {
-    guiMainLog('ipc-file', 'revealInFinder requested', {
-      targetPath: String(targetPath || ''),
-    });
     try {
       if (!targetPath || typeof targetPath !== 'string') {
-        guiMainLog('ipc-file', 'revealInFinder failed', { error: 'invalid_path' }, 'warn');
         return { ok: false };
       }
       const resolved = path.resolve(String(targetPath));
@@ -11279,30 +10841,13 @@ app.whenReady().then(() => {
       if (result && typeof result.then === 'function') {
         return result.then((err) => {
           if (err) {
-            guiMainLog('ipc-file', 'revealInFinder failed', {
-              targetPath: resolved,
-              openTarget,
-              error: err,
-            }, 'warn');
             return { ok: false, error: err };
           }
-          guiMainLog('ipc-file', 'revealInFinder completed', {
-            targetPath: resolved,
-            openTarget,
-          });
           return { ok: true };
         });
       }
-      guiMainLog('ipc-file', 'revealInFinder completed', {
-        targetPath: resolved,
-        openTarget,
-      });
       return { ok: true };
     } catch (err) {
-      guiMainLog('ipc-file', 'revealInFinder threw', {
-        targetPath: String(targetPath || ''),
-        error: err && err.message ? err.message : '',
-      }, 'error');
       return { ok: false, error: err.message };
     }
   });
@@ -11660,12 +11205,10 @@ app.whenReady().then(() => {
             logDir = String(settings.userDataPaths.logDir);
           }
         } catch (e) {
-          guiMainLog('cleanLogs', 'failed to parse settings', { error: e.message }, 'warn');
         }
       }
 
       if (!fs.existsSync(logDir)) {
-        guiMainLog('cleanLogs', 'log directory not found', { logDir }, 'warn');
         return { ok: true, cleaned: 0 };
       }
 
@@ -11679,9 +11222,7 @@ app.whenReady().then(() => {
             try {
               fs.unlinkSync(filePath);
               cleanedCount++;
-              guiMainLog('cleanLogs', 'deleted file', { file });
             } catch (e) {
-              guiMainLog('cleanLogs', 'failed to delete file', { file, error: e.message }, 'error');
             }
           }
         }
@@ -11697,10 +11238,8 @@ app.whenReady().then(() => {
               if (fileAge > sevenDaysMs) {
                 fs.unlinkSync(filePath);
                 cleanedCount++;
-                guiMainLog('cleanLogs', 'deleted old file (7d)', { file, ageDays: Math.floor(fileAge / (24 * 60 * 60 * 1000)) });
               }
             } catch (e) {
-              guiMainLog('cleanLogs', 'failed to delete old file', { file, error: e.message }, 'error');
             }
           }
         }
@@ -11716,22 +11255,16 @@ app.whenReady().then(() => {
               if (fileAge > thirtyDaysMs) {
                 fs.unlinkSync(filePath);
                 cleanedCount++;
-                guiMainLog('cleanLogs', 'deleted old file (30d)', { file, ageDays: Math.floor(fileAge / (24 * 60 * 60 * 1000)) });
               }
             } catch (e) {
-              guiMainLog('cleanLogs', 'failed to delete old file', { file, error: e.message }, 'error');
             }
           }
         }
       } else {
-        guiMainLog('cleanLogs', 'invalid mode', { mode }, 'warn');
         return { ok: false, error: 'invalid_mode' };
       }
-
-      guiMainLog('cleanLogs', 'completed', { mode, cleanedCount });
       return { ok: true, cleanedCount };
     } catch (error) {
-      guiMainLog('cleanLogs', 'failed', { error: error.message }, 'error');
       return { ok: false, error: error.message };
     }
   }
@@ -11813,15 +11346,11 @@ app.whenReady().then(() => {
       event.sender.send('clashfox:install-mihomo:progress', progress);
     };
 
-    guiMainLog('install-mihomo', 'Starting installation', { githubUser, version, channel });
-
     const result = await installMihomo({ githubUser, version, channel, onProgress });
 
     if (result.ok) {
-      guiMainLog('install-mihomo', 'Installation completed successfully', result);
       await listKernelFilesFromFs();
     } else {
-      guiMainLog('install-mihomo', 'Installation failed', { error: result.error }, 'error');
     }
 
     return result;
@@ -11909,29 +11438,16 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('clashfox:openPath', async (_event, targetPath) => {
-    guiMainLog('ipc-file', 'openPath requested', {
-      targetPath: String(targetPath || ''),
-    });
     try {
       if (!targetPath || typeof targetPath !== 'string') {
-        guiMainLog('ipc-file', 'openPath failed', { error: 'invalid_path' }, 'warn');
         return { ok: false };
       }
       const result = await shell.openPath(targetPath);
       if (result) {
-        guiMainLog('ipc-file', 'openPath failed', {
-          targetPath,
-          error: result,
-        }, 'warn');
         return { ok: false, error: result };
       }
-      guiMainLog('ipc-file', 'openPath completed', { targetPath });
       return { ok: true };
     } catch (err) {
-      guiMainLog('ipc-file', 'openPath threw', {
-        targetPath: String(targetPath || ''),
-        error: err && err.message ? err.message : '',
-      }, 'error');
       return { ok: false, error: err.message };
     }
   });

@@ -458,6 +458,15 @@ export async function updateMihomoGeoData(source = {}, bridge) {
   ]);
 }
 
+export async function upgradeMihomoUi(source = {}, bridge) {
+  return runConfigRequestCandidates(source, [
+    {
+      method: 'POST',
+      path: '/upgrade/ui',
+    },
+  ]);
+}
+
 function requireBridgeMethod(bridge, methodName) {
   const api = getBridge(bridge);
   if (!api || typeof api[methodName] !== 'function') {
@@ -488,6 +497,66 @@ export async function fetchRuleProvidersOverview(bridge) {
     return { ok: false, error: 'bridge_missing' };
   }
   return api.ruleProvidersOverview();
+}
+
+export async function fetchMihomoProvidersProxies(source = {}) {
+  const { baseUrl } = resolveMihomoControllerAccess(source);
+  if (!baseUrl) {
+    return { ok: false, error: 'controller_missing' };
+  }
+  try {
+    const response = await fetch(`${baseUrl}/providers/proxies`, {
+      method: 'GET',
+      headers: source.secret ? { Authorization: `Bearer ${source.secret}` } : {},
+    });
+    if (!response.ok) {
+      return { ok: false, error: 'request_failed', status: response.status };
+    }
+    const data = await response.json();
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: 'request_failed', details: error.message };
+  }
+}
+
+export async function fetchMihomoRules(source = {}) {
+  const { baseUrl } = resolveMihomoControllerAccess(source);
+  if (!baseUrl) {
+    return { ok: false, error: 'controller_missing' };
+  }
+  try {
+    const response = await fetch(`${baseUrl}/rules`, {
+      method: 'GET',
+      headers: source.secret ? { Authorization: `Bearer ${source.secret}` } : {},
+    });
+    if (!response.ok) {
+      return { ok: false, error: 'request_failed', status: response.status };
+    }
+    const data = await response.json();
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: 'request_failed', details: error.message };
+  }
+}
+
+export async function fetchMihomoProvidersRules(source = {}) {
+  const { baseUrl } = resolveMihomoControllerAccess(source);
+  if (!baseUrl) {
+    return { ok: false, error: 'controller_missing' };
+  }
+  try {
+    const response = await fetch(`${baseUrl}/providers/rules`, {
+      method: 'GET',
+      headers: source.secret ? { Authorization: `Bearer ${source.secret}` } : {},
+    });
+    if (!response.ok) {
+      return { ok: false, error: 'request_failed', status: response.status };
+    }
+    const data = await response.json();
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: 'request_failed', details: error.message };
+  }
 }
 
 export async function fetchRulesOverviewBundle(bridge) {

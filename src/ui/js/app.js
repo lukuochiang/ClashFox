@@ -1,11 +1,24 @@
-import { SidebarFoxDivider } from './sidebar-fox-divider.js';
-import { FOX_RANK_I18N } from './foxrank-i18n.js';
-
 const appLocaleUtils = globalThis.CLASHFOX_LOCALE_UTILS || {};
 const detectSystemLocale = typeof appLocaleUtils.detectSystemLocale === 'function'
   ? appLocaleUtils.detectSystemLocale
   : (() => 'en');
 let systemLocaleFromMain = '';
+
+// Default panel presets used before static config loads.
+const DEFAULT_PANEL_PRESETS = {
+  zashboard: {
+    name: 'zashboard',
+    displayName: 'Zashboard',
+    url: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
+    'external-ui-url': 'ui',
+  },
+  metacubexd: {
+    name: 'metacubexd',
+    displayName: 'MetaCubeXD',
+    url: 'https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz',
+    'external-ui-url': 'ui',
+  },
+};
 
 // apply last-used theme immediately to avoid flicker on reload
 // this will be overwritten later when settings are applied
@@ -1903,7 +1916,11 @@ async function fetchTunFromController() {
 }
 
 async function updateTunViaController(partialTun = {}) {
-  return updateTunConfigViaController(partialTun, getMihomoApiSource());
+  return updateTunConfigViaController(partialTun, getMihomoApiSource(), window.clashfox);
+}
+
+function getGuiBridgeSettings() {
+  return { ...(state.fileSettings || {}), ...(state.settings || {}) };
 }
 let quickHintNodes = [];
 
@@ -1952,6 +1969,8 @@ let externalAuthInput = document.getElementById('externalAuth');
 let settingsExternalUi = document.getElementById('settingsExternalUi');
 let settingsExternalUiUrl = document.getElementById('settingsExternalUiUrl');
 let panelSelect = document.getElementById('panelSelect');
+let panelInstallBtn = document.getElementById('panelInstallBtn');
+let panelUpdateBtn = document.getElementById('panelUpdateBtn');
 let startBtn = document.getElementById('startBtn');
 let stopBtn = document.getElementById('stopBtn');
 let restartBtn = document.getElementById('restartBtn');
@@ -2177,11 +2196,13 @@ const DEFAULT_SETTINGS = {
   },
 };
 
-let PANEL_PRESETS = {};
+let PANEL_PRESETS = { ...DEFAULT_PANEL_PRESETS };
 let RECOMMENDED_CONFIGS = [];
 
 const STATIC_CONFIGS_URL = new URL('../../../static/configs.json', window.location.href);
-let PANEL_EXTERNAL_UI_URLS = {};
+let PANEL_EXTERNAL_UI_URLS = Object.fromEntries(
+  Object.entries(PANEL_PRESETS).map(([key, preset]) => [key, preset['external-ui-url'] || preset.externalUiUrl || preset.url || '']),
+);
 
 const state = {
   lang: 'auto',
@@ -2208,8 +2229,7 @@ const state = {
   installState: 'idle',
   dashboardAlerted: false,
   dashboardLoaded: false,
-  autoPanelInstalled: false,
-  panelInstallRequested: false,
+  panelActionPending: false,
   helperAuthFallbackHintShown: false,
   kernelUpdateInfo: null,
   kernelUpdateCache: null,
@@ -2256,6 +2276,8 @@ const state = {
   overviewRunning: false,
   overviewUptimeBaseSec: 0,
   overviewUptimeAt: 0,
+  // JS-based uptime tracking: start timestamp for current session
+  mihomoStartTime: null,
   connSamples: [],
   connPeak: 0,
   connLast: null,
@@ -5490,7 +5512,10 @@ async function loadStaticConfigs() {
     const payload = await response.json();
     if (payload && typeof payload === 'object') {
       if (payload.panelPresets && typeof payload.panelPresets === 'object') {
-        PANEL_PRESETS = payload.panelPresets;
+        PANEL_PRESETS = {
+          ...DEFAULT_PANEL_PRESETS,
+          ...payload.panelPresets,
+        };
         // derive external UI URLs from presets if present
         const derivedUrls = {};
         Object.entries(PANEL_PRESETS).forEach(([key, preset]) => {
@@ -5502,6 +5527,7 @@ async function loadStaticConfigs() {
           }
         });
         PANEL_EXTERNAL_UI_URLS = Object.keys(derivedUrls).length > 0 ? derivedUrls : {};
+        syncPanelActionButtons();
       }
       if (Array.isArray(payload.recommendedConfigs)) {
         RECOMMENDED_CONFIGS = payload.recommendedConfigs;
@@ -5991,6 +6017,113 @@ function formatUptime(seconds) {
   return days > 0 ? `${days}d ${base}` : base;
 }
 
+// JS-based uptime tracking functions
+const MIHOMO_START_TIME_KEY = 'mihomo_start_time';
+const MIHOMO_TOTAL_UPTIME_KEY = 'mihomo_total_uptime';
+
+function getMihomoStartTime() {
+  try {
+    const stored = localStorage.getItem(MIHOMO_START_TIME_KEY);
+    if (stored) {
+      const time = Number.parseInt(stored, 10);
+      if (Number.isFinite(time) && time > 0) {
+        return time;
+      }
+    }
+  } catch {
+    // Ignore localStorage errors
+  }
+  return null;
+}
+
+function setMihomoStartTime(timestamp) {
+  try {
+    if (timestamp == null || timestamp <= 0) {
+      localStorage.removeItem(MIHOMO_START_TIME_KEY);
+    } else {
+      localStorage.setItem(MIHOMO_START_TIME_KEY, String(timestamp));
+    }
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
+function getMihomoTotalUptime() {
+  try {
+    const stored = localStorage.getItem(MIHOMO_TOTAL_UPTIME_KEY);
+    if (stored) {
+      const seconds = Number.parseFloat(stored);
+      if (Number.isFinite(seconds) && seconds >= 0) {
+        return seconds;
+      }
+    }
+  } catch {
+    // Ignore localStorage errors
+  }
+  return 0;
+}
+
+function setMihomoTotalUptime(seconds) {
+  try {
+    if (seconds == null || seconds < 0) {
+      localStorage.removeItem(MIHOMO_TOTAL_UPTIME_KEY);
+    } else {
+      localStorage.setItem(MIHOMO_TOTAL_UPTIME_KEY, String(seconds));
+    }
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
+function calculateMihomoUptime() {
+  const startTime = state.mihomoStartTime || getMihomoStartTime();
+  
+  // If mihomo is not running (no start time), return 0
+  if (!startTime) {
+    return 0;
+  }
+  
+  const now = Date.now();
+  const elapsedMs = Math.max(0, now - startTime);
+  const elapsedSec = Math.floor(elapsedMs / 1000);
+  
+  // Return current session uptime only (no accumulation)
+  return elapsedSec;
+}
+
+function resetMihomoUptimeTracking() {
+  state.mihomoStartTime = null;
+  setMihomoStartTime(null);
+  setMihomoTotalUptime(0);
+}
+
+function saveMihomoUptimeBeforeStop() {
+  const startTime = state.mihomoStartTime || getMihomoStartTime();
+  if (!startTime) {
+    return;
+  }
+  const now = Date.now();
+  const elapsedMs = Math.max(0, now - startTime);
+  const elapsedSec = Math.floor(elapsedMs / 1000);
+  
+  // Add to total uptime
+  const currentTotal = getMihomoTotalUptime();
+  const newTotal = currentTotal + elapsedSec;
+  setMihomoTotalUptime(newTotal);
+  
+  // Reset start time
+  state.mihomoStartTime = null;
+  setMihomoStartTime(null);
+}
+
+function startMihomoUptimeTracking() {
+  const now = Date.now();
+  state.mihomoStartTime = now;
+  setMihomoStartTime(now);
+  guiLog('uptime', 'tracking started', { startTime: now });
+}
+
+
 function formatLatency(value) {
   const num = Number.parseFloat(value);
   if (!Number.isFinite(num)) {
@@ -6047,6 +6180,333 @@ function formatSimpleDateTime(value) {
   const hh = String(date.getHours()).padStart(2, '0');
   const mi = String(date.getMinutes()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+}
+
+function parseProviderNumber(value) {
+  if (value === null || value === undefined || value === '') {
+    return 0;
+  }
+  const parsed = Number.parseFloat(String(value).trim());
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 0;
+  }
+  return parsed;
+}
+
+function parseProviderExpire(value) {
+  const parsed = Number.parseInt(String(value || '').trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+  // Some variants may return ms timestamps.
+  return parsed > 10_000_000_000 ? Math.floor(parsed / 1000) : parsed;
+}
+
+function parseSubscriptionUserinfo(raw = '') {
+  const source = String(raw || '').trim();
+  if (!source) {
+    return {
+      upload: 0,
+      download: 0,
+      total: 0,
+      expire: 0,
+    };
+  }
+  const result = {
+    upload: 0,
+    download: 0,
+    total: 0,
+    expire: 0,
+  };
+  source.split(';').forEach((segment) => {
+    const [keyRaw, valueRaw] = String(segment || '').split('=');
+    const key = String(keyRaw || '').trim().toLowerCase();
+    if (!key) {
+      return;
+    }
+    let value = String(valueRaw || '').trim();
+    try {
+      value = decodeURIComponent(value);
+    } catch {
+      // ignore decode failures
+    }
+    if (key === 'upload') result.upload = parseProviderNumber(value);
+    if (key === 'download') result.download = parseProviderNumber(value);
+    if (key === 'total') result.total = parseProviderNumber(value);
+    if (key === 'expire') result.expire = parseProviderExpire(value);
+  });
+  return result;
+}
+
+function normalizeProviderVehicleType(value = '') {
+  const text = String(value || '').trim();
+  if (!text) {
+    return 'UNKNOWN';
+  }
+  return text.toUpperCase();
+}
+
+function normalizeProxyProviderRecords(rawData = {}) {
+  const source = rawData && typeof rawData === 'object' ? rawData : {};
+  const providersContainer = source.providers && typeof source.providers === 'object'
+    ? source.providers
+    : source;
+  const records = [];
+  Object.entries(providersContainer).forEach(([key, value]) => {
+    if (!value || typeof value !== 'object') {
+      return;
+    }
+    const entry = value;
+    const name = String(entry.name || key || '').trim() || String(key || '').trim() || 'Provider';
+    const vehicleType = normalizeProviderVehicleType(entry.vehicleType || entry.vehicle || entry.type || '');
+    const subscriptionInfo = (entry.subscriptionInfo && typeof entry.subscriptionInfo === 'object')
+      ? entry.subscriptionInfo
+      : ((entry.subscription && typeof entry.subscription === 'object')
+        ? entry.subscription
+        : ((entry['subscription-info'] && typeof entry['subscription-info'] === 'object')
+          ? entry['subscription-info']
+          : null));
+    const fromHeader = parseSubscriptionUserinfo(
+      entry.subscriptionUserinfo
+      || entry['subscription-userinfo']
+      || entry.userinfo
+      || '',
+    );
+    const upload = parseProviderNumber(
+      (subscriptionInfo && (subscriptionInfo.upload ?? subscriptionInfo.Upload))
+      ?? entry.upload
+      ?? entry.Upload
+      ?? fromHeader.upload,
+    );
+    const download = parseProviderNumber(
+      (subscriptionInfo && (subscriptionInfo.download ?? subscriptionInfo.Download))
+      ?? entry.download
+      ?? entry.Download
+      ?? fromHeader.download,
+    );
+    const total = parseProviderNumber(
+      (subscriptionInfo && (subscriptionInfo.total ?? subscriptionInfo.Total))
+      ?? entry.total
+      ?? entry.Total
+      ?? fromHeader.total,
+    );
+    const expire = parseProviderExpire(
+      (subscriptionInfo && (subscriptionInfo.expire ?? subscriptionInfo.Expire))
+      ?? entry.expire
+      ?? entry.Expire
+      ?? fromHeader.expire,
+    );
+    let proxies = [];
+    if (Array.isArray(entry.proxies)) {
+      proxies = entry.proxies;
+    } else if (entry.proxies && typeof entry.proxies === 'object') {
+      proxies = Object.values(entry.proxies).filter(Boolean);
+    } else if (Array.isArray(entry.all)) {
+      proxies = entry.all;
+    } else if (Array.isArray(entry.children)) {
+      proxies = entry.children;
+    } else if (entry.now && Array.isArray(entry.now.all)) {
+      proxies = entry.now.all;
+    }
+    let currentProxy = '';
+    if (typeof entry.now === 'string') {
+      currentProxy = String(entry.now).trim();
+    } else if (entry.now && typeof entry.now === 'object') {
+      currentProxy = String(
+        entry.now.name
+        || entry.now.now
+        || entry.now.current
+        || entry.now.selected
+        || '',
+      ).trim();
+    }
+    if (!currentProxy) {
+      currentProxy = String(
+        entry.current
+        || entry.currentProxy
+        || entry.selected
+        || entry.selectedProxy
+        || entry.nowName
+        || '',
+      ).trim();
+    }
+    records.push({
+      key: String(key || '').trim() || name,
+      name,
+      vehicleType,
+      upload,
+      download,
+      total,
+      expire,
+      proxies,
+      currentProxy,
+    });
+  });
+  return records;
+}
+
+function buildProviderSubscriptionOverviewData(rawData = {}) {
+  const now = Date.now();
+  const records = normalizeProxyProviderRecords(rawData);
+  const items = records
+    .filter((record) => {
+      if (record.vehicleType === 'FILE') {
+        return false;
+      }
+      return record.total > 0 || record.upload > 0 || record.download > 0 || record.expire > 0;
+    })
+    .map((record) => {
+      const used = Math.max(0, record.upload + record.download);
+      const total = Math.max(0, record.total);
+      const remaining = Math.max(0, total - used);
+      const usedPercent = total > 0 ? Math.max(0, Math.min(100, (used / total) * 100)) : 0;
+      return {
+        id: record.key,
+        name: record.name,
+        vehicleType: record.vehicleType,
+        totalBytes: total,
+        usedBytes: used,
+        remainingBytes: remaining,
+        usedPercent,
+        expireAt: record.expire > 0 ? (record.expire * 1000) : 0,
+      };
+    })
+    .sort((a, b) => (b.usedPercent - a.usedPercent) || (b.usedBytes - a.usedBytes) || a.name.localeCompare(b.name));
+
+  const summary = items.reduce((acc, item) => {
+    acc.providerCount += 1;
+    acc.totalBytes += Number(item.totalBytes || 0);
+    acc.usedBytes += Number(item.usedBytes || 0);
+    acc.remainingBytes += Number(item.remainingBytes || 0);
+    return acc;
+  }, {
+    providerCount: 0,
+    totalBytes: 0,
+    usedBytes: 0,
+    remainingBytes: 0,
+  });
+  summary.usedPercent = summary.totalBytes > 0 ? Math.max(0, Math.min(100, (summary.usedBytes / summary.totalBytes) * 100)) : 0;
+
+  return {
+    generatedAt: now,
+    summary,
+    items,
+  };
+}
+
+function buildRulesOverviewData(rawData = {}) {
+  const payload = rawData && typeof rawData === 'object' ? rawData : {};
+  const rawRules = Array.isArray(payload.rules)
+    ? payload.rules
+    : (Array.isArray(payload) ? payload : []);
+  const typeCounter = new Map();
+  const policyCounter = new Map();
+  rawRules.forEach((rule) => {
+    const entry = rule && typeof rule === 'object' ? rule : {};
+    const type = String(entry.type || entry.ruleType || '').trim().toUpperCase() || 'UNKNOWN';
+    const policy = String(entry.proxy || entry.policy || entry.adapter || '').trim() || 'DIRECT';
+    typeCounter.set(type, (typeCounter.get(type) || 0) + 1);
+    policyCounter.set(policy, (policyCounter.get(policy) || 0) + 1);
+  });
+  const types = Array.from(typeCounter.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, 12);
+  const policies = Array.from(policyCounter.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, 12);
+  const records = rawRules.slice(0, 160).map((rule, index) => {
+    const entry = rule && typeof rule === 'object' ? rule : {};
+    const type = String(entry.type || entry.ruleType || '').trim().toUpperCase() || 'UNKNOWN';
+    const payloadText = String(
+      entry.payload
+      || entry.rule
+      || entry.domain
+      || entry.target
+      || entry.value
+      || '',
+    ).trim();
+    const payload = payloadText || '-';
+    const policy = String(entry.proxy || entry.policy || entry.adapter || '').trim() || 'DIRECT';
+    const provider = String(
+      entry.providerName
+      || entry.provider
+      || entry.source
+      || entry.sourceName
+      || '',
+    ).trim() || '-';
+    return {
+      id: `rule-${index}`,
+      type,
+      payload,
+      policy,
+      provider,
+    };
+  });
+  return {
+    generatedAt: Date.now(),
+    totalRules: rawRules.length,
+    types,
+    policies,
+    records,
+  };
+}
+
+function parseRuleTimestamp(value) {
+  const parsed = Number.parseInt(String(value || '').trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+  return parsed > 10_000_000_000 ? parsed : parsed * 1000;
+}
+
+function buildRuleProvidersOverviewData(rawData = {}) {
+  const payload = rawData && typeof rawData === 'object' ? rawData : {};
+  const container = payload.providers && typeof payload.providers === 'object'
+    ? payload.providers
+    : payload;
+  const items = [];
+  const behaviorCounter = new Map();
+  Object.entries(container).forEach(([key, value]) => {
+    if (!value || typeof value !== 'object') {
+      return;
+    }
+    const entry = value;
+    const name = String(entry.name || key || '').trim() || String(key || '').trim() || 'Provider';
+    const behavior = String(entry.behavior || '').trim() || 'Unknown';
+    const vehicleType = String(entry.vehicleType || entry.type || '').trim().toUpperCase() || 'UNKNOWN';
+    const ruleCount = Number.parseInt(String(entry.ruleCount ?? entry.count ?? entry.size ?? 0), 10) || 0;
+    const updatedAt = parseRuleTimestamp(entry.updatedAt || entry.updateTime || entry.updated || entry.lastUpdate || 0);
+    items.push({
+      id: String(key || '').trim() || name,
+      name,
+      behavior,
+      vehicleType,
+      ruleCount,
+      updatedAt,
+    });
+    behaviorCounter.set(behavior, (behaviorCounter.get(behavior) || 0) + 1);
+  });
+  items.sort((a, b) => b.ruleCount - a.ruleCount || a.name.localeCompare(b.name));
+  const behaviors = Array.from(behaviorCounter.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  return {
+    generatedAt: Date.now(),
+    totalProviders: items.length,
+    totalRules: items.reduce((sum, item) => sum + Number(item.ruleCount || 0), 0),
+    behaviors,
+    items,
+    records: items.slice(0, 160).map((item, index) => ({
+      id: `provider-${index}`,
+      name: item.name,
+      behavior: item.behavior,
+      vehicleType: item.vehicleType,
+      ruleCount: item.ruleCount,
+      updatedAt: item.updatedAt,
+    })),
+  };
 }
 
 function renderProviderSubscriptionOverview(payload = null) {
@@ -6644,21 +7104,44 @@ function updateOverviewUI(data) {
   const wsConnectionFresh = Boolean(state.lastMihomoConnectionsAt) && (now - Number(state.lastMihomoConnectionsAt || 0) < 10000);
   const wsTrafficFresh = Boolean(state.lastMihomoTrafficAt) && (now - Number(state.lastMihomoTrafficAt || 0) < 10000);
   const wsMemoryFresh = Boolean(state.lastMihomoMemoryAt) && (now - Number(state.lastMihomoMemoryAt || 0) < 10000);
-  const running = Boolean(data.running);
+
+  // Prefer snapshot running state when present to avoid stale local guard.
+  const hasRunning = Object.prototype.hasOwnProperty.call(data, 'running');
+  const running = hasRunning ? Boolean(data.running) : Boolean(state.coreRunning);
   state.overviewRunning = running;
   state.overviewRunningUpdatedAt = Date.now();
-  const uptime = Number.parseFloat(data.uptimeSec);
-  if (running && Number.isFinite(uptime) && uptime >= 0) {
-    state.overviewUptimeBaseSec = uptime;
-    state.overviewUptimeAt = Date.now();
-    if (overviewUptime) {
-      setNodeTextIfChanged(overviewUptime, formatUptime(uptime));
+
+  // Use JS-based uptime calculation
+  if (running) {
+    // If mihomo just started, start tracking
+    if (!state.mihomoStartTime && !getMihomoStartTime()) {
+      startMihomoUptimeTracking();
     }
-  } else if (!running) {
+
+    // Don't set overviewUptimeBaseSec here, let the timer handle it
+    // Just update the display immediately
+    const uptime = calculateMihomoUptime();
+    if (Number.isFinite(uptime) && uptime >= 0) {
+      if (overviewUptime) {
+        setNodeTextIfChanged(overviewUptime, formatUptime(uptime));
+      }
+    }
+  } else {
+    // mihomo stopped, save uptime before clearing
+    if (!state.coreActionInFlight && (state.mihomoStartTime || getMihomoStartTime())) {
+      saveMihomoUptimeBeforeStop();
+    }
+
     state.overviewUptimeBaseSec = 0;
     state.overviewUptimeAt = 0;
     if (overviewUptime) {
-      setNodeTextIfChanged(overviewUptime, '-');
+      // Display accumulated total uptime even when stopped
+      const uptime = calculateMihomoUptime();
+      if (Number.isFinite(uptime) && uptime > 0) {
+        setNodeTextIfChanged(overviewUptime, formatUptime(uptime));
+      } else {
+        setNodeTextIfChanged(overviewUptime, '-');
+      }
     }
   }
   if (!wsConnectionFresh) {
@@ -6791,7 +7274,9 @@ function loadFoxRankFromStorage() {
       return createDefaultFoxRankState();
     }
     const parsed = JSON.parse(payload);
-    const usageResetVersion = String(parsed.usageResetVersion || '');
+    const usageResetVersion = parsed.usageResetVersion
+      ? String(parsed.usageResetVersion || '')
+      : FOX_RANK_USAGE_RESET_VERSION;
     const shouldResetUsage = usageResetVersion !== FOX_RANK_USAGE_RESET_VERSION;
     return {
       ...createDefaultFoxRankState(),
@@ -7412,12 +7897,7 @@ function renderFoxRankBriefModal(snapshot = null) {
     return;
   }
   const data = snapshot || getFoxRankSnapshot();
-  const baseline = state.foxRank.quickReportBaseline || {
-    xp: data.xp,
-    stableDays: data.stabilityDays,
-    qualityScore: data.qualityScore,
-    explorationCount: data.explorationCount,
-  };
+  const baseline = getFoxRankQuickReportBaseline(data);
   const xpDelta = Math.max(0, data.xp - (Number(baseline.xp) || 0));
   const stableDelta = Math.max(0, data.stabilityDays - (Number(baseline.stableDays) || 0));
   const qualityDelta = Math.round((data.qualityScore - (Number(baseline.qualityScore) || 0)) * 100);
@@ -7446,6 +7926,40 @@ function renderFoxRankBriefModal(snapshot = null) {
   if (foxRankBriefBoost) {
     setNodeTextIfChanged(foxRankBriefBoost, formatFoxRankText('briefBoost', { label: data.boost.label, desc: data.boost.description }, `${data.boost.label} • ${data.boost.description}`));
   }
+}
+
+function getFoxRankQuickReportBaseline(snapshot) {
+  if (!state.foxRank) {
+    return {
+      xp: snapshot.xp,
+      stableDays: snapshot.stabilityDays,
+      qualityScore: snapshot.qualityScore,
+      explorationCount: snapshot.explorationCount,
+    };
+  }
+  const stored = state.foxRank.quickReportBaseline;
+  if (stored && typeof stored === 'object') {
+    return stored;
+  }
+  const history = Array.isArray(state.foxRank.history) ? state.foxRank.history : [];
+  const today = getTodayKey();
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const entry = history[i];
+    if (entry && entry.day && entry.day !== today) {
+      return {
+        xp: Number(entry.xp) || 0,
+        stableDays: Number(entry.stableDays) || 0,
+        qualityScore: Number(entry.qualityScore) || 0,
+        explorationCount: Number(entry.explorationCount) || 0,
+      };
+    }
+  }
+  return {
+    xp: snapshot.xp,
+    stableDays: snapshot.stabilityDays,
+    qualityScore: snapshot.qualityScore,
+    explorationCount: snapshot.explorationCount,
+  };
 }
 
 function maybeOpenFoxRankBrief(snapshot = null) {
@@ -8102,7 +8616,7 @@ async function loadProviderSubscriptionOverview() {
   state.providerSubscriptionLoading = true;
   guiLog('provider-traffic', 'load started');
   try {
-    const response = await fetchProviderSubscriptionOverview();
+    const response = await fetchMihomoProvidersProxies(getMihomoApiSource());
     if (!response || !response.ok || !response.data) {
       guiLog('provider-traffic', 'load failed', {
         error: response && response.error ? response.error : 'provider_subscription_overview_failed',
@@ -8115,13 +8629,14 @@ async function loadProviderSubscriptionOverview() {
       }
       return;
     }
-    cacheOverviewProviderSubscription(response.data);
-    renderProviderSubscriptionOverview(response.data);
+    const overviewData = buildProviderSubscriptionOverviewData(response.data);
+    cacheOverviewProviderSubscription(overviewData);
+    renderProviderSubscriptionOverview(overviewData);
     guiLog('provider-traffic', 'load completed', {
-      providerCount: response.data && response.data.summary
-        ? Number(response.data.summary.providerCount || 0)
+      providerCount: overviewData && overviewData.summary
+        ? Number(overviewData.summary.providerCount || 0)
         : 0,
-      itemCount: Array.isArray(response.data && response.data.items) ? response.data.items.length : 0,
+      itemCount: Array.isArray(overviewData && overviewData.items) ? overviewData.items.length : 0,
     });
   } catch {
     guiLog('provider-traffic', 'load threw', {
@@ -8148,7 +8663,11 @@ async function loadRulesOverviewCard() {
   state.rulesOverviewLoading = true;
   guiLog('rules-overview', 'load started');
   try {
-    const { rules: rulesResp, providers: providerResp } = await fetchRulesOverviewBundle();
+    const source = getMihomoApiSource();
+    const [rulesResp, providerResp] = await Promise.all([
+      fetchMihomoRules(source),
+      fetchMihomoProvidersRules(source),
+    ]);
     const hasRules = Boolean(rulesResp && rulesResp.ok && rulesResp.data);
     const hasProviders = Boolean(providerResp && providerResp.ok && providerResp.data);
     if (!hasRules && !hasProviders) {
@@ -8171,12 +8690,12 @@ async function loadRulesOverviewCard() {
       }
     }
     if (hasRules) {
-      state.rulesOverviewPayload = rulesResp.data;
+      state.rulesOverviewPayload = buildRulesOverviewData(rulesResp.data);
     } else if (!state.rulesOverviewPayload) {
       state.rulesOverviewPayload = { totalRules: 0, types: [], records: [] };
     }
     if (hasProviders) {
-      state.ruleProvidersOverviewPayload = providerResp.data;
+      state.ruleProvidersOverviewPayload = buildRuleProvidersOverviewData(providerResp.data);
     } else if (!state.ruleProvidersOverviewPayload) {
       state.ruleProvidersOverviewPayload = { totalProviders: 0, totalRules: 0, behaviors: [], items: [], records: [] };
     }
@@ -9390,6 +9909,8 @@ function refreshPageRefs() {
   settingsExternalUi = document.getElementById('settingsExternalUi');
   settingsExternalUiUrl = document.getElementById('settingsExternalUiUrl');
   panelSelect = document.getElementById('panelSelect');
+  panelInstallBtn = document.getElementById('panelInstallBtn');
+  panelUpdateBtn = document.getElementById('panelUpdateBtn');
   startBtn = document.getElementById('startBtn');
   stopBtn = document.getElementById('stopBtn');
   restartBtn = document.getElementById('restartBtn');
@@ -11178,6 +11699,10 @@ if (configPathInput) {
 
 if (panelSelect) {
   panelSelect.addEventListener('change', async (event) => {
+    if (state.panelActionPending) {
+      panelSelect.value = (state.settings && state.settings.panelChoice) || 'zashboard';
+      return;
+    }
     const value = event.target.value || '';
     if (!value) {
       return;
@@ -11195,7 +11720,7 @@ if (panelSelect) {
         return;
       }
     }
-    const preset = PANEL_PRESETS[value];
+    const preset = getPanelPreset(value);
     if (!preset) {
       return;
     }
@@ -11206,29 +11731,58 @@ if (panelSelect) {
         saveSettings({ externalUiUrl: urlVal });
       }
     }
-    state.panelInstallRequested = true;
-    showToast(t('labels.panelSwitchHint'), 'info');
     saveSettings({ panelChoice: value });
     updateDashboardFrameSrc();
-    const response = await ensurePanelInstalledAndActivated(preset);
-    if (response.ok) {
-      if (state.panelInstallRequested && response.installed) {
-        showToast(t('labels.panelInstalled'));
-      }
-      state.panelInstallRequested = false;
+  });
+}
+
+if (panelInstallBtn) {
+  panelInstallBtn.addEventListener('click', async () => {
+    const choice = getSelectedPanelName();
+    const preset = getPanelPreset(choice);
+    const panelName = preset?.displayName || preset?.name || choice;
+
+    const confirmed = await promptConfirm({
+      title: t('confirm.panelInstallTitle', 'Install Panel'),
+      body: t('confirm.panelInstallBody', `Are you sure you want to install ${panelName}?`),
+      confirmLabel: t('confirm.installConfirm', 'Install'),
+      confirmTone: 'primary',
+    });
+
+    if (!confirmed) {
       return;
     }
-    let errorMsg = t('labels.panelInstallFailed');
-    if (response.error) {
-      errorMsg = `${errorMsg} (${response.error})`;
-      if (response.error === 'empty_output' && response.details) {
-        errorMsg = `${errorMsg}: ${response.details}`;
-      }
+
+    handlePanelInstallAction().catch((error) => {
+      const message = String(error && error.message ? error.message : error || '');
+      showToast(`${t('labels.panelInstallFailed')} (${message || 'unknown_error'})`, 'error');
+      setPanelActionPending(false);
+    });
+  });
+}
+
+if (panelUpdateBtn) {
+  panelUpdateBtn.addEventListener('click', async () => {
+    const choice = getSelectedPanelName();
+    const preset = getPanelPreset(choice);
+    const panelName = preset?.displayName || preset?.name || choice;
+    
+    const confirmed = await promptConfirm({
+      title: t('confirm.panelUpdateTitle', 'Update Panel'),
+      body: t('confirm.panelUpdateBody', `Are you sure you want to update ${panelName}?`),
+      confirmLabel: t('confirm.updateConfirm', 'Update'),
+      confirmTone: 'primary',
+    });
+    
+    if (!confirmed) {
+      return;
     }
-    if (state.panelInstallRequested) {
-      showToast(errorMsg, 'error');
-    }
-    state.panelInstallRequested = false;
+    
+    handlePanelUpdateAction().catch((error) => {
+      const message = String(error && error.message ? error.message : error || '');
+      showToast(`${t('labels.panelUpdateFailed')} (${message || 'unknown_error'})`, 'error');
+      setPanelActionPending(false);
+    });
   });
 }
 if (externalControllerInput) {
@@ -11311,6 +11865,9 @@ async function handleCoreAction(action, button) {
     const response = await runCommandWithSudo(command, args);
     if (response.ok) {
       if (action === 'start') {
+        // Start uptime tracking when mihomo is being started
+        startMihomoUptimeTracking();
+        
         const running = await waitForKernelState(true, 12000, 350);
         if (running) {
           const tunApply = await applyTunSettingsAfterStart();
@@ -11318,6 +11875,10 @@ async function handleCoreAction(action, button) {
           setQuickActionRunningState(true);
           const startupElapsedMs = Date.now() - commandStartedAt;
           updateCoreStartupEstimate(startupElapsedMs);
+          // Refresh overview UI to update uptime display
+          if (currentPage === 'overview') {
+            updateOverviewUI();
+          }
           showToast(t('labels.startSuccess'));
           if (!tunApply || !tunApply.ok) {
             const message = (tunApply && tunApply.error) || ti('labels.tunUpdateFailed', 'TUN update failed');
@@ -11325,6 +11886,9 @@ async function handleCoreAction(action, button) {
           }
           guiLog('core-action', 'completed', { action, running: true });
         } else {
+          // Failed to start, reset uptime tracking
+          resetMihomoUptimeTracking();
+          
           state.coreRunningGuardUntil = 0;
           await loadStatusSilently();
           syncQuickActionButtons();
@@ -11334,6 +11898,10 @@ async function handleCoreAction(action, button) {
           guiLog('core-action', 'failed after wait', { action, reason: 'wait_for_running_timeout' }, 'warn');
         }
       } else if (action === 'restart') {
+        // For restart: reset tracking and start fresh
+        resetMihomoUptimeTracking();
+        startMihomoUptimeTracking();
+        
         const running = await waitForKernelState(true, 15000, 400);
         if (running) {
           const tunApply = await applyTunSettingsAfterStart();
@@ -11341,6 +11909,10 @@ async function handleCoreAction(action, button) {
           setQuickActionRunningState(true);
           const startupElapsedMs = Date.now() - commandStartedAt;
           updateCoreStartupEstimate(startupElapsedMs);
+          // Refresh overview UI to update uptime display
+          if (currentPage === 'overview') {
+            updateOverviewUI();
+          }
           showToast(t('labels.restartSuccess'));
           if (!tunApply || !tunApply.ok) {
             const message = (tunApply && tunApply.error) || ti('labels.tunUpdateFailed', 'TUN update failed');
@@ -11348,6 +11920,9 @@ async function handleCoreAction(action, button) {
           }
           guiLog('core-action', 'completed', { action, running: true });
         } else {
+          // Failed to restart, reset uptime tracking
+          resetMihomoUptimeTracking();
+          
           state.coreRunningGuardUntil = 0;
           await loadStatusSilently();
           syncQuickActionButtons();
@@ -11357,10 +11932,17 @@ async function handleCoreAction(action, button) {
           guiLog('core-action', 'failed after wait', { action, reason: 'wait_for_running_timeout' }, 'warn');
         }
       } else {
+        // Stop action: reset uptime tracking
+        resetMihomoUptimeTracking();
+        
         const stopped = await waitForKernelState(false, 10000, 300);
         if (stopped) {
           state.coreRunningGuardUntil = 0;
           setQuickActionRunningState(false);
+          // Refresh overview UI to update uptime display
+          if (currentPage === 'overview') {
+            updateOverviewUI();
+          }
           showToast(t('labels.stopped'));
           guiLog('core-action', 'completed', { action, running: false });
         } else {
@@ -11986,11 +12568,15 @@ function startOverviewTimer() {
     clearInterval(state.overviewTickTimer);
   }
   state.overviewTickTimer = setInterval(() => {
-    if (!state.overviewRunning || !state.overviewUptimeAt || !overviewUptime) {
+    const startTime = state.mihomoStartTime || getMihomoStartTime();
+    if (!startTime || !overviewUptime) {
       return;
     }
-    const elapsedSec = Math.max(0, Math.floor((Date.now() - state.overviewUptimeAt) / 1000));
-    setNodeTextIfChanged(overviewUptime, formatUptime(state.overviewUptimeBaseSec + elapsedSec));
+    // Use JS-based uptime calculation
+    const uptime = calculateMihomoUptime();
+    if (Number.isFinite(uptime) && uptime >= 0) {
+      setNodeTextIfChanged(overviewUptime, formatUptime(uptime));
+    }
   }, 1000);
 
   if (state.providerSubscriptionTimer) {
@@ -12061,6 +12647,7 @@ function updateExternalUiUrlField() {
     url = preset['external-ui-url'] || preset.externalUiUrl || preset.url || '';
   }
   settingsExternalUiUrl.value = url || '';
+  syncPanelActionButtons();
 }
 
 function getSelectedPanelName() {
@@ -12079,26 +12666,145 @@ function updateDashboardFrameSrc() {
   // Dashboard has been replaced by a local panel implementation.
 }
 
+function setPanelActionPending(pending) {
+  state.panelActionPending = Boolean(pending);
+  if (panelInstallBtn) {
+    panelInstallBtn.disabled = state.panelActionPending;
+  }
+  if (panelUpdateBtn) {
+    panelUpdateBtn.disabled = state.panelActionPending;
+  }
+}
+
+function syncPanelActionButtons() {
+  if (!panelUpdateBtn) {
+    return;
+  }
+  const choice = getSelectedPanelName();
+  const preset = getPanelPreset(choice);
+  const hideUpdate = Boolean(preset && preset.name === 'metacubexd');
+  panelUpdateBtn.classList.toggle('is-hidden', hideUpdate);
+}
+
+function getPanelPreset(panelName = '') {
+  const key = String(panelName || '').trim().toLowerCase();
+  if (!key) {
+    return null;
+  }
+  const preset = PANEL_PRESETS && typeof PANEL_PRESETS === 'object' ? PANEL_PRESETS[key] : null;
+  return preset && typeof preset === 'object' ? { ...preset, name: preset.name || key } : null;
+}
+
+async function installPanelMainBridge(preset) {
+  if (!preset) {
+    return { ok: false, error: 'panel_preset_missing' };
+  }
+  if (!window.clashfox || typeof window.clashfox.installPanel !== 'function') {
+    return { ok: false, error: 'bridge_missing' };
+  }
+  return window.clashfox.installPanel(preset);
+}
+
+async function updatePanelMainBridge(preset) {
+  if (!preset) {
+    return { ok: false, error: 'panel_preset_missing' };
+  }
+  const nextPreset = { ...preset, force: true };
+  return installPanelMainBridge(nextPreset);
+}
+
+async function activatePanelMainBridge(panelName = '') {
+  const normalizedName = String(panelName || '').trim();
+  if (!normalizedName) {
+    return { ok: false, error: 'panel_preset_missing' };
+  }
+  if (!window.clashfox || typeof window.clashfox.activatePanel !== 'function') {
+    return { ok: false, error: 'bridge_missing' };
+  }
+  return window.clashfox.activatePanel(normalizedName);
+}
+
 async function ensurePanelInstalledAndActivated(preset) {
   if (!preset || !preset.name) {
     return { ok: false, error: 'panel_preset_missing' };
   }
-  const activateFirst = await runCommand('panel-activate', ['--name', preset.name]);
+  const activateFirst = await activatePanelMainBridge(preset.name);
   if (activateFirst && activateFirst.ok) {
     return { ok: true, installed: false };
   }
   if (activateFirst && activateFirst.error && activateFirst.error !== 'panel_missing') {
     return activateFirst;
   }
-  const install = await runCommand('panel-install', ['--name', preset.name, '--url', preset.url]);
+  const install = await installPanelMainBridge(preset);
   if (!install || !install.ok) {
     return install || { ok: false, error: 'panel_install_failed' };
   }
-  const activateAfter = await runCommand('panel-activate', ['--name', preset.name]);
+  const activateAfter = await activatePanelMainBridge(preset.name);
   if (!activateAfter || !activateAfter.ok) {
     return activateAfter || { ok: false, error: 'panel_activate_failed' };
   }
-  return { ok: true, installed: true };
+  return { ok: true, installed: Boolean(install.installed !== false), skipped: Boolean(install.skipped) };
+}
+
+async function handlePanelInstallAction() {
+  if (state.panelActionPending) {
+    return;
+  }
+  const choice = getSelectedPanelName();
+  const preset = getPanelPreset(choice);
+  if (!preset) {
+    showToast(t('labels.panelInstallFailed'), 'error');
+    return;
+  }
+  setPanelActionPending(true);
+  showToast(t('labels.panelInstallInProgress'), 'info');
+  try {
+    const response = await ensurePanelInstalledAndActivated(preset);
+    if (response && response.ok) {
+      showToast(t('labels.panelInstalled'));
+      return;
+    }
+    let errorMsg = t('labels.panelInstallFailed');
+    if (response && response.error) {
+      errorMsg = `${errorMsg} (${response.error})`;
+      if (response.error === 'empty_output' && response.details) {
+        errorMsg = `${errorMsg}: ${response.details}`;
+      }
+    }
+    showToast(errorMsg, 'error');
+  } finally {
+    setPanelActionPending(false);
+  }
+}
+
+async function handlePanelUpdateAction() {
+  if (state.panelActionPending) {
+    return;
+  }
+  const choice = getSelectedPanelName();
+  const preset = getPanelPreset(choice);
+  if (!preset || preset.name === 'metacubexd') {
+    return;
+  }
+  setPanelActionPending(true);
+  showToast(t('labels.panelUpdateInProgress'), 'info');
+  try {
+    const response = await updatePanelMainBridge(preset);
+    if (response && response.ok) {
+      const activateAfter = await activatePanelMainBridge(preset.name);
+      if (!activateAfter || !activateAfter.ok) {
+        const suffix = activateAfter && activateAfter.error ? ` (${activateAfter.error})` : '';
+        showToast(`${t('labels.panelUpdateFailed')}${suffix}`, 'error');
+        return;
+      }
+      showToast(t('labels.panelUpdated'));
+      return;
+    }
+    const suffix = response && response.error ? ` (${response.error})` : '';
+    showToast(`${t('labels.panelUpdateFailed')}${suffix}`, 'error');
+  } finally {
+    setPanelActionPending(false);
+  }
 }
 
 async function initDashboardFrame() {
@@ -12158,21 +12864,6 @@ async function initApp() {
     return;
   }
   loadAppInfo(true);
-  if (state.settings && state.settings.panelChoice && !state.autoPanelInstalled) {
-    const preset = PANEL_PRESETS[state.settings.panelChoice];
-    if (preset) {
-      state.autoPanelInstalled = true;
-      ensurePanelInstalledAndActivated(preset).then((response) => {
-        if (response.ok) {
-          return;
-        }
-        if (!response.ok && response.error && response.error !== 'cancelled') {
-          const errorMsg = response.error ? `${t('labels.panelInstallFailed')} (${response.error})` : t('labels.panelInstallFailed');
-          showToast(errorMsg, 'error');
-        }
-      });
-    }
-  }
   loadStatus();
   setTimeout(() => loadStatus(), 1200);
   setTimeout(() => loadStatus(), 4000);
@@ -12214,8 +12905,9 @@ if (document.readyState === 'loading') {
 
 // Common entry: load tray i18n first, then main i18n map
 import {
-  fetchProviderSubscriptionOverview,
-  fetchRulesOverviewBundle,
+  fetchMihomoProvidersProxies,
+  fetchMihomoProvidersRules,
+  fetchMihomoRules,
   fetchTunConfigFromController,
   fetchMihomoVersion,
   reloadMihomoConfig,
@@ -12229,7 +12921,7 @@ import {
   updateModeViaController,
   updateMihomoConfigViaController,
   updateTunConfigViaController,
-} from './mihomo-api.js';
+} from '../api/mihomo-api.js';
 import {
   DEFAULT_HELPER_LOG_PATH,
   buildHelperStatusSnapshot,
@@ -12244,6 +12936,8 @@ import {
   revealInFinder,
   runHelperInstallInTerminal,
   uninstallHelper,
-} from './helper-api.js';
+} from '../api/helper-api.js';
+import { SidebarFoxDivider } from '../components/sidebar-fox-divider.js';
+import { FOX_RANK_I18N } from '../locales/foxrank-i18n.js';
 import '../locales/tray-i18n.js';
 import '../locales/i18n.js';
