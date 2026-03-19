@@ -5534,7 +5534,7 @@ async function loadStaticConfigs() {
       }
     }
   } catch (error) {
-    console.warn('Failed to load static configs.', error);
+    // Silent error handling in production
   }
 }
 
@@ -10162,7 +10162,7 @@ async function invokeHelperPanelRefresh(force = false) {
       await fn(Boolean(force));
     }
   } catch (err) {
-    console.warn('[helper] invokeHelperPanelRefresh failed:', err);
+    // Silent error handling in production
   }
 }
 
@@ -11280,10 +11280,10 @@ if (helperLogsOpenBtn) {
       try {
         const response = await openHelperLogsWithFallback(DEFAULT_HELPER_LOG_PATH);
         if (!response || !response.ok) {
-          console.warn('[helper] open logs failed');
+          // Silent error handling in production
         }
       } catch (err) {
-        console.warn('[helper] open logs failed:', err);
+        // Silent error handling in production
         try {
           await openPath(DEFAULT_HELPER_LOG_PATH);
         } catch {
@@ -12819,7 +12819,7 @@ async function initDashboardFrame() {
       return;
     }
   } catch (error) {
-    console.warn('[dashboard] init local dashboard failed:', error);
+    // Silent error handling in production
   }
   showDashboardAlert();
   state.dashboardLoaded = false;

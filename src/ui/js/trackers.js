@@ -416,8 +416,6 @@ function buildLocalComputerIcon() {
     iconSize: [30, 30],
     iconAnchor: [15, 15],
   });
-  console.log('[buildLocalComputerIcon] className:', icon.options.className);
-  console.log('[buildLocalComputerIcon] html:', icon.options.html);
   return icon;
 }
 
@@ -645,7 +643,6 @@ function applyFilters(points = []) {
   const outbound = String(filterOutboundEl && filterOutboundEl.value || '').trim();
   const country = String(filterCountryEl && filterCountryEl.value || '').trim();
   const city = String(filterCityEl && filterCityEl.value || '').trim();
-  console.log('[applyFilters] outbound:', outbound, 'country:', country, 'city:', city, 'points count:', points.length);
   const filtered = points.filter((point) => {
     if (outbound) {
       const outbounds = Array.isArray(point.outbounds) ? point.outbounds : [];
@@ -659,14 +656,11 @@ function applyFilters(points = []) {
     }
     return true;
   });
-  console.log('[applyFilters] filtered count:', filtered.length);
   return filtered;
 }
 
 function drawSnapshot(snapshot) {
-  console.log('[drawSnapshot] called');
   if (!map || !pointsLayer || !linksLayer) {
-    console.log('[drawSnapshot] layers not ready');
     return;
   }
   const payload = snapshot && snapshot.data && typeof snapshot.data === 'object' ? snapshot.data : {};
@@ -682,7 +676,6 @@ function drawSnapshot(snapshot) {
   refillSelect(filterCityEl, Array.isArray(filters.cities) ? filters.cities : []);
 
   const points = applyFilters(pointsSource).slice(0, RENDER_MAX_POINTS);
-  console.log('[drawSnapshot] points count:', points.length);
 
   setDetail(null);
   if (emptyEl) {

@@ -98,7 +98,7 @@ function finalizeDistLayout() {
   const versionDirName = resolveVersionDirName();
   const versionDir = path.join(distDir, versionDirName);
   fs.mkdirSync(versionDir, { recursive: true });
-  const keepExts = new Set(['.zip', '.yml', '.yaml']);
+  const keepExts = new Set(['.zip', '.dmg', '.yml', '.yaml']);
   const keepNames = new Set(['latest.yml']);
   for (const name of fs.readdirSync(distDir)) {
     const filePath = path.join(distDir, name);
@@ -156,7 +156,11 @@ function buildConfig({ includeHelper = true, forceX64Suffix = false } = {}) {
     files.push('!static/helper');
     files.push('!static/helper/**/*');
   }
-  const runtimeDependencyFiles = Object.keys(pkg.dependencies || {}).map((name) => `node_modules/${name}/**/*`);
+  const runtimeDependencyNames = new Set(Object.keys(pkg.dependencies || {}));
+  const runtimeDependencyFiles = Array.from(runtimeDependencyNames).map((name) => `node_modules/${name}/**/*`);
+  const devDependencyExcludes = Object.keys(pkg.devDependencies || {})
+    .filter((name) => !runtimeDependencyNames.has(name))
+    .map((name) => `!node_modules/${name}/**/*`);
   const requiredRuntimeFiles = [
     String(pkg.main || '').trim(),
     ...runtimeDependencyFiles,
@@ -164,6 +168,11 @@ function buildConfig({ includeHelper = true, forceX64Suffix = false } = {}) {
   requiredRuntimeFiles.forEach((entry) => {
     if (!files.includes(entry)) {
       files.unshift(entry);
+    }
+  });
+  devDependencyExcludes.forEach((entry) => {
+    if (!files.includes(entry)) {
+      files.push(entry);
     }
   });
   const extraResources = includeHelper || !Array.isArray(base.extraResources)
@@ -230,7 +239,7 @@ function buildMac() {
     CSC_IDENTITY_AUTO_DISCOVERY: 'false',
     PYTHON: process.env.PYTHON || 'python3',
   };
-  const commonArgs = ['--mac', 'zip'];
+  const commonArgs = ['--mac'];
   const buildAll = !requestedArch || requestedArch === 'all';
   if (buildAll || requestedArch === 'x64') {
     run('npx', ['electron-builder', ...commonArgs, '--x64', '--publish', 'never', '--config', tempX64ConfigPath], { env });

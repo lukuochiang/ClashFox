@@ -178,7 +178,7 @@ function shouldSuppressMihomoRequestLog(method = 'GET', url = '', ok = true) {
 }
 
 function logMihomoApi(event, payload = {}) {
-  console.log(`[mihomo-api] ${event}`, payload);
+  // Silent in production
 }
 
 let mihomoRequestSeq = 0;
