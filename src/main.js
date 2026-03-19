@@ -9589,9 +9589,7 @@ function toggleTrayMenuWindow() {
     return;
   }
   showTrayMenuWindow().catch((err) => {
-    } catch (err) {
-      // Silent error handling in production
-    }
+    // Silent error handling in production
   });
 }
 
