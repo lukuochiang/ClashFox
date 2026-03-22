@@ -1228,6 +1228,7 @@ function makeRow(item) {
     const row = document.createElement('div');
     row.className = 'menu-row-section';
     row.textContent = item.label || '';
+    bindHoverSubmenuClose(row);
     return row;
   }
 
@@ -1276,7 +1277,11 @@ function makeRow(item) {
     arrow.className = 'menu-arrow';
     arrow.textContent = '›';
     row.appendChild(arrow);
-    bindHoverSubmenuOpen(row, item.submenu);
+    if (item.submenu) {
+      bindHoverSubmenuOpen(row, item.submenu);
+    } else {
+      bindHoverSubmenuClose(row);
+    }
     row.addEventListener('click', (event) => {
       if (Date.now() < blockClickUntil) {
         event.preventDefault();
@@ -1366,6 +1371,7 @@ function makeRow(item) {
     return row;
   }
 
+  bindHoverSubmenuClose(row);
   row.addEventListener('click', async () => {
     if (Date.now() < blockClickUntil) {
       return;
@@ -1549,7 +1555,19 @@ function bindHoverSubmenuOpen(row, submenuKey) {
   const open = () => openSubmenu(submenuKey, row);
   row.addEventListener('pointerenter', open);
   row.addEventListener('mouseenter', open);
-  row.addEventListener('mouseover', open);
+}
+
+function bindHoverSubmenuClose(row) {
+  if (!row) {
+    return;
+  }
+  const close = () => {
+    if (activeSubmenuKey) {
+      hideSubmenu();
+    }
+  };
+  row.addEventListener('pointerenter', close);
+  row.addEventListener('mouseenter', close);
 }
 
 function openSubmenu(submenuKey, anchorRow, keepAnchor = false) {
@@ -1561,6 +1579,14 @@ function openSubmenu(submenuKey, anchorRow, keepAnchor = false) {
     submenuKey,
     keepAnchor ? activeSubmenuAnchor : anchorRow,
   );
+  if (
+    activeSubmenuKey === submenuKey
+    && activeSubmenuAnchor
+    && resolvedAnchor
+    && activeSubmenuAnchor === resolvedAnchor
+  ) {
+    return;
+  }
   activeSubmenuKey = submenuKey;
   activeSubmenuAnchor = resolvedAnchor;
   listEl.querySelectorAll('.menu-row.expanded').forEach((node) => node.classList.remove('expanded'));
@@ -1623,7 +1649,6 @@ async function init() {
       }
       menuVersion += 1;
       const keepSubmenuKey = activeSubmenuKey;
-      const shouldKeepSubmenu = shouldRestoreSubmenu(activeSubmenuAnchor);
       const keepSubmenuAnchorKey = activeSubmenuAnchor
         && activeSubmenuAnchor.dataset
         && activeSubmenuAnchor.dataset.submenuKey
@@ -1639,7 +1664,7 @@ async function init() {
           resetTrafficChart();
         }
       }
-      if (shouldKeepSubmenu && keepSubmenuKey && keepSubmenuAnchorKey) {
+      if (keepSubmenuKey && keepSubmenuAnchorKey) {
         const nextAnchor = findMainAnchorBySubmenuKey(keepSubmenuAnchorKey);
         if (nextAnchor) {
           activeSubmenuKey = null;

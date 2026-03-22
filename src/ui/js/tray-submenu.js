@@ -401,11 +401,6 @@ function renderPanelTrafficChart() {
     }
   }
   barsEl.innerHTML = svg;
-  if (submenuKey === 'panel') {
-    requestAnimationFrame(() => {
-      resizeSubmenuToContent();
-    });
-  }
 }
 
 function applyPanelTrafficSnapshot(payload = {}) {
@@ -781,66 +776,62 @@ function getVisibleSubmenuItems() {
   return submenuItems;
 }
 
-function applySubmenuWidthByContent() {
-  if (!submenuRootEl) {
-    return { width: SUBMENU_MIN_WIDTH, height: 0 };
-  }
-  const scrollableMode = isScrollableSubmenuKey(submenuKey);
-  if (submenuListEl) {
-    if (scrollableMode) {
-      const viewportHeight = window.screen && Number.isFinite(Number(window.screen.availHeight))
-        ? Number(window.screen.availHeight)
-        : window.innerHeight;
-      const maxHeight = Math.max(420, Math.min(760, Math.floor(viewportHeight * 0.8)));
-      submenuListEl.style.maxHeight = `${maxHeight}px`;
-      submenuListEl.style.overflowY = 'auto';
-    } else {
-      submenuListEl.style.maxHeight = '';
-      submenuListEl.style.overflowY = '';
-    }
-  }
+function estimateSubmenuDimensions() {
+  const items = Array.isArray(submenuItems) ? submenuItems : [];
   if (submenuKey === 'panel') {
-    submenuRootEl.style.width = 'max-content';
-  } else {
-    submenuRootEl.style.width = 'fit-content';
+    return { width: 260, height: 286 };
   }
-  const measured = Math.ceil(
-    Math.max(
-      submenuRootEl.scrollWidth || 0,
-      submenuRootEl.getBoundingClientRect().width || 0,
-      submenuListEl ? submenuListEl.scrollWidth || 0 : 0,
-    ),
-  );
-  const width = submenuKey === 'panel'
-    ? Math.max(SUBMENU_PANEL_MIN_WIDTH, Math.min(measured, SUBMENU_PANEL_MAX_WIDTH))
-    : Math.max(SUBMENU_MIN_WIDTH, Math.min(measured, SUBMENU_MAX_WIDTH));
-  submenuRootEl.style.width = `${width}px`;
-  const listHeight = submenuListEl
-    ? Math.ceil(
-        scrollableMode
-          ? Math.max(submenuListEl.clientHeight || 0, submenuListEl.getBoundingClientRect().height || 0)
-          : Math.max(submenuListEl.scrollHeight || 0, submenuListEl.getBoundingClientRect().height || 0),
-      )
-    : 0;
-  const height = Math.ceil(
-    Math.max(
-      submenuRootEl.scrollHeight || 0,
-      submenuRootEl.getBoundingClientRect().height || 0,
-      listHeight,
-    ),
-  );
-  return { width, height };
+  const visibleRows = items.reduce((count, item) => {
+    if (!item || typeof item !== 'object') {
+      return count + 1;
+    }
+    switch (item.type) {
+      case 'separator':
+        return count + 0.35;
+      case 'provider':
+        return count + 0.9;
+      case 'child':
+        return count + 0.8;
+      case 'panel-chart':
+        return count + 3.2;
+      case 'panel-provider-traffic':
+        return count + 4.2;
+      default:
+        return count + 1;
+    }
+  }, 0);
+  const isScrollable = String(submenuKey || '').startsWith('outbound-group:');
+  const width = submenuKey === 'network'
+    ? 280
+    : isScrollable
+      ? 320
+      : 260;
+  const baseHeight = submenuKey === 'network'
+    ? 170
+    : isScrollable
+      ? 150
+      : 120;
+  const heightCap = submenuKey === 'network'
+    ? 420
+    : isScrollable
+      ? 500
+      : 360;
+  const cappedHeight = Math.max(120, Math.min(heightCap, Math.round(baseHeight + (visibleRows * 28))));
+  return { width, height: cappedHeight };
 }
 
 function resizeSubmenuToContent() {
-  const metrics = applySubmenuWidthByContent();
-  const width = Math.max(SUBMENU_MIN_WIDTH, Math.ceil(metrics && metrics.width ? metrics.width : 0));
-  const height = Math.max(60, Math.ceil(metrics && metrics.height ? metrics.height : 0));
+  const metrics = estimateSubmenuDimensions();
+  const width = Math.max(SUBMENU_MIN_WIDTH, Math.ceil(metrics.width || 0));
+  const height = Math.max(60, Math.ceil(metrics.height || 0));
   if (width === lastResizeWidth && height === lastResizeHeight) {
     return;
   }
   lastResizeWidth = width;
   lastResizeHeight = height;
+  if (submenuRootEl) {
+    submenuRootEl.style.width = `${width}px`;
+  }
   window.clashfox.traySubmenuResize({ width, height });
 }
 
@@ -852,14 +843,18 @@ function renderSubmenu() {
   getVisibleSubmenuItems().forEach((item) => {
     submenuListEl.appendChild(makeRow(item));
   });
-  requestAnimationFrame(() => {
-    resizeSubmenuToContent();
-  });
+  resizeSubmenuToContent();
 }
 
 function setSubmenu(payload) {
-  submenuKey = payload && payload.key ? payload.key : '';
+  const nextKey = payload && payload.key ? payload.key : '';
+  const keyChanged = nextKey !== submenuKey;
+  submenuKey = nextKey;
   submenuItems = Array.isArray(payload && payload.items) ? payload.items : [];
+  if (keyChanged) {
+    lastResizeWidth = 0;
+    lastResizeHeight = 0;
+  }
   if (submenuRootEl) {
     submenuRootEl.dataset.submenuKey = submenuKey;
   }
