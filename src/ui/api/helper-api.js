@@ -31,11 +31,13 @@ export function buildHelperStatusSnapshot(data = {}, options = {}) {
     socketExists: Boolean(data.socketExists),
     socketPingOk: Boolean(data.socketPingOk),
     httpPingOk: Boolean(data.httpPingOk),
-    helperVersion: String(data.helperVersion || ''),
-    helperTargetVersion: String(data.helperTargetVersion || ''),
-    helperUpdateAvailable: Boolean(data.helperUpdateAvailable),
+    version: String(data.version || data.helperVersion || ''),
+    onlineVersion: String(data.onlineVersion || data.helperOnlineVersion || ''),
+    updateAvailable: Boolean(Object.prototype.hasOwnProperty.call(data, 'updateAvailable')
+      ? data.updateAvailable
+      : data.helperUpdateAvailable),
+    updateSource: String(data.updateSource || data.helperUpdateSource || ''),
     logPath: String(data.logPath || options.defaultLogPath || DEFAULT_HELPER_LOG_PATH),
-    updatedAt: options.updatedAt || new Date().toISOString(),
   };
 }
 

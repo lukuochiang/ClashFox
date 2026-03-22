@@ -1,3 +1,6 @@
+import {SidebarFoxDivider} from '../components/sidebar-fox-divider.js';
+import {FOX_RANK_I18N} from '../locales/foxrank-i18n.js';
+
 const appLocaleUtils = globalThis.CLASHFOX_LOCALE_UTILS || {};
 const detectSystemLocale = typeof appLocaleUtils.detectSystemLocale === 'function'
   ? appLocaleUtils.detectSystemLocale
@@ -61,6 +64,7 @@ let noticePopClose = document.getElementById('noticePopClose');
 let noticePopTitle = document.getElementById('noticePopTitle');
 let contentRoot = document.getElementById('contentRoot');
 let currentPage = document.body ? document.body.dataset.page : '';
+let appWindowVisible = !document.hidden;
 const VALID_PAGES = new Set(['overview', 'kernel', 'config', 'logs', 'settings', 'help', 'dashboard']);
 const FOX_RANK_STORAGE_KEY = 'clashfox-fox-rank-state';
 const FOX_RANK_USAGE_RESET_VERSION = '2026-03-16-reset-usage-v1';
@@ -240,7 +244,7 @@ function closeMihomoConnectionsSocket() {
 }
 
 function scheduleMihomoConnectionsReconnect() {
-  if (currentPage !== 'overview') {
+  if (currentPage !== 'overview' || !isMainWindowVisible()) {
     return;
   }
   stopMihomoConnectionsReconnect();
@@ -288,7 +292,7 @@ function closeMihomoTrafficSocket() {
 }
 
 function scheduleMihomoTrafficReconnect() {
-  if (currentPage !== 'overview') {
+  if (currentPage !== 'overview' || !isMainWindowVisible()) {
     return;
   }
   stopMihomoTrafficReconnect();
@@ -336,7 +340,7 @@ function closeMihomoMemorySocket() {
 }
 
 function scheduleMihomoMemoryReconnect() {
-  if (currentPage !== 'overview') {
+  if (currentPage !== 'overview' || !isMainWindowVisible()) {
     return;
   }
   stopMihomoMemoryReconnect();
@@ -754,12 +758,24 @@ function openTopologyZoomModal() {
   if (!topologyZoomModal) return;
   topologyZoomModal.hidden = false;
   document.body.classList.add('topology-zoom-open');
-  renderTopologyCard();
+  renderTopologyCard({ immediate: true, delayMs: 0 });
 }
 
 function bindTopologyZoomModal() {
   if (overviewTopologyZoomBtn && overviewTopologyZoomBtn.dataset.bound !== 'true') {
     overviewTopologyZoomBtn.dataset.bound = 'true';
+    overviewTopologyZoomBtn.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    overviewTopologyZoomBtn.addEventListener('mousedown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    overviewTopologyZoomBtn.addEventListener('dragstart', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
     overviewTopologyZoomBtn.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -1307,6 +1323,9 @@ function performTopologyRender() {
 }
 
 function renderTopologyCard(options = {}) {
+  if (!isMainWindowVisible() || currentPage !== 'overview') {
+    return;
+  }
   const immediate = Boolean(options && options.immediate);
   const delayMs = Number.isFinite(Number(options && options.delayMs)) ? Number(options.delayMs) : 240;
   if (immediate) {
@@ -1436,6 +1455,9 @@ function getSelectedMihomoLogLevel() {
 }
 
 function scheduleMihomoPageLogsReconnect() {
+  if (!isMainWindowVisible()) {
+    return;
+  }
   stopMihomoPageLogsReconnect();
   const attempt = Math.max(0, Number(state.mihomoPageLogsReconnectAttempts || 0));
   const delay = Math.min(
@@ -1449,7 +1471,7 @@ function scheduleMihomoPageLogsReconnect() {
 }
 
 function scheduleMihomoLogsReconnect() {
-  if (currentPage !== 'overview') {
+  if (currentPage !== 'overview' || !isMainWindowVisible()) {
     return;
   }
   stopMihomoLogsReconnect();
@@ -1465,6 +1487,10 @@ function scheduleMihomoLogsReconnect() {
 }
 
 function startTopologyTicker() {
+  if (!isMainWindowVisible() || currentPage !== 'overview') {
+    stopTopologyTicker();
+    return;
+  }
   if (state.topologyTickTimer) {
     clearInterval(state.topologyTickTimer);
   }
@@ -1524,7 +1550,7 @@ function handleMihomoLogsPayload(payload = '') {
 }
 
 function connectMihomoLogsStream() {
-  if (currentPage !== 'overview' || typeof WebSocket !== 'function') {
+  if (currentPage !== 'overview' || !isMainWindowVisible() || typeof WebSocket !== 'function') {
     return;
   }
   const nextUrl = resolveMihomoLogsWebSocketUrl(getMihomoApiSource(), 'info');
@@ -1606,7 +1632,7 @@ function appendMihomoLogEntry(payload = {}) {
 }
 
 function connectMihomoPageLogsStream() {
-  if (currentPage !== 'logs' || typeof WebSocket !== 'function') {
+  if (currentPage !== 'logs' || !isMainWindowVisible() || typeof WebSocket !== 'function') {
     return;
   }
   const nextUrl = resolveMihomoLogsWebSocketUrl(getMihomoApiSource(), getSelectedMihomoLogLevel());
@@ -1672,7 +1698,7 @@ function handleMihomoMemoryPayload(payload = {}) {
 }
 
 function connectMihomoMemoryStream() {
-  if (currentPage !== 'overview' || typeof WebSocket !== 'function') {
+  if (currentPage !== 'overview' || !isMainWindowVisible() || typeof WebSocket !== 'function') {
     return;
   }
   const nextUrl = resolveMihomoMemoryWebSocketUrl(getMihomoApiSource());
@@ -1784,7 +1810,7 @@ function handleMihomoTrafficPayload(payload = {}) {
 }
 
 function connectMihomoTrafficStream() {
-  if (currentPage !== 'overview' || typeof WebSocket !== 'function') {
+  if (currentPage !== 'overview' || !isMainWindowVisible() || typeof WebSocket !== 'function') {
     return;
   }
   const nextUrl = resolveMihomoTrafficWebSocketUrl(getMihomoApiSource());
@@ -1853,7 +1879,7 @@ function handleMihomoConnectionsPayload(payload = {}) {
 }
 
 function connectMihomoConnectionsStream() {
-  if (currentPage !== 'overview' || typeof WebSocket !== 'function') {
+  if (currentPage !== 'overview' || !isMainWindowVisible() || typeof WebSocket !== 'function') {
     return;
   }
   const nextUrl = resolveMihomoConnectionsWebSocketUrl(getMihomoApiSource());
@@ -2061,6 +2087,7 @@ let settingsConfigDirReveal = document.getElementById('settingsConfigDirReveal')
 let settingsCoreDirReveal = document.getElementById('settingsCoreDirReveal');
 let settingsDataDirReveal = document.getElementById('settingsDataDirReveal');
 let helperInstallBtn = document.getElementById('helperInstallBtn');
+let helperUninstallBtn = document.getElementById('helperUninstallBtn');
 let helperRepairBtn = document.getElementById('helperRepairBtn');
 let helperInstallTerminalBtn = document.getElementById('helperInstallTerminalBtn');
 let helperInstallPathBtn = document.getElementById('helperInstallPathBtn');
@@ -2091,6 +2118,7 @@ let settingsTrayMenuChart = document.getElementById('settingsTrayMenuChart');
 let settingsTrayMenuProviderTraffic = document.getElementById('settingsTrayMenuProviderTraffic');
 let settingsTrayMenuTrackers = document.getElementById('settingsTrayMenuTrackers');
 let settingsTrayMenuFoxboard = document.getElementById('settingsTrayMenuFoxboard');
+let settingsTrayMenuPanel = document.getElementById('settingsTrayMenuPanel');
 let settingsTrayMenuKernelManager = document.getElementById('settingsTrayMenuKernelManager');
 let settingsTrayMenuDirectoryLocations = document.getElementById('settingsTrayMenuDirectoryLocations');
 let settingsTrayMenuCopyShellExport = document.getElementById('settingsTrayMenuCopyShellExport');
@@ -2115,91 +2143,13 @@ const MAIN_WINDOW_MIN_HEIGHT = 640;
 const MAIN_WINDOW_MAX_WIDTH = 4096;
 const MAIN_WINDOW_MAX_HEIGHT = 2160;
 const APP_RELEASES_URL = 'https://github.com/lukuochiang/ClashFox/releases';
-const DEFAULT_SETTINGS = {
-  lang: 'auto',
-  theme: 'auto',
-  githubUser: 'vernesong',
-  configPath: '',
-  configDir: '',
-  coreDir: '',
-  dataDir: '',
-  panelChoice: '',
-  externalUi: 'ui',
-  externalController: '127.0.0.1:9090',
-  secret: 'clashfox',
-  authentication: ['mihomo:clashfox'],
-  panelManager: {
-    panelChoice: 'zashboard',
-    externalUi: 'ui',
-    externalController: '127.0.0.1:9090',
-    secret: 'clashfox',
-    authentication: ['mihomo:clashfox'],
-  },
-  proxy: 'rule',
-  systemProxy: false,
-  tun: false,
-  stack: 'Mixed',
-  mixedPort: 7893,
-  port: 7890,
-  socksPort: 7891,
-  allowLan: true,
-  overviewOrder: ['quick-actions', 'outbound-mode', 'running', 'network', 'conn-live', 'network-history', 'network-topology', 'provider-subscription', 'rules-overview'],
-  logLines: 10,
-  logAutoRefresh: false,
-  logIntervalPreset: '3',
-  generalPageSize: '10',
-  switchPageSize: '10',
-  backupsPageSize: '10',
-  configPageSize: '10',
-  recommendPageSize: '10',
-  sidebarCollapsed: false,
-  acceptBeta: false,
-  debugMode: false,
-  chartEnabled: true,
-  providerTrafficEnabled: true,
-  trackersEnabled: true,
-  foxboardEnabled: true,
-  kernelManagerEnabled: true,
-  directoryLocationsEnabled: true,
-  copyShellExportCommandEnabled: true,
-  trayMenu: {
-    chartEnabled: true,
-    providerTrafficEnabled: true,
-    trackersEnabled: true,
-    foxboardEnabled: true,
-    kernelManagerEnabled: true,
-    directoryLocationsEnabled: true,
-    copyShellExportCommandEnabled: true,
-  },
-  windowWidth: MAIN_WINDOW_DEFAULT_WIDTH,
-  windowHeight: MAIN_WINDOW_DEFAULT_HEIGHT,
-  mainWindowClosed: false,
-  appearance: {
-    lang: 'auto',
-    theme: 'auto',
-    debugMode: false,
-    acceptBeta: false,
-    githubUser: 'vernesong',
-    windowWidth: MAIN_WINDOW_DEFAULT_WIDTH,
-    windowHeight: MAIN_WINDOW_DEFAULT_HEIGHT,
-    mainWindowClosed: false,
-    generalPageSize: '10',
-    logLines: 10,
-    logAutoRefresh: false,
-    logIntervalPreset: '3',
-  },
-  kernel: {},
-  mihomoStatus: {
-    running: false,
-    source: 'init',
-    updatedAt: '',
-  },
-};
+let DEFAULT_SETTINGS = {};
 
 let PANEL_PRESETS = { ...DEFAULT_PANEL_PRESETS };
 let RECOMMENDED_CONFIGS = [];
 
 const STATIC_CONFIGS_URL = new URL('../../../static/configs.json', window.location.href);
+const STATIC_DEFAULT_SETTINGS_URL = new URL('../../../static/default-settings.json', window.location.href);
 let PANEL_EXTERNAL_UI_URLS = Object.fromEntries(
   Object.entries(PANEL_PRESETS).map(([key, preset]) => [key, preset['external-ui-url'] || preset.externalUiUrl || preset.url || '']),
 );
@@ -2341,7 +2291,6 @@ const state = {
   settings: { ...DEFAULT_SETTINGS },
 };
 state.foxRank = loadFoxRankFromStorage();
-saveFoxRankToStorage();
 
 const CORE_STARTUP_ESTIMATE_MIN_MS = 900;
 const CORE_STARTUP_ESTIMATE_MAX_MS = 10000;
@@ -2356,12 +2305,15 @@ const MIHOMO_LOGS_RECONNECT_MAX_MS = 12000;
 const TOPOLOGY_EVENT_LIMIT = 8;
 const TOPOLOGY_EVENT_TTL_MS = 20000;
 
+let kernelUpdateCacheStore = {};
+
 function readKernelUpdateCacheStore() {
-  return {};
+  return kernelUpdateCacheStore || {};
 }
 
 function writeKernelUpdateCacheStore(store = {}) {
-  return store;
+  kernelUpdateCacheStore = store && typeof store === 'object' ? { ...store } : {};
+  return kernelUpdateCacheStore;
 }
 
 function buildKernelUpdateCacheKey(source = '', currentVersion = '') {
@@ -2369,110 +2321,16 @@ function buildKernelUpdateCacheKey(source = '', currentVersion = '') {
 }
 
 function getCachedKernelUpdateResult(source = '', currentVersion = '') {
-  void source;
-  void currentVersion;
-  return null;
+  const store = readKernelUpdateCacheStore();
+  const key = buildKernelUpdateCacheKey(source, currentVersion);
+  return store && typeof store === 'object' ? store[key] || null : null;
 }
 
 function setCachedKernelUpdateResult(source = '', currentVersion = '', result = null) {
-  void source;
-  void currentVersion;
-  void result;
-}
-
-function readOverviewNetworkCache() {
-  return null;
-}
-
-function writeOverviewNetworkCache(payload = {}) {
-  return payload;
-}
-
-function cacheOverviewNetworkFromState() {
-  return;
-}
-
-function hydrateOverviewNetworkFromCache() {
-  return;
-}
-
-function readOverviewTrafficCache() {
-  return null;
-}
-
-function writeOverviewTrafficCache(payload = {}) {
-  return payload;
-}
-
-function cacheOverviewTrafficFromState() {
-  return;
-}
-
-function hydrateOverviewTrafficFromCache() {
-  return;
-}
-
-function readOverviewProviderSubscriptionCache() {
-  return state.providerSubscriptionCachePayload
-    && typeof state.providerSubscriptionCachePayload === 'object'
-    ? state.providerSubscriptionCachePayload
-    : null;
-}
-
-function writeOverviewProviderSubscriptionCache(payload = {}) {
-  return payload;
-}
-
-function cacheOverviewProviderSubscription(payload = null) {
-  state.providerSubscriptionCachePayload = payload && typeof payload === 'object'
-    ? JSON.parse(JSON.stringify(payload))
-    : null;
-}
-
-function hydrateOverviewProviderSubscriptionFromCache() {
-  const cached = readOverviewProviderSubscriptionCache();
-  if (!cached) {
-    return;
-  }
-  renderProviderSubscriptionOverview(cached);
-}
-
-function readOverviewRulesCardCache() {
-  return state.rulesOverviewCachePayload
-    && typeof state.rulesOverviewCachePayload === 'object'
-    ? state.rulesOverviewCachePayload
-    : null;
-}
-
-function writeOverviewRulesCardCache(payload = {}) {
-  return payload;
-}
-
-function cacheOverviewRulesCard() {
-  state.rulesOverviewCachePayload = JSON.parse(JSON.stringify({
-    rules: state.rulesOverviewPayload && typeof state.rulesOverviewPayload === 'object'
-      ? state.rulesOverviewPayload
-      : null,
-    providers: state.ruleProvidersOverviewPayload && typeof state.ruleProvidersOverviewPayload === 'object'
-      ? state.ruleProvidersOverviewPayload
-      : null,
-    view: state.rulesOverviewView === 'providers' ? 'providers' : 'rules',
-  }));
-}
-
-function hydrateOverviewRulesCardFromCache() {
-  const cached = readOverviewRulesCardCache();
-  if (!cached) {
-    return;
-  }
-  state.rulesOverviewPayload = cached.rules && typeof cached.rules === 'object'
-    ? cached.rules
-    : state.rulesOverviewPayload;
-  state.ruleProvidersOverviewPayload = cached.providers && typeof cached.providers === 'object'
-    ? cached.providers
-    : state.ruleProvidersOverviewPayload;
-  state.rulesOverviewView = cached.view === 'providers' ? 'providers' : 'rules';
-  renderRulesOverviewCard();
+  const store = readKernelUpdateCacheStore();
+  const key = buildKernelUpdateCacheKey(source, currentVersion);
+  store[key] = result;
+  writeKernelUpdateCacheStore(store);
 }
 
 function clamp(value, min, max) {
@@ -2615,6 +2473,12 @@ function applyFoxRankLocalizedUi() {
 }
 
 async function refreshSystemLocaleFromMain(forceApply = false) {
+  if (systemLocaleFromMain) {
+    if (forceApply && state.lang === 'auto') {
+      applyI18n();
+    }
+    return false;
+  }
   if (!window.clashfox || typeof window.clashfox.getSystemLocale !== 'function') {
     return false;
   }
@@ -2630,13 +2494,28 @@ async function refreshSystemLocaleFromMain(forceApply = false) {
     systemLocaleFromMain = nextLocale;
     if ((changed || forceApply) && state.lang === 'auto') {
       applyI18n();
-      if (typeof refreshPageView === 'function') {
-        refreshPageView();
-      }
     }
     return changed;
   } catch {
     return false;
+  }
+}
+
+function refreshLocalizedVisibleContent() {
+  if (currentPage === 'overview') {
+    renderProviderSubscriptionOverview();
+    renderRulesOverviewCard();
+    return;
+  }
+  if (currentPage === 'kernel') {
+    renderKernelTable();
+    renderSwitchTable();
+    renderBackupsTable();
+    renderRecommendTable();
+    return;
+  }
+  if (currentPage === 'settings') {
+    renderConfigTable();
   }
 }
 
@@ -2675,7 +2554,7 @@ function applyI18n() {
   updateThemeToggle();
   refreshNavButtonTooltips();
   setInstallState(state.installState);
-  renderConfigTable();
+  refreshLocalizedVisibleContent();
   refreshCustomSelects();
   requestTopNavOverflowSync();
 }
@@ -3088,7 +2967,7 @@ function applyCardIcons() {
 
   const mapIcon = (text) => {
     const tname = (text || '').toLowerCase();
-    if (tname.includes('network history')) return 'var(--icon-clock)';
+    if (tname.includes('network history') || tname.includes('network rate') || tname.includes('network speed') || tname.includes('网络速率')) return 'var(--icon-clock)';
     if (tname.includes('running status')) return 'var(--icon-activity)';
     if (tname.includes('realtime connections') || tname.includes('real-time connections') || tname.includes('实时连接')) return 'var(--icon-connections)';
     if (tname.includes('network status')) return 'var(--icon-wifi)';
@@ -3121,7 +3000,7 @@ function applyCardIcons() {
 
   const mapFill = (text) => {
     const tname = (text || '').toLowerCase();
-    if (tname.includes('network history')) return 'var(--icon-fill-clock)';
+    if (tname.includes('network history') || tname.includes('network rate') || tname.includes('network speed') || tname.includes('网络速率')) return 'var(--icon-fill-clock)';
     if (tname.includes('running status')) return 'var(--icon-fill-dashboard)';
     if (tname.includes('realtime connections') || tname.includes('real-time connections') || tname.includes('实时连接')) return 'var(--icon-fill-connections)';
     if (tname.includes('privileged helper') || tname.includes('特权助手')) return 'var(--icon-fill-settings)';
@@ -3254,6 +3133,7 @@ function normalizeSettingsForUi(settings) {
   normalized.providerTrafficEnabled = readTrayMenuBool('providerTrafficEnabled', readTrayMenuBool('trayMenuProviderTrafficEnabled', true));
   normalized.trackersEnabled = readTrayMenuBool('trackersEnabled', readTrayMenuBool('trayMenuTrackersEnabled', true));
   normalized.foxboardEnabled = readTrayMenuBool('foxboardEnabled', readTrayMenuBool('trayMenuFoxboardEnabled', true));
+  normalized.panelEnabled = readTrayMenuBool('panelEnabled', readTrayMenuBool('trayMenuPanelEnabled', false));
   normalized.kernelManagerEnabled = readTrayMenuBool('kernelManagerEnabled', readTrayMenuBool('trayMenuKernelManagerEnabled', true));
   normalized.directoryLocationsEnabled = readTrayMenuBool('directoryLocationsEnabled', readTrayMenuBool('trayMenuDirectoryLocationsEnabled', true));
   normalized.copyShellExportCommandEnabled = readTrayMenuBool('copyShellExportCommandEnabled', readTrayMenuBool('trayMenuCopyShellExportCommandEnabled', true));
@@ -3278,6 +3158,7 @@ function normalizeSettingsForUi(settings) {
     windowWidth: normalized.windowWidth,
     windowHeight: normalized.windowHeight,
     mainWindowClosed: normalized.mainWindowClosed,
+    sidebarCollapsed: normalized.sidebarCollapsed,
     generalPageSize: normalized.generalPageSize,
     logLines: normalized.logLines,
     logAutoRefresh: normalized.logAutoRefresh,
@@ -3289,6 +3170,7 @@ function normalizeSettingsForUi(settings) {
     providerTrafficEnabled: normalized.providerTrafficEnabled,
     trackersEnabled: normalized.trackersEnabled,
     foxboardEnabled: normalized.foxboardEnabled,
+    panelEnabled: normalized.panelEnabled,
     kernelManagerEnabled: normalized.kernelManagerEnabled,
     directoryLocationsEnabled: normalized.directoryLocationsEnabled,
     copyShellExportCommandEnabled: normalized.copyShellExportCommandEnabled,
@@ -3329,22 +3211,46 @@ function normalizeSettingsForUi(settings) {
     normalized.secret = normalized.panelManager.secret;
   }
   normalized.authentication = normalized.panelManager.authentication;
-  normalized.proxy = normalizeProxyMode(normalized.proxy || 'rule');
-  normalized.systemProxy = Boolean(normalized.systemProxy);
-  normalized.tun = Boolean(normalized.tun);
-  normalized.stack = normalizeTunStack(normalized.stack || 'Mixed');
-  normalized.mixedPort = Number.parseInt(String(normalized.mixedPort ?? ''), 10) || 7893;
-  normalized.port = Number.parseInt(String(normalized.port ?? ''), 10) || 7890;
-  normalized.socksPort = Number.parseInt(String(normalized.socksPort ?? ''), 10) || 7891;
-  normalized.allowLan = Object.prototype.hasOwnProperty.call(normalized, 'allowLan')
-    ? Boolean(normalized.allowLan)
-    : true;
+  const proxy = normalized.proxy && typeof normalized.proxy === 'object' ? normalized.proxy : {};
+  normalized.proxy = {
+    mode: normalizeProxyMode(proxy.mode || normalized.proxy || 'rule'),
+    systemProxy: Boolean(normalized.systemProxy ?? proxy.systemProxy),
+    tun: Boolean(normalized.tun ?? proxy.tun),
+    stack: normalizeTunStack(normalized.stack || proxy.stack || 'Mixed'),
+    mixedPort: Number.parseInt(String(normalized.mixedPort ?? proxy.mixedPort ?? ''), 10) || 7893,
+    port: Number.parseInt(String(normalized.port ?? proxy.port ?? ''), 10) || 7890,
+    socksPort: Number.parseInt(String(normalized.socksPort ?? proxy.socksPort ?? ''), 10) || 7891,
+    allowLan: Object.prototype.hasOwnProperty.call(normalized, 'allowLan')
+      ? Boolean(normalized.allowLan)
+      : Object.prototype.hasOwnProperty.call(proxy, 'allowLan')
+      ? Boolean(proxy.allowLan)
+      : true,
+  };
+  LEGACY_PROXY_FIELDS.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(normalized, key)) {
+      delete normalized[key];
+    }
+  });
 
   const userDataPaths = normalized.userDataPaths && typeof normalized.userDataPaths === 'object'
     ? normalized.userDataPaths
     : {};
+  const normalizeConfigFileName = (value = '') => {
+    const text = String(value || '').trim().replace(/[\\/]+$/, '');
+    if (!text) {
+      return '';
+    }
+    const parts = text.split(/[\\/]/).filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : text;
+  };
   if (!normalized.configFile && typeof userDataPaths.configFile === 'string') {
-    normalized.configFile = userDataPaths.configFile;
+    normalized.configFile = normalizeConfigFileName(userDataPaths.configFile);
+  }
+  if (!normalized.configFile && typeof normalized.configFileDir === 'string') {
+    normalized.configFile = normalizeConfigFileName(normalized.configFileDir);
+  }
+  if (!normalized.configFile && typeof userDataPaths.configFileDir === 'string') {
+    normalized.configFile = normalizeConfigFileName(userDataPaths.configFileDir);
   }
   if (!normalized.configDir && typeof userDataPaths.configDir === 'string') {
     normalized.configDir = userDataPaths.configDir;
@@ -3365,7 +3271,7 @@ function normalizeSettingsForUi(settings) {
     normalized.kernel = {};
   }
   if (!normalized.configPath && typeof normalized.configFile === 'string') {
-    normalized.configPath = normalized.configFile;
+    normalized.configPath = normalizeConfigFileName(normalized.configFile);
   }
   normalized.backupsPageSize = unifiedPageSize;
   normalized.switchPageSize = unifiedPageSize;
@@ -3373,6 +3279,9 @@ function normalizeSettingsForUi(settings) {
   normalized.recommendPageSize = unifiedPageSize;
   if (Object.prototype.hasOwnProperty.call(normalized, 'configFile')) {
     delete normalized.configFile;
+  }
+  if (Object.prototype.hasOwnProperty.call(normalized, 'configFileDir')) {
+    delete normalized.configFileDir;
   }
   return normalized;
 }
@@ -3394,16 +3303,26 @@ function mapSettingsForFile(settings) {
   const existingTrayMenu = mapped.trayMenu && typeof mapped.trayMenu === 'object'
     ? mapped.trayMenu
     : {};
-  mapped.proxy = normalizeProxyMode(mapped.proxy || 'rule');
-  mapped.systemProxy = Boolean(mapped.systemProxy);
-  mapped.tun = Boolean(mapped.tun);
-  mapped.stack = normalizeTunStack(mapped.stack || 'Mixed');
-  mapped.mixedPort = Number.parseInt(String(mapped.mixedPort ?? ''), 10) || 7893;
-  mapped.port = Number.parseInt(String(mapped.port ?? ''), 10) || 7890;
-  mapped.socksPort = Number.parseInt(String(mapped.socksPort ?? ''), 10) || 7891;
-  mapped.allowLan = Object.prototype.hasOwnProperty.call(mapped, 'allowLan')
-    ? Boolean(mapped.allowLan)
-    : true;
+  const proxy = mapped.proxy && typeof mapped.proxy === 'object' ? mapped.proxy : {};
+  mapped.proxy = {
+    mode: normalizeProxyMode(proxy.mode || mapped.proxy || 'rule'),
+    systemProxy: Boolean(mapped.systemProxy ?? proxy.systemProxy),
+    tun: Boolean(mapped.tun ?? proxy.tun),
+    stack: normalizeTunStack(mapped.stack || proxy.stack || 'Mixed'),
+    mixedPort: Number.parseInt(String(mapped.mixedPort ?? proxy.mixedPort ?? ''), 10) || 7893,
+    port: Number.parseInt(String(mapped.port ?? proxy.port ?? ''), 10) || 7890,
+    socksPort: Number.parseInt(String(mapped.socksPort ?? proxy.socksPort ?? ''), 10) || 7891,
+    allowLan: Object.prototype.hasOwnProperty.call(mapped, 'allowLan')
+      ? Boolean(mapped.allowLan)
+      : Object.prototype.hasOwnProperty.call(proxy, 'allowLan')
+      ? Boolean(proxy.allowLan)
+      : true,
+  };
+  LEGACY_PROXY_FIELDS.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(mapped, key)) {
+      delete mapped[key];
+    }
+  });
   mapped.appearance = {
     ...existingAppearance,
     lang: String(mapped.lang || existingAppearance.lang || 'auto'),
@@ -3420,6 +3339,9 @@ function mapSettingsForFile(settings) {
     mainWindowClosed: Object.prototype.hasOwnProperty.call(mapped, 'mainWindowClosed')
       ? Boolean(mapped.mainWindowClosed)
       : Boolean(existingAppearance.mainWindowClosed),
+    sidebarCollapsed: Object.prototype.hasOwnProperty.call(mapped, 'sidebarCollapsed')
+      ? Boolean(mapped.sidebarCollapsed)
+      : Boolean(existingAppearance.sidebarCollapsed),
     generalPageSize: String(
       mapped.generalPageSize
       || existingAppearance.generalPageSize
@@ -3471,6 +3393,15 @@ function mapSettingsForFile(settings) {
           : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuFoxboardEnabled')
             ? Boolean(existingTrayMenu.trayMenuFoxboardEnabled)
             : Boolean(existingAppearance.foxboardEnabled ?? existingAppearance.trayMenuFoxboardEnabled)))),
+    panelEnabled: Object.prototype.hasOwnProperty.call(mapped, 'panelEnabled')
+      ? Boolean(mapped.panelEnabled)
+      : (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuPanelEnabled')
+        ? Boolean(mapped.trayMenuPanelEnabled)
+        : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'panelEnabled')
+          ? Boolean(existingTrayMenu.panelEnabled)
+          : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuPanelEnabled')
+            ? Boolean(existingTrayMenu.trayMenuPanelEnabled)
+            : Boolean(existingAppearance.panelEnabled ?? existingAppearance.trayMenuPanelEnabled)))),
     kernelManagerEnabled: Object.prototype.hasOwnProperty.call(mapped, 'kernelManagerEnabled')
       ? Boolean(mapped.kernelManagerEnabled)
       : (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuKernelManagerEnabled')
@@ -3502,6 +3433,14 @@ function mapSettingsForFile(settings) {
   const existingPanelManager = mapped.panelManager && typeof mapped.panelManager === 'object'
     ? mapped.panelManager
     : {};
+  const normalizeConfigFileName = (value = '') => {
+    const text = String(value || '').trim().replace(/[\\/]+$/, '');
+    if (!text) {
+      return '';
+    }
+    const parts = text.split(/[\\/]/).filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : text;
+  };
   const normalizeAuthList = (value) => {
     const source = Array.isArray(value)
       ? value
@@ -3528,7 +3467,8 @@ function mapSettingsForFile(settings) {
     : {};
   mapped.userDataPaths = {
     ...existingPaths,
-    ...(mapped.configFile ? { configFile: String(mapped.configFile) } : {}),
+    ...(mapped.configFile ? { configFile: normalizeConfigFileName(mapped.configFile) } : {}),
+    ...(mapped.configFileDir ? { configFile: normalizeConfigFileName(mapped.configFileDir) } : {}),
     ...(mapped.configDir ? { configDir: String(mapped.configDir) } : {}),
     ...(mapped.coreDir ? { coreDir: String(mapped.coreDir) } : {}),
     ...(mapped.dataDir ? { dataDir: String(mapped.dataDir) } : {}),
@@ -3536,7 +3476,10 @@ function mapSettingsForFile(settings) {
     ...(mapped.pidDir ? { pidDir: String(mapped.pidDir) } : {}),
   };
   if (typeof mapped.configPath === 'string') {
-    mapped.userDataPaths.configFile = mapped.configPath;
+    mapped.userDataPaths.configFile = normalizeConfigFileName(mapped.configPath);
+  }
+  if (typeof mapped.configFileDir === 'string' && !mapped.userDataPaths.configFile) {
+    mapped.userDataPaths.configFile = normalizeConfigFileName(mapped.configFileDir);
   }
   if (Object.prototype.hasOwnProperty.call(mapped, 'switchPageSize')) {
     delete mapped.switchPageSize;
@@ -3568,6 +3511,9 @@ function mapSettingsForFile(settings) {
   }
   if (Object.prototype.hasOwnProperty.call(mapped, 'configFile')) {
     delete mapped.configFile;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'configFileDir')) {
+    delete mapped.configFileDir;
   }
   if (Object.prototype.hasOwnProperty.call(mapped, 'configDir')) {
     delete mapped.configDir;
@@ -3650,6 +3596,12 @@ function mapSettingsForFile(settings) {
   if (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuDirectoryLocationsEnabled')) {
     delete mapped.trayMenuDirectoryLocationsEnabled;
   }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'panelEnabled')) {
+    delete mapped.panelEnabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuPanelEnabled')) {
+    delete mapped.trayMenuPanelEnabled;
+  }
   if (Object.prototype.hasOwnProperty.call(mapped, 'copyShellExportCommandEnabled')) {
     delete mapped.copyShellExportCommandEnabled;
   }
@@ -3707,14 +3659,34 @@ function readSettings() {
     const parsed = normalizeSettingsForUi(JSON.parse(raw));
     const merged = { ...DEFAULT_SETTINGS, ...parsed };
     if (state.fileSettings) {
-      if (!merged.configPath && state.fileSettings.configPath) merged.configPath = state.fileSettings.configPath;
-      if (!merged.configDir && state.fileSettings.configDir) merged.configDir = state.fileSettings.configDir;
-      if (!merged.coreDir && state.fileSettings.coreDir) merged.coreDir = state.fileSettings.coreDir;
-      if (!merged.dataDir && state.fileSettings.dataDir) merged.dataDir = state.fileSettings.dataDir;
-      if (!merged.logDir && state.fileSettings.logDir) merged.logDir = state.fileSettings.logDir;
-      if (!merged.pidDir && state.fileSettings.pidDir) merged.pidDir = state.fileSettings.pidDir;
+      if (!merged.userDataPaths) {
+        merged.userDataPaths = {};
+      }
+      if (state.fileSettings.userDataPaths && typeof state.fileSettings.userDataPaths === 'object') {
+        if (!merged.userDataPaths.userAppDataDir && state.fileSettings.userDataPaths.userAppDataDir) {
+          merged.userDataPaths.userAppDataDir = state.fileSettings.userDataPaths.userAppDataDir;
+        }
+        if (!merged.userDataPaths.configFile && state.fileSettings.userDataPaths.configFile) {
+          merged.userDataPaths.configFile = state.fileSettings.userDataPaths.configFile;
+        }
+        if (!merged.userDataPaths.configDir && state.fileSettings.userDataPaths.configDir) {
+          merged.userDataPaths.configDir = state.fileSettings.userDataPaths.configDir;
+        }
+        if (!merged.userDataPaths.coreDir && state.fileSettings.userDataPaths.coreDir) {
+          merged.userDataPaths.coreDir = state.fileSettings.userDataPaths.coreDir;
+        }
+        if (!merged.userDataPaths.dataDir && state.fileSettings.userDataPaths.dataDir) {
+          merged.userDataPaths.dataDir = state.fileSettings.userDataPaths.dataDir;
+        }
+        if (!merged.userDataPaths.logDir && state.fileSettings.userDataPaths.logDir) {
+          merged.userDataPaths.logDir = state.fileSettings.userDataPaths.logDir;
+        }
+        if (!merged.userDataPaths.pidDir && state.fileSettings.userDataPaths.pidDir) {
+          merged.userDataPaths.pidDir = state.fileSettings.userDataPaths.pidDir;
+        }
+      }
     }
-    if (merged.configPath && (!parsed.configPath || parsed.configPath !== merged.configPath)) {
+    if (merged.userDataPaths && merged.userDataPaths.configFile && (!parsed.userDataPaths || !parsed.userDataPaths.configFile || parsed.userDataPaths.configFile !== merged.userDataPaths.configFile)) {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
     }
     return merged;
@@ -3732,39 +3704,98 @@ async function syncSettingsFromFile() {
     return;
   }
   const merged = normalizeSettingsForUi({ ...DEFAULT_SETTINGS, ...response.data });
+  let foxRankBackup = null;
+  try {
+    foxRankBackup = (state.settings && state.settings.foxRank && typeof state.settings.foxRank === 'object')
+      ? state.settings.foxRank
+      : (state.fileSettings && state.fileSettings.foxRank && typeof state.fileSettings.foxRank === 'object')
+        ? state.fileSettings.foxRank
+        : null;
+    if (!foxRankBackup) {
+      const rawStoredSettings = localStorage.getItem(SETTINGS_KEY);
+      if (rawStoredSettings) {
+        const parsedStoredSettings = JSON.parse(rawStoredSettings);
+        if (parsedStoredSettings && parsedStoredSettings.foxRank && typeof parsedStoredSettings.foxRank === 'object') {
+          foxRankBackup = parsedStoredSettings.foxRank;
+        }
+      }
+    }
+  } catch {
+    foxRankBackup = foxRankBackup && typeof foxRankBackup === 'object' ? foxRankBackup : null;
+  }
   if (window.clashfox && typeof window.clashfox.getUserDataPath === 'function') {
     const userData = await window.clashfox.getUserDataPath();
     if (userData && userData.ok && userData.path) {
       const base = userData.path;
-      if (!merged.configDir) {
-        merged.configDir = `${base}/config`;
+      if (!merged.userDataPaths) {
+        merged.userDataPaths = {};
       }
-      if (!merged.coreDir) {
-        merged.coreDir = `${base}/core`;
+      if (!merged.userDataPaths.configDir) {
+        merged.userDataPaths.configDir = 'config';
       }
-      if (!merged.dataDir) {
-        merged.dataDir = `${base}/data`;
+      if (!merged.userDataPaths.coreDir) {
+        merged.userDataPaths.coreDir = 'core';
       }
-      if (!merged.logDir) {
-        merged.logDir = `${base}/logs`;
+      if (!merged.userDataPaths.dataDir) {
+        merged.userDataPaths.dataDir = 'data';
       }
-      if (!merged.pidDir) {
-        merged.pidDir = `${base}/runtime`;
+      if (!merged.userDataPaths.logDir) {
+        merged.userDataPaths.logDir = 'logs';
+      }
+      if (!merged.userDataPaths.pidDir) {
+        merged.userDataPaths.pidDir = 'runtime';
+      }
+      if (!merged.userDataPaths.userAppDataDir) {
+        merged.userDataPaths.userAppDataDir = base;
       }
     }
   }
+  if (foxRankBackup && typeof foxRankBackup === 'object') {
+    merged.foxRank = foxRankBackup;
+  }
   state.fileSettings = { ...merged };
+  if (merged.foxRank && typeof merged.foxRank === 'object') {
+    state.foxRank = {
+      ...(state.foxRank && typeof state.foxRank === 'object' ? state.foxRank : {}),
+      ...merged.foxRank,
+    };
+  }
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
   if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
-    const { externalUiUrl, externalUiName, ...restSettings } = merged;
+    const { externalUiUrl: _externalUiUrl, externalUiName: _externalUiName, ...restSettings } = merged;
     const fileSettings = mapSettingsForFile(restSettings);
-    window.clashfox.writeSettings(fileSettings);
+    const { externalUiUrl: _currentExternalUiUrl, externalUiName: _currentExternalUiName, ...currentRestSettings } = state.fileSettings || {};
+    const currentFileSettings = mapSettingsForFile(currentRestSettings);
+    if (JSON.stringify(fileSettings) !== JSON.stringify(currentFileSettings)) {
+      window.clashfox.writeSettings(fileSettings);
+    }
   }
 }
 
 function saveSettings(patch) {
   guiLog('settings', 'saveSettings called', patch);
   const nextPatch = { ...(patch || {}) };
+  const proxyPatchKeys = LEGACY_PROXY_FIELDS;
+  const hasProxyPatch = Object.prototype.hasOwnProperty.call(nextPatch, 'proxy')
+    || proxyPatchKeys.some((key) => Object.prototype.hasOwnProperty.call(nextPatch, key));
+  if (hasProxyPatch) {
+    const currentProxy = state.settings && state.settings.proxy && typeof state.settings.proxy === 'object'
+      ? state.settings.proxy
+      : {};
+    const proxyPatch = nextPatch.proxy && typeof nextPatch.proxy === 'object'
+      ? nextPatch.proxy
+      : (Object.prototype.hasOwnProperty.call(nextPatch, 'proxy') ? { mode: nextPatch.proxy } : {});
+    proxyPatchKeys.forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(nextPatch, key)) {
+        proxyPatch[key] = nextPatch[key];
+        delete nextPatch[key];
+      }
+    });
+    nextPatch.proxy = normalizeProxySettings({
+      ...currentProxy,
+      ...proxyPatch,
+    });
+  }
   const nextAppearance = {
     ...((state.settings && state.settings.appearance) || {}),
     ...((state.fileSettings && state.fileSettings.appearance) || {}),
@@ -3803,6 +3834,7 @@ function saveSettings(patch) {
     'trayMenuProviderTrafficEnabled',
     'trayMenuTrackersEnabled',
     'trayMenuFoxboardEnabled',
+    'trayMenuPanelEnabled',
     'trayMenuKernelManagerEnabled',
     'trayMenuDirectoryLocationsEnabled',
     'trayMenuCopyShellExportCommandEnabled',
@@ -3810,6 +3842,7 @@ function saveSettings(patch) {
     'providerTrafficEnabled',
     'trackersEnabled',
     'foxboardEnabled',
+    'panelEnabled',
     'kernelManagerEnabled',
     'directoryLocationsEnabled',
     'copyShellExportCommandEnabled',
@@ -3848,13 +3881,28 @@ function saveSettings(patch) {
   if (Object.keys(nextPanelManager).length) {
     nextPatch.panelManager = nextPanelManager;
   }
-  state.settings = { ...state.settings, ...nextPatch };
+  const currentSettings = state.settings || {};
+  const nextSettings = { ...currentSettings, ...nextPatch };
+  LEGACY_PROXY_FIELDS.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(nextSettings, key)) {
+      delete nextSettings[key];
+    }
+  });
+  const { externalUiUrl: _currentExternalUiUrl, externalUiName: _currentExternalUiName, ...currentRestSettings } = currentSettings;
+  const { externalUiUrl: _nextExternalUiUrl, externalUiName: _nextExternalUiName, ...nextRestSettings } = nextSettings;
+  const currentFileSettings = mapSettingsForFile(currentRestSettings);
+  const nextFileSettings = mapSettingsForFile(nextRestSettings);
+  if (JSON.stringify(currentFileSettings) === JSON.stringify(nextFileSettings)) {
+    state.settings = nextSettings;
+    state.fileSettings = { ...state.fileSettings, ...nextPatch };
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
+    return;
+  }
+  state.settings = nextSettings;
   state.fileSettings = { ...state.fileSettings, ...nextPatch };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
   if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
-    const { externalUiUrl, externalUiName, ...restSettings } = state.settings;
-    const fileSettings = mapSettingsForFile(restSettings);
-    Promise.resolve(window.clashfox.writeSettings(fileSettings)).catch((error) => {
+    Promise.resolve(window.clashfox.writeSettings(nextFileSettings)).catch((error) => {
       guiLog('settings', 'writeSettings failed', {
         error: error && error.message ? error.message : String(error || ''),
       }, 'error');
@@ -3913,7 +3961,13 @@ function applySidebarCollapsedState(collapsed = false, persist = false) {
     sidebarCollapseToggle.setAttribute('title', label);
     sidebarCollapseToggle.setAttribute('aria-label', label);
   }
-  state.settings = { ...DEFAULT_SETTINGS, ...(state.settings || {}), sidebarCollapsed: Boolean(collapsed) };
+  if (!state.settings) {
+    state.settings = { ...DEFAULT_SETTINGS };
+  }
+  if (!state.settings.appearance) {
+    state.settings.appearance = {};
+  }
+  state.settings.appearance.sidebarCollapsed = Boolean(collapsed);
   if (persist) {
     saveSettings({ sidebarCollapsed: Boolean(collapsed) });
   }
@@ -4171,6 +4225,20 @@ function applyThemePreference(preference, persist = true) {
   updateThemeToggle();
 }
 
+const resolveAbsolutePath = (relativePath) => {
+  const userDataPaths = state.settings?.userDataPaths || {};
+  const userAppDataDir = userDataPaths.userAppDataDir || '';
+  if (!userAppDataDir) {
+    return relativePath;
+  }
+  if (relativePath.startsWith('/') || /^[A-Za-z]:/.test(relativePath)) {
+    return relativePath;
+  }
+  return userAppDataDir.endsWith('/')
+      ? `${userAppDataDir}${relativePath}`
+      : `${userAppDataDir}/${relativePath}`;
+};
+
 function applySettings(settings) {
   state.settings = { ...DEFAULT_SETTINGS, ...settings };
   state.settings.windowWidth = sanitizeWindowDimension(
@@ -4193,8 +4261,11 @@ function applySettings(settings) {
     state.settings.externalUi = 'ui';
     saveSettings({ externalUi: 'ui' });
   }
-  const externalUi = state.settings.dataDir
-    ? `${String(state.settings.dataDir).replace(/\/+$/, '')}/ui`
+  const dataDir = state.settings.userDataPaths?.dataDir
+    ? resolveAbsolutePath(state.settings.userDataPaths.dataDir)
+    : '';
+  const externalUi = dataDir
+    ? `${dataDir.replace(/\/+$/, '')}/ui`
     : '';
   // temporarily suppress transitions while applying initial theme
   document.body.classList.add('no-theme-transition');
@@ -4202,7 +4273,7 @@ function applySettings(settings) {
   document.body.classList.remove('no-theme-transition');
   setLanguage(state.settings.lang, false, false);
   syncDebugMode(state.settings.debugMode);
-  applySidebarCollapsedState(state.settings.sidebarCollapsed, false);
+  applySidebarCollapsedState(state.settings.appearance && state.settings.appearance.sidebarCollapsed, false);
   if (settingsWindowWidth) {
     settingsWindowWidth.value = state.settings.windowWidth;
   }
@@ -4224,6 +4295,9 @@ function applySettings(settings) {
   if (settingsTrayMenuFoxboard) {
     settingsTrayMenuFoxboard.checked = state.settings.foxboardEnabled !== false;
   }
+  if (settingsTrayMenuPanel) {
+    settingsTrayMenuPanel.checked = state.settings.panelEnabled === true;
+  }
   if (settingsTrayMenuKernelManager) {
     settingsTrayMenuKernelManager.checked = state.settings.kernelManagerEnabled !== false;
   }
@@ -4234,25 +4308,25 @@ function applySettings(settings) {
     settingsTrayMenuCopyShellExport.checked = state.settings.copyShellExportCommandEnabled !== false;
   }
   if (settingsProxyMixedPort) {
-    settingsProxyMixedPort.value = Number.parseInt(String(state.settings.mixedPort ?? 7893), 10) || 7893;
+    settingsProxyMixedPort.value = Number.parseInt(String(state.settings.proxy?.mixedPort ?? 7893), 10) || 7893;
   }
   if (settingsProxyPort) {
-    settingsProxyPort.value = Number.parseInt(String(state.settings.port ?? 7890), 10) || 7890;
+    settingsProxyPort.value = Number.parseInt(String(state.settings.proxy?.port ?? 7890), 10) || 7890;
   }
   if (settingsProxySocksPort) {
-    settingsProxySocksPort.value = Number.parseInt(String(state.settings.socksPort ?? 7891), 10) || 7891;
+    settingsProxySocksPort.value = Number.parseInt(String(state.settings.proxy?.socksPort ?? 7891), 10) || 7891;
   }
   if (settingsProxyAllowLan) {
-    settingsProxyAllowLan.checked = Boolean(state.settings.allowLan);
+    settingsProxyAllowLan.checked = Boolean(state.settings.proxy?.allowLan);
   }
   if (settingsConfigDir) {
-    settingsConfigDir.value = state.settings.configDir;
+    settingsConfigDir.value = resolveAbsolutePath(state.settings.userDataPaths?.configDir || '');
   }
   if (settingsCoreDir) {
-    settingsCoreDir.value = state.settings.coreDir;
+    settingsCoreDir.value = resolveAbsolutePath(state.settings.userDataPaths?.coreDir || '');
   }
   if (settingsDataDir) {
-    settingsDataDir.value = state.settings.dataDir;
+    settingsDataDir.value = resolveAbsolutePath(state.settings.userDataPaths?.dataDir || '');
   }
   if (settingsExternalUi) {
     settingsExternalUi.value = state.settings.externalUi || 'ui';
@@ -4277,10 +4351,6 @@ function applySettings(settings) {
     settingsConfigPath.value = state.settings.configPath;
   }
   hydrateOverviewIdentityFromSettings();
-  hydrateOverviewNetworkFromCache();
-  hydrateOverviewTrafficFromCache();
-  hydrateOverviewProviderSubscriptionFromCache();
-  hydrateOverviewRulesCardFromCache();
   applyOverviewOrders();
   if (externalControllerInput) {
     externalControllerInput.value = state.settings.externalController || '';
@@ -4304,15 +4374,15 @@ function applySettings(settings) {
   }
   setLogAutoRefresh(true);
   if (proxyModeSelect) {
-    setProxyModeValue(state.settings.proxy || 'rule');
+    setProxyModeValue(state.settings.proxy?.mode || 'rule');
   }
   if (tunToggle) {
-    tunToggle.checked = Boolean(state.settings.tun);
+    tunToggle.checked = Boolean(state.settings.proxy?.tun);
   }
   if (tunStackSelect) {
-    const stack = normalizeTunStack(state.settings.stack);
+    const stack = normalizeTunStack(state.settings.proxy?.stack);
     tunStackSelect.value = stack;
-    if (state.settings.stack !== stack) {
+    if (state.settings.proxy?.stack !== stack) {
       saveSettings({ stack });
     }
   }
@@ -4346,19 +4416,6 @@ function applySettings(settings) {
     settingsBackupsPageSize.value = state.settings.generalPageSize || unifiedPageSize;
   }
   applyPersistedMihomoStatus();
-  if (currentPage === 'overview') {
-    connectMihomoConnectionsStream();
-    connectMihomoTrafficStream();
-    connectMihomoMemoryStream();
-    connectMihomoLogsStream();
-    startTopologyTicker();
-  } else {
-    closeMihomoConnectionsSocket();
-    closeMihomoTrafficSocket();
-    closeMihomoMemorySocket();
-    closeMihomoLogsSocket();
-    stopTopologyTicker();
-  }
   renderTopologyCard();
   renderRecommendTable();
 }
@@ -4700,6 +4757,32 @@ function normalizeProxyMode(value) {
   return 'rule';
 }
 
+const LEGACY_PROXY_FIELDS = [
+  'systemProxy',
+  'tun',
+  'stack',
+  'mixedPort',
+  'port',
+  'socksPort',
+  'allowLan',
+];
+
+function normalizeProxySettings(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  return {
+    mode: normalizeProxyMode(source.mode || source),
+    systemProxy: Boolean(source.systemProxy),
+    tun: Boolean(source.tun),
+    stack: normalizeTunStack(source.stack || 'Mixed'),
+    mixedPort: Number.parseInt(String(source.mixedPort ?? ''), 10) || 7893,
+    port: Number.parseInt(String(source.port ?? ''), 10) || 7890,
+    socksPort: Number.parseInt(String(source.socksPort ?? ''), 10) || 7891,
+    allowLan: Object.prototype.hasOwnProperty.call(source, 'allowLan')
+      ? Boolean(source.allowLan)
+      : true,
+  };
+}
+
 function formatBackupTimestamp(raw, fallback = '-') {
   if (!raw || typeof raw !== 'string') {
     return fallback;
@@ -4719,12 +4802,16 @@ async function syncProxyModeFromFile() {
   if (!response || !response.ok || !response.data) {
     return;
   }
-  const nextMode = normalizeProxyMode(response.data.proxy);
-  const currentMode = normalizeProxyMode(state.settings && state.settings.proxy);
+  const nextMode = normalizeProxyMode(
+    response.data.proxy && typeof response.data.proxy === 'object'
+      ? response.data.proxy.mode
+      : response.data.proxy,
+  );
+  const currentMode = normalizeProxyMode(state.settings?.proxy?.mode);
   if (nextMode === currentMode) {
     return;
   }
-  saveSettings({ proxy: nextMode });
+  saveSettings({ proxy: { mode: nextMode } });
   setProxyModeValue(nextMode);
 }
 
@@ -4977,7 +5064,7 @@ async function performMihomoInstall(mode = 'install') {
     } else if (progress.status === 'extracting' && installStatus) {
       installStatus.textContent = t('install.extracting', 'Extracting...');
     } else if (progress.status === 'installing' && installStatus) {
-      installStatus.textContent = t('install.installing', 'Installing...');
+      installStatus.textContent = ti('install.installingKernel', 'Installing / updating kernel...');
     }
   });
 
@@ -5222,11 +5309,11 @@ function hydrateOverviewIdentityFromSettings() {
       ? (buildRaw ? `${versionRaw} (${buildRaw})` : versionRaw)
       : '-';
   }
-  const persistedMihomoStatus = (state.settings && state.settings.mihomoStatus)
-    || (state.fileSettings && state.fileSettings.mihomoStatus)
-    || null;
-  if (overviewStatus && persistedMihomoStatus && typeof persistedMihomoStatus.running === 'boolean') {
-    overviewStatus.textContent = persistedMihomoStatus.running ? t('labels.running') : t('labels.stopped');
+  const persistedKernel = (state.settings && state.settings.kernel)
+    || (state.fileSettings && state.fileSettings.kernel)
+    || {};
+  if (overviewStatus && typeof persistedKernel.running === 'boolean') {
+    overviewStatus.textContent = persistedKernel.running ? t('labels.running') : t('labels.stopped');
   }
   state.overviewIpRaw.local = '';
   state.overviewIpRaw.proxy = '';
@@ -5468,21 +5555,37 @@ function setActiveNav(page) {
   });
 }
 
+// For command arguments that require absolute paths.
+const resolveCommandPath = (relativePath) => {
+  const userDataPaths = state.settings?.userDataPaths || {};
+  const userAppDataDir = userDataPaths.userAppDataDir || '';
+  if (!userAppDataDir) {
+    return relativePath;
+  }
+  if (relativePath.startsWith('/') || /^[A-Za-z]:/.test(relativePath)) {
+    return relativePath;
+  }
+  return userAppDataDir.endsWith('/')
+      ? `${userAppDataDir}${relativePath}`
+      : `${userAppDataDir}/${relativePath}`;
+}
+
 async function runCommand(command, args = [], options = {}) {
   if (!window.clashfox || typeof window.clashfox.runCommand !== 'function') {
     guiLog('command', 'bridge missing', { command, args, options }, 'error');
     return { ok: false, error: 'bridge_missing' };
   }
   const effectiveSettings = { ...(state.fileSettings || {}), ...(state.settings || {}) };
+  const userDataPaths = effectiveSettings.userDataPaths || {};
   const pathArgs = [];
-  if (effectiveSettings.configDir) {
-    pathArgs.push('--config-dir', effectiveSettings.configDir);
+  if (userDataPaths.configDir) {
+    pathArgs.push('--config-dir', resolveCommandPath(userDataPaths.configDir));
   }
-  if (effectiveSettings.coreDir) {
-    pathArgs.push('--core-dir', effectiveSettings.coreDir);
+  if (userDataPaths.coreDir) {
+    pathArgs.push('--core-dir', resolveCommandPath(userDataPaths.coreDir));
   }
-  if (effectiveSettings.dataDir) {
-    pathArgs.push('--data-dir', effectiveSettings.dataDir);
+  if (userDataPaths.dataDir) {
+    pathArgs.push('--data-dir', resolveCommandPath(userDataPaths.dataDir));
   }
   const finalArgs = [...pathArgs, ...args];
   guiLog('command', 'runCommand start', { command, args: finalArgs, options });
@@ -5531,6 +5634,24 @@ async function loadStaticConfigs() {
       }
       if (Array.isArray(payload.recommendedConfigs)) {
         RECOMMENDED_CONFIGS = payload.recommendedConfigs;
+      }
+    }
+  } catch (error) {
+    // Silent error handling in production
+  }
+}
+
+async function loadDefaultSettings() {
+  try {
+    const response = await fetch(STATIC_DEFAULT_SETTINGS_URL, { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error(`load_failed_${response.status}`);
+    }
+    const payload = await response.json();
+    if (payload && typeof payload === 'object') {
+      DEFAULT_SETTINGS = payload;
+      if (state && typeof state === 'object') {
+        state.settings = { ...DEFAULT_SETTINGS, ...(state.settings || {}) };
       }
     }
   } catch (error) {
@@ -5771,10 +5892,10 @@ async function handleHelpHelperUpdateCheck() {
       const detail = result && result.error ? ` (${String(result.error)})` : '';
       setHelpAboutStatus(`${ti('help.helperUpdateCheckFailed', 'Helper update check failed')}${detail}`, 'error');
     } else if (result.updateAvailable) {
-      const targetVersion = normalizeVersionForDisplay(result.targetVersion || result.onlineVersion || '');
+      const onlineVersionText = normalizeVersionForDisplay(result.onlineVersion || '');
       setHelpAboutStatus(
-        targetVersion
-          ? `${ti('help.helperUpdateAvailable', 'Helper update available')}: v${targetVersion}`
+        onlineVersionText
+          ? `${ti('help.helperUpdateAvailable', 'Helper update available')}: v${onlineVersionText}`
           : ti('help.helperUpdateAvailable', 'Helper update available'),
         'warning',
       );
@@ -5840,6 +5961,9 @@ function updateStatusUI(data) {
   if (settingsConfigDefault) {
     settingsConfigDefault.textContent = data.configDefault || '-';
   }
+  if (currentPage === 'config') {
+    renderConfigTable();
+  }
   if (settingsLogPath) {
     settingsLogPath.textContent = data.logPath || '-';
   }
@@ -5897,13 +6021,17 @@ function setQuickActionRunningState(running) {
 }
 
 function getPersistedMihomoStatusSnapshot() {
-  const candidate = (state.settings && state.settings.mihomoStatus)
-    || (state.fileSettings && state.fileSettings.mihomoStatus)
-    || null;
-  if (!candidate || typeof candidate !== 'object' || typeof candidate.running !== 'boolean') {
+  const kernel = (state.settings && state.settings.kernel)
+    || (state.fileSettings && state.fileSettings.kernel)
+    || {};
+  if (!kernel || typeof kernel !== 'object' || typeof kernel.running !== 'boolean') {
     return null;
   }
-  return candidate;
+  return {
+    running: kernel.running,
+    source: 'settings',
+    updatedAt: kernel.updatedAt || new Date().toISOString(),
+  };
 }
 
 function applyPersistedMihomoStatus() {
@@ -5927,8 +6055,16 @@ function cacheMihomoStatusForUi(running, source = 'status') {
   if (!state.fileSettings) {
     state.fileSettings = {};
   }
-  state.settings.mihomoStatus = snapshot;
-  state.fileSettings.mihomoStatus = snapshot;
+  if (!state.settings.kernel) {
+    state.settings.kernel = {};
+  }
+  if (!state.fileSettings.kernel) {
+    state.fileSettings.kernel = {};
+  }
+  state.settings.kernel.running = snapshot.running;
+  state.settings.kernel.updatedAt = snapshot.updatedAt;
+  state.fileSettings.kernel.running = snapshot.running;
+  state.fileSettings.kernel.updatedAt = snapshot.updatedAt;
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
   } catch {
@@ -5984,6 +6120,13 @@ function syncRunningIndicators(running) {
     } else {
       statusPill.setAttribute('title', label);
     }
+  }
+  const dashboardNav = document.getElementById('navDashboard');
+  if (dashboardNav) {
+    const disabled = !running;
+    dashboardNav.disabled = disabled;
+    dashboardNav.classList.toggle('is-disabled', disabled);
+    dashboardNav.setAttribute('aria-disabled', String(disabled));
   }
 }
 
@@ -6077,17 +6220,15 @@ function setMihomoTotalUptime(seconds) {
 
 function calculateMihomoUptime() {
   const startTime = state.mihomoStartTime || getMihomoStartTime();
-  
-  // If mihomo is not running (no start time), return 0
-  if (!startTime) {
+
+  if (!startTime || !state.coreRunning) {
     return 0;
   }
-  
+
   const now = Date.now();
   const elapsedMs = Math.max(0, now - startTime);
   const elapsedSec = Math.floor(elapsedMs / 1000);
-  
-  // Return current session uptime only (no accumulation)
+
   return elapsedSec;
 }
 
@@ -6525,19 +6666,19 @@ function renderProviderSubscriptionOverview(payload = null) {
     : 0;
 
   const summaryMarkup = `
-    <div class="provider-subscription-stat">
+    <div class="provider-subscription-stat" data-stat-key="providers">
       <div class="provider-subscription-stat-label">${escapeLogCell(ti('providers.summaryCount', 'Providers'))}</div>
       <div class="provider-subscription-stat-value">${escapeLogCell(String(providerCount))}</div>
     </div>
-    <div class="provider-subscription-stat">
+    <div class="provider-subscription-stat" data-stat-key="used">
       <div class="provider-subscription-stat-label">${escapeLogCell(ti('providers.summaryUsed', 'Used'))}</div>
       <div class="provider-subscription-stat-value">${escapeLogCell(formatBytes(usedBytes))}</div>
     </div>
-    <div class="provider-subscription-stat">
+    <div class="provider-subscription-stat" data-stat-key="remaining">
       <div class="provider-subscription-stat-label">${escapeLogCell(ti('providers.summaryRemain', 'Remaining'))}</div>
       <div class="provider-subscription-stat-value">${escapeLogCell(formatBytes(remainingBytes))}</div>
     </div>
-    <div class="provider-subscription-stat">
+    <div class="provider-subscription-stat" data-stat-key="usage">
       <div class="provider-subscription-stat-label">${escapeLogCell(ti('providers.summaryUsage', 'Usage'))}</div>
       <div class="provider-subscription-stat-value">${escapeLogCell(`${usedPercent.toFixed(1)}%`)}</div>
     </div>
@@ -6834,7 +6975,6 @@ function updateTrafficHistory(rxRate, txRate) {
   }
   renderTrafficChart(state.trafficHistoryTx, trafficUploadLine, trafficUploadArea, trafficUploadAxis);
   renderTrafficChart(state.trafficHistoryRx, trafficDownloadLine, trafficDownloadArea, trafficDownloadAxis);
-  cacheOverviewTrafficFromState();
 }
 
 function resetTrafficHistory() {
@@ -6842,7 +6982,6 @@ function resetTrafficHistory() {
   state.trafficHistoryTx = [];
   renderTrafficChart(state.trafficHistoryTx, trafficUploadLine, trafficUploadArea, trafficUploadAxis);
   renderTrafficChart(state.trafficHistoryRx, trafficDownloadLine, trafficDownloadArea, trafficDownloadAxis);
-  cacheOverviewTrafficFromState();
 }
 
 function parseAuthList(value) {
@@ -6937,7 +7076,6 @@ function updateSystemTraffic(rxBytes, txBytes) {
     if (overviewSummaryUploadRate) {
       setNodeTextIfChanged(overviewSummaryUploadRate, '-');
     }
-    cacheOverviewTrafficFromState();
     return;
   }
 
@@ -7127,9 +7265,9 @@ function updateOverviewUI(data) {
       }
     }
   } else {
-    // mihomo stopped, save uptime before clearing
-    if (!state.coreActionInFlight && (state.mihomoStartTime || getMihomoStartTime())) {
-      saveMihomoUptimeBeforeStop();
+    // mihomo stopped, clear any stale runtime clock so the UI does not keep counting.
+    if (state.mihomoStartTime || getMihomoStartTime()) {
+      resetMihomoUptimeTracking();
     }
 
     state.overviewUptimeBaseSec = 0;
@@ -7234,7 +7372,6 @@ function applyOverviewNetworkSnapshot(data) {
     setNodeTextIfChanged(overviewInternetIp, text);
     setOverviewCopyButtonVisible(overviewInternetIpCopy, Boolean(text && text !== '-'));
   }
-  cacheOverviewNetworkFromState();
 }
 
 function loadFoxRankFromStorage() {
@@ -7256,6 +7393,55 @@ function loadFoxRankFromStorage() {
     lastQuickReportDay: '',
     quickReportBaseline: null,
   });
+  const normalizeFoxRankSnapshot = (value = {}) => ({
+    ...createDefaultFoxRankState(),
+    totalUsageSec: Number(value.totalUsageSec) || 0,
+    stableDays: Number(value.stableDays) || 0,
+    lastStableDay: String(value.lastStableDay || ''),
+    lastUsageBaseSec: Number(value.lastUsageBaseSec) || 0,
+    lastUsageTickSec: Number(value.lastUsageTickSec) || 0,
+    usageResetVersion: String(value.usageResetVersion || FOX_RANK_USAGE_RESET_VERSION),
+    qualityScore: Number(value.qualityScore) || 0,
+    explorationCount: Number(value.explorationCount) || 0,
+    lastExplorationFingerprint: String(value.lastExplorationFingerprint || ''),
+    lastExplorationAt: Number(value.lastExplorationAt) || 0,
+    unlockedBadges: Array.isArray(value.unlockedBadges) ? value.unlockedBadges.map((item) => String(item || '')) : [],
+    freshUnlockedBadges: Array.isArray(value.freshUnlockedBadges) ? value.freshUnlockedBadges.map((item) => String(item || '')) : [],
+    badgeUnlockMoments: value.badgeUnlockMoments && typeof value.badgeUnlockMoments === 'object'
+      ? Object.fromEntries(Object.entries(value.badgeUnlockMoments).map(([key, item]) => [String(key || ''), String(item || '')]))
+      : {},
+    history: normalizeHistory(value.history),
+    lastQuickReportDay: String(value.lastQuickReportDay || ''),
+    quickReportBaseline: value.quickReportBaseline && typeof value.quickReportBaseline === 'object'
+      ? {
+        xp: Number(value.quickReportBaseline.xp) || 0,
+        stableDays: Number(value.quickReportBaseline.stableDays) || 0,
+        qualityScore: Number(value.quickReportBaseline.qualityScore) || 0,
+        explorationCount: Number(value.quickReportBaseline.explorationCount) || 0,
+      }
+      : null,
+  });
+  const readFoxRankBackup = () => {
+    const candidates = [
+      state.settings && state.settings.foxRank,
+      state.fileSettings && state.fileSettings.foxRank,
+    ];
+    for (const candidate of candidates) {
+      if (candidate && typeof candidate === 'object') {
+        return candidate;
+      }
+    }
+    try {
+      const rawSettings = localStorage.getItem(SETTINGS_KEY);
+      if (!rawSettings) {
+        return null;
+      }
+      const parsed = JSON.parse(rawSettings);
+      return parsed && parsed.foxRank && typeof parsed.foxRank === 'object' ? parsed.foxRank : null;
+    } catch {
+      return null;
+    }
+  };
   const normalizeHistory = (value) => (Array.isArray(value) ? value : [])
     .map((item) => ({
       day: String(item && item.day ? item.day : ''),
@@ -7271,40 +7457,22 @@ function loadFoxRankFromStorage() {
   try {
     const payload = localStorage.getItem(FOX_RANK_STORAGE_KEY);
     if (!payload) {
-      return createDefaultFoxRankState();
+      const backup = readFoxRankBackup();
+      return backup ? normalizeFoxRankSnapshot(backup) : createDefaultFoxRankState();
     }
     const parsed = JSON.parse(payload);
     const usageResetVersion = parsed.usageResetVersion
       ? String(parsed.usageResetVersion || '')
       : FOX_RANK_USAGE_RESET_VERSION;
     const shouldResetUsage = usageResetVersion !== FOX_RANK_USAGE_RESET_VERSION;
-    return {
-      ...createDefaultFoxRankState(),
-      totalUsageSec: shouldResetUsage ? 0 : (Number(parsed.totalUsageSec) || 0),
-      stableDays: Number(parsed.stableDays) || 0,
-      lastStableDay: String(parsed.lastStableDay || ''),
+    return normalizeFoxRankSnapshot({
+      ...parsed,
+      totalUsageSec: shouldResetUsage ? 0 : parsed.totalUsageSec,
       usageResetVersion: FOX_RANK_USAGE_RESET_VERSION,
-      qualityScore: Number(parsed.qualityScore) || 0,
-      explorationCount: Number(parsed.explorationCount) || 0,
-      lastExplorationFingerprint: String(parsed.lastExplorationFingerprint || ''),
-      lastExplorationAt: Number(parsed.lastExplorationAt) || 0,
-      unlockedBadges: Array.isArray(parsed.unlockedBadges) ? parsed.unlockedBadges.map((item) => String(item || '')) : [],
-      badgeUnlockMoments: parsed.badgeUnlockMoments && typeof parsed.badgeUnlockMoments === 'object'
-        ? Object.fromEntries(Object.entries(parsed.badgeUnlockMoments).map(([key, value]) => [key, String(value || '')]))
-        : {},
-      history: normalizeHistory(parsed.history),
-      lastQuickReportDay: String(parsed.lastQuickReportDay || ''),
-      quickReportBaseline: parsed.quickReportBaseline && typeof parsed.quickReportBaseline === 'object'
-        ? {
-          xp: Number(parsed.quickReportBaseline.xp) || 0,
-          stableDays: Number(parsed.quickReportBaseline.stableDays) || 0,
-          qualityScore: Number(parsed.quickReportBaseline.qualityScore) || 0,
-          explorationCount: Number(parsed.quickReportBaseline.explorationCount) || 0,
-        }
-        : null,
-    };
+    });
   } catch {
-    return createDefaultFoxRankState();
+    const backup = readFoxRankBackup();
+    return backup ? normalizeFoxRankSnapshot(backup) : createDefaultFoxRankState();
   }
 }
 
@@ -7313,25 +7481,54 @@ function saveFoxRankToStorage() {
     return;
   }
   try {
-    localStorage.setItem(FOX_RANK_STORAGE_KEY, JSON.stringify({
-      totalUsageSec: state.foxRank.totalUsageSec,
-      stableDays: state.foxRank.stableDays,
-      lastStableDay: state.foxRank.lastStableDay,
-      usageResetVersion: state.foxRank.usageResetVersion || FOX_RANK_USAGE_RESET_VERSION,
-      qualityScore: state.foxRank.qualityScore || 0,
-      explorationCount: state.foxRank.explorationCount || 0,
-      lastExplorationFingerprint: state.foxRank.lastExplorationFingerprint || '',
-      lastExplorationAt: state.foxRank.lastExplorationAt || 0,
-      unlockedBadges: Array.isArray(state.foxRank.unlockedBadges) ? state.foxRank.unlockedBadges : [],
+    const snapshot = {
+      totalUsageSec: Number(state.foxRank.totalUsageSec) || 0,
+      stableDays: Number(state.foxRank.stableDays) || 0,
+      lastStableDay: String(state.foxRank.lastStableDay || ''),
+      lastUsageBaseSec: Number(state.foxRank.lastUsageBaseSec) || 0,
+      lastUsageTickSec: Number(state.foxRank.lastUsageTickSec) || 0,
+      usageResetVersion: String(state.foxRank.usageResetVersion || FOX_RANK_USAGE_RESET_VERSION),
+      qualityScore: Number(state.foxRank.qualityScore) || 0,
+      explorationCount: Number(state.foxRank.explorationCount) || 0,
+      lastExplorationFingerprint: String(state.foxRank.lastExplorationFingerprint || ''),
+      lastExplorationAt: Number(state.foxRank.lastExplorationAt) || 0,
+      unlockedBadges: Array.isArray(state.foxRank.unlockedBadges) ? state.foxRank.unlockedBadges.map((item) => String(item || '')) : [],
+      freshUnlockedBadges: Array.isArray(state.foxRank.freshUnlockedBadges) ? state.foxRank.freshUnlockedBadges.map((item) => String(item || '')) : [],
       badgeUnlockMoments: state.foxRank.badgeUnlockMoments && typeof state.foxRank.badgeUnlockMoments === 'object'
-        ? state.foxRank.badgeUnlockMoments
+        ? Object.fromEntries(Object.entries(state.foxRank.badgeUnlockMoments).map(([key, value]) => [String(key || ''), String(value || '')]))
         : {},
       history: Array.isArray(state.foxRank.history) ? state.foxRank.history.slice(-14) : [],
-      lastQuickReportDay: state.foxRank.lastQuickReportDay || '',
+      lastQuickReportDay: String(state.foxRank.lastQuickReportDay || ''),
       quickReportBaseline: state.foxRank.quickReportBaseline && typeof state.foxRank.quickReportBaseline === 'object'
-        ? state.foxRank.quickReportBaseline
+        ? {
+          xp: Number(state.foxRank.quickReportBaseline.xp) || 0,
+          stableDays: Number(state.foxRank.quickReportBaseline.stableDays) || 0,
+          qualityScore: Number(state.foxRank.quickReportBaseline.qualityScore) || 0,
+          explorationCount: Number(state.foxRank.quickReportBaseline.explorationCount) || 0,
+        }
         : null,
+    };
+    localStorage.setItem(FOX_RANK_STORAGE_KEY, JSON.stringify({
+      ...snapshot,
     }));
+    if (!state.settings || typeof state.settings !== 'object') {
+      state.settings = {};
+    }
+    if (!state.fileSettings || typeof state.fileSettings !== 'object') {
+      state.fileSettings = {};
+    }
+    state.settings.foxRank = snapshot;
+    state.fileSettings.foxRank = snapshot;
+    try {
+      const settingsRaw = localStorage.getItem(SETTINGS_KEY);
+      const settingsPayload = settingsRaw ? JSON.parse(settingsRaw) : {};
+      if (settingsPayload && typeof settingsPayload === 'object') {
+        settingsPayload.foxRank = snapshot;
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsPayload));
+      }
+    } catch {
+      // ignore settings backup failures
+    }
   } catch {
     // ignore storage failures
   }
@@ -8012,10 +8209,15 @@ function setFoxRankDetailTab(tab = 'log') {
 }
 
 function getAppLogFilePath() {
-  const configuredDir = state && state.fileSettings && typeof state.fileSettings.logDir === 'string'
-    ? String(state.fileSettings.logDir || '').trim()
+  const userDataPaths = state && state.fileSettings && state.fileSettings.userDataPaths
+    ? state.fileSettings.userDataPaths
+    : (state.settings && state.settings.userDataPaths ? state.settings.userDataPaths : {});
+  const relativeLogDir = userDataPaths && typeof userDataPaths.logDir === 'string'
+    ? String(userDataPaths.logDir || '').trim()
     : '';
-  const dir = configuredDir || '~/Library/Application Support/ClashFox/logs';
+  const dir = relativeLogDir
+    ? resolveAbsolutePath(relativeLogDir)
+    : '~/Library/Application Support/ClashFox/logs';
   return dir.endsWith('/') ? `${dir}clashfox.log` : `${dir}/clashfox.log`;
 }
 
@@ -8102,7 +8304,7 @@ function renderFoxRankDetailPanel(snapshot = null) {
         <span>${escapeLogCell(formatFoxRankText('levelPrefix', { level: data.tier.index + 1 }, `Lv. ${data.tier.index + 1}`))}</span>
       </div>
       <div class="fox-rank-share-progress">
-        <div class="fox-rank-share-progress-fill" style="width: ${Math.round(data.progress * 100)}%; background: linear-gradient(90deg, ${tierColor}, ${adjustColor(tierColor, -20)})"></div>
+        <div class="fox-rank-share-progress-fill" style="width: ${Math.round(data.progress * 100)}%; background: linear-gradient(90deg,${tierColor},${adjustColor(tierColor, -20)})"></div>
       </div>
       <div class="fox-rank-share-meta">
         <span>XP ${data.delta} / ${data.span}</span>
@@ -8346,6 +8548,9 @@ function renderFoxRankPanel(snapshot = null, options = {}) {
 }
 
 async function loadStatusSilently() {
+  if (!isMainWindowVisible()) {
+    return { ok: false, error: 'window_hidden' };
+  }
   // Do not bind status detection to selected config file validity.
   // Status should reflect actual kernel process state.
   const response = await runCommand('status');
@@ -8384,6 +8589,9 @@ function probeKernelRunningFromLocalGuard() {
 }
 
 async function loadStatus() {
+  if (!isMainWindowVisible()) {
+    return;
+  }
   guiLog('status', 'loadStatus started');
   const response = await loadStatusSilently();
   if (!response.ok) {
@@ -8414,9 +8622,21 @@ async function waitForKernelState(expectedRunning, timeoutMs = 12000, intervalMs
 }
 
 async function applyTunSettingsAfterStart() {
-  const enabled = Boolean(state.settings && state.settings.tun);
-  const stack = normalizeTunStack(state.settings && state.settings.stack);
-  const response = await updateTunViaController({ enable: enabled, stack });
+  const enabled = Boolean(state.settings?.proxy?.tun);
+  const stack = normalizeTunStack(state.settings?.proxy?.stack);
+  const retryableErrors = new Set(['request_failed', 'controller_missing', 'helper_unreachable', 'socket_missing']);
+  let response = null;
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    response = await updateTunViaController({ enable: enabled, stack });
+    if (response && response.ok) {
+      break;
+    }
+    const errorCode = String((response && response.error) || '').trim();
+    if (!retryableErrors.has(errorCode) || attempt === 4) {
+      break;
+    }
+    await sleep(250 * attempt);
+  }
   if (!response || !response.ok) {
     return response || { ok: false, error: 'tun_update_failed' };
   }
@@ -8429,6 +8649,9 @@ async function applyTunSettingsAfterStart() {
 }
 
 async function loadOverview(showToastOnSuccess = false) {
+  if (!isMainWindowVisible()) {
+    return false;
+  }
   if (state.overviewLoading) {
     return false;
   }
@@ -8498,20 +8721,15 @@ async function loadTunStatus(showToastOnSuccess = false) {
     const statusResp = await runCommand('status');
     const running = statusResp && statusResp.ok && statusResp.data && statusResp.data.running;
     if (!running) {
-      if (tunToggle) tunToggle.checked = false;
-      saveSettings({ tun: false });
       tunSynced = true;
-      return { ok: true, data: { enabled: false }, error: response.error };
+      return { ok: true, data: { enabled: Boolean(state.settings?.proxy?.tun) }, error: response.error };
     }
     const fetched = await fetchTunFromController();
     if (fetched && typeof fetched.enabled === 'boolean') {
       if (tunToggle) tunToggle.checked = fetched.enabled;
       const fetchedStack = normalizeTunStack(fetched.stack);
       if (tunStackSelect) tunStackSelect.value = fetchedStack;
-      saveSettings({
-        tun: fetched.enabled,
-        stack: fetchedStack,
-      });
+      syncRuntimeTunState(fetched.enabled, fetchedStack);
       tunSynced = true;
       return { ok: true, data: { enabled: fetched.enabled, stack: fetchedStack }, error: response.error };
     }
@@ -8519,16 +8737,16 @@ async function loadTunStatus(showToastOnSuccess = false) {
   }
   if (tunToggle && typeof response.data.enabled === 'boolean') {
     tunToggle.checked = response.data.enabled;
-    if (state.settings.tun !== response.data.enabled) {
-      saveSettings({ tun: response.data.enabled });
-    }
   }
   if (tunStackSelect && typeof response.data.stack === 'string') {
     const stack = normalizeTunStack(response.data.stack);
     tunStackSelect.value = stack;
-    if (state.settings.stack !== stack) {
-      saveSettings({ stack });
-    }
+  }
+  if (typeof response.data.enabled === 'boolean' || typeof response.data.stack === 'string') {
+    syncRuntimeTunState(
+      typeof response.data.enabled === 'boolean' ? response.data.enabled : undefined,
+      typeof response.data.stack === 'string' ? response.data.stack : null,
+    );
   }
   if (showToastOnSuccess) {
     showToast(t('labels.tunRefreshed'));
@@ -8620,17 +8838,13 @@ async function loadProviderSubscriptionOverview() {
     if (!response || !response.ok || !response.data) {
       guiLog('provider-traffic', 'load failed', {
         error: response && response.error ? response.error : 'provider_subscription_overview_failed',
-        cacheHit: Boolean(readOverviewProviderSubscriptionCache()),
       }, 'warn');
-      if (readOverviewProviderSubscriptionCache()) {
-        hydrateOverviewProviderSubscriptionFromCache();
-      } else if (!state.providerSubscriptionRenderSignature) {
+      if (!state.providerSubscriptionRenderSignature) {
         renderProviderSubscriptionOverview({ items: [], summary: { providerCount: 0 } });
       }
       return;
     }
     const overviewData = buildProviderSubscriptionOverviewData(response.data);
-    cacheOverviewProviderSubscription(overviewData);
     renderProviderSubscriptionOverview(overviewData);
     guiLog('provider-traffic', 'load completed', {
       providerCount: overviewData && overviewData.summary
@@ -8640,11 +8854,8 @@ async function loadProviderSubscriptionOverview() {
     });
   } catch {
     guiLog('provider-traffic', 'load threw', {
-      cacheHit: Boolean(readOverviewProviderSubscriptionCache()),
     }, 'error');
-    if (readOverviewProviderSubscriptionCache()) {
-      hydrateOverviewProviderSubscriptionFromCache();
-    } else if (!state.providerSubscriptionRenderSignature) {
+    if (!state.providerSubscriptionRenderSignature) {
       renderProviderSubscriptionOverview({ items: [], summary: { providerCount: 0 } });
     }
   } finally {
@@ -8674,12 +8885,7 @@ async function loadRulesOverviewCard() {
       guiLog('rules-overview', 'load failed', {
         rulesError: rulesResp && rulesResp.error ? rulesResp.error : '',
         providersError: providerResp && providerResp.error ? providerResp.error : '',
-        cacheHit: Boolean(readOverviewRulesCardCache()),
       }, 'warn');
-      if (readOverviewRulesCardCache()) {
-        hydrateOverviewRulesCardFromCache();
-        return;
-      }
       if (
         state.rulesOverviewPayload
         || state.ruleProvidersOverviewPayload
@@ -8699,7 +8905,6 @@ async function loadRulesOverviewCard() {
     } else if (!state.ruleProvidersOverviewPayload) {
       state.ruleProvidersOverviewPayload = { totalProviders: 0, totalRules: 0, behaviors: [], items: [], records: [] };
     }
-    cacheOverviewRulesCard();
     renderRulesOverviewCard();
     guiLog('rules-overview', 'load completed', {
       totalRules: state.rulesOverviewPayload
@@ -8714,11 +8919,8 @@ async function loadRulesOverviewCard() {
     });
   } catch {
     guiLog('rules-overview', 'load threw', {
-      cacheHit: Boolean(readOverviewRulesCardCache()),
     }, 'error');
-    if (readOverviewRulesCardCache()) {
-      hydrateOverviewRulesCardFromCache();
-    } else if (
+    if (
       !state.rulesOverviewPayload
       && !state.ruleProvidersOverviewPayload
       && !state.rulesOverviewRenderSignatures.records
@@ -8903,8 +9105,91 @@ function getCurrentConfigPath() {
       }
     }
   }
+  if (typeof state.settings?.configFileDir === 'string') {
+    candidates.push(state.settings.configFileDir);
+  }
+  if (state.settings?.userDataPaths && typeof state.settings.userDataPaths.configFile === 'string') {
+    candidates.push(state.settings.userDataPaths.configFile);
+  }
+  if (state.settings?.userDataPaths && typeof state.settings.userDataPaths.configFileDir === 'string') {
+    candidates.push(state.settings.userDataPaths.configFileDir);
+  }
+  if (state.fileSettings?.userDataPaths && typeof state.fileSettings.userDataPaths.configFile === 'string') {
+    candidates.push(state.fileSettings.userDataPaths.configFile);
+  }
+  if (state.fileSettings?.userDataPaths && typeof state.fileSettings.userDataPaths.configFileDir === 'string') {
+    candidates.push(state.fileSettings.userDataPaths.configFileDir);
+  }
+  if (typeof state.configDefault === 'string' && state.configDefault.trim()) {
+    candidates.push(state.configDefault);
+  }
   const explicit = candidates.find((value) => value && value.trim());
-  return (explicit || state.configDefault || '').trim();
+  const selected = (explicit || state.configDefault || '').trim();
+  if (!selected) {
+    return '';
+  }
+  if (selected.startsWith('/') || /^[A-Za-z]:[\\/]/.test(selected)) {
+    return selected;
+  }
+  const userDataPaths = state.settings?.userDataPaths || {};
+  const userAppDataDir = String(userDataPaths.userAppDataDir || '').trim();
+  const configDir = String(userDataPaths.configDir || 'config').trim() || 'config';
+  if (!userAppDataDir) {
+    return selected;
+  }
+  const base = userAppDataDir.replace(/[\\/]+$/, '');
+  return `${base}/${configDir}/${selected}`.replace(/\/+/g, '/');
+}
+
+function normalizeConfigPathKey(value = '') {
+  const text = String(value || '').trim();
+  if (!text) {
+    return { full: '', base: '' };
+  }
+  const normalizedFull = text.replace(/\\/g, '/').replace(/\/+$/, '');
+  const parts = normalizedFull.split('/').filter(Boolean);
+  return {
+    full: normalizedFull,
+    base: parts.length ? parts[parts.length - 1] : normalizedFull,
+  };
+}
+
+function isCurrentConfigPath(candidatePath = '', currentPath = '') {
+  const candidate = normalizeConfigPathKey(candidatePath);
+  const current = normalizeConfigPathKey(currentPath);
+  if (!candidate.full || !current.full) {
+    return false;
+  }
+  return candidate.full === current.full || candidate.base === current.base;
+}
+
+function syncRuntimeTunState(tunEnabled, tunStack = null) {
+  if (!state.settings) {
+    state.settings = { ...DEFAULT_SETTINGS };
+  }
+  if (!state.fileSettings) {
+    state.fileSettings = {};
+  }
+  if (!state.settings.proxy || typeof state.settings.proxy !== 'object') {
+    state.settings.proxy = {};
+  }
+  if (!state.fileSettings.proxy || typeof state.fileSettings.proxy !== 'object') {
+    state.fileSettings.proxy = {};
+  }
+  if (typeof tunEnabled === 'boolean') {
+    state.settings.proxy.tun = tunEnabled;
+    state.fileSettings.proxy.tun = tunEnabled;
+  }
+  if (typeof tunStack === 'string' && tunStack) {
+    const normalizedStack = normalizeTunStack(tunStack);
+    state.settings.proxy.stack = normalizedStack;
+    state.fileSettings.proxy.stack = normalizedStack;
+  }
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
+  } catch {
+    // ignore
+  }
 }
 
 function syncThemeSource(preference) {
@@ -8976,7 +9261,7 @@ function renderConfigTable() {
   // html += `<th class="current-col">${t('table.current')}</th>`;
   html += '</tr></thead><tbody>';
   pageData.items.forEach((item) => {
-    const isCurrent = currentPath && item.path === currentPath;
+    const isCurrent = currentPath && isCurrentConfigPath(item.path, currentPath);
     const rowClass = isCurrent ? 'selectable selected' : 'selectable';
     html += `<tr class="${rowClass}" data-path="${item.path || ''}">`;
     html += `<td class="check-col"><input type="radio" name="configCurrent" data-path="${item.path || ''}" ${isCurrent ? 'checked' : ''} /></td>`;
@@ -9320,7 +9605,7 @@ function renderRecommendTable() {
 }
 
 async function loadLogs() {
-  if (!logTableBody && !logContent) {
+  if (!isMainWindowVisible() || (!logTableBody && !logContent)) {
     return;
   }
   if (!Array.isArray(state.logEntries)) {
@@ -10001,6 +10286,7 @@ function refreshPageRefs() {
   settingsCoreDirReveal = document.getElementById('settingsCoreDirReveal');
   settingsDataDirReveal = document.getElementById('settingsDataDirReveal');
   helperInstallBtn = document.getElementById('helperInstallBtn');
+  helperUninstallBtn = document.getElementById('helperUninstallBtn');
   helperRepairBtn = document.getElementById('helperRepairBtn');
   helperInstallTerminalBtn = document.getElementById('helperInstallTerminalBtn');
   helperInstallPathBtn = document.getElementById('helperInstallPathBtn');
@@ -10028,6 +10314,7 @@ function refreshPageRefs() {
   settingsTrayMenuProviderTraffic = document.getElementById('settingsTrayMenuProviderTraffic');
   settingsTrayMenuTrackers = document.getElementById('settingsTrayMenuTrackers');
   settingsTrayMenuFoxboard = document.getElementById('settingsTrayMenuFoxboard');
+  settingsTrayMenuPanel = document.getElementById('settingsTrayMenuPanel');
   settingsTrayMenuKernelManager = document.getElementById('settingsTrayMenuKernelManager');
   settingsTrayMenuDirectoryLocations = document.getElementById('settingsTrayMenuDirectoryLocations');
   settingsTrayMenuCopyShellExport = document.getElementById('settingsTrayMenuCopyShellExport');
@@ -10094,7 +10381,7 @@ function bindTopbarActions() {
   if (sidebarCollapseToggle && sidebarCollapseToggle.dataset.bound !== 'true') {
     sidebarCollapseToggle.dataset.bound = 'true';
     sidebarCollapseToggle.addEventListener('click', () => {
-      const nextCollapsed = !(state.settings && state.settings.sidebarCollapsed);
+      const nextCollapsed = !(state.settings && state.settings.appearance && state.settings.appearance.sidebarCollapsed);
       applySidebarCollapsedState(nextCollapsed, true);
     });
   }
@@ -10128,7 +10415,9 @@ function refreshPageView() {
   if (logContent || logLines || logTableBody) {
     loadLogs();
   }
-  loadStatus();
+  if (currentPage !== 'overview') {
+    loadStatusSilently().catch(() => {});
+  }
   if (currentPage === 'kernel') {
     loadKernels();
   }
@@ -10136,13 +10425,19 @@ function refreshPageView() {
     loadBackups();
   }
   if (currentPage === 'overview') {
-    hydrateOverviewProviderSubscriptionFromCache();
-    hydrateOverviewRulesCardFromCache();
-    Promise.all([
-      loadOverview(),
-      loadProviderSubscriptionOverview(),
-      loadRulesOverviewCard(),
-    ]);
+    if (!state.providerSubscriptionRenderSignature) {
+      renderProviderSubscriptionOverview({ items: [], summary: { providerCount: 0 } });
+    }
+    if (
+      !state.rulesOverviewPayload
+      && !state.ruleProvidersOverviewPayload
+      && !state.rulesOverviewRenderSignatures.records
+      && !state.rulesOverviewRenderSignatures.chart
+    ) {
+      state.rulesOverviewPayload = { totalRules: 0, types: [], records: [] };
+      state.ruleProvidersOverviewPayload = { totalProviders: 0, totalRules: 0, behaviors: [], items: [], records: [] };
+      renderRulesOverviewCard();
+    }
   }
   if (currentPage === 'dashboard') {
     initDashboardFrame();
@@ -10272,6 +10567,89 @@ function preventPageReloadShortcuts() {
   }, true);
 }
 
+function isMainWindowVisible() {
+  return Boolean(appWindowVisible) && !document.hidden;
+}
+
+function stopOverviewActivity() {
+  if (state.coreStatusTimer) {
+    clearInterval(state.coreStatusTimer);
+    state.coreStatusTimer = null;
+  }
+  if (state.overviewTimer) {
+    clearInterval(state.overviewTimer);
+    state.overviewTimer = null;
+  }
+  if (state.overviewTickTimer) {
+    clearInterval(state.overviewTickTimer);
+    state.overviewTickTimer = null;
+  }
+  if (state.providerSubscriptionTimer) {
+    clearInterval(state.providerSubscriptionTimer);
+    state.providerSubscriptionTimer = null;
+  }
+  if (state.rulesOverviewTimer) {
+    clearInterval(state.rulesOverviewTimer);
+    state.rulesOverviewTimer = null;
+  }
+  if (state.trafficTimer) {
+    clearInterval(state.trafficTimer);
+    state.trafficTimer = null;
+  }
+  if (state.overviewLiteTimer) {
+    clearInterval(state.overviewLiteTimer);
+    state.overviewLiteTimer = null;
+  }
+  if (state.overviewMemoryTimer) {
+    clearInterval(state.overviewMemoryTimer);
+    state.overviewMemoryTimer = null;
+  }
+  closeMihomoConnectionsSocket();
+  closeMihomoTrafficSocket();
+  closeMihomoMemorySocket();
+  closeMihomoLogsSocket();
+  stopTopologyTicker();
+}
+
+async function syncMainWindowActivity() {
+  if (!isMainWindowVisible()) {
+    stopOverviewActivity();
+    closeMihomoPageLogsSocket();
+    if (dashboardLocalModule && typeof dashboardLocalModule.teardownDashboardPanel === 'function' && currentPage === 'dashboard') {
+      dashboardLocalModule.teardownDashboardPanel();
+      state.dashboardLoaded = false;
+    }
+    return;
+  }
+  if (currentPage === 'dashboard') {
+    await initDashboardFrame();
+  } else if (dashboardLocalModule && typeof dashboardLocalModule.teardownDashboardPanel === 'function' && state.dashboardLoaded) {
+    dashboardLocalModule.teardownDashboardPanel();
+    state.dashboardLoaded = false;
+  }
+  if (currentPage === 'overview') {
+    startOverviewTimer();
+    connectMihomoConnectionsStream();
+    connectMihomoTrafficStream();
+    connectMihomoMemoryStream();
+    connectMihomoLogsStream();
+    startTopologyTicker();
+    loadStatusSilently().catch(() => {});
+    Promise.all([
+      loadOverview(),
+      loadProviderSubscriptionOverview(),
+      loadRulesOverviewCard(),
+    ]).catch(() => {});
+  } else {
+    stopOverviewActivity();
+  }
+  if (currentPage === 'logs') {
+    loadLogs();
+  } else {
+    closeMihomoPageLogsSocket();
+  }
+}
+
 async function navigatePage(targetPage, pushState = true) {
   const normalized = String(targetPage || '').trim();
   guiLog('nav', 'navigatePage called', { targetPage: normalized, currentPage, pushState });
@@ -10282,9 +10660,6 @@ async function navigatePage(targetPage, pushState = true) {
     dashboardLocalModule.teardownDashboardPanel();
   }
   if (currentPage === 'overview') {
-    cacheOverviewNetworkFromState();
-    cacheOverviewTrafficFromState();
-    cacheOverviewRulesCard();
     closeTopologyZoomModal();
     if (normalized !== 'overview') {
       closeMihomoConnectionsSocket();
@@ -10343,9 +10718,7 @@ async function navigatePage(targetPage, pushState = true) {
       }
     });
   }
-  if (normalized === 'dashboard') {
-    initDashboardFrame();
-  }
+  await syncMainWindowActivity();
   if (pushState) {
     history.pushState({ page: normalized }, '', `${normalized}.html`);
   }
@@ -10355,6 +10728,7 @@ window.addEventListener('beforeunload', () => {
   if (dashboardLocalModule && typeof dashboardLocalModule.teardownDashboardPanel === 'function') {
     dashboardLocalModule.teardownDashboardPanel();
   }
+  stopOverviewActivity();
   closeMihomoConnectionsSocket();
   closeMihomoTrafficSocket();
   closeMihomoMemorySocket();
@@ -10362,9 +10736,6 @@ window.addEventListener('beforeunload', () => {
   closeMihomoPageLogsSocket();
   stopTopologyTicker();
   if (currentPage === 'overview') {
-    cacheOverviewNetworkFromState();
-    cacheOverviewTrafficFromState();
-    cacheOverviewRulesCard();
   }
 });
 
@@ -10479,411 +10850,418 @@ async function loadLayoutParts() {
 }
 
 function bindPageEvents() {
-if (noticePopClose && noticePopClose.dataset.bound !== 'true') {
-  noticePopClose.dataset.bound = 'true';
-  noticePopClose.addEventListener('click', hideNoticePop);
-}
-if (foxRankCard && foxRankCard.dataset.bound !== 'true') {
-  foxRankCard.dataset.bound = 'true';
-  foxRankCard.addEventListener('click', openFoxRankDetailModal);
-}
-if (foxRankDetailClose && foxRankDetailClose.dataset.bound !== 'true') {
-  foxRankDetailClose.dataset.bound = 'true';
-  foxRankDetailClose.addEventListener('click', closeFoxRankDetailModal);
-}
-if (foxRankDetailModal && foxRankDetailModal.dataset.bound !== 'true') {
-  foxRankDetailModal.dataset.bound = 'true';
-  foxRankDetailModal.addEventListener('click', (event) => {
-    if (event.target === foxRankDetailModal || event.target.classList.contains('fox-rank-detail-backdrop')) {
-      closeFoxRankDetailModal();
-    }
-  });
-}
-if (foxRankSectionTabs && foxRankSectionTabs.dataset.bound !== 'true') {
-  foxRankSectionTabs.dataset.bound = 'true';
-  foxRankSectionTabs.addEventListener('click', (event) => {
-    const button = event.target && event.target.closest
-      ? event.target.closest('[data-fox-rank-tab]')
-      : null;
-    if (!button) {
-      return;
-    }
-    setFoxRankDetailTab(String(button.dataset.foxRankTab || 'log'));
-  });
-}
-if (foxRankBriefModal && foxRankBriefModal.dataset.bound !== 'true') {
-  foxRankBriefModal.dataset.bound = 'true';
-  foxRankBriefModal.addEventListener('click', (event) => {
-    if (event.target === foxRankBriefModal || event.target.classList.contains('fox-rank-brief-backdrop')) {
-      closeFoxRankBriefModal();
-    }
-  });
-}
-if (foxRankCopySummaryBtn && foxRankCopySummaryBtn.dataset.bound !== 'true') {
-  foxRankCopySummaryBtn.dataset.bound = 'true';
-  foxRankCopySummaryBtn.addEventListener('click', () => {
-    runFoxRankActionWithButton(
-      foxRankCopySummaryBtn,
-      foxRankText('copySummary', 'Copy Summary'),
-      foxRankText('copying', 'Copying...'),
-      () => copyFoxRankSummary(),
-    );
-  });
-}
-if (foxRankExportPngBtn && foxRankExportPngBtn.dataset.bound !== 'true') {
-  foxRankExportPngBtn.dataset.bound = 'true';
-  foxRankExportPngBtn.addEventListener('click', () => {
-    runFoxRankActionWithButton(
-      foxRankExportPngBtn,
-      foxRankText('exportPng', 'Export PNG'),
-      foxRankText('exporting', 'Exporting...'),
-      () => exportFoxRankCardPng(),
-    );
-  });
-}
-if (foxRankBriefClose && foxRankBriefClose.dataset.bound !== 'true') {
-  foxRankBriefClose.dataset.bound = 'true';
-  foxRankBriefClose.addEventListener('click', closeFoxRankBriefModal);
-}
-if (foxRankBriefOpenDetail && foxRankBriefOpenDetail.dataset.bound !== 'true') {
-  foxRankBriefOpenDetail.dataset.bound = 'true';
-  foxRankBriefOpenDetail.addEventListener('click', () => {
-    closeFoxRankBriefModal();
-    openFoxRankDetailModal();
-  });
-}
-if (document.body && document.body.dataset.proxyConfigActionBound !== 'true') {
-  document.body.dataset.proxyConfigActionBound = 'true';
-  document.addEventListener('click', async (event) => {
-    const button = event.target && event.target.closest
-      ? event.target.closest('#proxyConfigReloadCoreBtn, #proxyConfigReloadConfigBtn')
-      : null;
-    if (!button) {
-      return;
-    }
-    const isReloadCore = button.id === 'proxyConfigReloadCoreBtn';
-    guiLog('proxy-config', isReloadCore ? 'reload core requested' : 'reload config requested');
-    button.disabled = true;
-    try {
-      const response = isReloadCore
-        ? await reloadMihomoCore(getMihomoApiSource())
-        : await reloadMihomoConfig(getMihomoApiSource());
-      if (!response || !response.ok) {
-        const detail = response && (response.details || response.error)
-          ? `: ${String(response.details || response.error)}`
-          : '';
-        showToast(
-          `${isReloadCore
-            ? ti('settings.proxyReloadCoreFailed', 'Reload core failed')
-            : ti('settings.proxyReloadConfigFailed', 'Reload config failed')}${detail}`,
-          'error',
-        );
-        return;
-      }
-      showToast(
-        isReloadCore
-          ? ti('settings.proxyReloadCoreSuccess', 'Core reloaded')
-          : ti('settings.proxyReloadConfigSuccess', 'Config reloaded'),
-        'info',
-      );
-      loadStatus();
-      loadTunStatus(false);
-      if (currentPage === 'overview') {
-        loadOverview();
-      }
-    } finally {
-      button.disabled = false;
-    }
-  });
-}
-const externalLinks = Array.from(document.querySelectorAll('[data-open-external="true"]'));
-externalLinks.forEach((link) => {
-  if (link.dataset.bound === 'true') {
-    return;
+  if (noticePopClose && noticePopClose.dataset.bound !== 'true') {
+    noticePopClose.dataset.bound = 'true';
+    noticePopClose.addEventListener('click', hideNoticePop);
   }
-  link.dataset.bound = 'true';
-  link.addEventListener('click', (event) => {
-    event.preventDefault();
-    const url = link.getAttribute('href');
-    if (!url) {
-      return;
-    }
-    if (window.clashfox && typeof window.clashfox.openExternal === 'function') {
-      window.clashfox.openExternal(url);
-    } else {
-      window.open(url);
-    }
-  });
-});
-bindOverviewDrag();
-document.querySelectorAll('[data-tip-key]').forEach((el) => {
-  if (el.dataset.tipBound === 'true') {
-    return;
+  if (foxRankCard && foxRankCard.dataset.bound !== 'true') {
+    foxRankCard.dataset.bound = 'true';
+    foxRankCard.addEventListener('click', openFoxRankDetailModal);
   }
-  el.dataset.tipBound = 'true';
-  el.addEventListener('mouseenter', () => updateTipPosition(el));
-  el.addEventListener('focus', () => updateTipPosition(el));
-});
-if (document.body && document.body.dataset.tipDelegationBound !== 'true') {
-  document.body.dataset.tipDelegationBound = 'true';
-  const delegatedTipHandler = (event) => {
-    const target = event.target && event.target.closest
-      ? event.target.closest('[data-tip-key]')
-      : null;
-    if (!target) {
-      return;
-    }
-    updateTipPosition(target);
-  };
-  document.addEventListener('mouseover', delegatedTipHandler, true);
-  document.addEventListener('focusin', delegatedTipHandler, true);
-}
-if (document.body && document.body.dataset.topologyKeyBound !== 'true') {
-  document.body.dataset.topologyKeyBound = 'true';
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      setTopologyHoverKey('');
-      if (foxRankDetailModal && !foxRankDetailModal.hidden) {
+  if (foxRankDetailClose && foxRankDetailClose.dataset.bound !== 'true') {
+    foxRankDetailClose.dataset.bound = 'true';
+    foxRankDetailClose.addEventListener('click', closeFoxRankDetailModal);
+  }
+  if (foxRankDetailModal && foxRankDetailModal.dataset.bound !== 'true') {
+    foxRankDetailModal.dataset.bound = 'true';
+    foxRankDetailModal.addEventListener('click', (event) => {
+      if (event.target === foxRankDetailModal || event.target.classList.contains('fox-rank-detail-backdrop')) {
         closeFoxRankDetailModal();
       }
+    });
+  }
+  if (foxRankSectionTabs && foxRankSectionTabs.dataset.bound !== 'true') {
+    foxRankSectionTabs.dataset.bound = 'true';
+    foxRankSectionTabs.addEventListener('click', (event) => {
+      const button = event.target && event.target.closest
+          ? event.target.closest('[data-fox-rank-tab]')
+          : null;
+      if (!button) {
+        return;
+      }
+      setFoxRankDetailTab(String(button.dataset.foxRankTab || 'log'));
+    });
+  }
+  if (foxRankBriefModal && foxRankBriefModal.dataset.bound !== 'true') {
+    foxRankBriefModal.dataset.bound = 'true';
+    foxRankBriefModal.addEventListener('click', (event) => {
+      if (event.target === foxRankBriefModal || event.target.classList.contains('fox-rank-brief-backdrop')) {
+        closeFoxRankBriefModal();
+      }
+    });
+  }
+  if (foxRankCopySummaryBtn && foxRankCopySummaryBtn.dataset.bound !== 'true') {
+    foxRankCopySummaryBtn.dataset.bound = 'true';
+    foxRankCopySummaryBtn.addEventListener('click', () => {
+      runFoxRankActionWithButton(
+          foxRankCopySummaryBtn,
+          foxRankText('copySummary', 'Copy Summary'),
+          foxRankText('copying', 'Copying...'),
+          () => copyFoxRankSummary(),
+      );
+    });
+  }
+  if (foxRankExportPngBtn && foxRankExportPngBtn.dataset.bound !== 'true') {
+    foxRankExportPngBtn.dataset.bound = 'true';
+    foxRankExportPngBtn.addEventListener('click', () => {
+      runFoxRankActionWithButton(
+          foxRankExportPngBtn,
+          foxRankText('exportPng', 'Export PNG'),
+          foxRankText('exporting', 'Exporting...'),
+          () => exportFoxRankCardPng(),
+      );
+    });
+  }
+  if (foxRankBriefClose && foxRankBriefClose.dataset.bound !== 'true') {
+    foxRankBriefClose.dataset.bound = 'true';
+    foxRankBriefClose.addEventListener('click', closeFoxRankBriefModal);
+  }
+  if (foxRankBriefOpenDetail && foxRankBriefOpenDetail.dataset.bound !== 'true') {
+    foxRankBriefOpenDetail.dataset.bound = 'true';
+    foxRankBriefOpenDetail.addEventListener('click', () => {
+      closeFoxRankBriefModal();
+      openFoxRankDetailModal();
+    });
+  }
+  if (document.body && document.body.dataset.proxyConfigActionBound !== 'true') {
+    document.body.dataset.proxyConfigActionBound = 'true';
+    document.addEventListener('click', async (event) => {
+      const button = event.target && event.target.closest
+          ? event.target.closest('#proxyConfigReloadCoreBtn, #proxyConfigReloadConfigBtn')
+          : null;
+      if (!button) {
+        return;
+      }
+      const isReloadCore = button.id === 'proxyConfigReloadCoreBtn';
+      guiLog('proxy-config', isReloadCore ? 'reload core requested' : 'reload config requested');
+      button.disabled = true;
+      try {
+        const response = isReloadCore
+            ? await reloadMihomoCore(getMihomoApiSource())
+            : await reloadMihomoConfig(getMihomoApiSource());
+        if (!response || !response.ok) {
+          const detail = response && (response.details || response.error)
+              ? `: ${String(response.details || response.error)}`
+              : '';
+          showToast(
+              `${isReloadCore
+                  ? ti('settings.proxyReloadCoreFailed', 'Reload core failed')
+                  : ti('settings.proxyReloadConfigFailed', 'Reload config failed')}${detail}`,
+              'error',
+          );
+          return;
+        }
+        showToast(
+            isReloadCore
+                ? ti('settings.proxyReloadCoreSuccess', 'Core reloaded')
+                : ti('settings.proxyReloadConfigSuccess', 'Config reloaded'),
+            'info',
+        );
+        loadStatus();
+        loadTunStatus(false);
+        if (currentPage === 'overview') {
+          loadOverview();
+        }
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
+  const externalLinks = Array.from(document.querySelectorAll('[data-open-external="true"]'));
+  externalLinks.forEach((link) => {
+    if (link.dataset.bound === 'true') {
+      return;
     }
+    link.dataset.bound = 'true';
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      const url = link.getAttribute('href');
+      if (!url) {
+        return;
+      }
+      if (window.clashfox && typeof window.clashfox.openExternal === 'function') {
+        window.clashfox.openExternal(url);
+      } else {
+        window.open(url);
+      }
+    });
   });
-}
-if (overviewKernelCopy && overviewKernelCopy.dataset.bound !== 'true') {
-  overviewKernelCopy.dataset.bound = 'true';
-  overviewKernelCopy.addEventListener('click', handleOverviewKernelCopy);
-}
-if (overviewLocalIpCopy && overviewLocalIpCopy.dataset.bound !== 'true') {
-  overviewLocalIpCopy.dataset.bound = 'true';
-  overviewLocalIpCopy.addEventListener('click', () => handleOverviewTextCopy(state.overviewIpRaw.local));
-}
-if (overviewProxyIpCopy && overviewProxyIpCopy.dataset.bound !== 'true') {
-  overviewProxyIpCopy.dataset.bound = 'true';
-  overviewProxyIpCopy.addEventListener('click', () => handleOverviewTextCopy(state.overviewIpRaw.proxy));
-}
-if (overviewInternetIpCopy && overviewInternetIpCopy.dataset.bound !== 'true') {
-  overviewInternetIpCopy.dataset.bound = 'true';
-  overviewInternetIpCopy.addEventListener('click', () => handleOverviewTextCopy(state.overviewIpRaw.internet));
-}
+  bindOverviewDrag();
+  document.querySelectorAll('[data-tip-key]').forEach((el) => {
+    if (el.dataset.tipBound === 'true') {
+      return;
+    }
+    el.dataset.tipBound = 'true';
+    el.addEventListener('mouseenter', () => updateTipPosition(el));
+    el.addEventListener('focus', () => updateTipPosition(el));
+  });
+  if (document.body && document.body.dataset.tipDelegationBound !== 'true') {
+    document.body.dataset.tipDelegationBound = 'true';
+    const delegatedTipHandler = (event) => {
+      const target = event.target && event.target.closest
+          ? event.target.closest('[data-tip-key]')
+          : null;
+      if (!target) {
+        return;
+      }
+      updateTipPosition(target);
+    };
+    document.addEventListener('mouseover', delegatedTipHandler, true);
+    document.addEventListener('focusin', delegatedTipHandler, true);
+  }
+  if (document.body && document.body.dataset.topologyKeyBound !== 'true') {
+    document.body.dataset.topologyKeyBound = 'true';
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        setTopologyHoverKey('');
+        if (foxRankDetailModal && !foxRankDetailModal.hidden) {
+          closeFoxRankDetailModal();
+        }
+      }
+    });
+  }
+  if (overviewKernelCopy && overviewKernelCopy.dataset.bound !== 'true') {
+    overviewKernelCopy.dataset.bound = 'true';
+    overviewKernelCopy.addEventListener('click', handleOverviewKernelCopy);
+  }
+  if (overviewLocalIpCopy && overviewLocalIpCopy.dataset.bound !== 'true') {
+    overviewLocalIpCopy.dataset.bound = 'true';
+    overviewLocalIpCopy.addEventListener('click', () => handleOverviewTextCopy(state.overviewIpRaw.local));
+  }
+  if (overviewProxyIpCopy && overviewProxyIpCopy.dataset.bound !== 'true') {
+    overviewProxyIpCopy.dataset.bound = 'true';
+    overviewProxyIpCopy.addEventListener('click', () => handleOverviewTextCopy(state.overviewIpRaw.proxy));
+  }
+  if (overviewInternetIpCopy && overviewInternetIpCopy.dataset.bound !== 'true') {
+    overviewInternetIpCopy.dataset.bound = 'true';
+    overviewInternetIpCopy.addEventListener('click', () => handleOverviewTextCopy(state.overviewIpRaw.internet));
+  }
   langButtons.forEach((btn) => {
     btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
   });
 
   if (settingsLang) {
-  settingsLang.addEventListener('change', (event) => {
-    setLanguage(event.target.value);
-  });
-}
-
-if (settingsTheme) {
-  settingsTheme.addEventListener('change', (event) => {
-    applyThemePreference(event.target.value);
-  });
-}
-
-if (settingsDebugMode) {
-  settingsDebugMode.addEventListener('change', (event) => {
-    const enabled = Boolean(event.target.checked);
-    saveSettings({ debugMode: enabled });
-    syncDebugMode(enabled);
-  });
-}
-
-if (settingsWindowWidth) {
-  settingsWindowWidth.addEventListener('change', (event) => {
-    const current = sanitizeWindowDimension(
-      state.settings.windowWidth,
-      MAIN_WINDOW_DEFAULT_WIDTH,
-      MAIN_WINDOW_MIN_WIDTH,
-      MAIN_WINDOW_MAX_WIDTH,
-    );
-    const next = sanitizeWindowDimension(
-      event.target.value,
-      current,
-      MAIN_WINDOW_MIN_WIDTH,
-      MAIN_WINDOW_MAX_WIDTH,
-    );
-    event.target.value = next;
-    saveSettings({ windowWidth: next });
-  });
-}
-
-if (settingsWindowHeight) {
-  settingsWindowHeight.addEventListener('change', (event) => {
-    const current = sanitizeWindowDimension(
-      state.settings.windowHeight,
-      MAIN_WINDOW_DEFAULT_HEIGHT,
-      MAIN_WINDOW_MIN_HEIGHT,
-      MAIN_WINDOW_MAX_HEIGHT,
-    );
-    const next = sanitizeWindowDimension(
-      event.target.value,
-      current,
-      MAIN_WINDOW_MIN_HEIGHT,
-      MAIN_WINDOW_MAX_HEIGHT,
-    );
-    event.target.value = next;
-    saveSettings({ windowHeight: next });
-  });
-}
-
-if (settingsAcceptBeta) {
-  settingsAcceptBeta.addEventListener('change', (event) => {
-    const enabled = Boolean(event.target.checked);
-    saveSettings({ acceptBeta: enabled });
-  });
-}
-
-if (settingsTrayMenuChart) {
-  settingsTrayMenuChart.addEventListener('change', (event) => {
-    const enabled = Boolean(event.target.checked);
-    saveSettings({ chartEnabled: enabled });
-  });
-}
-
-if (settingsTrayMenuProviderTraffic) {
-  settingsTrayMenuProviderTraffic.addEventListener('change', (event) => {
-    const enabled = Boolean(event.target.checked);
-    saveSettings({ providerTrafficEnabled: enabled });
-  });
-}
-
-if (settingsTrayMenuTrackers) {
-  settingsTrayMenuTrackers.addEventListener('change', (event) => {
-    const enabled = Boolean(event.target.checked);
-    saveSettings({ trackersEnabled: enabled });
-  });
-}
-
-if (settingsTrayMenuFoxboard) {
-  settingsTrayMenuFoxboard.addEventListener('change', (event) => {
-    const enabled = Boolean(event.target.checked);
-    saveSettings({ foxboardEnabled: enabled });
-  });
-}
-
-if (settingsTrayMenuKernelManager) {
-  settingsTrayMenuKernelManager.addEventListener('change', (event) => {
-    const enabled = Boolean(event.target.checked);
-    saveSettings({ kernelManagerEnabled: enabled });
-  });
-}
-
-if (settingsTrayMenuDirectoryLocations) {
-  settingsTrayMenuDirectoryLocations.addEventListener('change', (event) => {
-    const enabled = Boolean(event.target.checked);
-    saveSettings({ directoryLocationsEnabled: enabled });
-  });
-}
-
-if (settingsTrayMenuCopyShellExport) {
-  settingsTrayMenuCopyShellExport.addEventListener('change', (event) => {
-    const enabled = Boolean(event.target.checked);
-    saveSettings({ copyShellExportCommandEnabled: enabled });
-  });
-}
-
-const normalizeProxyPortSetting = (input, fallback) => {
-  const parsed = Number.parseInt(String(input ?? ''), 10);
-  if (!Number.isFinite(parsed) || parsed < 1 || parsed > 65535) {
-    return fallback;
+    settingsLang.addEventListener('change', (event) => {
+      setLanguage(event.target.value);
+    });
   }
-  return parsed;
-};
 
-if (settingsProxyMixedPort) {
-  settingsProxyMixedPort.addEventListener('change', async (event) => {
-    const fallback = Number.parseInt(String(state.settings.mixedPort ?? 7893), 10) || 7893;
-    const next = normalizeProxyPortSetting(event.target.value, fallback);
-    const previous = fallback;
-    event.target.value = next;
-    event.target.disabled = true;
-    try {
-      const response = await updateMihomoConfigViaController({ 'mixed-port': next }, getMihomoApiSource());
-      if (!response || !response.ok) {
-        event.target.value = previous;
-        const detail = response && (response.details || response.error)
-          ? `: ${String(response.details || response.error)}`
-          : '';
-        showToast(`${ti('settings.proxyMixedPortUpdateFailed', 'Mixed port update failed')}${detail}`, 'error');
-        return;
-      }
-      saveSettings({ mixedPort: next });
-    } finally {
-      event.target.disabled = false;
-    }
-  });
-}
+  if (settingsTheme) {
+    settingsTheme.addEventListener('change', (event) => {
+      applyThemePreference(event.target.value);
+    });
+  }
 
-if (settingsProxyPort) {
-  settingsProxyPort.addEventListener('change', async (event) => {
-    const fallback = Number.parseInt(String(state.settings.port ?? 7890), 10) || 7890;
-    const next = normalizeProxyPortSetting(event.target.value, fallback);
-    const previous = fallback;
-    event.target.value = next;
-    event.target.disabled = true;
-    try {
-      const response = await updateMihomoConfigViaController({ port: next }, getMihomoApiSource());
-      if (!response || !response.ok) {
-        event.target.value = previous;
-        const detail = response && (response.details || response.error)
-          ? `: ${String(response.details || response.error)}`
-          : '';
-        showToast(`${ti('settings.proxyPortUpdateFailed', 'Port update failed')}${detail}`, 'error');
-        return;
-      }
-      saveSettings({ port: next });
-    } finally {
-      event.target.disabled = false;
-    }
-  });
-}
+  if (settingsDebugMode) {
+    settingsDebugMode.addEventListener('change', (event) => {
+      const enabled = Boolean(event.target.checked);
+      saveSettings({debugMode: enabled});
+      syncDebugMode(enabled);
+    });
+  }
 
-if (settingsProxySocksPort) {
-  settingsProxySocksPort.addEventListener('change', async (event) => {
-    const fallback = Number.parseInt(String(state.settings.socksPort ?? 7891), 10) || 7891;
-    const next = normalizeProxyPortSetting(event.target.value, fallback);
-    const previous = fallback;
-    event.target.value = next;
-    event.target.disabled = true;
-    try {
-      const response = await updateMihomoConfigViaController({ 'socks-port': next }, getMihomoApiSource());
-      if (!response || !response.ok) {
-        event.target.value = previous;
-        const detail = response && (response.details || response.error)
-          ? `: ${String(response.details || response.error)}`
-          : '';
-        showToast(`${ti('settings.proxySocksPortUpdateFailed', 'Socks port update failed')}${detail}`, 'error');
-        return;
-      }
-      saveSettings({ socksPort: next });
-    } finally {
-      event.target.disabled = false;
-    }
-  });
-}
+  if (settingsWindowWidth) {
+    settingsWindowWidth.addEventListener('change', (event) => {
+      const current = sanitizeWindowDimension(
+          state.settings.windowWidth,
+          MAIN_WINDOW_DEFAULT_WIDTH,
+          MAIN_WINDOW_MIN_WIDTH,
+          MAIN_WINDOW_MAX_WIDTH,
+      );
+      const next = sanitizeWindowDimension(
+          event.target.value,
+          current,
+          MAIN_WINDOW_MIN_WIDTH,
+          MAIN_WINDOW_MAX_WIDTH,
+      );
+      event.target.value = next;
+      saveSettings({windowWidth: next});
+    });
+  }
 
-if (settingsProxyAllowLan) {
-  settingsProxyAllowLan.addEventListener('change', async (event) => {
-    const nextChecked = Boolean(event.target.checked);
-    const previousChecked = Boolean(state.settings.allowLan);
-    event.target.disabled = true;
-    try {
-      const response = await updateAllowLanViaController(nextChecked, getMihomoApiSource());
-      if (!response || !response.ok) {
-        event.target.checked = previousChecked;
-        const detail = response && (response.details || response.error)
-          ? `: ${String(response.details || response.error)}`
-          : '';
-        showToast(`${ti('settings.proxyAllowLanUpdateFailed', 'Allow LAN update failed')}${detail}`, 'error');
-        return;
-      }
-      saveSettings({ allowLan: nextChecked });
-    } finally {
-      event.target.disabled = false;
+  if (settingsWindowHeight) {
+    settingsWindowHeight.addEventListener('change', (event) => {
+      const current = sanitizeWindowDimension(
+          state.settings.windowHeight,
+          MAIN_WINDOW_DEFAULT_HEIGHT,
+          MAIN_WINDOW_MIN_HEIGHT,
+          MAIN_WINDOW_MAX_HEIGHT,
+      );
+      const next = sanitizeWindowDimension(
+          event.target.value,
+          current,
+          MAIN_WINDOW_MIN_HEIGHT,
+          MAIN_WINDOW_MAX_HEIGHT,
+      );
+      event.target.value = next;
+      saveSettings({windowHeight: next});
+    });
+  }
+
+  if (settingsAcceptBeta) {
+    settingsAcceptBeta.addEventListener('change', (event) => {
+      const enabled = Boolean(event.target.checked);
+      saveSettings({acceptBeta: enabled});
+    });
+  }
+
+  if (settingsTrayMenuChart) {
+    settingsTrayMenuChart.addEventListener('change', (event) => {
+      const enabled = Boolean(event.target.checked);
+      saveSettings({chartEnabled: enabled});
+    });
+  }
+
+  if (settingsTrayMenuProviderTraffic) {
+    settingsTrayMenuProviderTraffic.addEventListener('change', (event) => {
+      const enabled = Boolean(event.target.checked);
+      saveSettings({providerTrafficEnabled: enabled});
+    });
+  }
+
+  if (settingsTrayMenuTrackers) {
+    settingsTrayMenuTrackers.addEventListener('change', (event) => {
+      const enabled = Boolean(event.target.checked);
+      saveSettings({trackersEnabled: enabled});
+    });
+  }
+
+  if (settingsTrayMenuFoxboard) {
+    settingsTrayMenuFoxboard.addEventListener('change', (event) => {
+      const enabled = Boolean(event.target.checked);
+      saveSettings({foxboardEnabled: enabled});
+    });
+  }
+
+  if (settingsTrayMenuPanel) {
+    settingsTrayMenuPanel.addEventListener('change', (event) => {
+      const enabled = Boolean(event.target.checked);
+      saveSettings({panelEnabled: enabled});
+    });
+  }
+
+  if (settingsTrayMenuKernelManager) {
+    settingsTrayMenuKernelManager.addEventListener('change', (event) => {
+      const enabled = Boolean(event.target.checked);
+      saveSettings({kernelManagerEnabled: enabled});
+    });
+  }
+
+  if (settingsTrayMenuDirectoryLocations) {
+    settingsTrayMenuDirectoryLocations.addEventListener('change', (event) => {
+      const enabled = Boolean(event.target.checked);
+      saveSettings({directoryLocationsEnabled: enabled});
+    });
+  }
+
+  if (settingsTrayMenuCopyShellExport) {
+    settingsTrayMenuCopyShellExport.addEventListener('change', (event) => {
+      const enabled = Boolean(event.target.checked);
+      saveSettings({copyShellExportCommandEnabled: enabled});
+    });
+  }
+
+  const normalizeProxyPortSetting = (input, fallback) => {
+    const parsed = Number.parseInt(String(input ?? ''), 10);
+    if (!Number.isFinite(parsed) || parsed < 1 || parsed > 65535) {
+      return fallback;
     }
-  });
-}
+    return parsed;
+  };
+
+  if (settingsProxyMixedPort) {
+    settingsProxyMixedPort.addEventListener('change', async (event) => {
+      const fallback = Number.parseInt(String(state.settings.proxy?.mixedPort ?? 7893), 10) || 7893;
+      const next = normalizeProxyPortSetting(event.target.value, fallback);
+      const previous = fallback;
+      event.target.value = next;
+      event.target.disabled = true;
+      try {
+        const response = await updateMihomoConfigViaController({'mixed-port': next}, getMihomoApiSource());
+        if (!response || !response.ok) {
+          event.target.value = previous;
+          const detail = response && (response.details || response.error)
+              ? `: ${String(response.details || response.error)}`
+              : '';
+          showToast(`${ti('settings.proxyMixedPortUpdateFailed', 'Mixed port update failed')}${detail}`, 'error');
+          return;
+        }
+        saveSettings({mixedPort: next});
+      } finally {
+        event.target.disabled = false;
+      }
+    });
+  }
+
+  if (settingsProxyPort) {
+    settingsProxyPort.addEventListener('change', async (event) => {
+      const fallback = Number.parseInt(String(state.settings.proxy?.port ?? 7890), 10) || 7890;
+      const next = normalizeProxyPortSetting(event.target.value, fallback);
+      const previous = fallback;
+      event.target.value = next;
+      event.target.disabled = true;
+      try {
+        const response = await updateMihomoConfigViaController({port: next}, getMihomoApiSource());
+        if (!response || !response.ok) {
+          event.target.value = previous;
+          const detail = response && (response.details || response.error)
+              ? `: ${String(response.details || response.error)}`
+              : '';
+          showToast(`${ti('settings.proxyPortUpdateFailed', 'Port update failed')}${detail}`, 'error');
+          return;
+        }
+        saveSettings({port: next});
+      } finally {
+        event.target.disabled = false;
+      }
+    });
+  }
+
+  if (settingsProxySocksPort) {
+    settingsProxySocksPort.addEventListener('change', async (event) => {
+      const fallback = Number.parseInt(String(state.settings.proxy?.socksPort ?? 7891), 10) || 7891;
+      const next = normalizeProxyPortSetting(event.target.value, fallback);
+      const previous = fallback;
+      event.target.value = next;
+      event.target.disabled = true;
+      try {
+        const response = await updateMihomoConfigViaController({'socks-port': next}, getMihomoApiSource());
+        if (!response || !response.ok) {
+          event.target.value = previous;
+          const detail = response && (response.details || response.error)
+              ? `: ${String(response.details || response.error)}`
+              : '';
+          showToast(`${ti('settings.proxySocksPortUpdateFailed', 'Socks port update failed')}${detail}`, 'error');
+          return;
+        }
+        saveSettings({socksPort: next});
+      } finally {
+        event.target.disabled = false;
+      }
+    });
+  }
+
+  if (settingsProxyAllowLan) {
+    settingsProxyAllowLan.addEventListener('change', async (event) => {
+      const nextChecked = Boolean(event.target.checked);
+      const previousChecked = Boolean(state.settings.proxy?.allowLan);
+      event.target.disabled = true;
+      try {
+        const response = await updateAllowLanViaController(nextChecked, getMihomoApiSource());
+        if (!response || !response.ok) {
+          event.target.checked = previousChecked;
+          const detail = response && (response.details || response.error)
+              ? `: ${String(response.details || response.error)}`
+              : '';
+          showToast(`${ti('settings.proxyAllowLanUpdateFailed', 'Allow LAN update failed')}${detail}`, 'error');
+          return;
+        }
+        saveSettings({allowLan: nextChecked});
+      } finally {
+        event.target.disabled = false;
+      }
+    });
+  }
 
 const getRevealPath = (inputEl) => {
   if (!inputEl) {
@@ -10891,13 +11269,28 @@ const getRevealPath = (inputEl) => {
   }
   const value = (inputEl.value || '').trim();
   if (value && value !== '-') {
-    return value;
+    return resolveAbsolutePath(value);
   }
   const placeholder = (inputEl.placeholder || '').trim();
   if (placeholder && placeholder !== '-') {
-    return placeholder;
+    return resolveAbsolutePath(placeholder);
   }
   return '';
+};
+
+// Display-only path resolver. Does not mutate settings or storage.
+const resolveAbsolutePath = (relativePath) => {
+  const userDataPaths = state.settings?.userDataPaths || {};
+  const userAppDataDir = userDataPaths.userAppDataDir || '';
+  if (!userAppDataDir) {
+    return relativePath;
+  }
+  if (relativePath.startsWith('/') || /^[A-Za-z]:/.test(relativePath)) {
+    return relativePath;
+  }
+  return userAppDataDir.endsWith('/')
+    ? `${userAppDataDir}${relativePath}`
+    : `${userAppDataDir}/${relativePath}`;
 };
 
 async function refreshHelperInstallPath() {
@@ -10926,80 +11319,83 @@ function refreshHelperLogPath() {
   }
 }
 
-function setHelperStatus(state, text) {
-  if (helperStatusText) {
-    helperStatusText.textContent = text || '-';
-    helperStatusText.dataset.state = state || 'unknown';
+  function setHelperStatus(state, text) {
+    if (helperStatusText) {
+      helperStatusText.textContent = text || '-';
+      helperStatusText.dataset.state = state || 'unknown';
+    }
+    if (helperStatusDot) {
+      helperStatusDot.dataset.state = state || 'unknown';
+    }
   }
-  if (helperStatusDot) {
-    helperStatusDot.dataset.state = state || 'unknown';
-  }
-}
 
-function setHelperPrimaryAction(snapshot = {}) {
-  const stateValue = snapshot && snapshot.state ? String(snapshot.state) : '';
-  const installed = Boolean(snapshot && snapshot.installed);
-  const updateAvailable = Boolean(snapshot && snapshot.helperUpdateAvailable);
-  if (!installed) {
-    helperPrimaryAction = 'install';
-  } else if (updateAvailable) {
-    helperPrimaryAction = 'update';
-  } else {
-    helperPrimaryAction = 'uninstall';
-  }
-  if (!helperInstallBtn) {
-    return;
-  }
-  if (helperPrimaryAction === 'uninstall') {
-    helperInstallBtn.textContent = ti('settings.helperUninstall', 'Uninstall');
-  } else if (helperPrimaryAction === 'update') {
-    helperInstallBtn.textContent = ti('settings.helperUpdate', 'Update');
-  } else {
-    helperInstallBtn.textContent = ti('settings.helperInstall', 'Install');
-  }
-  helperInstallBtn.dataset.helperAction = helperPrimaryAction;
-  if (helperCheckUpdateBtn) {
-    // Only show "Check updates" after helper is installed.
-    helperCheckUpdateBtn.classList.toggle('is-hidden', !installed);
-  }
-  if (helperRefreshBtn) {
-    // When primary action is uninstall, hide manual refresh button.
-    const hideRefresh = helperPrimaryAction === 'uninstall';
-    helperRefreshBtn.classList.toggle('is-hidden', hideRefresh);
-  }
-  if (helperRepairBtn) {
-    const showRepair = installed && stateValue === 'installed_unreachable';
-    helperRepairBtn.classList.toggle('is-hidden', !showRepair);
-  }
-}
-
-function getCachedHelperStatus() {
-  const candidate = (state.settings && state.settings.helperStatus)
-    || (state.fileSettings && state.fileSettings.helperStatus)
-    || null;
-  if (!candidate || typeof candidate !== 'object') {
-    return null;
-  }
-  return candidate;
-}
-
-async function hydrateHelperStatusFromFile() {
-  try {
-    const response = await readHelperSettings();
-    if (!response || !response.ok || !response.data || typeof response.data !== 'object') {
+  function setHelperPrimaryAction(snapshot = {}) {
+    const stateValue = snapshot && snapshot.state ? String(snapshot.state) : '';
+    const installed = Boolean(snapshot && snapshot.installed);
+    const updateAvailable = Boolean(snapshot && (snapshot.updateAvailable ?? snapshot.helperUpdateAvailable));
+    if (!installed) {
+      helperPrimaryAction = 'install';
+    } else if (updateAvailable) {
+      helperPrimaryAction = 'update';
+    } else {
+      helperPrimaryAction = null;
+    }
+    if (!helperInstallBtn) {
       return;
     }
-    if (response.data.helperStatus && typeof response.data.helperStatus === 'object') {
-      if (!state.settings) state.settings = {};
-      if (!state.fileSettings) state.fileSettings = {};
-      state.settings.helperStatus = response.data.helperStatus;
-      state.fileSettings.helperStatus = response.data.helperStatus;
-      applyHelperStatusSnapshot(response.data.helperStatus);
+    helperInstallBtn.classList.toggle('is-hidden', installed && !updateAvailable);
+    if (helperPrimaryAction === 'update') {
+      helperInstallBtn.textContent = ti('settings.helperUpdate', 'Update');
+      helperInstallBtn.dataset.helperAction = helperPrimaryAction;
+    } else if (!installed) {
+      helperInstallBtn.textContent = ti('settings.helperInstall', 'Install');
+      helperInstallBtn.dataset.helperAction = 'install';
+    } else {
+      helperInstallBtn.dataset.helperAction = '';
     }
-  } catch {
-    // ignore
+    if (helperCheckUpdateBtn) {
+      // Only show "Check updates" after helper is installed.
+      helperCheckUpdateBtn.classList.toggle('is-hidden', !installed);
+    }
+    if (helperUninstallBtn) {
+      helperUninstallBtn.classList.toggle('is-hidden', !installed);
+    }
+    if (helperRefreshBtn) {
+      helperRefreshBtn.classList.toggle('is-hidden', installed);
+    }
+    if (helperRepairBtn) {
+      const showRepair = installed && stateValue === 'installed_unreachable';
+      helperRepairBtn.classList.toggle('is-hidden', !showRepair);
+    }
   }
-}
+
+  function getCachedHelperStatus() {
+    const candidate = (state.settings && state.settings.helperStatus)
+        || (state.fileSettings && state.fileSettings.helperStatus)
+        || null;
+    if (!candidate || typeof candidate !== 'object') {
+      return null;
+    }
+    return candidate;
+  }
+
+  async function hydrateHelperStatusFromFile() {
+    try {
+      const response = await readHelperSettings();
+      if (!response || !response.ok || !response.data || typeof response.data !== 'object') {
+        return;
+      }
+      if (response.data.helperStatus && typeof response.data.helperStatus === 'object') {
+        if (!state.settings) state.settings = {};
+        if (!state.fileSettings) state.fileSettings = {};
+        state.settings.helperStatus = response.data.helperStatus;
+        state.fileSettings.helperStatus = response.data.helperStatus;
+        applyHelperStatusSnapshot(response.data.helperStatus);
+      }
+    } catch {
+      // ignore
+    }
+  }
 
 function applyHelperStatusSnapshot(snapshot) {
   if (!snapshot || typeof snapshot !== 'object') {
@@ -11007,12 +11403,12 @@ function applyHelperStatusSnapshot(snapshot) {
   }
   setHelperPrimaryAction(snapshot);
   if (helperVersionText) {
-    const version = normalizeVersionForDisplay(snapshot.helperVersion || '');
-    const targetVersion = normalizeVersionForDisplay(snapshot.helperTargetVersion || '');
-    const updateAvailable = Boolean(snapshot.helperUpdateAvailable && version && targetVersion);
+    const version = normalizeVersionForDisplay(snapshot.version || snapshot.helperVersion || '');
+    const onlineVersionText = normalizeVersionForDisplay(snapshot.onlineVersion || snapshot.helperOnlineVersion || '');
+    const updateAvailable = Boolean((snapshot.updateAvailable ?? snapshot.helperUpdateAvailable) && version && onlineVersionText);
     helperVersionText.dataset.updateAvailable = updateAvailable ? 'true' : 'false';
     if (updateAvailable) {
-      helperVersionText.innerHTML = `Version: <span class="helper-version-current">${version}</span> -> <span class="helper-version-target">${targetVersion}</span>`;
+      helperVersionText.innerHTML = `Version: <span class="helper-version-current">${version}</span> -> <span class="helper-version-target">${onlineVersionText}</span>`;
     } else {
       helperVersionText.textContent = `Version: ${version || '-'}`;
     }
@@ -11035,13 +11431,7 @@ function applyHelperStatusSnapshot(snapshot) {
 }
 
 async function refreshHelperStatus(force = false) {
-  guiLog('helper-panel', 'refresh status started', { force: Boolean(force) });
-  await hydrateHelperStatusFromFile();
-  const cached = getCachedHelperStatus();
-  if (cached) {
-    applyHelperStatusSnapshot(cached);
-  }
-
+  guiLog('helper-panel', 'refresh status started', {force: Boolean(force)});
   try {
     const response = await getHelperStatus();
     if (response && response.ok && response.data) {
@@ -11059,7 +11449,7 @@ async function refreshHelperStatus(force = false) {
         state: snapshot.state,
         installed: snapshot.installed,
         running: snapshot.running,
-        updateAvailable: snapshot.helperUpdateAvailable,
+        updateAvailable: Boolean(snapshot.updateAvailable ?? snapshot.helperUpdateAvailable),
       });
       return;
     }
@@ -11068,10 +11458,16 @@ async function refreshHelperStatus(force = false) {
       error: err && err.message ? err.message : String(err || ''),
     }, 'error');
   }
+
+  await hydrateHelperStatusFromFile();
+  const cached = getCachedHelperStatus();
+  if (cached) {
+    applyHelperStatusSnapshot(cached);
+  }
 }
 
 async function refreshHelperPanel(force = false) {
-  guiLog('helper-panel', 'refresh panel started', { force: Boolean(force) });
+  guiLog('helper-panel', 'refresh panel started', {force: Boolean(force)});
   await hydrateHelperStatusFromFile();
   await Promise.all([
     refreshHelperStatus(force),
@@ -11080,6 +11476,7 @@ async function refreshHelperPanel(force = false) {
   ]);
   guiLog('helper-panel', 'refresh panel completed');
 }
+
 window.__refreshHelperPanel = refreshHelperPanel;
 
 if (settingsConfigDirReveal) {
@@ -11112,53 +11509,110 @@ if (settingsDataDirReveal) {
 if (helperInstallBtn) {
   if (helperInstallBtn.dataset.bound !== 'true') {
     helperInstallBtn.dataset.bound = 'true';
-    helperInstallBtn.addEventListener('click', async () => {
+    helperInstallBtn.addEventListener('click', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       const isUninstall = helperPrimaryAction === 'uninstall';
       const isUpdate = helperPrimaryAction === 'update';
+      const pendingText = isUninstall
+        ? ti('settings.helperUninstalling', 'Uninstalling helper...')
+        : (isUpdate
+          ? ti('settings.helperUpdating', 'Updating helper...')
+          : ti('settings.helperInstalling', 'Installing helper...'));
+      setHelperStatus('checking', pendingText);
       helperInstallBtn.disabled = true;
-      const response = isUninstall
-        ? await uninstallHelper()
-        : await installHelper();
-      if (response && response.error === 'bridge_missing') {
-        helperInstallBtn.disabled = false;
-        showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
-        return;
-      }
-      helperInstallBtn.disabled = false;
-      if (response && response.ok) {
-        showToast(
-          isUninstall
-            ? ti('settings.helperUninstallSuccess', 'Helper uninstalled')
+      try {
+        const response = isUninstall
+            ? await uninstallHelper()
+            : await installHelper();
+        if (response && response.error === 'bridge_missing') {
+          setHelperStatus('error', ti('settings.helperInstallUnavailable', 'Helper installer unavailable'));
+          showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
+          return;
+        }
+        if (response && response.ok) {
+          showToast(
+              isUninstall
+                  ? ti('settings.helperUninstallSuccess', 'Helper uninstalled')
+                  : (isUpdate
+                      ? ti('settings.helperUpdateSuccess', 'Helper updated')
+                      : ti('settings.helperInstallSuccess', 'Helper installed')),
+              'info'
+          );
+          await refreshHelperPanel(true);
+          return;
+        }
+        if (response && response.path && helperInstallPath) {
+          helperInstallPath.textContent = response.path;
+        }
+        const detail = response && (response.details || response.error)
+            ? `: ${String(response.details || response.error)}`
+            : '';
+        const message = `${isUninstall
+            ? ti('settings.helperUninstallFailed', 'Helper uninstall failed')
             : (isUpdate
-              ? ti('settings.helperUpdateSuccess', 'Helper updated')
-              : ti('settings.helperInstallSuccess', 'Helper installed')),
-          'info'
-        );
-        await refreshHelperPanel(true);
-        return;
+                ? ti('settings.helperUpdateFailed', 'Helper update failed')
+                : ti('settings.helperInstallFailed', 'Helper install failed'))}${detail}`;
+        setHelperStatus('error', message);
+        showToast(message, 'error');
+        if (response && response.rollback && typeof response.rollback === 'object') {
+          const restored = Boolean(response.rollback.restored);
+          showToast(
+              restored
+                  ? ti('settings.helperRollbackOk', 'Helper rollback completed')
+                  : ti('settings.helperRollbackFailed', 'Helper rollback failed'),
+              restored ? 'info' : 'error'
+          );
+        }
+      } catch (err) {
+        const detail = err && err.message ? `: ${String(err.message)}` : '';
+        const message = `${isUninstall
+            ? ti('settings.helperUninstallFailed', 'Helper uninstall failed')
+            : (isUpdate
+                ? ti('settings.helperUpdateFailed', 'Helper update failed')
+                : ti('settings.helperInstallFailed', 'Helper install failed'))}${detail}`;
+        setHelperStatus('error', message);
+        showToast(message, 'error');
+      } finally {
+        helperInstallBtn.disabled = false;
       }
-      if (response && response.path && helperInstallPath) {
-        helperInstallPath.textContent = response.path;
-      }
-      const detail = response && (response.details || response.error)
-        ? `: ${String(response.details || response.error)}`
-        : '';
-      showToast(
-        `${isUninstall
-          ? ti('settings.helperUninstallFailed', 'Helper uninstall failed')
-          : (isUpdate
-            ? ti('settings.helperUpdateFailed', 'Helper update failed')
-            : ti('settings.helperInstallFailed', 'Helper install failed'))}${detail}`,
-        'error'
-      );
-      if (response && response.rollback && typeof response.rollback === 'object') {
-        const restored = Boolean(response.rollback.restored);
-        showToast(
-          restored
-            ? ti('settings.helperRollbackOk', 'Helper rollback completed')
-            : ti('settings.helperRollbackFailed', 'Helper rollback failed'),
-          restored ? 'info' : 'error'
-        );
+    });
+  }
+}
+
+if (helperUninstallBtn) {
+  if (helperUninstallBtn.dataset.bound !== 'true') {
+    helperUninstallBtn.dataset.bound = 'true';
+    helperUninstallBtn.addEventListener('click', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      helperUninstallBtn.disabled = true;
+      try {
+        setHelperStatus('checking', ti('settings.helperUninstalling', 'Uninstalling helper...'));
+        const response = await uninstallHelper();
+        if (response && response.error === 'bridge_missing') {
+          setHelperStatus('error', ti('settings.helperInstallUnavailable', 'Helper installer unavailable'));
+          showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
+          return;
+        }
+        if (response && response.ok) {
+          showToast(ti('settings.helperUninstallSuccess', 'Helper uninstalled'), 'info');
+          await refreshHelperPanel(true);
+          return;
+        }
+        const detail = response && (response.details || response.error)
+          ? `: ${String(response.details || response.error)}`
+          : '';
+        const message = `${ti('settings.helperUninstallFailed', 'Helper uninstall failed')}${detail}`;
+        setHelperStatus('error', message);
+        showToast(message, 'error');
+      } catch (err) {
+        const detail = err && err.message ? `: ${String(err.message)}` : '';
+        const message = `${ti('settings.helperUninstallFailed', 'Helper uninstall failed')}${detail}`;
+        setHelperStatus('error', message);
+        showToast(message, 'error');
+      } finally {
+        helperUninstallBtn.disabled = false;
       }
     });
   }
@@ -11167,24 +11621,37 @@ if (helperInstallBtn) {
 if (helperRepairBtn) {
   if (helperRepairBtn.dataset.bound !== 'true') {
     helperRepairBtn.dataset.bound = 'true';
-    helperRepairBtn.addEventListener('click', async () => {
+    helperRepairBtn.addEventListener('click', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setHelperStatus('checking', ti('settings.helperRepairing', 'Repairing helper...'));
       helperRepairBtn.disabled = true;
-      const response = await repairHelper();
-      if (response && response.error === 'bridge_missing') {
+      try {
+        const response = await repairHelper();
+        if (response && response.error === 'bridge_missing') {
+          setHelperStatus('error', ti('settings.helperInstallUnavailable', 'Helper installer unavailable'));
+          showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
+          return;
+        }
+        if (response && response.ok) {
+          showToast(ti('settings.helperRepairSuccess', 'Helper repaired'), 'info');
+          await refreshHelperPanel(true);
+          return;
+        }
+        const detail = response && (response.details || response.error)
+            ? `: ${String(response.details || response.error)}`
+            : '';
+        const message = `${ti('settings.helperRepairFailed', 'Helper repair failed')}${detail}`;
+        setHelperStatus('error', message);
+        showToast(message, 'error');
+      } catch (err) {
+        const detail = err && err.message ? `: ${String(err.message)}` : '';
+        const message = `${ti('settings.helperRepairFailed', 'Helper repair failed')}${detail}`;
+        setHelperStatus('error', message);
+        showToast(message, 'error');
+      } finally {
         helperRepairBtn.disabled = false;
-        showToast(ti('settings.helperInstallUnavailable', 'Helper installer unavailable'), 'error');
-        return;
       }
-      helperRepairBtn.disabled = false;
-      if (response && response.ok) {
-        showToast(ti('settings.helperRepairSuccess', 'Helper repaired'), 'info');
-        await refreshHelperPanel(true);
-        return;
-      }
-      const detail = response && (response.details || response.error)
-        ? `: ${String(response.details || response.error)}`
-        : '';
-      showToast(`${ti('settings.helperRepairFailed', 'Helper repair failed')}${detail}`, 'error');
     });
   }
 }
@@ -11222,20 +11689,29 @@ if (helperInstallPathBtn) {
 }
 
 if (helperRefreshBtn) {
-  helperRefreshBtn.addEventListener('click', async () => {
+  helperRefreshBtn.addEventListener('click', async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setHelperStatus('checking', ti('settings.helperRefreshing', 'Refreshing helper panel...'));
     helperRefreshBtn.disabled = true;
-    await refreshHelperPanel(true);
-    helperRefreshBtn.disabled = false;
+    try {
+      await refreshHelperPanel(true);
+    } finally {
+      helperRefreshBtn.disabled = false;
+    }
   });
 }
 
 if (helperCheckUpdateBtn) {
   if (helperCheckUpdateBtn.dataset.bound !== 'true') {
     helperCheckUpdateBtn.dataset.bound = 'true';
-    helperCheckUpdateBtn.addEventListener('click', async () => {
+    helperCheckUpdateBtn.addEventListener('click', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setHelperStatus('checking', ti('settings.helperCheckingUpdate', 'Checking helper updates...'));
       helperCheckUpdateBtn.disabled = true;
       try {
-        const result = await checkHelperUpdates({ force: true });
+        const result = await checkHelperUpdates({force: true});
         if (result && result.error === 'bridge_missing') {
           showToast(ti('settings.helperUpdateCheckFailed', 'Failed to check helper updates'), 'error');
           return;
@@ -11244,20 +11720,20 @@ if (helperCheckUpdateBtn) {
           const detail = result && result.error ? `: ${String(result.error)}` : '';
           showToast(`${ti('settings.helperUpdateCheckFailed', 'Failed to check helper updates')}${detail}`, 'error');
         } else if (result.updateAvailable) {
-          const targetVersion = normalizeVersionForDisplay(result.targetVersion || result.onlineVersion || '');
+          const onlineVersionText = normalizeVersionForDisplay(result.onlineVersion || '');
           showToast(
-            targetVersion
-              ? `${ti('settings.helperUpdateFound', 'Helper update available')}: v${targetVersion}`
-              : ti('settings.helperUpdateFound', 'Helper update available'),
-            'info'
+              onlineVersionText
+                  ? `${ti('settings.helperUpdateFound', 'Helper update available')}: v${onlineVersionText}`
+                  : ti('settings.helperUpdateFound', 'Helper update available'),
+              'info'
           );
-        } else if (String(result.targetVersion || '').trim()) {
+        } else if (String(result.onlineVersion || '').trim()) {
           const installedVersion = normalizeVersionForDisplay(result.installedVersion || '');
-          const targetVersion = normalizeVersionForDisplay(result.targetVersion || '');
+          const onlineVersionText = normalizeVersionForDisplay(result.onlineVersion || '');
           if (installedVersion) {
             showToast(ti('settings.helperAlreadyLatest', 'Helper is up to date.'), 'info');
           } else {
-            showToast(`${ti('settings.helperLatestVersion', 'Latest helper version')}: v${targetVersion}`, 'info');
+            showToast(`${ti('settings.helperLatestVersion', 'Latest helper version')}: v${onlineVersionText}`, 'info');
           }
         } else {
           showToast(ti('settings.helperAlreadyLatest', 'Helper is up to date.'), 'info');
@@ -11348,9 +11824,9 @@ if (updateBtn) {
       return;
     }
     const channel = choice === 'release'
-      ? 'release'
-      : (choice === 'alpha' ? 'alpha' : 'default');
-    await performMihomoInstall({ mode: 'update', channel });
+        ? 'release'
+        : (choice === 'alpha' ? 'alpha' : 'default');
+    await performMihomoInstall({mode: 'update', channel});
   });
 }
 
@@ -11376,7 +11852,7 @@ if (settingsGithubUser) {
     }
     state.githubSourceManualOverride = true;
     updateInstallVersionVisibility();
-    saveSettings({ githubUser: normalized });
+    saveSettings({githubUser: normalized});
     state.kernelUpdateCheckedAt = 0;
     state.kernelUpdateInfo = {
       ok: false,
@@ -11420,7 +11896,7 @@ async function handleConfigBrowse() {
   guiLog('config', 'browse requested');
   const result = await window.clashfox.selectConfig();
   if (result.ok) {
-    guiLog('config', 'browse completed', { path: result.path || '' });
+    guiLog('config', 'browse completed', {path: result.path || ''});
     configPathInput.value = result.path;
     if (overviewConfigPath) {
       overviewConfigPath.value = result.path;
@@ -11428,7 +11904,7 @@ async function handleConfigBrowse() {
     if (settingsConfigPath) {
       settingsConfigPath.value = result.path;
     }
-    saveSettings({ configPath: result.path });
+    saveSettings({configPath: result.path});
     showToast(t('labels.configNeedsRestart'));
     renderConfigTable();
     return;
@@ -11448,8 +11924,8 @@ async function handleConfigReload() {
     const response = await reloadMihomoConfig(getMihomoApiSource());
     if (!response || !response.ok) {
       const detail = response && (response.details || response.error)
-        ? `: ${String(response.details || response.error)}`
-        : '';
+          ? `: ${String(response.details || response.error)}`
+          : '';
       guiLog('config', 'reload failed', {
         error: response && response.error ? response.error : 'reload_config_failed',
       }, 'warn');
@@ -11487,7 +11963,7 @@ async function handleConfigImport() {
     return;
   }
   const fileName = result.data && result.data.fileName ? result.data.fileName : '';
-  guiLog('config', 'import completed', { fileName });
+  guiLog('config', 'import completed', {fileName});
   if (fileName) {
     showToast(`${t('labels.configImported')}: ${fileName}`, 'info');
   } else {
@@ -11511,12 +11987,12 @@ async function handleConfigDelete(targetPath, configName = '') {
     confirmTone: 'danger',
   });
   if (!confirmed) {
-    guiLog('config', 'delete cancelled', { targetPath });
+    guiLog('config', 'delete cancelled', {targetPath});
     return;
   }
   const response = await window.clashfox.deleteConfig(targetPath);
   if (response && response.ok) {
-    guiLog('config', 'delete completed', { targetPath });
+    guiLog('config', 'delete completed', {targetPath});
     showToast(ti('labels.configDeleteSuccess', 'Config deleted.'));
     await loadConfigs();
     return;
@@ -11538,7 +12014,7 @@ async function handleConfigDelete(targetPath, configName = '') {
 
 async function handleDirectoryBrowse(title) {
   if (!window.clashfox || typeof window.clashfox.selectDirectory !== 'function') {
-    return { ok: false };
+    return {ok: false};
   }
   return window.clashfox.selectDirectory(title);
 }
@@ -11573,7 +12049,7 @@ async function resetConfigPath() {
   if (settingsConfigPath) {
     settingsConfigPath.value = '';
   }
-  saveSettings({ configPath: '' });
+  saveSettings({configPath: ''});
   showToast(t('labels.configNeedsRestart'));
   renderConfigTable();
 }
@@ -11588,16 +12064,24 @@ async function resetPathSetting(key, label) {
   if (!ok) {
     return;
   }
+  const userDataPathsUpdate = {};
   if (key === 'configDir' && settingsConfigDir) {
+    userDataPathsUpdate.configDir = '';
     settingsConfigDir.value = '';
   }
   if (key === 'coreDir' && settingsCoreDir) {
+    userDataPathsUpdate.coreDir = '';
     settingsCoreDir.value = '';
   }
   if (key === 'dataDir' && settingsDataDir) {
+    userDataPathsUpdate.dataDir = '';
     settingsDataDir.value = '';
   }
-  saveSettings({ [key]: '' });
+  if (Object.keys(userDataPathsUpdate).length > 0) {
+    saveSettings({userDataPaths: userDataPathsUpdate});
+  } else {
+    saveSettings({[key]: ''});
+  }
   refreshPathDependentViews();
 }
 
@@ -11678,7 +12162,7 @@ if (settingsConfigPath) {
     if (overviewConfigPath) {
       overviewConfigPath.value = value;
     }
-    saveSettings({ configPath: value });
+    saveSettings({configPath: value});
     renderConfigTable();
   });
 }
@@ -11692,7 +12176,7 @@ if (configPathInput) {
     if (settingsConfigPath) {
       settingsConfigPath.value = value;
     }
-    saveSettings({ configPath: value });
+    saveSettings({configPath: value});
     renderConfigTable();
   });
 }
@@ -11728,10 +12212,10 @@ if (panelSelect) {
     if (settingsExternalUiUrl) {
       const urlVal = settingsExternalUiUrl.value || '';
       if (urlVal && state.settings.externalUiUrl !== urlVal) {
-        saveSettings({ externalUiUrl: urlVal });
+        saveSettings({externalUiUrl: urlVal});
       }
     }
-    saveSettings({ panelChoice: value });
+    saveSettings({panelChoice: value});
     updateDashboardFrameSrc();
   });
 }
@@ -11766,18 +12250,18 @@ if (panelUpdateBtn) {
     const choice = getSelectedPanelName();
     const preset = getPanelPreset(choice);
     const panelName = preset?.displayName || preset?.name || choice;
-    
+
     const confirmed = await promptConfirm({
       title: t('confirm.panelUpdateTitle', 'Update Panel'),
       body: t('confirm.panelUpdateBody', `Are you sure you want to update ${panelName}?`),
       confirmLabel: t('confirm.updateConfirm', 'Update'),
       confirmTone: 'primary',
     });
-    
+
     if (!confirmed) {
       return;
     }
-    
+
     handlePanelUpdateAction().catch((error) => {
       const message = String(error && error.message ? error.message : error || '');
       showToast(`${t('labels.panelUpdateFailed')} (${message || 'unknown_error'})`, 'error');
@@ -11787,17 +12271,17 @@ if (panelUpdateBtn) {
 }
 if (externalControllerInput) {
   externalControllerInput.addEventListener('change', (event) => {
-    saveSettings({ externalController: event.target.value.trim() });
+    saveSettings({externalController: event.target.value.trim()});
   });
 }
 if (externalSecretInput) {
   externalSecretInput.addEventListener('change', (event) => {
-    saveSettings({ secret: event.target.value.trim() });
+    saveSettings({secret: event.target.value.trim()});
   });
 }
 if (externalAuthInput) {
   externalAuthInput.addEventListener('change', (event) => {
-    saveSettings({ authentication: parseAuthList(event.target.value) });
+    saveSettings({authentication: parseAuthList(event.target.value)});
   });
 }
 
@@ -11819,12 +12303,12 @@ async function handleCoreAction(action, button) {
   setCoreActionState(false);
   const helperStateSnapshot = () => {
     const snapshot = (state.settings && state.settings.helperStatus)
-      || (state.fileSettings && state.fileSettings.helperStatus)
-      || {};
+        || (state.fileSettings && state.fileSettings.helperStatus)
+        || {};
     return String((snapshot && snapshot.state) || '').trim();
   };
   const helperNotInstalled = () => helperStateSnapshot() === 'not_installed';
-  
+
   try {
     // Always refresh status before making action decisions to avoid stale state.
     const statusResp = await loadStatusSilently();
@@ -11838,12 +12322,12 @@ async function handleCoreAction(action, button) {
       showToast(t('labels.alreadyRunning'));
       return;
     }
-    
+
     if (action === 'stop' && !state.coreRunning) {
       showToast(t('labels.alreadyStopped'));
       return;
     }
-    
+
     let command = action;
     if (action === 'restart' && !state.coreRunning) {
       showToast(t('labels.alreadyStopped'));
@@ -11858,7 +12342,7 @@ async function handleCoreAction(action, button) {
         args.push('--config', configPath);
       }
     }
-    
+
     // 执行操作
     const commandStartedAt = Date.now();
     await maybeNotifyHelperAuthFallback(command);
@@ -11867,7 +12351,7 @@ async function handleCoreAction(action, button) {
       if (action === 'start') {
         // Start uptime tracking when mihomo is being started
         startMihomoUptimeTracking();
-        
+
         const running = await waitForKernelState(true, 12000, 350);
         if (running) {
           const tunApply = await applyTunSettingsAfterStart();
@@ -11884,24 +12368,24 @@ async function handleCoreAction(action, button) {
             const message = (tunApply && tunApply.error) || ti('labels.tunUpdateFailed', 'TUN update failed');
             showToast(message, 'warn');
           }
-          guiLog('core-action', 'completed', { action, running: true });
+          guiLog('core-action', 'completed', {action, running: true});
         } else {
           // Failed to start, reset uptime tracking
           resetMihomoUptimeTracking();
-          
+
           state.coreRunningGuardUntil = 0;
           await loadStatusSilently();
           syncQuickActionButtons();
           if (!helperNotInstalled()) {
             showToast(ti('labels.startFailed', 'Start failed'), 'error');
           }
-          guiLog('core-action', 'failed after wait', { action, reason: 'wait_for_running_timeout' }, 'warn');
+          guiLog('core-action', 'failed after wait', {action, reason: 'wait_for_running_timeout'}, 'warn');
         }
       } else if (action === 'restart') {
         // For restart: reset tracking and start fresh
         resetMihomoUptimeTracking();
         startMihomoUptimeTracking();
-        
+
         const running = await waitForKernelState(true, 15000, 400);
         if (running) {
           const tunApply = await applyTunSettingsAfterStart();
@@ -11918,23 +12402,23 @@ async function handleCoreAction(action, button) {
             const message = (tunApply && tunApply.error) || ti('labels.tunUpdateFailed', 'TUN update failed');
             showToast(message, 'warn');
           }
-          guiLog('core-action', 'completed', { action, running: true });
+          guiLog('core-action', 'completed', {action, running: true});
         } else {
           // Failed to restart, reset uptime tracking
           resetMihomoUptimeTracking();
-          
+
           state.coreRunningGuardUntil = 0;
           await loadStatusSilently();
           syncQuickActionButtons();
           if (!helperNotInstalled()) {
             showToast(ti('labels.restartFailed', 'Restart failed'), 'error');
           }
-          guiLog('core-action', 'failed after wait', { action, reason: 'wait_for_running_timeout' }, 'warn');
+          guiLog('core-action', 'failed after wait', {action, reason: 'wait_for_running_timeout'}, 'warn');
         }
       } else {
         // Stop action: reset uptime tracking
         resetMihomoUptimeTracking();
-        
+
         const stopped = await waitForKernelState(false, 10000, 300);
         if (stopped) {
           state.coreRunningGuardUntil = 0;
@@ -11944,13 +12428,13 @@ async function handleCoreAction(action, button) {
             updateOverviewUI();
           }
           showToast(t('labels.stopped'));
-          guiLog('core-action', 'completed', { action, running: false });
+          guiLog('core-action', 'completed', {action, running: false});
         } else {
           state.coreRunningGuardUntil = 0;
           await loadStatusSilently();
           syncQuickActionButtons();
           showToast(ti('labels.stopFailed', 'Stop failed'), 'error');
-          guiLog('core-action', 'failed after wait', { action, reason: 'wait_for_stopped_timeout' }, 'warn');
+          guiLog('core-action', 'failed after wait', {action, reason: 'wait_for_stopped_timeout'}, 'warn');
         }
       }
       loadOverview();
@@ -11967,7 +12451,7 @@ async function handleCoreAction(action, button) {
       const helperMissing = String(helperState || '').trim() === 'not_installed';
       showToast(message, helperMissing ? 'info' : 'error');
     }
-    
+
   } catch (error) {
     guiLog('core-action', 'threw', {
       action,
@@ -12002,19 +12486,19 @@ if (restartBtn) {
   restartBtn.addEventListener('click', () => handleCoreAction('restart', restartBtn));
 }
 
-if (proxyModeSelect) {
+  if (proxyModeSelect) {
   getProxyModeInputs().forEach((input) => {
     input.addEventListener('change', async () => {
       if (!input.checked) {
         return;
       }
       const value = getProxyModeValue();
-      const previous = (state.settings && state.settings.proxy) || 'rule';
-      guiLog('proxy-config', 'mode change requested', { value, previous });
-      saveSettings({ proxy: value });
+      const previous = (state.settings?.proxy?.mode) || 'rule';
+      guiLog('proxy-config', 'mode change requested', {value, previous});
+      saveSettings({proxy: { mode: value }});
       const response = await updateModeViaController(value, getMihomoApiSource());
       if (response.ok) {
-        guiLog('proxy-config', 'mode change completed', { value });
+        guiLog('proxy-config', 'mode change completed', {value});
         showToast(t('labels.proxyModeUpdated'));
         return;
       }
@@ -12023,11 +12507,11 @@ if (proxyModeSelect) {
         error: response.error || 'unknown_error',
       }, 'warn');
       setProxyModeValue(previous);
-      saveSettings({ proxy: previous });
+      saveSettings({proxy: { mode: previous }});
       const details = response && response.details ? `: ${String(response.details)}` : '';
       const message = response.error === 'controller_missing'
-        ? t('labels.controllerMissing')
-        : `${ti('labels.modeUpdateFailed', 'Mode update failed')}${details}`;
+          ? t('labels.controllerMissing')
+          : `${ti('labels.modeUpdateFailed', 'Mode update failed')}${details}`;
       showToast(message, 'error');
     });
   });
@@ -12037,7 +12521,7 @@ if (tunToggle) {
   tunToggle.addEventListener('change', async () => {
     const enabled = Boolean(tunToggle.checked);
     const previous = !enabled;
-    guiLog('proxy-config', 'tun toggle requested', { enabled, previous });
+    guiLog('proxy-config', 'tun toggle requested', {enabled, previous});
     if (enabled && !previous && window.clashfox && typeof window.clashfox.detectTunConflict === 'function') {
       try {
         const conflictProbe = await window.clashfox.detectTunConflict();
@@ -12051,7 +12535,7 @@ if (tunToggle) {
           });
           if (!proceed) {
             tunToggle.checked = previous;
-            saveSettings({ tun: previous });
+            saveSettings({tun: previous});
             showToast(ti('labels.tunConflictHint', 'TUN conflict detected. Turn off TUN mode in other proxy apps, then try again.'), 'warn');
             return;
           }
@@ -12061,12 +12545,12 @@ if (tunToggle) {
       }
     }
     if (!state.coreRunning) {
-      saveSettings({ tun: enabled });
-      guiLog('proxy-config', 'tun toggle deferred until next start', { enabled });
+      saveSettings({tun: enabled});
+      guiLog('proxy-config', 'tun toggle deferred until next start', {enabled});
       showToast(ti('labels.tunApplyOnStart', 'TUN setting saved, it will be applied on next start.'));
       return;
     }
-    const response = await updateTunViaController({ enable: enabled });
+    const response = await updateTunViaController({enable: enabled});
     // /configs patch may return OK first, while runtime TUN can fail shortly after.
     // Wait a short window and validate final TUN state before showing success.
     const waitResult = await waitForTunState(enabled, 3000, 350);
@@ -12077,20 +12561,20 @@ if (tunToggle) {
     if (!response.ok || tunMismatch || !statusOk || actual !== enabled) {
       const nextChecked = statusOk ? actual : previous;
       tunToggle.checked = nextChecked;
-      saveSettings({ tun: nextChecked });
+      saveSettings({tun: nextChecked});
       const message = formatTunUpdateError(
-        response,
-        statusResponse,
-        !statusOk
-          ? ti('labels.tunStatusFailed', 'TUN status unavailable')
-          : ti('labels.tunUpdateFailed', 'TUN update failed'),
+          response,
+          statusResponse,
+          !statusOk
+              ? ti('labels.tunStatusFailed', 'TUN status unavailable')
+              : ti('labels.tunUpdateFailed', 'TUN update failed'),
       );
       const finalMessage = enabled
-        ? ti(
-          'labels.tunEnableFailedConflictHint',
-          'TUN update failed. Turn off TUN mode in other proxy apps, then try again.',
-        )
-        : message;
+          ? ti(
+              'labels.tunEnableFailedConflictHint',
+              'TUN update failed. Turn off TUN mode in other proxy apps, then try again.',
+          )
+          : message;
       guiLog('proxy-config', 'tun toggle failed', {
         enabled,
         actual,
@@ -12099,38 +12583,38 @@ if (tunToggle) {
       showToast(finalMessage, 'error');
       return;
     }
-    saveSettings({ tun: actual });
-    guiLog('proxy-config', 'tun toggle completed', { enabled: actual });
+    saveSettings({tun: actual});
+    guiLog('proxy-config', 'tun toggle completed', {enabled: actual});
     showToast(actual ? t('labels.tunEnabled') : t('labels.tunDisabled'));
   });
 }
 
 if (tunStackSelect) {
   tunStackSelect.addEventListener('change', async () => {
-    const previous = normalizeTunStack(state.settings && state.settings.stack);
+    const previous = normalizeTunStack(state.settings?.proxy?.stack);
     const value = normalizeTunStack(tunStackSelect.value);
-    guiLog('proxy-config', 'tun stack change requested', { value, previous });
+    guiLog('proxy-config', 'tun stack change requested', {value, previous});
     tunStackSelect.value = value;
     if (!state.coreRunning) {
-      saveSettings({ stack: value });
-      guiLog('proxy-config', 'tun stack deferred until next start', { value });
+      saveSettings({stack: value});
+      guiLog('proxy-config', 'tun stack deferred until next start', {value});
       showToast(ti('labels.tunApplyOnStart', 'TUN setting saved, it will be applied on next start.'));
       return;
     }
-    const response = await updateTunViaController({ stack: value });
+    const response = await updateTunViaController({stack: value});
     const statusResponse = await loadTunStatus(false);
     const actual = normalizeTunStack(tunStackSelect.value);
     const statusOk = statusResponse && statusResponse.ok && statusResponse.data;
     if (!response.ok || !statusOk || actual !== value) {
       const nextValue = statusOk ? actual : previous;
       tunStackSelect.value = nextValue;
-      saveSettings({ stack: nextValue });
+      saveSettings({stack: nextValue});
       const message = formatTunUpdateError(
-        response,
-        statusResponse,
-        !statusOk
-          ? ti('labels.tunStatusFailed', 'TUN status unavailable')
-          : ti('labels.tunStackUpdateFailed', 'TUN stack update failed'),
+          response,
+          statusResponse,
+          !statusOk
+              ? ti('labels.tunStatusFailed', 'TUN status unavailable')
+              : ti('labels.tunStackUpdateFailed', 'TUN stack update failed'),
       );
       guiLog('proxy-config', 'tun stack change failed', {
         value,
@@ -12140,8 +12624,8 @@ if (tunStackSelect) {
       showToast(message, 'error');
       return;
     }
-    saveSettings({ stack: actual });
-    guiLog('proxy-config', 'tun stack change completed', { value: actual });
+    saveSettings({stack: actual});
+    guiLog('proxy-config', 'tun stack change completed', {value: actual});
   });
 }
 
@@ -12177,12 +12661,12 @@ if (configTable) {
       confirmTone: 'primary',
     });
     if (!confirmed) {
-      guiLog('config', 'switch cancelled', { path });
+      guiLog('config', 'switch cancelled', {path});
       renderConfigTable();
       return;
     }
-    saveSettings({ configPath: path });
-    guiLog('config', 'switch completed', { path });
+    saveSettings({configPath: path});
+    guiLog('config', 'switch completed', {path});
     showToast(t('labels.configNeedsRestart'));
     renderConfigTable();
   });
@@ -12312,7 +12796,7 @@ if (settingsBackupsPageSize) {
     renderSwitchTable();
     renderConfigTable();
     renderRecommendTable();
-    saveSettings({ generalPageSize: settingsBackupsPageSize.value });
+    saveSettings({generalPageSize: settingsBackupsPageSize.value});
   });
 }
 if (backupsPrev) {
@@ -12353,7 +12837,7 @@ if (backupsPageSize) {
     renderSwitchTable();
     renderConfigTable();
     renderRecommendTable();
-    saveSettings({ generalPageSize: backupsPageSize.value });
+    saveSettings({generalPageSize: backupsPageSize.value});
   });
 }
 
@@ -12420,7 +12904,7 @@ if (backupsDelete) {
 if (switchBtn) {
   switchBtn.addEventListener('click', async () => {
     const index = getSelectedBackupIndex();
-    guiLog('kernel', 'switch backup requested', { index: index || '' });
+    guiLog('kernel', 'switch backup requested', {index: index || ''});
     await switchKernelByIndex(index);
   });
 }
@@ -12484,7 +12968,7 @@ if (cleanBtn) {
     if (window.clashfox && typeof window.clashfox.cleanLogs === 'function') {
       response = await window.clashfox.cleanLogs(mode);
     } else {
-      response = { ok: false, error: 'cleanLogs function not available' };
+      response = {ok: false, error: 'cleanLogs function not available'};
     }
 
     if (response.ok) {
@@ -12515,6 +12999,20 @@ if (overviewNetworkRefresh) {
 }
 if (overviewRulesSwitch && overviewRulesSwitch.dataset.bound !== 'true') {
   overviewRulesSwitch.dataset.bound = 'true';
+  overviewRulesSwitch.querySelectorAll('button').forEach((button) => {
+    button.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    button.addEventListener('mousedown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    button.addEventListener('dragstart', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+  });
   overviewRulesSwitch.addEventListener('click', (event) => {
     const button = event.target.closest('[data-rules-view]');
     if (!button) {
@@ -12531,6 +13029,10 @@ if (overviewRulesSwitch && overviewRulesSwitch.dataset.bound !== 'true') {
 }
 
 function startOverviewTimer() {
+  if (!isMainWindowVisible() || currentPage !== 'overview') {
+    stopOverviewActivity();
+    return;
+  }
   if (state.coreStatusTimer) {
     clearInterval(state.coreStatusTimer);
   }
@@ -12582,9 +13084,6 @@ function startOverviewTimer() {
   if (state.providerSubscriptionTimer) {
     clearInterval(state.providerSubscriptionTimer);
   }
-  if (currentPage === 'overview') {
-    loadProviderSubscriptionOverview();
-  }
   state.providerSubscriptionTimer = setInterval(() => {
     if (currentPage === 'overview') {
       loadProviderSubscriptionOverview();
@@ -12593,9 +13092,6 @@ function startOverviewTimer() {
 
   if (state.rulesOverviewTimer) {
     clearInterval(state.rulesOverviewTimer);
-  }
-  if (currentPage === 'overview') {
-    loadRulesOverviewCard();
   }
   state.rulesOverviewTimer = setInterval(() => {
     if (currentPage === 'overview') {
@@ -12692,58 +13188,58 @@ function getPanelPreset(panelName = '') {
     return null;
   }
   const preset = PANEL_PRESETS && typeof PANEL_PRESETS === 'object' ? PANEL_PRESETS[key] : null;
-  return preset && typeof preset === 'object' ? { ...preset, name: preset.name || key } : null;
+  return preset && typeof preset === 'object' ? {...preset, name: preset.name || key} : null;
 }
 
 async function installPanelMainBridge(preset) {
   if (!preset) {
-    return { ok: false, error: 'panel_preset_missing' };
+    return {ok: false, error: 'panel_preset_missing'};
   }
   if (!window.clashfox || typeof window.clashfox.installPanel !== 'function') {
-    return { ok: false, error: 'bridge_missing' };
+    return {ok: false, error: 'bridge_missing'};
   }
   return window.clashfox.installPanel(preset);
 }
 
 async function updatePanelMainBridge(preset) {
   if (!preset) {
-    return { ok: false, error: 'panel_preset_missing' };
+    return {ok: false, error: 'panel_preset_missing'};
   }
-  const nextPreset = { ...preset, force: true };
+  const nextPreset = {...preset, force: true};
   return installPanelMainBridge(nextPreset);
 }
 
 async function activatePanelMainBridge(panelName = '') {
   const normalizedName = String(panelName || '').trim();
   if (!normalizedName) {
-    return { ok: false, error: 'panel_preset_missing' };
+    return {ok: false, error: 'panel_preset_missing'};
   }
   if (!window.clashfox || typeof window.clashfox.activatePanel !== 'function') {
-    return { ok: false, error: 'bridge_missing' };
+    return {ok: false, error: 'bridge_missing'};
   }
   return window.clashfox.activatePanel(normalizedName);
 }
 
 async function ensurePanelInstalledAndActivated(preset) {
   if (!preset || !preset.name) {
-    return { ok: false, error: 'panel_preset_missing' };
+    return {ok: false, error: 'panel_preset_missing'};
   }
   const activateFirst = await activatePanelMainBridge(preset.name);
   if (activateFirst && activateFirst.ok) {
-    return { ok: true, installed: false };
+    return {ok: true, installed: false};
   }
   if (activateFirst && activateFirst.error && activateFirst.error !== 'panel_missing') {
     return activateFirst;
   }
   const install = await installPanelMainBridge(preset);
   if (!install || !install.ok) {
-    return install || { ok: false, error: 'panel_install_failed' };
+    return install || {ok: false, error: 'panel_install_failed'};
   }
   const activateAfter = await activatePanelMainBridge(preset.name);
   if (!activateAfter || !activateAfter.ok) {
-    return activateAfter || { ok: false, error: 'panel_activate_failed' };
+    return activateAfter || {ok: false, error: 'panel_activate_failed'};
   }
-  return { ok: true, installed: Boolean(install.installed !== false), skipped: Boolean(install.skipped) };
+  return {ok: true, installed: Boolean(install.installed !== false), skipped: Boolean(install.skipped)};
 }
 
 async function handlePanelInstallAction() {
@@ -12808,6 +13304,9 @@ async function handlePanelUpdateAction() {
 }
 
 async function initDashboardFrame() {
+  if (!isMainWindowVisible() || currentPage !== 'dashboard') {
+    return;
+  }
   try {
     if (!dashboardLocalModule) {
       dashboardLocalModule = await import('./dashboard.js');
@@ -12832,7 +13331,9 @@ async function initApp() {
   if (targetPage && targetPage !== currentPage) {
     await navigatePage(targetPage, false);
   }
-  preloadPageTemplates(targetPage || currentPage).catch(() => {});
+  preloadPageTemplates(targetPage || currentPage).catch(() => {
+  });
+  await loadDefaultSettings();
   await loadStaticConfigs();
   await syncSettingsFromFile();
   await refreshSystemLocaleFromMain();
@@ -12843,7 +13344,7 @@ async function initApp() {
   updateScrollbarWidthVar();
   window.addEventListener('resize', () => {
     updateScrollbarWidthVar();
-    applySidebarCollapsedState(Boolean(state.settings && state.settings.sidebarCollapsed), false);
+    applySidebarCollapsedState(Boolean(state.settings && state.settings.appearance && state.settings.appearance.sidebarCollapsed), false);
     requestTopNavOverflowSync();
   });
   bindPageEvents();
@@ -12855,40 +13356,29 @@ async function initApp() {
     }
   }
   setActiveNav(currentPage);
-  if (currentPage === 'dashboard') {
-    initDashboardFrame();
-  }
   const ok = await waitForBridge();
   if (!ok) {
     showToast(t('labels.bridgeMissing'), 'error');
     return;
   }
   loadAppInfo(true);
-  loadStatus();
-  setTimeout(() => loadStatus(), 1200);
-  setTimeout(() => loadStatus(), 4000);
+  if (currentPage !== 'overview') {
+    await loadStatusSilently().catch(() => {});
+  }
   if (currentPage === 'settings') {
     if (contentRoot) {
       contentRoot.scrollTop = 0;
       if (typeof contentRoot.scrollTo === 'function') {
-        contentRoot.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+        contentRoot.scrollTo({top: 0, left: 0, behavior: 'auto'});
       }
     }
     await invokeHelperPanelRefresh();
   }
-  if (currentPage === 'overview') {
-    Promise.all([
-      loadOverview(),
-      loadProviderSubscriptionOverview(),
-      loadRulesOverviewCard(),
-    ]);
-  }
   updateInstallVersionVisibility();
-  startOverviewTimer();
+  await syncMainWindowActivity();
   loadConfigs();
   loadKernels();
   loadBackups();
-  loadLogs();
 }
 
 window.addEventListener('popstate', () => {
@@ -12896,6 +13386,26 @@ window.addEventListener('popstate', () => {
   const target = VALID_PAGES.has(historyPage) ? historyPage : getPageFromLocation();
   navigatePage(target, false);
 });
+
+async function handleMainWindowVisibilityChange() {
+  const visible = !document.hidden;
+  if (appWindowVisible === visible) {
+    return;
+  }
+  appWindowVisible = visible;
+  if (!appWindowVisible) {
+    stopOverviewActivity();
+    closeMihomoPageLogsSocket();
+    if (currentPage === 'dashboard' && dashboardLocalModule && typeof dashboardLocalModule.teardownDashboardPanel === 'function') {
+      dashboardLocalModule.teardownDashboardPanel();
+      state.dashboardLoaded = false;
+    }
+    return;
+  }
+  syncMainWindowActivity().catch(() => {});
+}
+
+document.addEventListener('visibilitychange', handleMainWindowVisibilityChange);
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initApp);
@@ -12937,7 +13447,5 @@ import {
   runHelperInstallInTerminal,
   uninstallHelper,
 } from '../api/helper-api.js';
-import { SidebarFoxDivider } from '../components/sidebar-fox-divider.js';
-import { FOX_RANK_I18N } from '../locales/foxrank-i18n.js';
 import '../locales/tray-i18n.js';
 import '../locales/i18n.js';

@@ -35,6 +35,41 @@
   --font-body: "Trebuchet MS", "Verdana", sans-serif;
 }
 
+body[data-theme="night"] {
+  color-scheme: dark;
+  --bg-1: #0b1421;
+  --bg-2: #162435;
+  --panel: #111b29;
+  --panel-soft: #192638;
+  --accent: #63b7ff;
+  --accent-strong: #2f85e8;
+  --mint: #67d6bd;
+  --ink: #e8f0f8;
+  --muted: #92a7bd;
+  --border: rgba(132, 157, 188, 0.22);
+  --line: rgba(132, 157, 188, 0.18);
+  --check: #49d17d;
+  --icon: #d7dde8;
+  --shadow: 0 14px 32px rgba(0, 0, 0, 0.35);
+  --row-hover: rgba(99, 183, 255, 0.1);
+  --row-selected: rgba(67, 140, 212, 0.22);
+  --header-status: #8ce0c6;
+  --chart-down: #53b8ff;
+  --chart-down-glow: rgba(83, 184, 255, 0.26);
+  --chart-up: #d88cff;
+  --chart-up-glow: rgba(216, 140, 255, 0.24);
+  --chart-bar-base: rgba(132, 151, 177, 0.14);
+  --chart-baseline: rgba(124, 152, 184, 0.28);
+  --latency-good: #3fcca9;
+  --latency-good-glow: rgba(63, 204, 169, 0.14);
+  --latency-medium: #65b8ff;
+  --latency-medium-glow: rgba(101, 184, 255, 0.14);
+  --latency-slow: #6f96e8;
+  --latency-slow-glow: rgba(111, 150, 232, 0.14);
+  --latency-dead: #8393aa;
+  --latency-dead-glow: rgba(131, 147, 170, 0.12);
+}
+
 * { box-sizing: border-box; }
 
 html,
@@ -57,13 +92,24 @@ body {
 .submenu-root {
   border-radius: 12px;
   background:
-    radial-gradient(circle at top right, rgba(42, 96, 153, 0.16), transparent 38%),
-    radial-gradient(circle at bottom left, rgba(39, 128, 118, 0.12), transparent 34%),
-    linear-gradient(150deg, var(--panel), var(--panel-soft));
+    radial-gradient(circle at top right, rgba(42, 96, 153, 0.12), transparent 38%),
+    radial-gradient(circle at bottom left, rgba(39, 128, 118, 0.08), transparent 34%),
+    linear-gradient(150deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 252, 0.94));
   border: 1px solid var(--border);
   box-shadow: none;
   padding: 8px 0;
   overflow: hidden;
+  color: var(--ink);
+}
+
+body[data-theme="night"] .menu-root,
+body[data-theme="night"] .submenu-root {
+  background:
+    radial-gradient(circle at top right, rgba(76, 139, 209, 0.18), transparent 38%),
+    radial-gradient(circle at bottom left, rgba(57, 174, 153, 0.1), transparent 34%),
+    linear-gradient(150deg, rgba(10, 18, 29, 0.98), rgba(19, 31, 46, 0.96));
+  border-color: rgba(132, 157, 188, 0.22);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.42);
 }
 
 .menu-root {
@@ -130,6 +176,7 @@ body {
   font-size: 14px;
   line-height: 1;
   border-bottom: 1px solid var(--line);
+  color: var(--ink);
 }
 
 .menu-header-left {
@@ -168,6 +215,7 @@ body {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  color: var(--ink);
 }
 
 .menu-header-status {
@@ -189,21 +237,21 @@ body {
 }
 
 .menu-header-status.running {
-  color: var(--mint);
+  color: #2f7a6f;
 }
 
 .menu-header-status.running .status-dot {
-  background: var(--mint);
-  box-shadow: 0 0 0 4px rgba(140, 224, 198, 0.18);
+  background: #2f7a6f;
+  box-shadow: 0 0 0 4px rgba(47, 122, 111, 0.16);
 }
 
 .menu-header-status.stopped {
-  color: var(--accent-strong);
+  color: #b24e43;
 }
 
 .menu-header-status.stopped .status-dot {
-  background: var(--accent-strong);
-  box-shadow: 0 0 0 4px rgba(255, 122, 74, 0.18);
+  background: #b24e43;
+  box-shadow: 0 0 0 4px rgba(178, 78, 67, 0.16);
 }
 
 .menu-header-status.neutral {
@@ -281,13 +329,13 @@ body {
 .menu-chart-label {
   font-size: 10px;
   font-weight: 600;
-  color: rgba(225, 232, 240, 0.94);
-  background: rgba(24, 31, 42, 0.86);
-  border: 1px solid rgba(111, 130, 156, 0.3);
+  color: rgba(36, 50, 68, 0.92);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(154, 176, 198, 0.28);
   border-radius: 4px;
   padding: 1px 5px;
-  box-shadow: 0 2px 8px rgba(6, 10, 18, 0.22);
-  backdrop-filter: blur(6px);
+  box-shadow: 0 1px 4px rgba(31, 46, 60, 0.08);
+  backdrop-filter: none;
 }
 
 .menu-chart-label.top {
@@ -299,10 +347,22 @@ body {
 }
 
 .menu-chart-label.total {
-  background: rgba(31, 39, 52, 0.92);
-  border-color: rgba(117, 135, 160, 0.24);
+  background: rgba(246, 249, 253, 0.98);
+  border-color: rgba(154, 176, 198, 0.22);
   font-size: 9px;
   opacity: 0.9;
+}
+
+body[data-theme="night"] .menu-chart-label {
+  color: rgba(236, 242, 248, 0.94);
+  background: rgba(16, 24, 36, 0.9);
+  border-color: rgba(132, 157, 188, 0.2);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22);
+}
+
+body[data-theme="night"] .menu-chart-label.total {
+  background: rgba(22, 32, 47, 0.96);
+  border-color: rgba(132, 157, 188, 0.18);
 }
 
 .menu-chart-footer {
@@ -312,6 +372,10 @@ body {
   font-size: 9px;
   color: rgba(133, 149, 171, 0.88);
   letter-spacing: 0.2px;
+}
+
+body[data-theme="night"] .menu-chart-footer {
+  color: rgba(164, 181, 202, 0.84);
 }
 
 .menu-provider-traffic {
@@ -869,6 +933,7 @@ body[data-theme="day"] .panel-card-title {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  color: var(--ink);
 }
 
 .menu-row-provider .menu-label {

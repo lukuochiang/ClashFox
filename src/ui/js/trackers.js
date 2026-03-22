@@ -36,6 +36,7 @@ let lastSystemDark = window.matchMedia
   ? window.matchMedia('(prefers-color-scheme: dark)').matches
   : true;
 let lastAppliedTheme = null;
+let lastSettingsSignature = '';
 let lastStatsText = '';
 let lastStatsMode = '';
 let lastStatsParts = { endpoints: null, connections: null, provider: null };
@@ -259,6 +260,10 @@ async function syncPreferencesFromSettings() {
   if (!window.clashfox || typeof window.clashfox.readSettings !== 'function') {
     syncLanguageFromPreference();
     applyThemeMode(themePreference);
+    lastSettingsSignature = JSON.stringify({
+      lang: languagePreference,
+      theme: themePreference,
+    });
     return;
   }
   try {
@@ -276,11 +281,25 @@ async function syncPreferencesFromSettings() {
   }
   syncLanguageFromPreference();
   applyThemeMode(themePreference);
+  lastSettingsSignature = JSON.stringify({
+    lang: languagePreference,
+    theme: themePreference,
+  });
 }
 
 function applySettingsPayload(settings = {}) {
-  languagePreference = readLanguagePreferenceFromSettings(settings);
-  themePreference = resolveThemePreference(settings);
+  const nextLanguagePreference = readLanguagePreferenceFromSettings(settings);
+  const nextThemePreference = resolveThemePreference(settings);
+  const nextSignature = JSON.stringify({
+    lang: nextLanguagePreference,
+    theme: nextThemePreference,
+  });
+  if (nextSignature === lastSettingsSignature) {
+    return;
+  }
+  lastSettingsSignature = nextSignature;
+  languagePreference = nextLanguagePreference;
+  themePreference = nextThemePreference;
   const applyNow = () => {
     syncLanguageFromPreference();
     applyThemeMode(themePreference);

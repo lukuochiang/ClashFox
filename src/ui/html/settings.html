@@ -180,6 +180,25 @@
                   </label>
                 </div>
                 <div class="menu-item-row">
+                  <div class="menu-item-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                      <rect x="3.5" y="5.5" width="17" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"></rect>
+                      <path d="M7 16.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+                      <circle cx="9" cy="9.5" r="1.2" fill="currentColor"></circle>
+                      <circle cx="12" cy="9.5" r="1.2" fill="currentColor"></circle>
+                      <circle cx="15" cy="9.5" r="1.2" fill="currentColor"></circle>
+                    </svg>
+                  </div>
+                  <div class="menu-item-body">
+                    <div class="menu-item-title" data-i18n="settings.trayMenuPanel">Panel</div>
+                    <div class="menu-item-desc" data-i18n="settings.trayMenuPanelDesc">Show Panel submenu in the tray menu.</div>
+                  </div>
+                  <label class="toggle menu-item-toggle">
+                    <input id="settingsTrayMenuPanel" type="checkbox" />
+                    <span class="toggle-pill"></span>
+                  </label>
+                </div>
+                <div class="menu-item-row">
                   <div class="menu-item-icon kernel-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" role="presentation" focusable="false">
                       <rect x="6" y="6" width="12" height="12" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.6"></rect>
@@ -340,10 +359,11 @@
                 </button>
               </div>
               <div class="helper-card-actions">
-                <button class="btn primary" id="helperInstallBtn" data-i18n="settings.helperInstall">Install</button>
-                <button class="btn ghost is-hidden" id="helperRepairBtn" data-i18n="settings.helperRepairAction">Repair</button>
-                <button class="btn ghost" id="helperRefreshBtn" type="button" data-i18n="actions.refresh">Refresh</button>
-                <button class="btn ghost" id="helperLogsOpenBtn" data-i18n="settings.helperLogsOpen">View Helper Logs</button>
+                <button class="btn primary" id="helperInstallBtn" type="button" data-i18n="settings.helperInstall">Install</button>
+                <button class="btn danger is-hidden" id="helperUninstallBtn" type="button" data-i18n="settings.helperUninstall">Uninstall</button>
+                <button class="btn ghost is-hidden" id="helperRepairBtn" type="button" data-i18n="settings.helperRepairAction">Repair</button>
+                <button class="btn ghost is-hidden" id="helperRefreshBtn" type="button" data-i18n="actions.refresh">Refresh</button>
+                <button class="btn ghost" id="helperLogsOpenBtn" type="button" data-i18n="settings.helperLogsOpen">View Helper Logs</button>
               </div>
               <button class="is-hidden" id="helperInstallTerminalBtn" type="button"></button>
               <button class="is-hidden" id="helperInstallPathBtn" type="button"></button>

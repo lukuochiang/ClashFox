@@ -1,7 +1,7 @@
 {
   "name": "ClashFox",
   "version": "0.4.8",
-  "buildNumber": 1,
+  "buildNumber": 15,
   "description": "ClashFox GUI for Mihomo",
   "license": "GPL-3.0",
   "author": "Kuochiang Lu <lukuochiang@gmail.com> (https://github.com/lukuochiang/ClashFox)",
@@ -51,10 +51,6 @@
       "!**/.DS_Store"
     ],
     "extraResources": [
-      {
-        "from": "static/helper",
-        "to": "helper"
-      },
       {
         "from": "static/default.yaml",
         "to": "default.yaml"

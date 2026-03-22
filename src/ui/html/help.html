@@ -31,7 +31,10 @@
           <section id="help" class="panel active help-stack">
           <div class="card help-about-card">
             <div class="card-header-row">
-              <h3 data-i18n="help.aboutTitle" data-card-icon="copyright">About ClashFox</h3>
+              <h3 class="help-about-heading" data-card-icon="copyright">
+                <span class="help-about-heading-main" data-i18n="help.aboutTitle">About ClashFox</span>
+                <span class="help-about-heading-sub">- 🦊 让 Mihomo 内核管理变得趣味十足！</span>
+              </h3>
               <div class="help-about-header-actions" aria-label="About ClashFox Actions">
                 <button
                   class="icon-btn ghost small help-about-action-btn"
@@ -75,102 +78,175 @@
 <!--                </button>-->
               </div>
             </div>
-            <div class="help-about-head">
-              <div class="help-about-team-block">
-                <div class="help-about-team-name" data-i18n="help.aboutTeamValue">ClashFox Team</div>
-                <p class="help-about-desc-lead" data-i18n="help.aboutDescLead">ClashFox Team builds and maintains the product experience around ClashFox.</p>
+            <div class="help-about-layout">
+              <div class="help-about-primary">
+                <div class="help-about-team-block">
+                  <div class="help-about-team-head">
+                    <div class="help-about-team-logo" aria-hidden="true">
+                      <img src="../assets/clashfox_team.png" alt="" />
+                    </div>
+                    <div class="help-about-team-copy">
+                      <div class="help-about-team-name" data-i18n="help.aboutTeamValue">ClashFox Team</div>
+                      <p class="help-about-desc-lead" data-i18n="help.aboutDescLead">ClashFox Team builds and maintains the desktop experience, tray integration, helper flow, and the visible-page refresh model.</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="help-about-grid">
+                  <div class="help-about-item">
+                    <span class="help-about-label" data-i18n="help.aboutVersionLabel">Version</span>
+                    <span class="help-about-value" id="helpAboutVersion">v0.0.0</span>
+                  </div>
+                  <div class="help-about-item">
+                    <span class="help-about-label" data-i18n="help.aboutBuildLabel">Build</span>
+                    <span class="help-about-value" id="helpAboutBuild">-</span>
+                  </div>
+                  <div class="help-about-item">
+                    <span class="help-about-label" data-i18n="help.aboutTeamLabel">Team</span>
+                    <span class="help-about-value" data-i18n="help.aboutTeamValue">ClashFox Team</span>
+                  </div>
+                </div>
+                <div class="help-about-desc">
+                  <div class="help-about-tags" aria-label="About ClashFox capabilities">
+                    <span class="help-about-tag" data-i18n="help.aboutTagDesktop">Desktop GUI</span>
+                    <span class="help-about-tag" data-i18n="help.aboutTagTray">Tray Integration</span>
+                    <span class="help-about-tag" data-i18n="help.aboutTagMihomo">Mihomo Workflow</span>
+                  </div>
+                  <div class="help-about-status help-about-status-inline" id="helpAboutStatus" data-state="idle" data-i18n="help.updateEntryHint">Use the button above to check for an app update.</div>
+                </div>
+              </div>
+              <div class="help-about-secondary">
+                <div class="help-about-section">
+                  <div class="help-about-brand">
+                    <div class="help-about-brand-logo" aria-hidden="true">
+                      <img src="../assets/logo.png" alt="" />
+                    </div>
+                    <div class="help-about-brand-copy">
+                      <h4 class="help-about-section-title" data-i18n="help.projectName">ClashFox</h4>
+                      <p class="help-about-project-copy" data-i18n="help.project">ClashFox is a desktop GUI for Mihomo with overview cards, dashboard, logs, Foxboard, trackers, tray menus, and helper management.</p>
+                    </div>
+                  </div>
+                  <div class="help-about-links help-about-info-grid" aria-label="Project Links">
+                    <a class="help-about-link-card" href="https://github.com/lukuochiang/ClashFox" data-open-external="true">
+                      <span class="help-about-link-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M12 11a3.25 3.25 0 1 0-3.25-3.25A3.25 3.25 0 0 0 12 11Z"/><path d="M6.5 19a5.5 5.5 0 0 1 11 0"/><path d="M12 3v2.5"/></svg>
+                      </span>
+                      <span class="help-about-link-label" data-i18n="help.authorLabel">Author</span>
+                      <span class="help-about-link-value" data-i18n="help.authorValue">lukuochiang</span>
+                    </a>
+                    <a class="help-about-link-card" href="https://github.com/lukuochiang/ClashFox" data-open-external="true">
+                      <span class="help-about-link-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M4.8 7.2h14.4v9.6H4.8z"/><path d="M8 11h8"/></svg>
+                      </span>
+                      <span class="help-about-link-label" data-i18n="help.repoLabel">Project Repository</span>
+                      <span class="help-about-link-value">ClashFox</span>
+                    </a>
+                    <a class="help-about-link-card" href="https://github.com/lukuochiang/ClashFox-Helper" data-open-external="true">
+                      <span class="help-about-link-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M12 4.5 6.8 7v4.2c0 3.8 2.2 7.1 5.2 8.6 3-1.5 5.2-4.8 5.2-8.6V7L12 4.5Z"/><path d="m9.4 12.1 1.6 1.6 3.7-3.7"/></svg>
+                      </span>
+                      <span class="help-about-link-label" data-i18n="help.helperRepoLabel">Helper Repository</span>
+                      <span class="help-about-link-value">ClashFox-Helper</span>
+                    </a>
+                    <a class="help-about-link-card" href="https://github.com/lukuochiang/ClashFox/issues" data-open-external="true">
+                      <span class="help-about-link-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M6.5 4.5h11A2.5 2.5 0 0 1 20 7v7A2.5 2.5 0 0 1 17.5 16.5H11l-4.5 3v-3H6.5A2.5 2.5 0 0 1 4 14V7A2.5 2.5 0 0 1 6.5 4.5Z"/><path d="M12 8v3.5"/><path d="M12 14.7h.01"/></svg>
+                      </span>
+                      <span class="help-about-link-label" data-i18n="help.feedbackLabel">Feedback</span>
+                      <span class="help-about-link-value" data-i18n="help.feedbackValue">GitHub Issues</span>
+                    </a>
+                    <a class="help-about-link-card help-about-link-card-wide" href="https://t.me/clashfoxd" data-open-external="true">
+                      <span class="help-about-link-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M21 4 4.5 11.2c-.9.4-.88 1.7.03 2.07l4.24 1.72 1.63 4.82c.28.83 1.37 1 1.9.31l2.5-3.18 4.44 3.25c.73.53 1.77.09 1.9-.79l1.65-14.65c.09-.78-.68-1.37-1.39-1.05Z"/></svg>
+                      </span>
+                      <span class="help-about-link-label" data-i18n="help.contactLabel">Contact Us</span>
+                      <span class="help-about-link-value" data-i18n="help.contactValue">Telegram @clashfoxd</span>
+                    </a>
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="help-about-grid">
-              <div class="help-about-item">
-                <span class="help-about-label" data-i18n="help.aboutVersionLabel">Version</span>
-                <span class="help-about-value" id="helpAboutVersion">v0.0.0</span>
-              </div>
-              <div class="help-about-item">
-                <span class="help-about-label" data-i18n="help.aboutBuildLabel">Build</span>
-                <span class="help-about-value" id="helpAboutBuild">-</span>
-              </div>
-              <div class="help-about-item">
-                <span class="help-about-label" data-i18n="help.aboutTeamLabel">Team</span>
-                <span class="help-about-value" data-i18n="help.aboutTeamValue">ClashFox Team</span>
-              </div>
-            </div>
-            <div class="help-about-desc">
-              <div class="help-about-tags" aria-label="About ClashFox capabilities">
-                <span class="help-about-tag" data-i18n="help.aboutTagDesktop">Desktop GUI</span>
-                <span class="help-about-tag" data-i18n="help.aboutTagTray">Tray Integration</span>
-                <span class="help-about-tag" data-i18n="help.aboutTagMihomo">Mihomo Workflow</span>
-              </div>
-            </div>
-            <div class="help-about-status" id="helpAboutStatus" data-state="idle" data-i18n="help.updateEntryHint">Use the buttons below to check app, kernel, and helper updates.</div>
-          </div>
-          <div class="card help-card">
-            <h3 data-i18n="help.title">Help & Notes</h3>
-            <ul class="help-list">
-              <li data-i18n="help.line1">This GUI invokes the original ClashFox Mihomo Toolkit script under the hood.</li>
-              <li data-i18n="help.line2">Some actions require sudo and may prompt for your macOS password.</li>
-              <li data-i18n="help.line3">If you are running on non-macOS, the toolkit functions are disabled.</li>
-            </ul>
-          </div>
-          <div class="card help-intro-card">
-            <h3 data-i18n="help.introTitle">Introduction</h3>
-            <div class="help-intro-meta">
-              <div class="help-slogan">
-                <span data-i18n="help.sloganLabel">Slogan</span>:
-                <span id="helpSlogan">🦊 让 Mihomo 内核管理变得趣味十足！</span>
-              </div>
-            </div>
-            <ul class="help-list">
-              <li data-i18n="help.project">Project: ClashFox GUI for Mihomo</li>
-              <li>
-                <span data-i18n="help.githubLabel">GitHub:</span>
-                <a class="help-link" href="https://github.com/lukuochiang/ClashFox" data-open-external="true">
-                  https://github.com/lukuochiang/ClashFox
-                </a>
-              </li>
-              <li>
-                <span data-i18n="help.telegramLabel">Telegram:</span>
-                <a class="help-link" href="https://t.me/clashfoxd" data-open-external="true">
-                  https://t.me/clashfoxd
-                </a>
-              </li>
-            </ul>
           </div>
           <div class="card">
             <h3 data-i18n="help.ackTitle" data-card-icon="defaults">Acknowledgements</h3>
             <p class="help-ack-intro" data-i18n="help.ackDesc">Special thanks to the following projects and developers:</p>
-            <ul class="help-list">
-              <li>
-                <a class="help-link" href="https://github.com/MetaCubeX/mihomo" data-open-external="true">
+            <ul class="help-list help-ack-list">
+              <li class="help-ack-item">
+                <a class="help-link help-ack-card" href="https://github.com/MetaCubeX/mihomo" data-open-external="true">
                   MetaCubeX/mihomo
                 </a>
               </li>
-              <li>
-                <a class="help-link" href="https://github.com/vernesong/mihomo" data-open-external="true">
+              <li class="help-ack-item">
+                <a class="help-link help-ack-card" href="https://github.com/vernesong/mihomo" data-open-external="true">
                   vernesong/mihomo
                 </a>
               </li>
-              <li>
-                <a class="help-link" href="https://github.com/Zephyruso/zashboard" data-open-external="true">
+              <li class="help-ack-item">
+                <a class="help-link help-ack-card" href="https://github.com/Zephyruso/zashboard" data-open-external="true">
                   Zephyruso/zashboard
                 </a>
               </li>
-              <li>
-                <a class="help-link" href="https://github.com/MetaCubeX/metacubexd" data-open-external="true">
+              <li class="help-ack-item">
+                <a class="help-link help-ack-card" href="https://github.com/MetaCubeX/metacubexd" data-open-external="true">
                   MetaCubeX/metacubexd
                 </a>
               </li>
-              <li>
-                <a class="help-link" href="https://github.com/666OS/ClashMac" data-open-external="true">
-                  666OS/ClashMac
-                </a>
-              </li>
+<!--              <li class="help-ack-item">-->
+<!--                <a class="help-link help-ack-card" href="https://github.com/666OS/ClashMac" data-open-external="true">-->
+<!--                  666OS/ClashMac-->
+<!--                </a>-->
+<!--              </li>-->
             </ul>
+            <p class="help-ack-footer">
+              感谢项目作者的开源贡献！如果这些项目对你有帮助，也请给他们点个 ⭐ Star 支持一下！
+            </p>
+          </div>
+          <div class="help-doc-grid">
+            <div class="card help-doc-card help-doc-card-privacy">
+              <h3 class="help-doc-title">
+                <span class="help-doc-title-icon help-doc-title-icon-privacy" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M12 3 5.5 6v5.3c0 4.4 2.8 8.4 6.5 10.6 3.7-2.2 6.5-6.2 6.5-10.6V6L12 3Z"/><path d="M9.4 12.1 11 13.7l3.7-3.7"/></svg>
+                </span>
+                <span>安全隐私</span>
+              </h3>
+              <p class="help-doc-copy">ClashFox 尊重你的隐私，尽量不收集个人身份信息。设置、状态和本地缓存主要保存在本机，只有在需要时才会访问更新检查、日志和控制器相关信息。</p>
+              <ul class="help-doc-list">
+                <li>本地配置与缓存可随时清理。</li>
+                <li>常规使用不会主动上传个人数据。</li>
+                <li>更新检查仅请求版本与发布信息。</li>
+              </ul>
+            </div>
+            <div class="card help-doc-card help-doc-card-license">
+              <h3 class="help-doc-title">
+                <span class="help-doc-title-icon help-doc-title-icon-license" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M7 4.5h10a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z"/><path d="M9 8h6"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
+                </span>
+                <span>许可证</span>
+              </h3>
+              <p class="help-doc-copy">本项目基于 GNU GPL v3 发布。你可以自由使用、修改和分发，但需要遵守 GPLv3 相关条款。</p>
+              <ul class="help-doc-list">
+                <li>完整许可文本请查看仓库根目录的 <span class="help-doc-inline-code">LICENSE</span> 文件。</li>
+                <li><a class="help-doc-license-link" href="https://github.com/lukuochiang/ClashFox/blob/main/LICENSE" data-open-external="true">LICENSE</a></li>
+              </ul>
+            </div>
+            <div class="card help-doc-card help-doc-card-disclaimer">
+              <h3 class="help-doc-title">
+                <span class="help-doc-title-icon help-doc-title-icon-disclaimer" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M12 3.8 3.8 18a1.8 1.8 0 0 0 1.56 2.7h13.3a1.8 1.8 0 0 0 1.56-2.7L12 3.8Z"/><path d="M12 9v4.5"/><path d="M12 16.8h.01"/></svg>
+                </span>
+                <span>免责声明</span>
+              </h3>
+              <p class="help-doc-copy">本项目仅供个人学习和研究使用。使用本项目即表示您同意：</p>
+              <ul class="help-doc-list">
+                <li>不将本项目用于任何商业用途。</li>
+                <li>承担使用本项目的所有风险和责任。</li>
+                <li>遵守相关服务条款和法律法规。</li>
+              </ul>
+              <p class="help-doc-copy">项目作者对因使用本项目而产生的任何直接或间接损失不承担责任。</p>
+            </div>
           </div>
         </section>
         </div>
       </main>
-    </div>
     <div id="overlayRoot"></div>
 
     <script src="../utils/locale-utils.js"></script>

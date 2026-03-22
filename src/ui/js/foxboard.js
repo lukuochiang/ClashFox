@@ -8,6 +8,7 @@ const resolveLocaleFromSettings = typeof foxboardLocaleUtils.resolveLocaleFromSe
 
 let foxboardDebugMode = false;
 let systemLocaleFromMain = '';
+let foxboardThemeSettingsSnapshot = null;
 
 function foxboardLog(scope, message, payload = null, level = 'log') {
   return;
@@ -39,6 +40,21 @@ function applyTheme(theme = 'auto', dark = false) {
   } catch {
     // ignore storage failures
   }
+}
+
+function applyMergedThemeSnapshot(preloadedSettings = null) {
+  const nextSettings = preloadedSettings && typeof preloadedSettings === 'object'
+    ? preloadedSettings
+    : null;
+  if (nextSettings) {
+    foxboardThemeSettingsSnapshot = {
+      ...(foxboardThemeSettingsSnapshot || {}),
+      ...nextSettings,
+    };
+  }
+  return foxboardThemeSettingsSnapshot && typeof foxboardThemeSettingsSnapshot === 'object'
+    ? foxboardThemeSettingsSnapshot
+    : nextSettings;
 }
 
 function applyLocaleTexts(locale = 'en') {
@@ -74,8 +90,14 @@ function applyLocaleTexts(locale = 'en') {
 let currentTheme = 'auto';
 let unsubscribeSystemTheme = null;
 let unsubscribeSettingsUpdated = null;
+let foxboardWindowVisible = !document.hidden;
+let lastSettingsSignature = '';
+let systemLocaleCached = '';
 
 async function refreshSystemLocaleFromMain() {
+  if (systemLocaleCached) {
+    return false;
+  }
   if (!window.clashfox || typeof window.clashfox.getSystemLocale !== 'function') {
     return false;
   }
@@ -90,6 +112,7 @@ async function refreshSystemLocaleFromMain() {
     }
     const changed = locale !== systemLocaleFromMain;
     systemLocaleFromMain = locale;
+    systemLocaleCached = locale;
     return changed;
   } catch {
     return false;
@@ -111,6 +134,7 @@ async function syncSettings() {
     const response = await window.clashfox.readSettings();
     const settings = unwrapSettingsPayload(response);
     const appearance = settings && typeof settings.appearance === 'object' ? settings.appearance : {};
+    foxboardThemeSettingsSnapshot = settings;
     foxboardDebugMode = Boolean(settings && settings.debugMode);
     window.__clashfoxFoxboardDebug = foxboardDebugMode;
     currentTheme = String(settings.theme || appearance.theme || 'auto').trim().toLowerCase();
@@ -125,6 +149,11 @@ async function syncSettings() {
       ? window.matchMedia('(prefers-color-scheme: dark)').matches
       : document.documentElement.getAttribute('data-theme') === 'night';
     applyTheme(currentTheme, dark);
+    lastSettingsSignature = JSON.stringify({
+      theme: currentTheme,
+      locale,
+      debug: foxboardDebugMode,
+    });
   } catch {
     foxboardLog('settings', 'sync failed', null, 'warn');
   }
@@ -143,13 +172,23 @@ async function bootFoxboard() {
       });
     }
     if (window.clashfox && typeof window.clashfox.onSettingsUpdated === 'function') {
-      unsubscribeSettingsUpdated = window.clashfox.onSettingsUpdated((settings = {}) => {
-        Promise.resolve(refreshSystemLocaleFromMain()).then(() => {
-          const appearance = settings && typeof settings.appearance === 'object' ? settings.appearance : {};
-          foxboardDebugMode = Boolean(settings && settings.debugMode);
+    unsubscribeSettingsUpdated = window.clashfox.onSettingsUpdated((settings = {}) => {
+        const appearance = settings && typeof settings.appearance === 'object' ? settings.appearance : {};
+        const mergedSettings = applyMergedThemeSnapshot(settings) || settings;
+        const nextSignature = JSON.stringify({
+          theme: String(mergedSettings.theme || (mergedSettings.appearance && mergedSettings.appearance.theme) || 'auto').trim().toLowerCase(),
+          locale: resolveLocaleWithSystem(mergedSettings),
+          debug: Boolean(mergedSettings && mergedSettings.debugMode),
+        });
+        if (nextSignature === lastSettingsSignature) {
+          return;
+        }
+        lastSettingsSignature = nextSignature;
+        Promise.resolve(systemLocaleCached ? false : refreshSystemLocaleFromMain()).then(() => {
+          foxboardDebugMode = Boolean(mergedSettings && mergedSettings.debugMode);
           window.__clashfoxFoxboardDebug = foxboardDebugMode;
-          currentTheme = String(settings.theme || appearance.theme || 'auto').trim().toLowerCase();
-          const locale = resolveLocaleWithSystem(settings);
+          currentTheme = String(mergedSettings.theme || (mergedSettings.appearance && mergedSettings.appearance.theme) || 'auto').trim().toLowerCase();
+          const locale = resolveLocaleWithSystem(mergedSettings);
           foxboardLog('settings', 'event update received', {
             theme: currentTheme,
             locale,
@@ -165,7 +204,9 @@ async function bootFoxboard() {
         });
       });
     }
-    await initDashboardPanel();
+    if (!document.hidden) {
+      await initDashboardPanel();
+    }
     foxboardLog('lifecycle', 'boot completed');
   } catch (error) {
     // Keep standalone window stable even if panel init fails.
@@ -173,6 +214,21 @@ async function bootFoxboard() {
       error: error && error.message ? error.message : String(error || ''),
     }, 'error');
   }
+}
+
+function syncFoxboardVisibility() {
+  const visible = !document.hidden;
+  if (foxboardWindowVisible === visible) {
+    return;
+  }
+  foxboardWindowVisible = visible;
+  if (!visible) {
+    teardownDashboardPanel();
+    return;
+  }
+  syncSettings().then(() => {
+    initDashboardPanel().catch(() => {});
+  }).catch(() => {});
 }
 
 if (document.readyState === 'loading') {
@@ -193,3 +249,6 @@ window.addEventListener('beforeunload', () => {
   }
   teardownDashboardPanel();
 });
+
+document.addEventListener('visibilitychange', syncFoxboardVisibility);
+window.addEventListener('focus', syncFoxboardVisibility);

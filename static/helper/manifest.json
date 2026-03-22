@@ -1,8 +1,0 @@
-{
-  "name": "clashfox-helper",
-  "version": "0.3.6",
-  "platform": "darwin",
-  "arch": "universal",
-  "packagedAt": "2026-03-05T01:13:39Z",
-  "build": {"version":"0.3.6","gitCommit":"49e0efa","buildTime":"2026-03-05T01:13:39Z","launchedAt":""}
-}

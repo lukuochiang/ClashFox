@@ -145,7 +145,7 @@ contextBridge.exposeInMainWorld('clashfox', {
     return () => ipcRenderer.removeListener('clashfox:settingsUpdated', listener);
   },
   trayMenuGetData: () => ipcRenderer.invoke('clashfox:trayMenu:getData'),
-  trayMenuGetConnectivity: () => ipcRenderer.invoke('clashfox:trayMenu:connectivity'),
+  trayMenuGetConnectivity: (force = false) => ipcRenderer.invoke('clashfox:trayMenu:connectivity', Boolean(force)),
   trayMenuAction: (action, payload = {}) => ipcRenderer.invoke('clashfox:trayMenu:action', action, payload),
   trayMenuHide: () => ipcRenderer.send('clashfox:trayMenu:hide'),
   trayMenuSetExpanded: (expanded, payload = {}) => ipcRenderer.send('clashfox:trayMenu:setExpanded', Boolean(expanded), payload),
@@ -162,6 +162,14 @@ contextBridge.exposeInMainWorld('clashfox', {
     ipcRenderer.on('clashfox:trayMenu:update', listener);
     return () => ipcRenderer.removeListener('clashfox:trayMenu:update', listener);
   },
+  onTrayMenuVisibility: (handler) => {
+    if (typeof handler !== 'function') {
+      return () => {};
+    }
+    const listener = (_event, payload) => handler(payload);
+    ipcRenderer.on('clashfox:trayMenu:visibility', listener);
+    return () => ipcRenderer.removeListener('clashfox:trayMenu:visibility', listener);
+  },
   traySubmenuResize: (payload = {}) => ipcRenderer.send('clashfox:traySubmenu:resize', payload),
   traySubmenuHover: (hovering) => ipcRenderer.send('clashfox:traySubmenu:hover', Boolean(hovering)),
   traySubmenuReady: () => ipcRenderer.send('clashfox:traySubmenu:ready'),
@@ -174,6 +182,14 @@ contextBridge.exposeInMainWorld('clashfox', {
     ipcRenderer.on('clashfox:traySubmenu:update', listener);
     return () => ipcRenderer.removeListener('clashfox:traySubmenu:update', listener);
   },
+  onTraySubmenuVisibility: (handler) => {
+    if (typeof handler !== 'function') {
+      return () => {};
+    }
+    const listener = (_event, payload) => handler(payload);
+    ipcRenderer.on('clashfox:traySubmenu:visibility', listener);
+    return () => ipcRenderer.removeListener('clashfox:traySubmenu:visibility', listener);
+  },
   trayPanelResize: (payload = {}) => ipcRenderer.send('clashfox:trayPanel:resize', payload),
   trayPanelHover: (hovering) => ipcRenderer.send('clashfox:trayPanel:hover', Boolean(hovering)),
   trayPanelReady: () => ipcRenderer.send('clashfox:trayPanel:ready'),
@@ -185,5 +201,13 @@ contextBridge.exposeInMainWorld('clashfox', {
     const listener = (_event, payload) => handler(payload);
     ipcRenderer.on('clashfox:trayPanel:update', listener);
     return () => ipcRenderer.removeListener('clashfox:trayPanel:update', listener);
+  },
+  onTrayPanelVisibility: (handler) => {
+    if (typeof handler !== 'function') {
+      return () => {};
+    }
+    const listener = (_event, payload) => handler(payload);
+    ipcRenderer.on('clashfox:trayPanel:visibility', listener);
+    return () => ipcRenderer.removeListener('clashfox:trayPanel:visibility', listener);
   },
 });

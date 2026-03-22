@@ -15,6 +15,7 @@ let panelChartRatesTx = [];
 let panelChartTotalRx = null;
 let panelChartTotalTx = null;
 let panelProviderPayloadSignature = '';
+let lastSettingsSignature = '';
 
 const PANEL_TRAFFIC_HISTORY_LIMIT = 520;
 const PANEL_TRAFFIC_INTERVAL_MS = 1000;
@@ -26,6 +27,7 @@ let panelProviderRefreshTimer = null;
 const PANEL_MIN_HEIGHT = 286;
 const PANEL_RESIZE_DIFF_THRESHOLD = 4;
 let panelResizeScheduled = false;
+let panelRendererVisible = false;
 
 async function applyTrayTheme() {
   try {
@@ -145,6 +147,35 @@ function closePanelTrafficSocket() {
   } catch {
     // ignore
   }
+}
+
+function stopPanelLiveActivity() {
+  stopProviderFallbackRefresh();
+  closePanelTrafficSocket();
+}
+
+function startPanelLiveActivity() {
+  if (!panelRendererVisible) {
+    return;
+  }
+  if (panelItems.length) {
+    renderPanel();
+  }
+  startProviderFallbackRefresh();
+  openPanelTrafficSocket();
+}
+
+function setPanelRendererVisible(nextVisible) {
+  const visible = Boolean(nextVisible);
+  if (panelRendererVisible === visible) {
+    return;
+  }
+  panelRendererVisible = visible;
+  if (!visible) {
+    stopPanelLiveActivity();
+    return;
+  }
+  startPanelLiveActivity();
 }
 
 function schedulePanelTrafficReconnect() {
@@ -305,6 +336,9 @@ function buildPanelProviderTrafficMarkup(payload = null) {
 }
 
 function renderPanelTrafficChart() {
+  if (!panelRendererVisible) {
+    return;
+  }
   const barsEl = document.getElementById('panelChartBars');
   if (!barsEl) return;
   const topLabelEl = document.getElementById('panelChartTopLabel');
@@ -438,7 +472,7 @@ function applyPanelTrafficSnapshot(payload = {}) {
 }
 
 async function openPanelTrafficSocket() {
-  if (typeof WebSocket !== 'function') return;
+  if (!panelRendererVisible || typeof WebSocket !== 'function') return;
   const nextUrl = await getPanelTrafficSocketUrl();
   if (!nextUrl) return;
   const existing = panelChartSocket;
@@ -553,6 +587,9 @@ function updateProviderCardInPlace(payload = null) {
 }
 
 async function refreshProviderTrafficFallback(force = false) {
+  if (!panelRendererVisible) {
+    return;
+  }
   if (!window.clashfox || typeof window.clashfox.providerSubscriptionOverview !== 'function') {
     return;
   }
@@ -583,7 +620,7 @@ async function refreshProviderTrafficFallback(force = false) {
 }
 
 function startProviderFallbackRefresh() {
-  if (panelProviderRefreshTimer) {
+  if (!panelRendererVisible || panelProviderRefreshTimer) {
     return;
   }
   panelProviderRefreshTimer = setInterval(() => {
@@ -623,7 +660,7 @@ function makeRow(item) {
 }
 
 function renderPanel() {
-  if (!panelListEl) {
+  if (!panelRendererVisible || !panelListEl) {
     return;
   }
   panelListEl.innerHTML = '';
@@ -650,6 +687,9 @@ function setPanel(payload) {
   panelItemsSignature = nextItemsSignature;
   const { item } = getPanelProviderItem();
   panelProviderPayloadSignature = buildProviderPayloadSignature(item && item.payload ? item.payload : null);
+  if (!panelRendererVisible) {
+    return;
+  }
   renderPanel();
   refreshProviderTrafficFallback(false).catch(() => {});
   startProviderFallbackRefresh();
@@ -664,6 +704,12 @@ if (window.clashfox && typeof window.clashfox.onTrayPanelUpdate === 'function') 
   });
 }
 
+if (window.clashfox && typeof window.clashfox.onTrayPanelVisibility === 'function') {
+  window.clashfox.onTrayPanelVisibility((payload = {}) => {
+    setPanelRendererVisible(Boolean(payload && payload.visible));
+  });
+}
+
 if (window.clashfox && typeof window.clashfox.onSystemThemeChange === 'function') {
   window.clashfox.onSystemThemeChange(() => {
     applyTrayTheme().catch(() => {});
@@ -671,7 +717,21 @@ if (window.clashfox && typeof window.clashfox.onSystemThemeChange === 'function'
 }
 
 if (window.clashfox && typeof window.clashfox.onSettingsUpdated === 'function') {
-  window.clashfox.onSettingsUpdated(() => {
+  window.clashfox.onSettingsUpdated((settings = {}) => {
+    const appearance = settings && typeof settings.appearance === 'object' ? settings.appearance : {};
+    const nextSignature = String(
+      settings.theme
+      || appearance.theme
+      || appearance.colorMode
+      || 'auto',
+    ).trim().toLowerCase();
+    if (nextSignature === lastSettingsSignature) {
+      return;
+    }
+    lastSettingsSignature = nextSignature;
+    if (!panelRendererVisible) {
+      return;
+    }
     applyTrayTheme().catch(() => {});
   });
 }
@@ -687,6 +747,7 @@ if (window.matchMedia) {
     media.addListener(handleThemeChange);
   }
 }
+
 
 if (window.clashfox && typeof window.clashfox.trayPanelHover === 'function') {
   const sendHover = (nextValue) => {
@@ -707,6 +768,7 @@ if (window.clashfox && typeof window.clashfox.trayPanelReady === 'function') {
 }
 
 window.addEventListener('beforeunload', () => {
+  stopPanelLiveActivity();
   stopProviderFallbackRefresh();
   closePanelTrafficSocket();
 });

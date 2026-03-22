@@ -25,6 +25,11 @@ let menuResizeObserver = null;
 let menuMutationObserver = null;
 let geometryRaf = 0;
 let suppressSubmenuUntil = 0;
+let trayMenuRendererVisible = false;
+let trayMenuSettingsRefreshTimer = null;
+let lastSettingsSignature = '';
+let lastMenuDataSettingsSignature = '';
+let trayThemeSettingsSnapshot = null;
 const TRAFFIC_HISTORY_POINTS = 520;
 const TRAFFIC_INTERVAL_MS = 1000;
 const OVERVIEW_INTERVAL_MS = 5000;
@@ -78,9 +83,90 @@ function syncTrafficChartVisibility() {
   scheduleGeometrySync();
 }
 
+function stopMenuLiveActivity() {
+  stopProviderTrafficRotation();
+  stopTrafficTimers();
+}
+
+function stopTrayMenuSettingsRefresh() {
+  if (trayMenuSettingsRefreshTimer) {
+    clearTimeout(trayMenuSettingsRefreshTimer);
+    trayMenuSettingsRefreshTimer = null;
+  }
+}
+
+function scheduleTrayMenuSettingsRefresh() {
+  if (!trayMenuRendererVisible) {
+    return;
+  }
+  if (trayMenuSettingsRefreshTimer) {
+    return;
+  }
+  trayMenuSettingsRefreshTimer = setTimeout(async () => {
+    trayMenuSettingsRefreshTimer = null;
+    if (!trayMenuRendererVisible) {
+      return;
+    }
+    try {
+      const nextData = await window.clashfox.trayMenuGetData();
+      if (nextData && typeof nextData === 'object') {
+        const nextSignature = buildMenuRenderSignature(nextData);
+        if (nextSignature === lastMenuRenderSignature) {
+          return;
+        }
+        menuData = nextData;
+        lastMenuRenderSignature = nextSignature;
+        renderAll();
+        scheduleGeometrySync();
+      }
+    } catch {
+      trayLog('settings', 'tray menu refresh after settings update failed', null, 'warn');
+    }
+  }, 120);
+}
+
+function startMenuLiveActivity() {
+  if (!trayMenuRendererVisible) {
+    return;
+  }
+  if (menuData && providerTrafficState.renderKey) {
+    renderProviderTraffic();
+  }
+  if (chartEl) {
+    startTrafficTimers();
+  }
+}
+
+function setTrayMenuRendererVisible(nextVisible) {
+  const visible = Boolean(nextVisible);
+  if (trayMenuRendererVisible === visible) {
+    return;
+  }
+  trayMenuRendererVisible = visible;
+  if (!visible) {
+    stopMenuLiveActivity();
+    stopTrayMenuSettingsRefresh();
+    blockClickUntil = 0;
+    return;
+  }
+  renderAll();
+  syncTrafficChartVisibility();
+  if (chartEl) {
+    startTrafficTimers();
+  }
+  scheduleGeometrySync();
+}
+
+const TRAY_SIGNATURE_OMIT_KEYS = new Set(['generatedAt', 'updatedAt']);
+
 function buildMenuRenderSignature(value = null) {
   try {
-    return JSON.stringify(value || {});
+    return JSON.stringify(value || {}, (key, val) => {
+      if (TRAY_SIGNATURE_OMIT_KEYS.has(key)) {
+        return undefined;
+      }
+      return val;
+    });
   } catch {
     return '';
   }
@@ -99,6 +185,11 @@ function buildMainListRenderSignature(value = null) {
     return JSON.stringify({
       items: Array.isArray(value && value.items) ? value.items : [],
       outboundProxyTree: value && value.outboundProxyTree ? value.outboundProxyTree : null,
+    }, (key, val) => {
+      if (TRAY_SIGNATURE_OMIT_KEYS.has(key)) {
+        return undefined;
+      }
+      return val;
     });
   } catch {
     return '';
@@ -109,17 +200,39 @@ function trayLog(scope, message, payload = null, level = 'log') {
   return;
 }
 
-async function applyTrayTheme() {
+async function applyTrayTheme(preloadedSettings = null) {
   try {
     if (!document.body) {
       return;
     }
     let preference = '';
-    if (window.clashfox && typeof window.clashfox.readSettings === 'function') {
+    const nextSettings = preloadedSettings && typeof preloadedSettings === 'object'
+      ? preloadedSettings
+      : null;
+    if (nextSettings) {
+      trayThemeSettingsSnapshot = {
+        ...(trayThemeSettingsSnapshot || {}),
+        ...nextSettings,
+      };
+    }
+    const settings = trayThemeSettingsSnapshot && typeof trayThemeSettingsSnapshot === 'object'
+      ? trayThemeSettingsSnapshot
+      : nextSettings;
+    if (settings) {
+      const appearance = settings && typeof settings.appearance === 'object' ? settings.appearance : {};
+      preference = String(
+        settings.theme
+        || appearance.theme
+        || '',
+      ).trim().toLowerCase();
+    } else if (window.clashfox && typeof window.clashfox.readSettings === 'function') {
       const response = await window.clashfox.readSettings();
       const settings = response && response.ok && response.data && typeof response.data === 'object'
         ? response.data
         : null;
+      if (settings) {
+        trayThemeSettingsSnapshot = settings;
+      }
       preference = String(
         (settings && settings.theme)
         || (settings && settings.appearance && settings.appearance.theme)
@@ -322,7 +435,7 @@ function startProviderTrafficRotation(totalItems) {
 }
 
 function renderProviderTraffic() {
-  if (!providerTrafficEl) {
+  if (!trayMenuRendererVisible || !providerTrafficEl) {
     return;
   }
   const payload = menuData && menuData.providerTraffic && typeof menuData.providerTraffic === 'object'
@@ -411,7 +524,7 @@ function renderProviderTraffic() {
 }
 
 function renderTrafficBars() {
-  if (!chartBarsEl) {
+  if (!trayMenuRendererVisible || !chartBarsEl) {
     return;
   }
   const count = Math.max(trafficState.historyRx.length, trafficState.historyTx.length, 0);
@@ -640,18 +753,96 @@ function applyChartEnabled(enabled) {
   trafficState.chartEnabled = enabled;
   syncTrafficChartVisibility();
   if (!enabled) {
-    stopTrafficTimers();
+    stopMenuLiveActivity();
     resetTrafficChart();
     syncWindowGeometry();
     return;
   }
-  openTrafficSocket().catch(() => {});
+  if (trayMenuRendererVisible) {
+    startMenuLiveActivity();
+  }
 }
 
 function invalidateSettingsCache() {
   trafficState.settings = null;
   trafficState.settingsAt = 0;
-  closeTrafficSocket();
+}
+
+function buildTrafficArgsFromSettings(settings = {}) {
+  const source = settings && typeof settings === 'object' ? settings : {};
+  const userDataPaths = source.userDataPaths && typeof source.userDataPaths === 'object'
+    ? source.userDataPaths
+    : {};
+  const userAppDataDir = String(userDataPaths.userAppDataDir || '').trim();
+  const configDir = String(userDataPaths.configDir || 'config').trim() || 'config';
+  const configFile = String(
+    userDataPaths.configFile
+    || source.configFile
+    || source.configPath
+    || 'default.yaml',
+  ).trim() || 'default.yaml';
+  const fullConfigPath = userAppDataDir
+    ? require('path').resolve(userAppDataDir, configDir, configFile)
+    : configFile;
+  const controller = String(
+    (source.panelManager && source.panelManager.externalController)
+    || source.externalController
+    || '',
+  ).trim();
+  const secret = String(
+    (source.panelManager && source.panelManager.secret)
+    || source.secret
+    || '',
+  ).trim();
+  const args = [];
+  if (fullConfigPath) {
+    args.push('--config', fullConfigPath);
+  }
+  if (controller) {
+    args.push('--controller', controller);
+  }
+  if (secret) {
+    args.push('--secret', secret);
+  }
+  return args;
+}
+
+function buildTrayMenuSettingsSignature(settings = {}) {
+  const source = settings && typeof settings === 'object' ? settings : {};
+  const appearance = source.appearance && typeof source.appearance === 'object' ? source.appearance : {};
+  const proxy = source.proxy && typeof source.proxy === 'object' ? source.proxy : {};
+  const userDataPaths = source.userDataPaths && typeof source.userDataPaths === 'object' ? source.userDataPaths : {};
+  return JSON.stringify({
+    configPath: String(source.configPath || userDataPaths.configFile || '').trim(),
+    panelChoice: String(source.panelChoice || source.externalUi || '').trim(),
+    controller: String(source.externalController || '').trim(),
+    secret: String(source.secret || '').trim(),
+    authentication: Array.isArray(source.authentication) ? source.authentication.slice() : [],
+    proxy: {
+      mode: String(proxy.mode || '').trim(),
+      systemProxy: Boolean(proxy.systemProxy),
+      tun: Boolean(proxy.tun),
+      stack: String(proxy.stack || '').trim(),
+      mixedPort: String(proxy.mixedPort || '').trim(),
+      port: String(proxy.port || '').trim(),
+      socksPort: String(proxy.socksPort || '').trim(),
+      allowLan: Boolean(proxy.allowLan),
+    },
+    trayMenu: {
+      chartEnabled: source.chartEnabled !== false,
+      providerTrafficEnabled: source.providerTrafficEnabled !== false,
+      trackersEnabled: source.trackersEnabled !== false,
+      foxboardEnabled: source.foxboardEnabled !== false,
+      panelEnabled: source.panelEnabled === true,
+      kernelManagerEnabled: source.kernelManagerEnabled !== false,
+      directoryLocationsEnabled: source.directoryLocationsEnabled !== false,
+      copyShellExportCommandEnabled: source.copyShellExportCommandEnabled !== false,
+    },
+    userDataPaths: {
+      configDir: String(userDataPaths.configDir || '').trim(),
+      userAppDataDir: String(userDataPaths.userAppDataDir || '').trim(),
+    },
+  });
 }
 
 async function getTrafficArgs() {
@@ -660,7 +851,7 @@ async function getTrafficArgs() {
   }
   const now = Date.now();
   if (trafficState.settings && (now - trafficState.settingsAt) < SETTINGS_CACHE_MS) {
-    return trafficState.settings;
+    return buildTrafficArgsFromSettings(trafficState.settings);
   }
   try {
     const response = await window.clashfox.readSettings();
@@ -673,22 +864,9 @@ async function getTrafficArgs() {
         ? settings.chartEnabled !== false
         : settings.trayMenuChartEnabled !== false,
     );
-    const configFile = String(settings.configFile || settings.configPath || '').trim();
-    const controller = String(settings.externalController || '').trim();
-    const secret = String(settings.secret || '').trim();
-    const args = [];
-    if (configFile) {
-      args.push('--config', configFile);
-    }
-    if (controller) {
-      args.push('--controller', controller);
-    }
-    if (secret) {
-      args.push('--secret', secret);
-    }
-    trafficState.settings = args;
+    trafficState.settings = settings;
     trafficState.settingsAt = now;
-    return args;
+    return buildTrafficArgsFromSettings(settings);
   } catch {
     return [];
   }
@@ -698,12 +876,30 @@ async function getTrafficSocketUrl() {
   if (!window.clashfox || typeof window.clashfox.readSettings !== 'function') {
     return '';
   }
+  const now = Date.now();
+  if (trafficState.settings && (now - trafficState.settingsAt) < SETTINGS_CACHE_MS) {
+    const cached = trafficState.settings;
+    const controllerRaw = String(cached.externalController || '127.0.0.1:9090').trim() || '127.0.0.1:9090';
+    const secret = String(cached.secret || 'clashfox').trim();
+    const baseUrl = /^https?:\/\//i.test(controllerRaw) ? controllerRaw : `http://${controllerRaw}`;
+    const url = new URL(baseUrl);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.pathname = '/traffic';
+    if (secret) {
+      url.searchParams.set('token', secret);
+    } else {
+      url.searchParams.delete('token');
+    }
+    return url.toString();
+  }
   try {
     const response = await window.clashfox.readSettings();
     const settings = response && response.ok ? response.data : null;
     if (!settings || typeof settings !== 'object') {
       return '';
     }
+    trafficState.settings = settings;
+    trafficState.settingsAt = now;
     const controllerRaw = String(settings.externalController || '127.0.0.1:9090').trim() || '127.0.0.1:9090';
     const secret = String(settings.secret || 'clashfox').trim();
     const baseUrl = /^https?:\/\//i.test(controllerRaw) ? controllerRaw : `http://${controllerRaw}`;
@@ -754,7 +950,7 @@ function handleTrafficSocketPayload(payload = {}) {
 }
 
 async function openTrafficSocket() {
-  if (!trafficState.chartEnabled || typeof WebSocket !== 'function') {
+  if (!trayMenuRendererVisible || !trafficState.chartEnabled || typeof WebSocket !== 'function') {
     return;
   }
   const nextUrl = await getTrafficSocketUrl();
@@ -813,7 +1009,7 @@ async function openTrafficSocket() {
 }
 
 async function loadTrafficSnapshot() {
-  if (!shouldUseTrafficFallback()) {
+  if (!trayMenuRendererVisible || !shouldUseTrafficFallback()) {
     return;
   }
   if (!window.clashfox || typeof window.clashfox.runCommand !== 'function') {
@@ -840,7 +1036,7 @@ async function loadTrafficSnapshot() {
 }
 
 async function loadOverviewSnapshot() {
-  if (!shouldUseTrafficFallback()) {
+  if (!trayMenuRendererVisible || !shouldUseTrafficFallback()) {
     return;
   }
   if (!window.clashfox || typeof window.clashfox.runCommand !== 'function') {
@@ -865,6 +1061,9 @@ async function loadOverviewSnapshot() {
 }
 
 async function startTrafficTimers() {
+  if (!trayMenuRendererVisible) {
+    return;
+  }
   if (trafficState.trafficTimer || trafficState.overviewTimer) {
     openTrafficSocket().catch(() => {});
     return;
@@ -1077,9 +1276,7 @@ function makeRow(item) {
     arrow.className = 'menu-arrow';
     arrow.textContent = '›';
     row.appendChild(arrow);
-    row.addEventListener('mouseenter', () => {
-      openSubmenu(item.submenu, row);
-    });
+    bindHoverSubmenuOpen(row, item.submenu);
     row.addEventListener('click', (event) => {
       if (Date.now() < blockClickUntil) {
         event.preventDefault();
@@ -1157,9 +1354,7 @@ function makeRow(item) {
   }
 
   if (item.submenu) {
-    row.addEventListener('mouseenter', () => {
-      openSubmenu(item.submenu, row);
-    });
+    bindHoverSubmenuOpen(row, item.submenu);
     row.addEventListener('click', (event) => {
       if (Date.now() < blockClickUntil) {
         event.preventDefault();
@@ -1347,10 +1542,17 @@ function shouldRestoreSubmenu(anchorRow) {
   );
 }
 
-function openSubmenu(submenuKey, anchorRow, keepAnchor = false) {
-  if (!document.hasFocus() || Date.now() < suppressSubmenuUntil) {
+function bindHoverSubmenuOpen(row, submenuKey) {
+  if (!row || !submenuKey) {
     return;
   }
+  const open = () => openSubmenu(submenuKey, row);
+  row.addEventListener('pointerenter', open);
+  row.addEventListener('mouseenter', open);
+  row.addEventListener('mouseover', open);
+}
+
+function openSubmenu(submenuKey, anchorRow, keepAnchor = false) {
   if (!submenuKey || !menuData || !menuData.submenus || !Array.isArray(menuData.submenus[submenuKey])) {
     hideSubmenu();
     return;
@@ -1409,6 +1611,11 @@ async function init() {
       if (!payload) {
         return;
       }
+      if (!trayMenuRendererVisible) {
+        menuData = payload;
+        lastMenuRenderSignature = buildMenuRenderSignature(payload);
+        return;
+      }
       applyTrayTheme().catch(() => {});
       const nextSignature = buildMenuRenderSignature(payload);
       if (nextSignature === lastMenuRenderSignature) {
@@ -1456,10 +1663,12 @@ async function init() {
       const nextSignature = buildMenuRenderSignature(initial);
       menuData = initial;
       lastMenuRenderSignature = nextSignature;
-      renderAll();
-      if (chartEl) {
-        if (!restoreTrafficCache()) {
-          resetTrafficChart();
+      if (trayMenuRendererVisible) {
+        renderAll();
+        if (chartEl) {
+          if (!restoreTrafficCache()) {
+            resetTrafficChart();
+          }
         }
       }
     }
@@ -1475,27 +1684,59 @@ async function init() {
   }
   if (window.clashfox && typeof window.clashfox.onSettingsUpdated === 'function') {
     window.clashfox.onSettingsUpdated(async (settings = {}) => {
-      invalidateSettingsCache();
-      applyChartEnabled(
-        Object.prototype.hasOwnProperty.call(settings || {}, 'chartEnabled')
-          ? settings.chartEnabled !== false
+      const appearance = settings && typeof settings.appearance === 'object' ? settings.appearance : {};
+      const nextSignature = JSON.stringify({
+        theme: String(settings.theme || appearance.theme || 'auto').trim().toLowerCase(),
+        lang: String(settings.lang || settings.language || settings.locale || appearance.lang || appearance.language || appearance.locale || 'auto').trim().toLowerCase(),
+        chartEnabled: Object.prototype.hasOwnProperty.call(settings || {}, 'chartEnabled')
+          ? Boolean(settings.chartEnabled)
+          : Object.prototype.hasOwnProperty.call(settings || {}, 'trayMenuChartEnabled')
+            ? Boolean(settings.trayMenuChartEnabled)
+            : true,
+        providerTrafficEnabled: Object.prototype.hasOwnProperty.call(settings || {}, 'providerTrafficEnabled')
+          ? Boolean(settings.providerTrafficEnabled)
           : true,
+        panelEnabled: Object.prototype.hasOwnProperty.call(settings || {}, 'panelEnabled')
+          ? Boolean(settings.panelEnabled)
+          : false,
+        trackersEnabled: Object.prototype.hasOwnProperty.call(settings || {}, 'trackersEnabled')
+          ? Boolean(settings.trackersEnabled)
+          : true,
+        foxboardEnabled: Object.prototype.hasOwnProperty.call(settings || {}, 'foxboardEnabled')
+          ? Boolean(settings.foxboardEnabled)
+          : true,
+        kernelManagerEnabled: Object.prototype.hasOwnProperty.call(settings || {}, 'kernelManagerEnabled')
+          ? Boolean(settings.kernelManagerEnabled)
+          : true,
+        directoryLocationsEnabled: Object.prototype.hasOwnProperty.call(settings || {}, 'directoryLocationsEnabled')
+          ? Boolean(settings.directoryLocationsEnabled)
+          : true,
+        copyShellExportCommandEnabled: Object.prototype.hasOwnProperty.call(settings || {}, 'copyShellExportCommandEnabled')
+          ? Boolean(settings.copyShellExportCommandEnabled)
+          : true,
+      });
+      if (nextSignature === lastSettingsSignature) {
+        return;
+      }
+      lastSettingsSignature = nextSignature;
+      const nextMenuSettingsSignature = buildTrayMenuSettingsSignature(settings);
+      const shouldRefreshMenuData = nextMenuSettingsSignature !== lastMenuDataSettingsSignature;
+      lastMenuDataSettingsSignature = nextMenuSettingsSignature;
+      invalidateSettingsCache();
+      if (!trayMenuRendererVisible) {
+        return;
+      }
+      const chartEnabled = Object.prototype.hasOwnProperty.call(settings || {}, 'chartEnabled')
+        ? settings.chartEnabled !== false
+        : (Object.prototype.hasOwnProperty.call(settings || {}, 'trayMenuChartEnabled')
+          ? settings.trayMenuChartEnabled !== false
+          : true);
+      applyChartEnabled(
+        chartEnabled,
       );
-      applyTrayTheme().catch(() => {});
-      try {
-        const nextData = await window.clashfox.trayMenuGetData();
-        if (nextData && typeof nextData === 'object') {
-          const nextSignature = buildMenuRenderSignature(nextData);
-          if (nextSignature === lastMenuRenderSignature) {
-            return;
-          }
-          menuData = nextData;
-          lastMenuRenderSignature = nextSignature;
-          renderAll();
-          scheduleGeometrySync();
-        }
-      } catch {
-        trayLog('settings', 'tray menu refresh after settings update failed', null, 'warn');
+      applyTrayTheme(settings).catch(() => {});
+      if (shouldRefreshMenuData) {
+        scheduleTrayMenuSettingsRefresh();
       }
     });
   }
@@ -1516,8 +1757,15 @@ async function init() {
       media.addListener(handleThemeChange);
     }
   }
-  if (chartEl) {
-    startTrafficTimers();
+  if (window.clashfox && typeof window.clashfox.onTrayMenuVisibility === 'function') {
+    window.clashfox.onTrayMenuVisibility((payload = {}) => {
+      setTrayMenuRendererVisible(Boolean(payload && payload.visible));
+      if (trayMenuRendererVisible && menuData) {
+        if (chartEl && !trafficState.trafficTimer && !trafficState.overviewTimer) {
+          startTrafficTimers();
+        }
+      }
+    });
   }
 }
 
@@ -1538,21 +1786,13 @@ window.addEventListener('keydown', (event) => {
   runActionForItem(item).catch(() => {});
 });
 
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') {
-    blockClickUntil = Date.now() + 220;
-    startTrafficTimers();
-  } else {
-    suppressSubmenuUntil = Date.now() + 250;
-  }
-});
-
 window.addEventListener('blur', () => {
-  suppressSubmenuUntil = Date.now() + 250;
+  // Keep submenu hover responsive; main process handles actual window closing.
 });
 
 window.addEventListener('beforeunload', () => {
   stopTrafficTimers();
+  stopTrayMenuSettingsRefresh();
   persistTrafficCache();
 });
 

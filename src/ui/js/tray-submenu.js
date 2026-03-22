@@ -7,6 +7,8 @@ let connectivityRefreshTimer = null;
 let lastResizeWidth = 0;
 let lastResizeHeight = 0;
 let lastHoverSent = false;
+let lastSettingsSignature = '';
+let trayThemeSettingsSnapshot = null;
 let panelChartSocket = null;
 let panelChartReconnectTimer = null;
 let panelChartReconnectAttempts = 0;
@@ -31,18 +33,42 @@ const PANEL_TRAFFIC_HISTORY_LIMIT = 18;
 const PANEL_TRAFFIC_INTERVAL_MS = 1500;
 const PANEL_TRAFFIC_RECONNECT_BASE_MS = 1200;
 const PANEL_TRAFFIC_RECONNECT_MAX_MS = 10000;
+let submenuRendererVisible = false;
 
-async function applyTrayTheme() {
+async function applyTrayTheme(preloadedSettings = null) {
   try {
     if (!document.body) {
       return;
     }
     let preference = '';
-    if (window.clashfox && typeof window.clashfox.readSettings === 'function') {
+    const nextSettings = preloadedSettings && typeof preloadedSettings === 'object'
+      ? preloadedSettings
+      : null;
+    if (nextSettings) {
+      trayThemeSettingsSnapshot = {
+        ...(trayThemeSettingsSnapshot || {}),
+        ...nextSettings,
+      };
+    }
+    const settings = trayThemeSettingsSnapshot && typeof trayThemeSettingsSnapshot === 'object'
+      ? trayThemeSettingsSnapshot
+      : nextSettings;
+    if (settings) {
+      const appearance = settings && typeof settings.appearance === 'object' ? settings.appearance : {};
+      preference = String(
+        settings.theme
+        || appearance.theme
+        || appearance.colorMode
+        || '',
+      ).trim().toLowerCase();
+    } else if (window.clashfox && typeof window.clashfox.readSettings === 'function') {
       const response = await window.clashfox.readSettings();
       const settings = response && response.ok && response.data && typeof response.data === 'object'
         ? response.data
         : null;
+      if (settings) {
+        trayThemeSettingsSnapshot = settings;
+      }
       preference = String(
         (settings && settings.theme)
         || (settings && settings.appearance && settings.appearance.theme)
@@ -196,6 +222,40 @@ function closePanelTrafficSocket() {
   }
 }
 
+function stopSubmenuLiveActivity() {
+  stopConnectivityRefresh();
+  closePanelTrafficSocket();
+}
+
+function startSubmenuLiveActivity() {
+  if (!submenuRendererVisible) {
+    return;
+  }
+  if (submenuKey === 'network') {
+    ensureConnectivityRefresh();
+  }
+  if (submenuKey === 'panel') {
+    openPanelTrafficSocket().catch(() => {});
+    renderPanelTrafficChart();
+  }
+}
+
+function setSubmenuRendererVisible(nextVisible) {
+  const visible = Boolean(nextVisible);
+  if (submenuRendererVisible === visible) {
+    return;
+  }
+  submenuRendererVisible = visible;
+  if (!visible) {
+    stopSubmenuLiveActivity();
+    return;
+  }
+  if (submenuKey) {
+    renderSubmenu();
+  }
+  startSubmenuLiveActivity();
+}
+
 function schedulePanelTrafficReconnect() {
   stopPanelTrafficReconnect();
   const delay = Math.min(
@@ -289,6 +349,9 @@ function buildPanelProviderTrafficMarkup(payload = null) {
 }
 
 function renderPanelTrafficChart() {
+  if (!submenuRendererVisible) {
+    return;
+  }
   const barsEl = document.getElementById('panelChartBars');
   if (!barsEl) return;
   const topLabelEl = document.getElementById('panelChartTopLabel');
@@ -363,7 +426,7 @@ function applyPanelTrafficSnapshot(payload = {}) {
 }
 
 async function openPanelTrafficSocket() {
-  if (submenuKey !== 'panel' || typeof WebSocket !== 'function') {
+  if (!submenuRendererVisible || submenuKey !== 'panel' || typeof WebSocket !== 'function') {
     return;
   }
   const nextUrl = await getPanelTrafficSocketUrl();
@@ -439,12 +502,12 @@ function applyConnectivitySnapshot(snapshot) {
   renderSubmenu();
 }
 
-async function refreshConnectivityBadge() {
-  if (submenuKey !== 'network' || !window.clashfox || typeof window.clashfox.trayMenuGetConnectivity !== 'function') {
+async function refreshConnectivityBadge(force = false) {
+  if (!submenuRendererVisible || submenuKey !== 'network' || !window.clashfox || typeof window.clashfox.trayMenuGetConnectivity !== 'function') {
     return;
   }
   try {
-    const snapshot = await window.clashfox.trayMenuGetConnectivity();
+    const snapshot = await window.clashfox.trayMenuGetConnectivity(Boolean(force));
     applyConnectivitySnapshot(snapshot);
   } catch {
     // ignore
@@ -452,16 +515,16 @@ async function refreshConnectivityBadge() {
 }
 
 function ensureConnectivityRefresh() {
-  if (submenuKey !== 'network') {
+  if (!submenuRendererVisible || submenuKey !== 'network') {
     stopConnectivityRefresh();
     return;
   }
-  refreshConnectivityBadge();
+  refreshConnectivityBadge(true);
   if (connectivityRefreshTimer) {
     return;
   }
   connectivityRefreshTimer = setInterval(() => {
-    refreshConnectivityBadge();
+    refreshConnectivityBadge(false);
   }, CONNECTIVITY_REFRESH_MS);
 }
 
@@ -782,6 +845,9 @@ function resizeSubmenuToContent() {
 }
 
 function renderSubmenu() {
+  if (!submenuRendererVisible) {
+    return;
+  }
   submenuListEl.innerHTML = '';
   getVisibleSubmenuItems().forEach((item) => {
     submenuListEl.appendChild(makeRow(item));
@@ -796,6 +862,9 @@ function setSubmenu(payload) {
   submenuItems = Array.isArray(payload && payload.items) ? payload.items : [];
   if (submenuRootEl) {
     submenuRootEl.dataset.submenuKey = submenuKey;
+  }
+  if (!submenuRendererVisible) {
+    return;
   }
   renderSubmenu();
   ensureConnectivityRefresh();
@@ -818,6 +887,12 @@ if (window.clashfox && typeof window.clashfox.onTraySubmenuUpdate === 'function'
   });
 }
 
+if (window.clashfox && typeof window.clashfox.onTraySubmenuVisibility === 'function') {
+  window.clashfox.onTraySubmenuVisibility((payload = {}) => {
+    setSubmenuRendererVisible(Boolean(payload && payload.visible));
+  });
+}
+
 if (window.clashfox && typeof window.clashfox.onSystemThemeChange === 'function') {
   window.clashfox.onSystemThemeChange(() => {
     applyTrayTheme().catch(() => {});
@@ -825,8 +900,26 @@ if (window.clashfox && typeof window.clashfox.onSystemThemeChange === 'function'
 }
 
 if (window.clashfox && typeof window.clashfox.onSettingsUpdated === 'function') {
-  window.clashfox.onSettingsUpdated(() => {
-    applyTrayTheme().catch(() => {});
+  window.clashfox.onSettingsUpdated((settings = {}) => {
+    const appearance = settings && typeof settings.appearance === 'object' ? settings.appearance : {};
+    const mergedSettings = {
+      ...(trayThemeSettingsSnapshot || {}),
+      ...(settings || {}),
+    };
+    const nextSignature = String(
+      mergedSettings.theme
+      || (mergedSettings.appearance && mergedSettings.appearance.theme)
+      || (mergedSettings.appearance && mergedSettings.appearance.colorMode)
+      || 'auto',
+    ).trim().toLowerCase();
+    if (nextSignature === lastSettingsSignature) {
+      return;
+    }
+    lastSettingsSignature = nextSignature;
+    if (!submenuRendererVisible) {
+      return;
+    }
+    applyTrayTheme(mergedSettings).catch(() => {});
   });
 }
 
@@ -848,6 +941,7 @@ if (window.matchMedia) {
     media.addListener(handleThemeChange);
   }
 }
+
 
 if (window.clashfox && typeof window.clashfox.traySubmenuHover === 'function') {
   const sendHover = (nextValue) => {
@@ -877,3 +971,7 @@ if (submenuListEl) {
     }
   });
 }
+
+window.addEventListener('beforeunload', () => {
+  stopSubmenuLiveActivity();
+});

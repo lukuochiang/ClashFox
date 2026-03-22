@@ -11,6 +11,8 @@ const { spawn, spawnSync, execFile } = require('child_process');
 const isDev = !app.isPackaged;
 const ROOT_DIR = isDev ? path.join(__dirname, '..') : process.resourcesPath;
 const APP_PATH = app.getAppPath ? app.getAppPath() : ROOT_DIR;
+const DEFAULT_SETTINGS_PATH = path.join(APP_PATH, 'static', 'default-settings.json');
+let cachedDefaultSettings = null;
 app.name = 'ClashFox';
 app.setName('ClashFox');
 const APP_DATA_DIR = path.join(app.getPath('appData'), app.getName());
@@ -19,15 +21,38 @@ app.setPath('userData', WORK_DIR);
 // app.setPath('cache', path.join(WORK_DIR, 'Cache'));
 // app.setPath('logs', path.join(WORK_DIR, 'Logs'));
 
+function expandUserHome(pathStr) {
+  if (!pathStr) return pathStr;
+
+  // macOS/Linux: ~ -> /Users/username
+  if (pathStr.startsWith('~')) {
+    return path.join(os.homedir(), pathStr.slice(1));
+  }
+
+  // Windows: %USERPROFILE% -> C:\Users\username
+  if (process.platform === 'win32' && pathStr.startsWith('%USERPROFILE%')) {
+    return pathStr.replace('%USERPROFILE%', process.env.USERPROFILE || '');
+  }
+
+  return pathStr;
+}
+
 function ensureAppDirs() {
   try {
-    fs.mkdirSync(APP_DATA_DIR, { recursive: true });
+    const userAppDataDir = resolveUserAppDataDirFromSettings();
+    const coreDir = resolveCoreDirectoryFromSettings();
+    const configDir = resolveConfigDirectoryFromSettings();
+    const dataDir = resolveDataDirectoryFromSettings();
+    const logDir = resolveLogDirectoryFromSettings();
+    const pidDir = resolvePidDirectoryFromSettings();
+
+    fs.mkdirSync(userAppDataDir, { recursive: true });
     fs.mkdirSync(WORK_DIR, { recursive: true });
-    fs.mkdirSync(path.join(APP_DATA_DIR, 'core'), { recursive: true });
-    fs.mkdirSync(path.join(APP_DATA_DIR, 'config'), { recursive: true });
-    fs.mkdirSync(path.join(APP_DATA_DIR, 'data'), { recursive: true });
-    fs.mkdirSync(path.join(APP_DATA_DIR, 'logs'), { recursive: true });
-    fs.mkdirSync(path.join(APP_DATA_DIR, 'runtime'), { recursive: true });
+    fs.mkdirSync(coreDir, { recursive: true });
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.mkdirSync(logDir, { recursive: true });
+    fs.mkdirSync(pidDir, { recursive: true });
   } catch {
     // ignore
   }
@@ -40,6 +65,7 @@ let trayMenuVisible = false;
 let trayMenuData = null;
 let trayMenuBuildInProgress = false;
 let trayMenuBuildPending = false;
+let trayMenuWarmupPromise = null;
 let trayMenuContentHeight = 420;
 let trayMenuRefreshTimer = null;
 let trayMenuRendererReady = false;
@@ -82,9 +108,16 @@ let globalSettings = {
   debugMode: false, // 是否启用调试模式
 };
 
+const TRAY_SIGNATURE_OMIT_KEYS = new Set(['generatedAt', 'updatedAt']);
+
 function buildTrayMenuDataSignature(value = null) {
   try {
-    return JSON.stringify(value || {});
+    return JSON.stringify(value || {}, (key, val) => {
+      if (TRAY_SIGNATURE_OMIT_KEYS.has(key)) {
+        return undefined;
+      }
+      return val;
+    });
   } catch {
     return '';
   }
@@ -115,6 +148,21 @@ function cloneTrayProxyMenuCacheEntry(entry = null) {
     outboundProxyCard,
     outboundProviderSubmenus,
   };
+}
+
+function sendTrayWindowVisibility(windowName, visible) {
+  const payload = { visible: Boolean(visible) };
+  if (windowName === 'menu' && trayMenuWindow && !trayMenuWindow.isDestroyed()) {
+    trayMenuWindow.webContents.send('clashfox:trayMenu:visibility', payload);
+    return;
+  }
+  if (windowName === 'submenu' && traySubmenuWindow && !traySubmenuWindow.isDestroyed()) {
+    traySubmenuWindow.webContents.send('clashfox:traySubmenu:visibility', payload);
+    return;
+  }
+  if (windowName === 'panel' && trayPanelWindow && !trayPanelWindow.isDestroyed()) {
+    trayPanelWindow.webContents.send('clashfox:trayPanel:visibility', payload);
+  }
 }
 
 function resetTrayProxyMenuCache() {
@@ -177,14 +225,7 @@ const RESTART_TRANSITION_MIN_MS = 450;
 const RESTART_TRANSITION_MAX_MS = 4000;
 const RESTART_TRANSITION_RATIO = 0.5;
 let trayCoreStartupEstimateMs = 1500;
-const PRIVILEGED_COMMANDS = new Set([
-  'install',
-  'delete-backups',
-  'system-proxy-enable',
-  'system-proxy-disable',
-  'system-proxy-status',
-  'track-connections'
-]);
+
 const DANGEROUS_BRIDGE_ARGS = new Set(['--config-dir', '--core-dir', '--data-dir']);
 const DANGEROUS_BRIDGE_ARG_PREFIXES = ['--config-dir=', '--core-dir=', '--data-dir='];
 const SAFE_BRIDGE_COMMANDS = new Set([
@@ -235,7 +276,6 @@ function sanitizeBridgeArguments(args = []) {
   return cleaned;
 }
 const HELPER_SOCKET_PATH = '/var/run/com.clashfox.helper.sock';
-const HELPER_APP_BUNDLE_DIR = '/Applications/ClashFox.app/Contents/Resources/helper';
 const HELPER_USER_DIR = path.join(APP_DATA_DIR, 'helper');
 const HELPER_LEGACY_DIR = '/Library/Application Support/ClashFox/helper';
 const HELPER_TOKEN_PATH = path.join(HELPER_USER_DIR, 'token');
@@ -294,7 +334,6 @@ let connectivityQualityFetchPromise = null;
 const HELPER_UPDATE_CACHE_TTL_MS = 3 * 60 * 1000;
 let helperUpdateCache = {
   checkedAt: 0,
-  acceptBeta: null,
   result: null,
 };
 const WORLDWIDE_TRACK_LIMIT = 320;
@@ -354,12 +393,7 @@ function getUiLabels() {
 }
 
 function getConfigPathFromSettings() {
-  const settings = readAppSettings();
-  const configPath = settings && typeof settings.configFile === 'string' ? settings.configFile.trim() : '';
-  if (configPath && fs.existsSync(configPath)) {
-    return configPath;
-  }
-  return path.join(APP_DATA_DIR, 'config', 'default.yaml');
+  return resolveConfigPathFromSettingsOrArgs(readAppSettings());
 }
 
 function getNavLabels() {
@@ -515,6 +549,38 @@ function refreshTrayMenuLabelsOnly() {
   }
 }
 
+function pickSettingsSubset(source = {}, keys = []) {
+  const output = {};
+  const target = source && typeof source === 'object' ? source : {};
+  keys.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(target, key)) {
+      output[key] = target[key];
+    }
+  });
+  return output;
+}
+
+function buildTrayLabelsSignature(settings = {}) {
+  const appearance = settings && typeof settings.appearance === 'object' ? settings.appearance : {};
+  return JSON.stringify({
+    theme: String(settings.theme || appearance.theme || appearance.colorMode || '').trim().toLowerCase(),
+    lang: String(settings.lang || settings.language || settings.locale || appearance.lang || appearance.language || appearance.locale || '').trim().toLowerCase(),
+  });
+}
+
+function buildTrayStructureSignature(settings = {}) {
+  return JSON.stringify(pickSettingsSubset(settings, [
+    'proxy',
+    'providerTrafficEnabled',
+    'panelEnabled',
+    'kernelManagerEnabled',
+    'directoryLocationsEnabled',
+    'trackersEnabled',
+    'foxboardEnabled',
+    'copyShellExportCommandEnabled',
+  ]));
+}
+
 async function openDirectoryInFinder(targetPath) {
   try {
     if (!targetPath || typeof targetPath !== 'string') {
@@ -546,20 +612,117 @@ function withMacTrayGlyph(key, label) {
   return glyph ? `${glyph} ${text}` : text;
 }
 
-function readAppSettings() {
+function readDefaultSettingsFile() {
+  if (cachedDefaultSettings) {
+    return cachedDefaultSettings;
+  }
   try {
-    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
+    if (DEFAULT_SETTINGS_PATH && fs.existsSync(DEFAULT_SETTINGS_PATH)) {
+      const raw = fs.readFileSync(DEFAULT_SETTINGS_PATH, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        cachedDefaultSettings = parsed;
+        return cachedDefaultSettings;
+      }
+    }
+  } catch {
+    // ignore and fallback
+  }
+  cachedDefaultSettings = {};
+  return cachedDefaultSettings;
+}
+
+function mergeDefaultSettings(base = {}, overrides = {}) {
+  const merged = { ...base, ...overrides };
+  const mergeKey = (key) => {
+    const baseObj = base && typeof base === 'object' && base[key] && typeof base[key] === 'object' ? base[key] : {};
+    const overrideObj = overrides && typeof overrides === 'object' && overrides[key] && typeof overrides[key] === 'object'
+      ? overrides[key]
+      : {};
+    merged[key] = { ...baseObj, ...overrideObj };
+  };
+  mergeKey('appearance');
+  mergeKey('trayMenu');
+  mergeKey('panelManager');
+  mergeKey('kernel');
+  mergeKey('proxy');
+  mergeKey('device');
+  mergeKey('helper');
+  return merged;
+}
+
+function getSettingsPath() {
+  return path.join(APP_DATA_DIR, 'runtime', 'settings.json');
+}
+
+let appSettingsCache = null;
+
+function cloneSettingsSnapshot(settings = null) {
+  if (!settings || typeof settings !== 'object') {
+    return null;
+  }
+  try {
+    return JSON.parse(JSON.stringify(settings));
+  } catch {
+    return { ...settings };
+  }
+}
+
+function readAppSettings() {
+  if (appSettingsCache && typeof appSettingsCache === 'object') {
+    const snapshot = cloneSettingsSnapshot(appSettingsCache) || {};
+    if ((!snapshot.helperStatus || typeof snapshot.helperStatus !== 'object')
+      && snapshot.helper && typeof snapshot.helper === 'object') {
+      snapshot.helperStatus = { ...snapshot.helper };
+    }
+    return snapshot;
+  }
+  try {
+    const settingsPath = getSettingsPath();
     if (!fs.existsSync(settingsPath)) {
-      return {};
+      const fallback = mergeAppearanceAliases(
+        mergePanelManagerAliases(
+          mergeUserDataPathAliases(
+            normalizeSettingsForStorage(readDefaultSettingsFile()),
+          ),
+        ),
+      );
+      appSettingsCache = cloneSettingsSnapshot(fallback);
+      return cloneSettingsSnapshot(fallback) || {};
     }
     const raw = fs.readFileSync(settingsPath, 'utf8');
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') {
-      return {};
+      const fallback = mergeAppearanceAliases(
+        mergePanelManagerAliases(
+          mergeUserDataPathAliases(
+            normalizeSettingsForStorage(readDefaultSettingsFile()),
+          ),
+        ),
+      );
+      appSettingsCache = cloneSettingsSnapshot(fallback);
+      return cloneSettingsSnapshot(fallback) || {};
     }
-    return mergeAppearanceAliases(mergePanelManagerAliases(mergeUserDataPathAliases(normalizeSettingsForStorage(parsed))));
+    const merged = mergeDefaultSettings(readDefaultSettingsFile(), parsed);
+    const normalized = mergeAppearanceAliases(
+      mergePanelManagerAliases(
+        mergeUserDataPathAliases(
+          normalizeSettingsForStorage(merged),
+        ),
+      ),
+    );
+    appSettingsCache = cloneSettingsSnapshot(normalized);
+    return cloneSettingsSnapshot(normalized) || {};
   } catch {
-    return {};
+    const fallback = mergeAppearanceAliases(
+      mergePanelManagerAliases(
+        mergeUserDataPathAliases(
+          normalizeSettingsForStorage(readDefaultSettingsFile()),
+        ),
+      ),
+    );
+    appSettingsCache = cloneSettingsSnapshot(fallback);
+    return cloneSettingsSnapshot(fallback) || {};
   }
 }
 
@@ -724,14 +887,18 @@ function mapOrderedFields(source = {}, orderedKeys = []) {
 }
 
 function buildDefaultDirectorySettings() {
-  const configDir = path.join(APP_DATA_DIR, 'config');
+  // 使用相对路径，方便跨用户移植
+  const userAppDataDir = process.platform === 'win32'
+    ? '%USERPROFILE%/AppData/Roaming/ClashFox'
+    : '~/Library/Application Support/ClashFox';
   return {
-    configDir,
-    coreDir: path.join(APP_DATA_DIR, 'core'),
-    dataDir: path.join(APP_DATA_DIR, 'data'),
-    logDir: path.join(APP_DATA_DIR, 'logs'),
-    pidDir: path.join(APP_DATA_DIR, 'runtime'),
-    configFile: path.join(configDir, 'default.yaml'),
+    userAppDataDir,
+    configFile: 'default.yaml',
+    configDir: 'config',
+    coreDir: 'core',
+    dataDir: 'data',
+    logDir: 'logs',
+    pidDir: 'runtime',
   };
 }
 
@@ -828,6 +995,7 @@ function mergeAppearanceAliases(settings = {}) {
     providerTrafficEnabled: readTrayBoolean('providerTrafficEnabled', readTrayBoolean('trayMenuProviderTrafficEnabled', true)),
     trackersEnabled: readTrayBoolean('trackersEnabled', readTrayBoolean('trayMenuTrackersEnabled', true)),
     foxboardEnabled: readTrayBoolean('foxboardEnabled', readTrayBoolean('trayMenuFoxboardEnabled', true)),
+    panelEnabled: readTrayBoolean('panelEnabled', readTrayBoolean('trayMenuPanelEnabled', false)),
     kernelManagerEnabled: readTrayBoolean('kernelManagerEnabled', readTrayBoolean('trayMenuKernelManagerEnabled', true)),
     directoryLocationsEnabled: readTrayBoolean('directoryLocationsEnabled', readTrayBoolean('trayMenuDirectoryLocationsEnabled', true)),
     copyShellExportCommandEnabled: readTrayBoolean('copyShellExportCommandEnabled', readTrayBoolean('trayMenuCopyShellExportCommandEnabled', true)),
@@ -853,8 +1021,6 @@ function normalizeKernelSettings(value = {}) {
     'language',
     'languageVersion',
     'buildTime',
-    'source',
-    'updatedAt',
   ]);
   if (!Object.keys(ordered).length) {
     return {};
@@ -864,7 +1030,7 @@ function normalizeKernelSettings(value = {}) {
 
 function normalizeDeviceSettings(value = {}, overviewValue = {}) {
   const device = value && typeof value === 'object' ? value : {};
-  const snapshot = resolveCurrentDeviceSnapshot(normalizeTextValue(device.source) || 'electron');
+  const snapshot = resolveCurrentDeviceSnapshot('electron');
   const user = normalizeTextValue(device.user) || snapshot.user;
   const userRealName = normalizeTextValue(device.userRealName) || snapshot.userRealName;
   const computerName = normalizeTextValue(device.computerName) || normalizeTextValue(device.displayName) || snapshot.computerName;
@@ -878,8 +1044,6 @@ function normalizeDeviceSettings(value = {}, overviewValue = {}) {
     os: osName,
     version,
     build,
-    source: normalizeTextValue(device.source) || snapshot.source,
-    updatedAt: normalizeTextValue(device.updatedAt) || snapshot.updatedAt,
   };
   const ordered = mapOrderedFields(normalized, [
     'user',
@@ -888,8 +1052,6 @@ function normalizeDeviceSettings(value = {}, overviewValue = {}) {
     'os',
     'version',
     'build',
-    'source',
-    'updatedAt',
   ]);
   if (!Object.keys(ordered).length) {
     return {};
@@ -924,21 +1086,32 @@ function normalizeSettingsForStorage(input = {}) {
     return fallback;
   };
 
-  const configPathFromLegacy = typeof parsed.configPath === 'string' ? normalizeTextValue(parsed.configPath) : '';
+  const userAppDataDir = normalizeTextValue(parsed.userAppDataDir) || defaultDirs.userAppDataDir;
+  const normalizeConfigFileName = (value = '') => {
+    const text = normalizeTextValue(value);
+    if (!text) {
+      return '';
+    }
+    const normalized = text.replace(/[\\/]+$/, '');
+    const parts = normalized.split(/[\\/]/).filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : normalized;
+  };
+  const configuredConfigFile = normalizeConfigFileName(parsed.configFile) || defaultDirs.configFile;
   const configuredConfigDir = normalizeTextValue(parsed.configDir) || defaultDirs.configDir;
   const configuredCoreDir = normalizeTextValue(parsed.coreDir) || defaultDirs.coreDir;
   const configuredDataDir = normalizeTextValue(parsed.dataDir) || defaultDirs.dataDir;
   const configuredLogDir = normalizeTextValue(parsed.logDir) || defaultDirs.logDir;
   const configuredPidDir = normalizeTextValue(parsed.pidDir) || defaultDirs.pidDir;
-  const configuredConfigFile = normalizeTextValue(parsed.configFile) || configPathFromLegacy;
   parsed.userDataPaths = {
-    configFile: configuredConfigFile || path.join(configuredConfigDir, 'default.yaml'),
+    userAppDataDir,
+    configFile: configuredConfigFile,
     configDir: configuredConfigDir,
     coreDir: configuredCoreDir,
     dataDir: configuredDataDir,
     logDir: configuredLogDir,
     pidDir: configuredPidDir,
   };
+  delete parsed.userAppDataDir;
   delete parsed.configFile;
   delete parsed.configDir;
   delete parsed.coreDir;
@@ -995,6 +1168,7 @@ function normalizeSettingsForStorage(input = {}) {
     windowWidth: Number.parseInt(String(parsed.windowWidth ?? ''), 10) || DEFAULT_MAIN_WINDOW_WIDTH,
     windowHeight: Number.parseInt(String(parsed.windowHeight ?? ''), 10) || DEFAULT_MAIN_WINDOW_HEIGHT,
     mainWindowClosed: Boolean(parsed.mainWindowClosed),
+    sidebarCollapsed: Boolean(parsed.sidebarCollapsed),
     generalPageSize,
     logLines: Number.parseInt(String(parsed.logLines ?? ''), 10) || 10,
     logAutoRefresh: Boolean(parsed.logAutoRefresh),
@@ -1033,6 +1207,14 @@ function normalizeSettingsForStorage(input = {}) {
           : trayMenuConfig.foxboardEnabled ?? trayMenuConfig.trayMenuFoxboardEnabled),
       true,
     ),
+    panelEnabled: normalizeBool(
+      Object.prototype.hasOwnProperty.call(parsed, 'panelEnabled')
+        ? parsed.panelEnabled
+        : (Object.prototype.hasOwnProperty.call(parsed, 'trayMenuPanelEnabled')
+          ? parsed.trayMenuPanelEnabled
+          : trayMenuConfig.panelEnabled ?? trayMenuConfig.trayMenuPanelEnabled),
+      false,
+    ),
     kernelManagerEnabled: normalizeBool(
       Object.prototype.hasOwnProperty.call(parsed, 'kernelManagerEnabled')
         ? parsed.kernelManagerEnabled
@@ -1067,14 +1249,18 @@ function normalizeSettingsForStorage(input = {}) {
   delete parsed.providerTrafficEnabled;
   delete parsed.trackersEnabled;
   delete parsed.foxboardEnabled;
+  delete parsed.panelEnabled;
   delete parsed.kernelManagerEnabled;
   delete parsed.directoryLocationsEnabled;
+  delete parsed.copyShellExportCommandEnabled;
   delete parsed.trayMenuChartEnabled;
   delete parsed.trayMenuProviderTrafficEnabled;
   delete parsed.trayMenuTrackersEnabled;
   delete parsed.trayMenuFoxboardEnabled;
+  delete parsed.trayMenuPanelEnabled;
   delete parsed.trayMenuKernelManagerEnabled;
   delete parsed.trayMenuDirectoryLocationsEnabled;
+  delete parsed.trayMenuCopyShellExportCommandEnabled;
   delete parsed.windowWidth;
   delete parsed.windowHeight;
   delete parsed.mainWindowClosed;
@@ -1097,6 +1283,26 @@ function normalizeSettingsForStorage(input = {}) {
   delete parsed.captureSocksPort;
   delete parsed.captureTunMode;
   delete parsed.captureAllowLan;
+
+  const proxy = parsed.proxy && typeof parsed.proxy === 'object' ? parsed.proxy : {};
+  const mode = normalizeTextValue(proxy.mode) || 'rule';
+  parsed.proxy = {
+    mode,
+    systemProxy: normalizeBool(parsed.systemProxy ?? proxy.systemProxy, false),
+    tun: normalizeBool(parsed.tun ?? proxy.tun, false),
+    stack: normalizeTextValue(parsed.stack || proxy.stack) || 'Mixed',
+    mixedPort: normalizePort(parsed.mixedPort ?? proxy.mixedPort, 7893),
+    port: normalizePort(parsed.port ?? proxy.port, 7890),
+    socksPort: normalizePort(parsed.socksPort ?? proxy.socksPort, 7891),
+    allowLan: normalizeBool(parsed.allowLan ?? proxy.allowLan, true),
+  };
+  delete parsed.systemProxy;
+  delete parsed.tun;
+  delete parsed.stack;
+  delete parsed.mixedPort;
+  delete parsed.port;
+  delete parsed.socksPort;
+  delete parsed.allowLan;
 
   const legacyKernelVersion = normalizeKernelVersionValue(parsed.kernelVersion);
   const kernelCandidate = normalizeKernelVersionValue(
@@ -1121,25 +1327,50 @@ function normalizeSettingsForStorage(input = {}) {
 
   parsed.device = normalizeDeviceSettings(parsed.device, {});
   delete parsed.overview;
+  delete parsed.sidebarCollapsed;
+  delete parsed.mihomoStatus;
+  const helperSource = parsed.helper && typeof parsed.helper === 'object' ? parsed.helper : {};
+  const helperLegacySource = parsed.helperStatus && typeof parsed.helperStatus === 'object'
+    ? parsed.helperStatus
+    : {};
+  parsed.helper = {
+    state: normalizeTextValue(helperSource.state || helperLegacySource.state) || 'unknown',
+    installed: normalizeBool(helperSource.installed ?? helperLegacySource.installed, false),
+    running: normalizeBool(helperSource.running ?? helperLegacySource.running, false),
+    binaryExists: normalizeBool(helperSource.binaryExists ?? helperLegacySource.binaryExists, false),
+    plistExists: normalizeBool(helperSource.plistExists ?? helperLegacySource.plistExists, false),
+    launchdLoaded: normalizeBool(helperSource.launchdLoaded ?? helperLegacySource.launchdLoaded, false),
+    socketExists: normalizeBool(helperSource.socketExists ?? helperLegacySource.socketExists, false),
+    socketPingOk: normalizeBool(helperSource.socketPingOk ?? helperLegacySource.socketPingOk, false),
+    httpPingOk: normalizeBool(helperSource.httpPingOk ?? helperLegacySource.httpPingOk, false),
+    version: normalizeTextValue(helperSource.version || helperSource.helperVersion || helperLegacySource.version || helperLegacySource.helperVersion),
+    onlineVersion: normalizeTextValue(helperSource.onlineVersion || helperSource.helperOnlineVersion || helperLegacySource.onlineVersion || helperLegacySource.helperOnlineVersion),
+    updateAvailable: normalizeBool(
+      Object.prototype.hasOwnProperty.call(helperSource, 'updateAvailable')
+        ? helperSource.updateAvailable
+        : (Object.prototype.hasOwnProperty.call(helperSource, 'helperUpdateAvailable')
+          ? helperSource.helperUpdateAvailable
+          : (Object.prototype.hasOwnProperty.call(helperLegacySource, 'updateAvailable')
+            ? helperLegacySource.updateAvailable
+            : helperLegacySource.helperUpdateAvailable)),
+      false,
+    ),
+    updateSource: normalizeTextValue(helperSource.updateSource || helperSource.helperUpdateSource || helperLegacySource.updateSource || helperLegacySource.helperUpdateSource),
+    logPath: normalizeTextValue(helperSource.logPath || helperLegacySource.logPath) || '/var/log/clashfox-helper.log',
+  };
+  delete parsed.helperStatus;
 
   const ordered = {};
   const priority = [
     'proxy',
-    'systemProxy',
-    'tun',
-    'stack',
-    'mixedPort',
-    'port',
-    'socksPort',
-    'allowLan',
     'appearance',
     'trayMenu',
     'userDataPaths',
     'panelManager',
     'kernel',
     'device',
+    'helper',
     'helperStatus',
-    'mihomoStatus',
     'overviewOrder',
   ];
   priority.forEach((key) => {
@@ -1163,24 +1394,117 @@ function resolveCheckUpdateUrlFromSettings() {
 
 function resolveConfigDirectoryFromSettings() {
   const settings = readAppSettings();
-  const configured = settings && typeof settings.configDir === 'string'
-    ? settings.configDir.trim()
+  const configured = settings
+    && settings.userDataPaths
+    && typeof settings.userDataPaths.configDir === 'string'
+    ? settings.userDataPaths.configDir.trim()
     : '';
   if (configured) {
-    return path.resolve(configured);
+    const userAppDataDir = settings
+      && settings.userDataPaths
+      && typeof settings.userDataPaths.userAppDataDir === 'string'
+      ? settings.userDataPaths.userAppDataDir.trim()
+      : process.platform === 'win32'
+        ? '%USERPROFILE%/AppData/Roaming/ClashFox'
+        : '~/Library/Application Support/ClashFox';
+    return path.resolve(expandUserHome(userAppDataDir), configured);
   }
   return path.join(APP_DATA_DIR, 'config');
 }
 
 function resolveCoreDirectoryFromSettings() {
   const settings = readAppSettings();
-  const configured = settings && typeof settings.coreDir === 'string'
-    ? settings.coreDir.trim()
+  const configured = settings
+    && settings.userDataPaths
+    && typeof settings.userDataPaths.coreDir === 'string'
+    ? settings.userDataPaths.coreDir.trim()
     : '';
   if (configured) {
-    return path.resolve(configured);
+    const userAppDataDir = settings
+      && settings.userDataPaths
+      && typeof settings.userDataPaths.userAppDataDir === 'string'
+      ? settings.userDataPaths.userAppDataDir.trim()
+      : process.platform === 'win32'
+        ? '%USERPROFILE%/AppData/Roaming/ClashFox'
+        : '~/Library/Application Support/ClashFox';
+    return path.resolve(expandUserHome(userAppDataDir), configured);
   }
   return path.join(APP_DATA_DIR, 'core');
+}
+
+function resolveDataDirectoryFromSettings() {
+  const settings = readAppSettings();
+  const configured = settings
+    && settings.userDataPaths
+    && typeof settings.userDataPaths.dataDir === 'string'
+    ? settings.userDataPaths.dataDir.trim()
+    : '';
+  if (configured) {
+    const userAppDataDir = settings
+      && settings.userDataPaths
+      && typeof settings.userDataPaths.userAppDataDir === 'string'
+      ? settings.userDataPaths.userAppDataDir.trim()
+      : process.platform === 'win32'
+        ? '%USERPROFILE%/AppData/Roaming/ClashFox'
+        : '~/Library/Application Support/ClashFox';
+    return path.resolve(expandUserHome(userAppDataDir), configured);
+  }
+  return path.join(APP_DATA_DIR, 'data');
+}
+
+function resolveLogDirectoryFromSettings() {
+  const settings = readAppSettings();
+  const configured = settings
+    && settings.userDataPaths
+    && typeof settings.userDataPaths.logDir === 'string'
+    ? settings.userDataPaths.logDir.trim()
+    : '';
+  if (configured) {
+    const userAppDataDir = settings
+      && settings.userDataPaths
+      && typeof settings.userDataPaths.userAppDataDir === 'string'
+      ? settings.userDataPaths.userAppDataDir.trim()
+      : process.platform === 'win32'
+        ? '%USERPROFILE%/AppData/Roaming/ClashFox'
+        : '~/Library/Application Support/ClashFox';
+    return path.resolve(expandUserHome(userAppDataDir), configured);
+  }
+  return path.join(APP_DATA_DIR, 'logs');
+}
+
+function resolvePidDirectoryFromSettings() {
+  const settings = readAppSettings();
+  const configured = settings
+    && settings.userDataPaths
+    && typeof settings.userDataPaths.pidDir === 'string'
+    ? settings.userDataPaths.pidDir.trim()
+    : '';
+  if (configured) {
+    const userAppDataDir = settings
+      && settings.userDataPaths
+      && typeof settings.userDataPaths.userAppDataDir === 'string'
+      ? settings.userDataPaths.userAppDataDir.trim()
+      : process.platform === 'win32'
+        ? '%USERPROFILE%/AppData/Roaming/ClashFox'
+        : '~/Library/Application Support/ClashFox';
+    return path.resolve(expandUserHome(userAppDataDir), configured);
+  }
+  return path.join(APP_DATA_DIR, 'runtime');
+}
+
+function resolveUserAppDataDirFromSettings() {
+  const settings = readAppSettings();
+  const configured = settings
+    && settings.userDataPaths
+    && typeof settings.userDataPaths.userAppDataDir === 'string'
+    ? settings.userDataPaths.userAppDataDir.trim()
+    : '';
+  if (configured) {
+    return path.resolve(expandUserHome(configured));
+  }
+  return path.resolve(expandUserHome(process.platform === 'win32'
+    ? '%USERPROFILE%/AppData/Roaming/ClashFox'
+    : '~/Library/Application Support/ClashFox'));
 }
 
 function formatFileModifiedTime(value) {
@@ -1946,6 +2270,69 @@ async function fetchLatestHelperReleaseFallback() {
   }
 }
 
+async function fetchLatestHelperReleaseViaApi() {
+  try {
+    const release = await new Promise((resolve, reject) => {
+      https.get('https://api.github.com/repos/lukuochiang/ClashFox-Helper/releases?per_page=20', {
+        headers: {
+          'User-Agent': `ClashFox/${app.getVersion() || '0.0.0'}`,
+          Accept: 'application/vnd.github.v3+json',
+        },
+      }, (res) => {
+        const statusCode = Number(res.statusCode || 0);
+        if (statusCode < 200 || statusCode >= 300) {
+          res.resume();
+          reject(new Error(`HTTP_${statusCode}`));
+          return;
+        }
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch (err) {
+            reject(new Error(`Failed to parse helper API response: ${err.message}`));
+          }
+        });
+      }).on('error', reject).setTimeout(15000, () => {
+        reject(new Error('API request timeout'));
+      });
+    });
+    if (!Array.isArray(release)) {
+      return { ok: false, error: 'HELPER_RELEASE_API_EMPTY' };
+    }
+    const selectedRelease = pickLatestRelease(release, false);
+    if (!selectedRelease || typeof selectedRelease !== 'object') {
+      return { ok: false, error: 'HELPER_RELEASE_UNAVAILABLE' };
+    }
+    const version = extractSemverFromText(selectedRelease.tag_name || selectedRelease.name || '');
+    if (!version) {
+      return { ok: false, error: 'FALLBACK_NO_VERSION' };
+    }
+    const asset = pickHelperAssetFromRelease(selectedRelease, process.arch);
+    return {
+      ok: true,
+      version,
+      releaseTag: String(selectedRelease.tag_name || `v${version}`).trim(),
+      releaseName: String(selectedRelease.name || selectedRelease.tag_name || `v${version}`).trim(),
+      releaseUrl: String(selectedRelease.html_url || `https://github.com/lukuochiang/ClashFox-Helper/releases/tag/v${version}`).trim(),
+      prerelease: Boolean(selectedRelease.prerelease),
+      assetName: asset && asset.name ? String(asset.name).trim() : '',
+      assetUrl: asset && asset.browser_download_url ? String(asset.browser_download_url).trim() : '',
+      source: 'latest_api',
+    };
+  } catch (error) {
+    const latestPageInfo = await fetchLatestHelperReleaseFallback().catch(() => null);
+    if (latestPageInfo && latestPageInfo.ok) {
+      return latestPageInfo;
+    }
+    return {
+      ok: false,
+      error: String((error && error.message) || (latestPageInfo && latestPageInfo.error) || 'HELPER_RELEASE_API_FAILED'),
+    };
+  }
+}
+
 function buildHelperAssetFallbackUrls({ releaseTag = '', version = '' } = {}) {
   const tag = String(releaseTag || '').trim().replace(/^\/+/, '') || (version ? `v${version}` : '');
   const ver = String(version || '').trim();
@@ -1972,28 +2359,34 @@ function buildHelperAssetFallbackUrls({ releaseTag = '', version = '' } = {}) {
   return urls;
 }
 
-async function getLatestHelperReleaseInfo({ acceptBeta = false, force = false } = {}) {
+async function getLatestHelperReleaseInfo({ force = false } = {}) {
   const now = Date.now();
-  if (!force && helperUpdateCache.result && helperUpdateCache.acceptBeta === Boolean(acceptBeta) && (now - helperUpdateCache.checkedAt) < HELPER_UPDATE_CACHE_TTL_MS) {
+  if (!force && helperUpdateCache.result && (now - helperUpdateCache.checkedAt) < HELPER_UPDATE_CACHE_TTL_MS) {
     return helperUpdateCache.result;
   }
-  const latestPageInfo = await fetchLatestHelperReleaseFallback();
-  if (latestPageInfo && latestPageInfo.ok) {
-    const result = { ...latestPageInfo };
+  const latestApiInfo = await fetchLatestHelperReleaseViaApi();
+  const latestPageInfo = (!latestApiInfo || !latestApiInfo.ok)
+    ? await fetchLatestHelperReleaseFallback()
+    : null;
+  const sourceInfo = latestApiInfo && latestApiInfo.ok ? latestApiInfo : latestPageInfo;
+  if (sourceInfo && sourceInfo.ok) {
+    const result = { ...sourceInfo };
     result.assetFallbackUrls = buildHelperAssetFallbackUrls({
       releaseTag: result.releaseTag,
       version: result.version,
     });
-    helperUpdateCache = { checkedAt: now, acceptBeta: Boolean(acceptBeta), result };
+    helperUpdateCache = { checkedAt: now, result };
     return result;
   }
   const result = {
     ok: false,
-    error: latestPageInfo && latestPageInfo.error
-      ? String(latestPageInfo.error)
-      : 'CHECK_HELPER_UPDATE_FAILED',
+    error: String(
+      (latestApiInfo && latestApiInfo.error)
+      || (latestPageInfo && latestPageInfo.error)
+      || 'CHECK_HELPER_UPDATE_FAILED',
+    ),
   };
-  helperUpdateCache = { checkedAt: now, acceptBeta: Boolean(acceptBeta), result };
+  helperUpdateCache = { checkedAt: now, result };
   return result;
 }
 
@@ -2069,7 +2462,7 @@ function syncExtractedHelperPackageFiles(binaryPath = '', extractTempDir = '', b
     'uninstall-helper.sh',
     'doctor-helper.sh',
     'check-helper.sh',
-    'VERSION',
+    'VERSION.txt',
     'manifest.json',
     'checksums.txt',
     'CHANGELOG.md',
@@ -2113,7 +2506,7 @@ function syncExtractedHelperPackageFiles(binaryPath = '', extractTempDir = '', b
 }
 
 function resolveHelperWorkspaceDir() {
-  const helperDir = HELPER_APP_BUNDLE_DIR;
+  const helperDir = HELPER_USER_DIR;
   try {
     fs.mkdirSync(helperDir, { recursive: true });
   } catch {
@@ -2139,7 +2532,7 @@ function installHelperBinaryWithSystemAuth(binaryPath = '', version = '') {
       quote(scriptPath),
       quote(targetBinary),
       quote(String(version || '').trim()),
-      quote(HELPER_APP_BUNDLE_DIR),
+      quote(HELPER_USER_DIR),
     ];
     const command = commandParts.join(' ');
     const script = [
@@ -2185,9 +2578,7 @@ function installHelperBinaryWithSystemAuth(binaryPath = '', version = '') {
 }
 
 async function installLatestHelperFromOnline() {
-  const settings = readAppSettings();
-  const acceptBeta = Boolean(settings && settings.acceptBeta);
-  const latest = await getLatestHelperReleaseInfo({ acceptBeta, force: true });
+  const latest = await getLatestHelperReleaseInfo({ force: true });
   if (!latest || !latest.ok) {
     return { ok: false, error: (latest && latest.error) || 'helper_update_unavailable' };
   }
@@ -2215,10 +2606,11 @@ async function installLatestHelperFromOnline() {
     }
     let downloadError = '';
     let downloaded = false;
-    for (const candidateUrl of candidateAssetUrls) {
+    let helperReleaseAsset = null;
+    const tryDownloadCandidate = async (candidateUrl) => {
       const candidateName = path.basename(String(candidateUrl).split('?')[0] || '').trim();
       if (!candidateName) {
-        continue;
+        return false;
       }
       const candidatePath = path.join(packageDir, candidateName);
       if (fs.existsSync(candidatePath)) {
@@ -2228,8 +2620,7 @@ async function installLatestHelperFromOnline() {
             resolvedAssetUrl = candidateUrl;
             resolvedAssetName = candidateName;
             archivePath = candidatePath;
-            downloaded = true;
-            break;
+            return true;
           }
         } catch {
           // ignore broken local asset and continue to download
@@ -2240,14 +2631,34 @@ async function installLatestHelperFromOnline() {
         resolvedAssetUrl = candidateUrl;
         resolvedAssetName = candidateName;
         archivePath = candidatePath;
-        downloaded = true;
-        break;
+        return true;
       } catch (error) {
         downloadError = String((error && error.message) || error || 'download_failed');
+        return false;
+      }
+    };
+    for (const candidateUrl of candidateAssetUrls) {
+      if (await tryDownloadCandidate(candidateUrl)) {
+        downloaded = true;
+        break;
       }
     }
     if (!downloaded) {
-      return { ok: false, error: downloadError || 'helper_download_failed' };
+      helperReleaseAsset = null;
+    }
+    if (!downloaded) {
+      return {
+        ok: false,
+        error: downloadError || 'helper_download_failed',
+        diagnostics: {
+          releaseTag: latest.releaseTag || '',
+          releaseUrl: latest.releaseUrl || '',
+          assetName: resolvedAssetName || '',
+          assetUrl: resolvedAssetUrl || '',
+          candidateAssetUrls,
+          apiAssetName: helperReleaseAsset && helperReleaseAsset.name ? helperReleaseAsset.name : '',
+        },
+      };
     }
     extractTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clashfox-helper-extract-'));
     let binaryPath = '';
@@ -2295,7 +2706,6 @@ async function installLatestHelperFromOnline() {
           bundleHelperDir,
           extractTempDir,
           helperSync: syncResult,
-          expectedBackupPath: path.join(bundleHelperDir, 'install-backup', 'com.clashfox.helper'),
         },
       };
     }
@@ -2311,13 +2721,12 @@ async function installLatestHelperFromOnline() {
       diagnostics: {
         archivePath,
         extractedBinaryPath: binaryPath,
-        packageDir,
-        bundleHelperDir,
-        extractTempDir,
-        helperSync: syncResult,
-        expectedBackupPath: path.join(bundleHelperDir, 'install-backup', 'com.clashfox.helper'),
-      },
-    };
+      packageDir,
+      bundleHelperDir,
+      extractTempDir,
+      helperSync: syncResult,
+    },
+  };
   } catch (err) {
     return {
       ok: false,
@@ -2327,7 +2736,6 @@ async function installLatestHelperFromOnline() {
         packageDir,
         bundleHelperDir,
         extractTempDir,
-        expectedBackupPath: path.join(bundleHelperDir, 'install-backup', 'com.clashfox.helper'),
       },
     };
   } finally {
@@ -2342,9 +2750,7 @@ async function installLatestHelperFromOnline() {
 }
 
 async function checkHelperUpdates({ force = true } = {}) {
-  const settings = readAppSettings();
-  const acceptBeta = Boolean(settings && settings.acceptBeta);
-  const latest = await getLatestHelperReleaseInfo({ acceptBeta, force: Boolean(force) });
+  const latest = await getLatestHelperReleaseInfo({ force: Boolean(force) });
   if (!latest || !latest.ok) {
     return {
       ok: false,
@@ -2353,26 +2759,19 @@ async function checkHelperUpdates({ force = true } = {}) {
     };
   }
   const installedVersion = readInstalledHelperVersion();
-  const bundledVersion = readBundledHelperVersion();
   const onlineVersion = String(latest.version || '').trim();
-  let targetVersion = onlineVersion || bundledVersion || '';
-  if (onlineVersion && bundledVersion) {
-    targetVersion = compareVersions(onlineVersion, bundledVersion) >= 0 ? onlineVersion : bundledVersion;
-  }
   const updateAvailable = Boolean(
     installedVersion
-    && targetVersion
-    && compareVersions(targetVersion, installedVersion) > 0
+    && onlineVersion
+    && compareVersions(onlineVersion, installedVersion) > 0
   );
   return {
     ok: true,
     status: updateAvailable ? 'update_available' : 'up_to_date',
     installedVersion,
     onlineVersion,
-    bundledVersion,
-    targetVersion,
     updateAvailable,
-    updateSource: targetVersion === bundledVersion ? 'bundled' : 'online',
+    updateSource: updateAvailable ? 'online' : '',
     releaseUrl: String(latest.releaseUrl || '').trim(),
     assetName: String(latest.assetName || '').trim(),
   };
@@ -3336,7 +3735,7 @@ async function installMihomo({ githubUser = 'vernesong', version = '', channel =
         });
 
         headReq.on('error', (err) => {
-          reject(new Error(`HEAD request failed: ${err.message}`));
+          reject(new Error(`HEAD fa c: ${err.message}`));
         });
 
         headReq.setTimeout(15000, () => {
@@ -3501,9 +3900,14 @@ async function installMihomo({ githubUser = 'vernesong', version = '', channel =
 
 function writeAppSettings(settings = {}) {
   ensureAppDirs();
-  const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
+  const settingsPath = getSettingsPath();
   const normalized = normalizeSettingsForStorage(settings);
   fs.writeFileSync(settingsPath, `${JSON.stringify(normalized, null, 2)}\n`);
+  appSettingsCache = cloneSettingsSnapshot(mergeAppearanceAliases(
+    mergePanelManagerAliases(
+      mergeUserDataPathAliases(normalized),
+    ),
+  ));
 }
 
 function sanitizeMainWindowDimension(value, fallback, min, max) {
@@ -3533,7 +3937,7 @@ function resolveMainWindowSizeFromSettings() {
 
 function resolveHelperInstallScriptPath() {
   const candidates = [
-    path.join(HELPER_APP_BUNDLE_DIR, 'install-helper.sh'),
+    path.join(HELPER_USER_DIR, 'install-helper.sh'),
     path.join(process.resourcesPath || '', 'helper', 'install-helper.sh'),
     path.join(APP_PATH, 'static', 'helper', 'install-helper.sh'),
     path.join(APP_PATH, 'helper', 'install-helper.sh'),
@@ -3543,12 +3947,12 @@ function resolveHelperInstallScriptPath() {
       return candidate;
     }
   }
-  return path.join(HELPER_APP_BUNDLE_DIR, 'install-helper.sh');
+  return path.join(HELPER_USER_DIR, 'install-helper.sh');
 }
 
 function resolveHelperUninstallScriptPath() {
   const candidates = [
-    path.join(HELPER_APP_BUNDLE_DIR, 'uninstall-helper.sh'),
+    path.join(HELPER_USER_DIR, 'uninstall-helper.sh'),
     path.join(process.resourcesPath || '', 'helper', 'uninstall-helper.sh'),
     path.join(APP_PATH, 'static', 'helper', 'uninstall-helper.sh'),
     path.join(APP_PATH, 'helper', 'uninstall-helper.sh'),
@@ -3558,12 +3962,12 @@ function resolveHelperUninstallScriptPath() {
       return candidate;
     }
   }
-  return path.join(HELPER_APP_BUNDLE_DIR, 'uninstall-helper.sh');
+  return path.join(HELPER_USER_DIR, 'uninstall-helper.sh');
 }
 
 function resolveHelperDoctorScriptPath() {
   const candidates = [
-    path.join(HELPER_APP_BUNDLE_DIR, 'doctor-helper.sh'),
+    path.join(HELPER_USER_DIR, 'doctor-helper.sh'),
     path.join(process.resourcesPath || '', 'helper', 'doctor-helper.sh'),
     path.join(APP_PATH, 'static', 'helper', 'doctor-helper.sh'),
     path.join(APP_PATH, 'helper', 'doctor-helper.sh'),
@@ -3573,7 +3977,7 @@ function resolveHelperDoctorScriptPath() {
       return candidate;
     }
   }
-  return path.join(HELPER_APP_BUNDLE_DIR, 'doctor-helper.sh');
+  return path.join(HELPER_USER_DIR, 'doctor-helper.sh');
 }
 
 function runHelperDoctor(options = {}) {
@@ -3735,30 +4139,6 @@ function readInstalledHelperVersion(paths = getHelperPaths()) {
   return '';
 }
 
-function readBundledHelperVersion() {
-  const candidates = [
-    path.join(process.resourcesPath || '', 'helper', 'com.clashfox.helper'),
-    path.join(APP_PATH, 'static', 'helper', 'com.clashfox.helper'),
-    path.join(APP_PATH, 'helper', 'com.clashfox.helper'),
-  ];
-  for (const candidate of candidates) {
-    if (!candidate || !fs.existsSync(candidate)) {
-      continue;
-    }
-    try {
-      const result = spawnSync(candidate, ['--version'], { encoding: 'utf8', timeout: 1500 });
-      const raw = String((result && result.stdout) || '').trim();
-      const version = normalizeHelperVersion(raw);
-      if (version) {
-        return version;
-      }
-    } catch {
-      // continue probing other candidates
-    }
-  }
-  return '';
-}
-
 function readProxyPortsFromConfigPath(configPath = '') {
   try {
     if (!configPath || !fs.existsSync(configPath)) {
@@ -3863,6 +4243,10 @@ function readArgValueFromArgv(name = '') {
 }
 
 function resolveConfigPathFromSettingsOrArgs(settings = null) {
+  const fromArgs = readArgValueFromArgv('--config');
+  if (fromArgs) {
+    return fromArgs.trim();
+  }
   const fromSettingsUserData = settings
     && settings.userDataPaths
     && typeof settings.userDataPaths.configFile === 'string'
@@ -3871,8 +4255,23 @@ function resolveConfigPathFromSettingsOrArgs(settings = null) {
   const fromSettingsLegacy = settings && typeof settings.configFile === 'string'
     ? settings.configFile.trim()
     : '';
-  const fromArgs = readArgValueFromArgv('--config');
-  return (fromSettingsUserData || fromSettingsLegacy || fromArgs || '').trim();
+  const configFile = fromSettingsUserData || fromSettingsLegacy || 'default.yaml';
+
+  const configDir = settings
+    && settings.userDataPaths
+    && typeof settings.userDataPaths.configDir === 'string'
+    ? settings.userDataPaths.configDir.trim()
+    : 'config';
+
+  const userAppDataDir = settings
+    && settings.userDataPaths
+    && typeof settings.userDataPaths.userAppDataDir === 'string'
+    ? settings.userDataPaths.userAppDataDir.trim()
+    : process.platform === 'win32'
+      ? '%USERPROFILE%/AppData/Roaming/ClashFox'
+      : '~/Library/Application Support/ClashFox';
+
+  return path.resolve(expandUserHome(userAppDataDir), configDir, configFile);
 }
 
 async function resolveActiveNetworkServiceName() {
@@ -4382,7 +4781,7 @@ async function buildOverviewNetworkSnapshot() {
   const localIp = String(preferredNetwork.localIp || '').trim();
   const routerTarget = String(preferredNetwork.router || defaultRoute.gateway || '').trim();
   const proxyPortCandidate = String(
-    (settings && (settings.mixedPort ?? settings.port))
+    (settings && settings.proxy && (settings.proxy.mixedPort ?? settings.proxy.port))
       ?? '',
   ).trim();
   const [routerMs, dnsMs, internetMs, internetIp, proxyIp] = await Promise.all([
@@ -4434,10 +4833,8 @@ async function resolveUsableNetworkServiceName(preferred = '') {
           if (index === 0 && line.toLowerCase().includes('network services')) {
             return false;
           }
-          if (line.startsWith('*')) {
-            return false;
-          }
-          return true;
+          return !line.startsWith('*');
+
         });
       resolve(lines);
     });
@@ -4489,23 +4886,13 @@ async function getHelperStatus() {
     || normalizeHelperVersion(ping && ping.data && ping.data.version)
     || normalizeHelperVersion(statusProbe && statusProbe.data && statusProbe.data.version)
     || '';
-  const bundledTargetVersion = readBundledHelperVersion();
-  const settings = readAppSettings();
-  const acceptBeta = Boolean(settings && settings.acceptBeta);
-  const onlineLatest = await getLatestHelperReleaseInfo({ acceptBeta, force: false }).catch(() => null);
+  const onlineLatest = await getLatestHelperReleaseInfo({ force: false }).catch(() => null);
   const onlineVersion = onlineLatest && onlineLatest.ok ? String(onlineLatest.version || '').trim() : '';
-  let helperTargetVersion = onlineVersion || bundledTargetVersion;
-  if (onlineVersion && bundledTargetVersion) {
-    helperTargetVersion = compareVersions(onlineVersion, bundledTargetVersion) >= 0
-      ? onlineVersion
-      : bundledTargetVersion;
-  }
   const helperUpdateAvailable = Boolean(
     helperVersion
-    && helperTargetVersion
-    && compareVersions(helperTargetVersion, helperVersion) > 0,
+    && onlineVersion
+    && compareVersions(onlineVersion, helperVersion) > 0,
   );
-  const helperUpdateSource = helperTargetVersion === bundledTargetVersion ? 'bundled' : 'online';
   let state = 'installed_unreachable';
   if (running) {
     state = 'running';
@@ -4527,19 +4914,11 @@ async function getHelperStatus() {
       socketExists,
       socketPingOk,
       httpPingOk,
-      helperVersion,
-      helperBundledVersion: bundledTargetVersion,
-      helperOnlineVersion: onlineVersion,
-      helperTargetVersion,
-      helperUpdateAvailable,
-      helperUpdateSource,
-      helperOnlineReleaseUrl: onlineLatest && onlineLatest.ok ? String(onlineLatest.releaseUrl || '').trim() : '',
-      helperOnlineAssetName: onlineLatest && onlineLatest.ok ? String(onlineLatest.assetName || '').trim() : '',
-      helperOnlineError: onlineLatest && !onlineLatest.ok ? String(onlineLatest.error || '') : '',
+      version: helperVersion,
+      onlineVersion,
+      updateAvailable: helperUpdateAvailable,
+      updateSource: helperUpdateAvailable ? 'online' : '',
       logPath,
-      ping: ping || { ok: false, error: 'helper_unreachable' },
-      statusProbe: statusProbe || null,
-      doctor: doctor || null,
     },
   };
 }
@@ -4557,24 +4936,25 @@ function normalizeHelperStatusPayload(result) {
     socketExists: Boolean(data.socketExists),
     socketPingOk: Boolean(data.socketPingOk),
     httpPingOk: Boolean(data.httpPingOk),
-    helperVersion: String(data.helperVersion || ''),
-    helperBundledVersion: String(data.helperBundledVersion || ''),
-    helperOnlineVersion: String(data.helperOnlineVersion || ''),
-    helperTargetVersion: String(data.helperTargetVersion || ''),
-    helperUpdateAvailable: Boolean(data.helperUpdateAvailable),
-    helperUpdateSource: String(data.helperUpdateSource || ''),
-    helperOnlineReleaseUrl: String(data.helperOnlineReleaseUrl || ''),
-    helperOnlineAssetName: String(data.helperOnlineAssetName || ''),
-    helperOnlineError: String(data.helperOnlineError || ''),
+    version: String(data.version || data.helperVersion || ''),
+    onlineVersion: String(data.onlineVersion || data.helperOnlineVersion || ''),
+    updateAvailable: Boolean(Object.prototype.hasOwnProperty.call(data, 'updateAvailable')
+      ? data.updateAvailable
+      : data.helperUpdateAvailable),
+    updateSource: String(data.updateSource || data.helperUpdateSource || ''),
     logPath: String(data.logPath || '/var/log/clashfox-helper.log'),
-    updatedAt: new Date().toISOString(),
   };
 }
 
 function persistHelperStatusToSettings(result) {
   try {
     const settings = readAppSettings();
-    settings.helperStatus = normalizeHelperStatusPayload(result);
+    const helperSnapshot = normalizeHelperStatusPayload(result);
+    settings.helperStatus = helperSnapshot;
+    settings.helper = {
+      ...(settings.helper && typeof settings.helper === 'object' ? settings.helper : {}),
+      ...helperSnapshot,
+    };
     writeAppSettings(settings);
     return settings.helperStatus;
   } catch {
@@ -4803,8 +5183,8 @@ function persistMainWindowSizeToSettings(width, height) {
 
 function resolveOutboundModeFromSettings() {
   const parsed = readAppSettings();
-  const mode = parsed && typeof parsed.proxy === 'string'
-    ? parsed.proxy.trim().toLowerCase()
+  const mode = parsed && parsed.proxy && typeof parsed.proxy === 'object'
+    ? String(parsed.proxy.mode || '').trim().toLowerCase()
     : '';
   if (OUTBOUND_MODE_BADGE[mode]) {
     return mode;
@@ -4819,7 +5199,10 @@ function persistOutboundModeToSettings(mode) {
   try {
     ensureAppDirs();
     const parsed = readAppSettings();
-    parsed.proxy = mode;
+    parsed.proxy = {
+      ...(parsed && parsed.proxy && typeof parsed.proxy === 'object' ? parsed.proxy : {}),
+      mode,
+    };
     writeAppSettings(parsed);
     return true;
   } catch {
@@ -4831,7 +5214,10 @@ function persistTunEnabledToSettings(enabled) {
   try {
     ensureAppDirs();
     const parsed = readAppSettings();
-    parsed.tun = Boolean(enabled);
+    parsed.proxy = {
+      ...(parsed && parsed.proxy && typeof parsed.proxy === 'object' ? parsed.proxy : {}),
+      tun: Boolean(enabled),
+    };
     writeAppSettings(parsed);
     return true;
   } catch {
@@ -4843,7 +5229,10 @@ function persistSystemProxyEnabledToSettings(enabled) {
   try {
     ensureAppDirs();
     const parsed = readAppSettings() || {};
-    parsed.systemProxy = Boolean(enabled);
+    parsed.proxy = {
+      ...(parsed && parsed.proxy && typeof parsed.proxy === 'object' ? parsed.proxy : {}),
+      systemProxy: Boolean(enabled),
+    };
     writeAppSettings(parsed);
     return true;
   } catch {
@@ -4855,7 +5244,10 @@ function persistSystemProxyEnabledToAppSettings(enabled) {
   try {
     ensureAppDirs();
     const parsed = readAppSettings() || {};
-    parsed.systemProxy = Boolean(enabled);
+    parsed.proxy = {
+      ...(parsed && parsed.proxy && typeof parsed.proxy === 'object' ? parsed.proxy : {}),
+      systemProxy: Boolean(enabled),
+    };
     writeAppSettings(parsed);
     return parsed;
   } catch {
@@ -4885,20 +5277,20 @@ function persistMihomoStatusToSettings(runningValue, source = 'unknown') {
   try {
     ensureAppDirs();
     const parsed = readAppSettings() || {};
-    const previous = parsed && parsed.mihomoStatus && typeof parsed.mihomoStatus === 'object'
-      ? parsed.mihomoStatus
-      : null;
-    const previousRunning = previous && typeof previous.running === 'boolean'
-      ? previous.running
+    const kernel = parsed && parsed.kernel && typeof parsed.kernel === 'object'
+      ? parsed.kernel
+      : {};
+    const previousRunning = typeof kernel.running === 'boolean'
+      ? kernel.running
       : null;
     if (previousRunning === running) {
       return false;
     }
-    parsed.mihomoStatus = {
-      running,
-      source: String(source || 'unknown'),
-      updatedAt: new Date().toISOString(),
-    };
+    if (!parsed.kernel || typeof parsed.kernel !== 'object') {
+      parsed.kernel = {};
+    }
+    parsed.kernel.running = running;
+    parsed.kernel.updatedAt = new Date().toISOString();
     writeAppSettings(parsed);
     return true;
   } catch {
@@ -5068,12 +5460,17 @@ function persistOverviewSystemToSettings(overviewData = {}, source = 'overview')
 
 function buildShellExportCommand(settings = null) {
   const source = settings && typeof settings === 'object' ? settings : readAppSettings();
+  const proxy = source && source.proxy && typeof source.proxy === 'object' ? source.proxy : {};
   const httpCandidate = String(
-    (source && (source.port ?? source.mixedPort))
+    (Object.prototype.hasOwnProperty.call(proxy, 'port')
+      ? proxy.port
+      : proxy.mixedPort)
       ?? '',
   ).trim();
   const socksCandidate = String(
-    (source && source.socksPort)
+    (Object.prototype.hasOwnProperty.call(proxy, 'socksPort')
+      ? proxy.socksPort
+      : '')
       ?? '',
   ).trim();
   const safeHttpPort = /^[0-9]+$/.test(httpCandidate) ? httpCandidate : '7890';
@@ -5123,9 +5520,9 @@ function pickOverviewInternetLatencyValue(data = {}) {
   return '';
 }
 
-async function getConnectivityQualitySnapshot(configPath) {
+async function getConnectivityQualitySnapshot(configPath, force = false) {
   const now = Date.now();
-  if ((now - connectivityQualityCache.updatedAt) <= CONNECTIVITY_REFRESH_MS) {
+  if (!force && (now - connectivityQualityCache.updatedAt) <= CONNECTIVITY_REFRESH_MS) {
     return connectivityQualityCache;
   }
   if (connectivityQualityFetchPromise) {
@@ -5134,14 +5531,24 @@ async function getConnectivityQualitySnapshot(configPath) {
 
   connectivityQualityFetchPromise = (async () => {
     try {
-      const overview = await runBridge(['overview', '--cache-ttl', '2', '--config', configPath, ...getControllerArgsFromSettings()]);
-      const internetMs = overview && overview.ok && overview.data
-        ? pickOverviewInternetLatencyValue(overview.data)
-        : '';
+      const directPingMs = await measurePingLatency('1.1.1.1');
+      const internetMs = String(directPingMs || '').trim();
       if (internetMs && internetMs !== '-') {
         connectivityQualityCache = {
           text: `${internetMs} ms`,
           tone: resolveConnectivityToneByLatency(internetMs),
+          updatedAt: Date.now(),
+        };
+        return connectivityQualityCache;
+      }
+      const localOverview = await buildOverviewNetworkSnapshot();
+      const overviewInternetMs = localOverview && localOverview.ok && localOverview.data
+        ? pickOverviewInternetLatencyValue(localOverview.data)
+        : '';
+      if (overviewInternetMs && overviewInternetMs !== '-') {
+        connectivityQualityCache = {
+          text: `${overviewInternetMs} ms`,
+          tone: resolveConnectivityToneByLatency(overviewInternetMs),
           updatedAt: Date.now(),
         };
         return connectivityQualityCache;
@@ -5172,15 +5579,22 @@ async function getConnectivityQualitySnapshot(configPath) {
 
 function patchTrayMenuConnectivityBadge(snapshot) {
   if (!trayMenuData || !trayMenuData.submenus || !Array.isArray(trayMenuData.submenus.network)) {
-    return;
+    return false;
   }
   const text = snapshot && snapshot.text ? String(snapshot.text) : '-';
   const tone = snapshot && snapshot.tone ? String(snapshot.tone) : 'neutral';
+  let changed = false;
   trayMenuData.submenus.network = trayMenuData.submenus.network.map((item) => {
     if (!item || item.type === 'separator') {
       return item;
     }
     if (item.iconKey === 'connectivityQuality') {
+      const currentText = item.rightBadge && item.rightBadge.text ? String(item.rightBadge.text) : '-';
+      const currentTone = item.rightBadge && item.rightBadge.tone ? String(item.rightBadge.tone) : 'neutral';
+      if (currentText === text && currentTone === tone) {
+        return item;
+      }
+      changed = true;
       return {
         ...item,
         rightBadge: {
@@ -5191,6 +5605,31 @@ function patchTrayMenuConnectivityBadge(snapshot) {
     }
     return item;
   });
+  if (changed) {
+    trayMenuDataSignature = buildTrayMenuDataSignature(trayMenuData);
+  }
+  return changed;
+}
+
+async function refreshTrayMenuLiveState() {
+  if (!trayMenuVisible || !trayMenuWindow || trayMenuWindow.isDestroyed()) {
+    return;
+  }
+  const configPath = getConfigPathFromSettings();
+  const snapshot = await getConnectivityQualitySnapshot(configPath, true);
+  const changed = patchTrayMenuConnectivityBadge(snapshot);
+  if (!changed) {
+    return;
+  }
+  if (trayMenuRendererReady && trayMenuWindow && !trayMenuWindow.isDestroyed()) {
+    trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
+  }
+  if (traySubmenuVisible && traySubmenuPendingPayload && traySubmenuPendingPayload.key === 'network') {
+    sendTraySubmenuUpdate({
+      key: 'network',
+      items: trayMenuData.submenus.network,
+    });
+  }
 }
 
 async function refreshNetworkSubmenuState() {
@@ -5198,9 +5637,12 @@ async function refreshNetworkSubmenuState() {
   let systemProxyEnabled;
   let tunEnabled;
   const traySettings = readAppSettings();
+  const trayProxySettings = traySettings && traySettings.proxy && typeof traySettings.proxy === 'object'
+    ? traySettings.proxy
+    : {};
   const expectedProxyPort = String(
-    traySettings && Object.prototype.hasOwnProperty.call(traySettings, 'port')
-      ? traySettings.port
+    trayProxySettings && Object.prototype.hasOwnProperty.call(trayProxySettings, 'port')
+      ? trayProxySettings.port
       : '',
   ).trim();
   try {
@@ -5214,7 +5656,7 @@ async function refreshNetworkSubmenuState() {
     // ignore transient errors; keep last known value
   }
   try {
-    const tunStatus = await runBridge(['tun-status']);
+    const tunStatus = await runBridge(['tun-status', '--config', configPath]);
     tunEnabled = Boolean(tunStatus && tunStatus.ok && tunStatus.data && tunStatus.data.enabled);
   } catch {
     // ignore transient errors; keep last known value
@@ -5225,12 +5667,15 @@ async function refreshNetworkSubmenuState() {
 function getControllerArgsFromSettings() {
   const settings = readAppSettings();
   const args = [];
-  let controller = settings && typeof settings.externalController === 'string'
+  const panelManager = settings && typeof settings.panelManager === 'object'
+    ? settings.panelManager
+    : {};
+  let controller = (settings && typeof settings.externalController === 'string')
     ? settings.externalController.trim()
-    : '';
-  let secret = settings && typeof settings.secret === 'string'
+    : (typeof panelManager.externalController === 'string' ? panelManager.externalController.trim() : '');
+  let secret = (settings && typeof settings.secret === 'string')
     ? settings.secret.trim()
-    : '';
+    : (typeof panelManager.secret === 'string' ? panelManager.secret.trim() : '');
   const configPath = getConfigPathFromSettings();
   let configController = '';
   let configSecret = '';
@@ -5251,13 +5696,17 @@ function getControllerArgsFromSettings() {
   if (!secret) {
     secret = 'clashfox';
   }
-  if ((configController && !settings.externalController) || (configSecret && !settings.secret)) {
+  if ((configController && !settings.externalController && !panelManager.externalController)
+    || (configSecret && !settings.secret && !panelManager.secret)) {
     const nextSettings = { ...settings };
-    if (configController && !nextSettings.externalController) {
-      nextSettings.externalController = configController;
+    if (!nextSettings.panelManager) {
+      nextSettings.panelManager = {};
     }
-    if (configSecret && !nextSettings.secret) {
-      nextSettings.secret = configSecret;
+    if (configController && !nextSettings.externalController && !nextSettings.panelManager.externalController) {
+      nextSettings.panelManager.externalController = configController;
+    }
+    if (configSecret && !nextSettings.secret && !nextSettings.panelManager.secret) {
+      nextSettings.panelManager.secret = configSecret;
     }
     writeAppSettings(nextSettings);
     emitSettingsUpdated(nextSettings);
@@ -5715,11 +6164,11 @@ async function runBridgeViaHelperApi(bridgeArgs = []) {
         const settings = readAppSettings();
         const configPath = resolveConfigPathFromSettingsOrArgs(settings);
         const ports = readProxyPortsFromConfigPath(configPath);
-        const portFromSettings = settings && Object.prototype.hasOwnProperty.call(settings, 'port')
-          ? String(settings.port || '').trim()
+        const portFromSettings = settings && settings.proxy && Object.prototype.hasOwnProperty.call(settings.proxy, 'port')
+          ? String(settings.proxy.port || '').trim()
           : '';
-        const socksFromSettings = settings && Object.prototype.hasOwnProperty.call(settings, 'socksPort')
-          ? String(settings.socksPort || '').trim()
+        const socksFromSettings = settings && settings.proxy && Object.prototype.hasOwnProperty.call(settings.proxy, 'socksPort')
+          ? String(settings.proxy.socksPort || '').trim()
           : '';
         const port = portFromSettings || String(ports.port || '').trim() || '7890';
         const socksPort = socksFromSettings || String(ports.socksPort || '').trim() || String(port);
@@ -5990,7 +6439,7 @@ function emitTrayRefresh() {
 function emitSettingsUpdated(settings = {}) {
   const payload = settings && typeof settings === 'object' ? settings : {};
   BrowserWindow.getAllWindows().forEach((win) => {
-    if (!win || win.isDestroyed() || !win.webContents) {
+    if (!win || win.isDestroyed() || !win.webContents || !win.isVisible()) {
       return;
     }
     win.webContents.send('clashfox:settingsUpdated', payload);
@@ -6130,8 +6579,8 @@ async function waitForKernelRunningFromTray(sudoPass = '', timeoutMs = 12000, in
 async function readSystemProxyEnabledSnapshot(configPath = '') {
   const settings = readAppSettings();
   const expectedPort = String(
-    settings && Object.prototype.hasOwnProperty.call(settings, 'port')
-      ? settings.port
+    settings && settings.proxy && Object.prototype.hasOwnProperty.call(settings.proxy, 'port')
+      ? settings.proxy.port
       : '',
   ).trim();
   const statusArgs = ['system-proxy-status'];
@@ -6193,12 +6642,15 @@ function resolveSystemProxyEnabledFromPayload(payload = null) {
 
 function resolveControllerAccessFromSettings(controllerOverride = '', secretOverride = '') {
   const settings = readAppSettings();
+  const panelManager = settings && typeof settings.panelManager === 'object'
+    ? settings.panelManager
+    : {};
   const controllerRaw = settings && Object.prototype.hasOwnProperty.call(settings, 'externalController')
     ? String(settings.externalController || '').trim()
-    : '';
+    : (typeof panelManager.externalController === 'string' ? panelManager.externalController.trim() : '');
   const secretRaw = settings && Object.prototype.hasOwnProperty.call(settings, 'secret')
     ? String(settings.secret || '').trim()
-    : '';
+    : (typeof panelManager.secret === 'string' ? panelManager.secret.trim() : '');
   const controller = String(controllerOverride || '').trim() || controllerRaw || '127.0.0.1:9090';
   const baseUrl = /^https?:\/\//i.test(controller) ? controller : `http://${controller}`;
   return {
@@ -6486,9 +6938,15 @@ function openMainPage(page) {
 function openDashboardPanel() {
   try {
     const settings = readAppSettings();
-    const panel = (settings && settings.panelChoice) ? String(settings.panelChoice) : 'zashboard';
-    let controller = (settings && settings.externalController) ? String(settings.externalController).trim() : '127.0.0.1:9090';
-    const secret = (settings && settings.secret) ? String(settings.secret).trim() : 'clashfox';
+    const panelManager = settings && typeof settings.panelManager === 'object'
+      ? settings.panelManager
+      : {};
+    const panel = (panelManager && panelManager.panelChoice) ? String(panelManager.panelChoice)
+      : (settings && settings.panelChoice ? String(settings.panelChoice) : 'zashboard');
+    let controller = (settings && settings.externalController) ? String(settings.externalController).trim()
+      : (panelManager && panelManager.externalController ? String(panelManager.externalController).trim() : '127.0.0.1:9090');
+    const secret = (settings && settings.secret) ? String(settings.secret).trim()
+      : (panelManager && panelManager.secret ? String(panelManager.secret).trim() : 'clashfox');
     if (!/^https?:\/\//.test(controller)) {
       controller = `http://${controller}`;
     }
@@ -8532,24 +8990,35 @@ function patchTrayMenuOutboundMode(nextMode) {
 
 function patchTrayMenuNetworkState({ systemProxyEnabled, tunEnabled } = {}) {
   if (!trayMenuData || !trayMenuData.submenus || !Array.isArray(trayMenuData.submenus.network)) {
-    return;
+    return false;
   }
+  let changed = false;
   trayMenuData.submenus.network = trayMenuData.submenus.network.map((item) => {
     if (!item || item.type === 'separator') {
       return item;
     }
     if (item.action === 'toggle-system-proxy' && typeof systemProxyEnabled === 'boolean') {
+      const nextRightText = systemProxyEnabled ? 'On' : 'Off';
+      if (item.checked === systemProxyEnabled && String(item.rightText || '') === nextRightText) {
+        return item;
+      }
+      changed = true;
       return {
         ...item,
         checked: systemProxyEnabled,
-        rightText: systemProxyEnabled ? 'On' : 'Off',
+        rightText: nextRightText,
       };
     }
     if (item.action === 'toggle-tun' && typeof tunEnabled === 'boolean') {
+      const nextRightText = tunEnabled ? 'On' : 'Off';
+      if (item.checked === tunEnabled && String(item.rightText || '') === nextRightText) {
+        return item;
+      }
+      changed = true;
       return {
         ...item,
         checked: tunEnabled,
-        rightText: tunEnabled ? 'On' : 'Off',
+        rightText: nextRightText,
       };
     }
     return item;
@@ -8569,10 +9038,17 @@ function patchTrayMenuNetworkState({ systemProxyEnabled, tunEnabled } = {}) {
   const settings = readAppSettings();
   applyTrayIconForState({
     active: isTrayActiveState({
-      systemProxyEnabled: typeof systemProxyEnabled === 'boolean' ? systemProxyEnabled : Boolean(settings && settings.systemProxy),
-      tunEnabled: typeof tunEnabled === 'boolean' ? tunEnabled : Boolean(settings && settings.tun),
+      systemProxyEnabled: typeof systemProxyEnabled === 'boolean' ? systemProxyEnabled : Boolean(settings && settings.proxy && settings.proxy.systemProxy),
+      tunEnabled: typeof tunEnabled === 'boolean' ? tunEnabled : Boolean(settings && settings.proxy && settings.proxy.tun),
     }),
   });
+  if (changed) {
+    trayMenuDataSignature = buildTrayMenuDataSignature(trayMenuData);
+    if (trayMenuRendererReady && trayMenuWindow && !trayMenuWindow.isDestroyed()) {
+      trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
+    }
+  }
+  return changed;
 }
 
 function buildTrayProviderPayload({ providerTrafficResult, showProviderTraffic }) {
@@ -8593,6 +9069,104 @@ function buildTrayProviderPayload({ providerTrafficResult, showProviderTraffic }
     outboundProxyTree = null;
   }
   return { providerTraffic, outboundProxyTree };
+}
+
+function buildTrayMenuShell() {
+  const labels = getTrayLabels();
+  const uiLabels = getUiLabels();
+  const traySettings = readAppSettings();
+  const trayProxySettings = traySettings && traySettings.proxy && typeof traySettings.proxy === 'object'
+    ? traySettings.proxy
+    : {};
+  const currentOutboundMode = resolveOutboundModeFromSettings();
+  const currentOutboundBadge = OUTBOUND_MODE_BADGE[currentOutboundMode] || OUTBOUND_MODE_BADGE.rule;
+  const showProviderTraffic = traySettings ? traySettings.providerTrafficEnabled !== false : true;
+  const dashboardEnabled = Boolean(trayMenuData && trayMenuData.header && trayMenuData.header.statusState === 'running');
+  const networkTakeoverEnabled = Boolean(trayProxySettings.systemProxy);
+  const tunEnabled = Boolean(trayProxySettings.tun);
+  const connectivity = connectivityQualityCache && connectivityQualityCache.text
+    ? {
+        text: connectivityQualityCache.text,
+        tone: connectivityQualityCache.tone || 'neutral',
+      }
+    : { text: '-', tone: 'neutral' };
+  const trayFeatureFlags = {
+    showKernelManager: traySettings ? traySettings.kernelManagerEnabled !== false : true,
+    showDirectoryLocations: traySettings ? traySettings.directoryLocationsEnabled !== false : true,
+    showTrackers: traySettings ? traySettings.trackersEnabled !== false : true,
+    showFoxboard: traySettings ? traySettings.foxboardEnabled !== false : true,
+    showPanel: Boolean(traySettings && traySettings.panelEnabled),
+    showCopyShellExportCommand: traySettings ? traySettings.copyShellExportCommandEnabled !== false : true,
+  };
+  const trayProviderPayload = {
+    providerTraffic: trayMenuData && trayMenuData.providerTraffic ? trayMenuData.providerTraffic : null,
+    outboundProxyTree: trayProxyMenuCache && trayProxyMenuCache.outboundProxyCard
+      ? trayProxyMenuCache.outboundProxyCard
+      : null,
+  };
+  const cachedSubmenus = trayProxyMenuCache && trayProxyMenuCache.outboundProviderSubmenus
+    ? trayProxyMenuCache.outboundProviderSubmenus
+    : {};
+  return {
+    header: {
+      title: app.getName(),
+      status: trayMenuData && trayMenuData.header && trayMenuData.header.status
+        ? trayMenuData.header.status
+        : (uiLabels.stopped || labels.off || 'Stopped'),
+      statusState: dashboardEnabled ? 'running' : 'stopped',
+    },
+    backLabel: '‹ Back',
+    meta: {
+      configPath: getConfigPathFromSettings(),
+      networkTakeoverPort: String(trayProxySettings.port || '7890').trim() || '7890',
+      networkTakeoverSocksPort: String(trayProxySettings.socksPort || '7891').trim() || '7891',
+      networkTakeoverService: trayMenuData && trayMenuData.meta && trayMenuData.meta.networkTakeoverService
+        ? String(trayMenuData.meta.networkTakeoverService || '')
+        : '',
+      dashboardEnabled,
+      currentOutboundMode,
+      submenuSide: 'right',
+    },
+    providerTraffic: trayProviderPayload.providerTraffic,
+    outboundProxyTree: trayProviderPayload.outboundProxyTree,
+    items: buildTrayMainMenuItems({
+      labels,
+      currentOutboundBadge,
+      dashboardEnabled,
+      trayFeatureFlags,
+    }),
+    submenus: buildTraySubmenuData({
+      labels,
+      outboundItems: buildTrayOutboundModeItems({ labels, currentOutboundMode }),
+      providerTraffic: trayProviderPayload.providerTraffic,
+      showProviderTraffic,
+      dashboardEnabled,
+      networkTakeoverEnabled,
+      tunEnabled,
+      tunAvailable: true,
+      networkTakeoverService: trayMenuData && trayMenuData.meta && trayMenuData.meta.networkTakeoverService
+        ? String(trayMenuData.meta.networkTakeoverService || '')
+        : '',
+      connectivityQuality: connectivity.text,
+      connectivityTone: connectivity.tone,
+      showCopyShellExportCommand: trayFeatureFlags.showCopyShellExportCommand,
+      outboundProviderSubmenus: cachedSubmenus,
+    }),
+  };
+}
+
+function warmTrayMenuData(force = false) {
+  if (trayMenuBuildInProgress) {
+    trayMenuBuildPending = true;
+    return trayMenuData;
+  }
+  if (!force && trayMenuWarmupPromise) {
+    return trayMenuWarmupPromise;
+  }
+  trayMenuWarmupPromise = createTrayMenu().finally(() => {
+    trayMenuWarmupPromise = null;
+  });
+  return trayMenuWarmupPromise;
 }
 
 function buildTrayOutboundModeItems({ labels, currentOutboundMode }) {
@@ -8616,10 +9190,11 @@ function buildTrayMainMenuItems({
     { type: 'separator' },
     { type: 'action', label: labels.outboundMode || 'Outbound Mode', rightText: `[${currentOutboundBadge}]`, submenu: 'outbound', iconKey: 'outboundMode' },
     { type: 'separator' },
-    { type: 'action', label: labels.panel || 'Panel', submenu: 'panel', iconKey: 'panel' },
-    { type: 'separator' },
     { type: 'action', label: labels.dashboard, action: 'open-dashboard', enabled: dashboardEnabled, rightText: '⌘ 2', shortcut: 'Cmd+2', iconKey: 'dashboard' },
   ];
+  if (trayFeatureFlags.showPanel) {
+    items.splice(5, 0, { type: 'separator' }, { type: 'action', label: labels.panel || 'Panel', submenu: 'panel', iconKey: 'panel' });
+  }
   if (trayFeatureFlags.showTrackers) {
     items.push({ type: 'separator' });
     items.push({ type: 'action', label: labels.trackers || 'Trackers', action: 'open-worldwide', rightText: '⌘ 3', shortcut: 'Cmd+3', iconKey: 'trackers' });
@@ -8747,28 +9322,27 @@ async function buildTrayMenuOnce() {
   let dashboardEnabled = false;
   let networkTakeoverEnabled = false;
   let networkTakeoverService = '';
-  let networkTakeoverPort = String(traySettings && traySettings.port ? traySettings.port : '7890').trim() || '7890';
-  let networkTakeoverSocksPort = String(traySettings && traySettings.socksPort ? traySettings.socksPort : '7891').trim() || '7891';
+  const trayProxySettings = traySettings && traySettings.proxy && typeof traySettings.proxy === 'object'
+    ? traySettings.proxy
+    : {};
+  let networkTakeoverPort = String(trayProxySettings.port ? trayProxySettings.port : '7890').trim() || '7890';
+  let networkTakeoverSocksPort = String(trayProxySettings.socksPort ? trayProxySettings.socksPort : '7891').trim() || '7891';
   let connectivityQuality = '-';
   let connectivityTone = 'neutral';
-  let tunEnabled = Boolean(
-    Object.prototype.hasOwnProperty.call(traySettings || {}, 'tun')
-      ? traySettings.tun
-      : false,
-  );
+  let tunEnabled = Boolean(trayProxySettings.tun);
   const expectedProxyPort = String(
-    traySettings && Object.prototype.hasOwnProperty.call(traySettings, 'port')
-      ? traySettings.port
+    trayProxySettings && Object.prototype.hasOwnProperty.call(trayProxySettings, 'port')
+      ? trayProxySettings.port
       : '',
   ).trim();
   let tunAvailable = true;
   const parsedProxyPorts = readProxyPortsFromConfigPath(configPath);
-  if (!traySettings || !Object.prototype.hasOwnProperty.call(traySettings, 'port')) {
+  if (!trayProxySettings || !Object.prototype.hasOwnProperty.call(trayProxySettings, 'port')) {
     if (parsedProxyPorts && parsedProxyPorts.port) {
       networkTakeoverPort = String(parsedProxyPorts.port).trim() || networkTakeoverPort;
     }
   }
-  if (!traySettings || !Object.prototype.hasOwnProperty.call(traySettings, 'socksPort')) {
+  if (!trayProxySettings || !Object.prototype.hasOwnProperty.call(trayProxySettings, 'socksPort')) {
     if (parsedProxyPorts && parsedProxyPorts.socksPort) {
       networkTakeoverSocksPort = String(parsedProxyPorts.socksPort).trim() || networkTakeoverSocksPort;
     }
@@ -8822,18 +9396,18 @@ async function buildTrayMenuOnce() {
     persistSystemProxyEnabledToSettings(networkTakeoverEnabled);
   } catch {
     networkTakeoverEnabled = Boolean(
-      traySettings && Object.prototype.hasOwnProperty.call(traySettings, 'systemProxy')
-        ? traySettings.systemProxy
+      trayProxySettings && Object.prototype.hasOwnProperty.call(trayProxySettings, 'systemProxy')
+        ? trayProxySettings.systemProxy
         : false,
     );
     networkTakeoverService = '';
-    networkTakeoverPort = (traySettings && Object.prototype.hasOwnProperty.call(traySettings, 'port'))
-      ? String(traySettings.port).trim()
+    networkTakeoverPort = (trayProxySettings && Object.prototype.hasOwnProperty.call(trayProxySettings, 'port'))
+      ? String(trayProxySettings.port).trim()
       : ((parsedProxyPorts && parsedProxyPorts.port)
       ? String(parsedProxyPorts.port).trim()
       : '7890');
-    networkTakeoverSocksPort = (traySettings && Object.prototype.hasOwnProperty.call(traySettings, 'socksPort'))
-      ? String(traySettings.socksPort).trim()
+    networkTakeoverSocksPort = (trayProxySettings && Object.prototype.hasOwnProperty.call(trayProxySettings, 'socksPort'))
+      ? String(trayProxySettings.socksPort).trim()
       : ((parsedProxyPorts && parsedProxyPorts.socksPort)
       ? String(parsedProxyPorts.socksPort).trim()
       : '7891');
@@ -8899,6 +9473,7 @@ async function buildTrayMenuOnce() {
     showDirectoryLocations: traySettings ? traySettings.directoryLocationsEnabled !== false : true,
     showTrackers: traySettings ? traySettings.trackersEnabled !== false : true,
     showFoxboard: traySettings ? traySettings.foxboardEnabled !== false : true,
+    showPanel: Boolean(traySettings && traySettings.panelEnabled),
     showCopyShellExportCommand: traySettings ? traySettings.copyShellExportCommandEnabled !== false : true,
   };
   const trayProviderPayload = buildTrayProviderPayload({
@@ -9020,6 +9595,7 @@ function ensureTrayMenuWindow() {
     show: false,
     frame: false,
     transparent: true,
+    backgroundColor: '#00000000',
     resizable: false,
     movable: false,
     minimizable: false,
@@ -9028,6 +9604,7 @@ function ensureTrayMenuWindow() {
     hasShadow: false,
     skipTaskbar: true,
     alwaysOnTop: true,
+    acceptFirstMouse: true,
     webPreferences: {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
@@ -9106,6 +9683,7 @@ function hideTraySubmenuWindow() {
   }
   traySubmenuVisible = false;
   traySubmenuHovering = false;
+  sendTrayWindowVisibility('submenu', false);
   if (traySubmenuWindow && !traySubmenuWindow.isDestroyed()) {
     traySubmenuWindow.hide();
   }
@@ -9115,6 +9693,7 @@ function hideTrayPanelWindow() {
   trayPanelVisible = false;
   trayPanelHovering = false;
   trayPanelPayloadSignature = '';
+  sendTrayWindowVisibility('panel', false);
   if (trayPanelWindow && !trayPanelWindow.isDestroyed()) {
     trayPanelWindow.hide();
   }
@@ -9139,6 +9718,7 @@ function ensureTraySubmenuWindow() {
     skipTaskbar: true,
     alwaysOnTop: true,
     focusable: false,
+    acceptFirstMouse: true,
     backgroundColor: '#00000000',
     webPreferences: {
       contextIsolation: true,
@@ -9184,6 +9764,7 @@ function ensureTrayPanelWindow() {
     skipTaskbar: true,
     alwaysOnTop: true,
     focusable: false,
+    acceptFirstMouse: true,
     backgroundColor: '#00000000',
     webPreferences: {
       contextIsolation: true,
@@ -9231,6 +9812,7 @@ function hideTrayMenuWindow() {
   trayMenuClosing = false;
   traySubmenuPendingPayload = null;
   trayPanelPendingPayload = null;
+  sendTrayWindowVisibility('menu', false);
   if (trayMenuRefreshTimer) {
     clearInterval(trayMenuRefreshTimer);
     trayMenuRefreshTimer = null;
@@ -9245,7 +9827,6 @@ function sendTraySubmenuUpdate(payload) {
     || trayMenuClosing
     || !trayMenuWindow
     || trayMenuWindow.isDestroyed()
-    || !trayMenuWindow.isFocused()
   ) {
     hideTraySubmenuWindow();
     return;
@@ -9273,7 +9854,6 @@ function sendTrayPanelUpdate(payload) {
     || trayMenuClosing
     || !trayMenuWindow
     || trayMenuWindow.isDestroyed()
-    || !trayMenuWindow.isFocused()
   ) {
     hideTrayPanelWindow();
     return;
@@ -9404,7 +9984,6 @@ async function openTrayPanelWindow(payload = {}) {
     || trayMenuClosing
     || !trayMenuWindow
     || trayMenuWindow.isDestroyed()
-    || !trayMenuWindow.isFocused()
   ) {
     return;
   }
@@ -9419,7 +9998,10 @@ async function openTrayPanelWindow(payload = {}) {
   trayPanelVisible = false;
   let latestMenuData = trayMenuData;
   try {
-    latestMenuData = await createTrayMenu().catch(() => trayMenuData);
+    if (!latestMenuData) {
+      warmTrayMenuData().catch(() => {});
+      latestMenuData = buildTrayMenuShell();
+    }
   } finally {
     trayPanelVisible = previousPanelVisible;
   }
@@ -9445,6 +10027,7 @@ async function openTrayPanelWindow(payload = {}) {
   if (!popup.isVisible()) {
     popup.show();
   }
+  sendTrayWindowVisibility('panel', true);
 }
 
 function computeTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, explicitWidth = 260) {
@@ -9552,10 +10135,10 @@ async function showTrayMenuWindow() {
     trayMenuContentHeight = currentBounds.height;
   }
   if (!trayMenuData) {
-    await createTrayMenu().catch(() => {});
+    warmTrayMenuData().catch(() => {});
   } else if ((Date.now() - trayMenuLastBuiltAt) > 1000) {
     // Refresh stale cache in background only when needed.
-    createTrayMenu().catch(() => {});
+    warmTrayMenuData().catch(() => {});
   } else {
     const connectivityItem = trayMenuData
       && trayMenuData.submenus
@@ -9566,19 +10149,22 @@ async function showTrayMenuWindow() {
       ? String(connectivityItem.rightBadge.text || '').trim()
       : '';
     if (!connectivityText || connectivityText === '-') {
-      createTrayMenu().catch(() => {});
+      warmTrayMenuData().catch(() => {});
     }
   }
   applyTrayMenuWindowBounds(trayMenuContentHeight, false, 260);
   popup.show();
   popup.focus();
   trayMenuVisible = true;
+  sendTrayWindowVisibility('menu', true);
+  refreshNetworkSubmenuState().catch(() => {});
+  refreshTrayMenuLiveState().catch(() => {});
   if (!trayMenuRefreshTimer) {
     trayMenuRefreshTimer = setInterval(() => {
       if (!trayMenuVisible) {
         return;
       }
-      createTrayMenu().catch(() => {});
+      refreshTrayMenuLiveState().catch(() => {});
     }, CONNECTIVITY_REFRESH_MS);
   }
 }
@@ -9647,8 +10233,8 @@ async function handleTrayMenuAction(action, payload = {}) {
       const proxyArgs = ['--config', configPath];
       const settings = readAppSettings();
       const expectedPort = String(
-        settings && Object.prototype.hasOwnProperty.call(settings, 'port')
-          ? settings.port
+        settings && settings.proxy && typeof settings.proxy === 'object' && Object.prototype.hasOwnProperty.call(settings.proxy, 'port')
+          ? settings.proxy.port
           : '',
       ).trim();
       if (expectedPort) {
@@ -9672,8 +10258,8 @@ async function handleTrayMenuAction(action, payload = {}) {
         patchTrayMenuNetworkState({ systemProxyEnabled: actualEnabled });
       } else {
         const fallbackEnabled = Boolean(
-          settings && Object.prototype.hasOwnProperty.call(settings, 'systemProxy')
-            ? settings.systemProxy
+          settings && settings.proxy && typeof settings.proxy === 'object' && Object.prototype.hasOwnProperty.call(settings.proxy, 'systemProxy')
+            ? settings.proxy.systemProxy
             : false
         );
         persistSystemProxyEnabledToSettings(fallbackEnabled);
@@ -9960,7 +10546,7 @@ function createWindow(showOnCreate = false) {
   mainWindow = win;
 
   const attachDashboardAuth = () => {
-    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
+    const settingsPath = getSettingsPath();
     win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
       const url = details.url || '';
       const isLocalControllerRequest =
@@ -10207,11 +10793,13 @@ function setDockIcon() {
 }
 
 app.whenReady().then(() => {
+  globalSettings.debugMode = false;
   ensureAppDirs();
   setDockIcon();
   createTrayMenu();
   const shouldShowMainWindow = false;
   createWindow(shouldShowMainWindow);
+  applyDevToolsState();
   if (app.dock && app.dock.show) {
     if (shouldShowMainWindow) {
       app.dock.show();
@@ -10462,13 +11050,17 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('clashfox:trayMenu:getData', async () => {
-    const data = await createTrayMenu();
-    return data || trayMenuData || {};
+    if (trayMenuData) {
+      warmTrayMenuData().catch(() => {});
+      return trayMenuData;
+    }
+    warmTrayMenuData().catch(() => {});
+    return buildTrayMenuShell();
   });
 
-  ipcMain.handle('clashfox:trayMenu:connectivity', async () => {
+  ipcMain.handle('clashfox:trayMenu:connectivity', async (_event, force = false) => {
     const configPath = getConfigPathFromSettings();
-    const snapshot = await getConnectivityQualitySnapshot(configPath);
+    const snapshot = await getConnectivityQualitySnapshot(configPath, Boolean(force));
     patchTrayMenuConnectivityBadge(snapshot);
     return snapshot || { text: '-', tone: 'neutral' };
   });
@@ -10476,7 +11068,7 @@ app.whenReady().then(() => {
   ipcMain.handle('clashfox:trayMenu:action', async (_event, action, payload = {}) => {
     const result = await handleTrayMenuAction(action, payload);
     const skipRebuildActions = new Set(['toggle-system-proxy', 'toggle-tun']);
-    if (!skipRebuildActions.has(String(action || '').trim())) {
+    if (!skipRebuildActions.has(String(action || '').trim()) && !(result && result.hide)) {
       createTrayMenu().catch(() => {});
     }
     return result || { ok: false };
@@ -10488,6 +11080,7 @@ app.whenReady().then(() => {
 
   ipcMain.on('clashfox:trayMenu:rendererReady', () => {
     trayMenuRendererReady = true;
+    sendTrayWindowVisibility('menu', trayMenuVisible);
     if (trayMenuWindow && !trayMenuWindow.isDestroyed() && trayMenuData) {
       trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
     }
@@ -10509,11 +11102,14 @@ app.whenReady().then(() => {
       || trayMenuClosing
       || !trayMenuWindow
       || trayMenuWindow.isDestroyed()
-      || !trayMenuWindow.isFocused()
     ) {
       return;
     }
     const key = payload && payload.key ? String(payload.key) : '';
+    if (key === 'network') {
+      refreshNetworkSubmenuState().catch(() => {});
+      refreshTrayMenuLiveState().catch(() => {});
+    }
     const items = (trayMenuData
       && trayMenuData.submenus
       && Array.isArray(trayMenuData.submenus[key]))
@@ -10537,6 +11133,7 @@ app.whenReady().then(() => {
     };
     traySubmenuLastSize = { width: 0, height: 0 };
     traySubmenuVisible = true;
+    positionTraySubmenuWindow(traySubmenuLastSize.width || 240, traySubmenuLastSize.height || 200);
     sendTraySubmenuUpdate({
       key,
       items,
@@ -10544,6 +11141,7 @@ app.whenReady().then(() => {
     if (!popup.isVisible()) {
       popup.show();
     }
+    sendTrayWindowVisibility('submenu', true);
   });
 
   ipcMain.on('clashfox:trayMenu:closeSubmenu', () => {
@@ -10557,12 +11155,11 @@ app.whenReady().then(() => {
       || trayMenuClosing
       || !trayMenuWindow
       || trayMenuWindow.isDestroyed()
-      || !trayMenuWindow.isFocused()
     ) {
       return;
     }
     trayPanelLastSize = { width: 260, height: 286 };
-    await openTrayPanelWindow(payload);
+    openTrayPanelWindow(payload).catch(() => {});
   });
 
   ipcMain.on('clashfox:trayMenu:closePanel', () => {
@@ -10600,12 +11197,12 @@ app.whenReady().then(() => {
 
   ipcMain.on('clashfox:traySubmenu:ready', () => {
     traySubmenuReady = true;
+    sendTrayWindowVisibility('submenu', traySubmenuVisible);
     if (
       !trayMenuVisible
       || trayMenuClosing
       || !trayMenuWindow
       || trayMenuWindow.isDestroyed()
-      || !trayMenuWindow.isFocused()
     ) {
       hideTraySubmenuWindow();
       return;
@@ -10631,7 +11228,6 @@ app.whenReady().then(() => {
       || trayMenuClosing
       || !trayMenuWindow
       || trayMenuWindow.isDestroyed()
-      || !trayMenuWindow.isFocused()
     ) {
       hideTrayPanelWindow();
       return;
@@ -10656,12 +11252,12 @@ app.whenReady().then(() => {
 
   ipcMain.on('clashfox:trayPanel:ready', () => {
     trayPanelReady = true;
+    sendTrayWindowVisibility('panel', trayPanelVisible);
     if (
       !trayMenuVisible
       || trayMenuClosing
       || !trayMenuWindow
       || trayMenuWindow.isDestroyed()
-      || !trayMenuWindow.isFocused()
     ) {
       hideTrayPanelWindow();
       return;
@@ -10730,9 +11326,7 @@ app.whenReady().then(() => {
         return { ok: false, error: 'outside_config_dir' };
       }
       const settings = readAppSettings();
-      const currentConfig = settings && typeof settings.configFile === 'string'
-        ? path.resolve(settings.configFile)
-        : '';
+      const currentConfig = resolveConfigPathFromSettingsOrArgs(settings);
       if (currentConfig && resolvedTarget === currentConfig) {
         return { ok: false, error: 'current_config' };
       }
@@ -10859,43 +11453,44 @@ app.whenReady().then(() => {
   ipcMain.handle('clashfox:readSettings', async () => {
     try {
       ensureAppDirs();
-      const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
+      const settingsPath = getSettingsPath();
       const defaultConfigPath = path.join(APP_DATA_DIR, 'config', 'default.yaml');
+      const baseDefaults = readDefaultSettingsFile();
+      const fallbackOf = (key, fallback) => (
+        Object.prototype.hasOwnProperty.call(baseDefaults, key) ? baseDefaults[key] : fallback
+      );
       if (!fs.existsSync(settingsPath)) {
-        const defaults = {
-          configFile: defaultConfigPath,
-          proxy: 'rule',
-          systemProxy: false,
-          tun: false,
-          stack: 'Mixed',
-          mixedPort: 7893,
-          port: 7890,
-          socksPort: 7891,
-          allowLan: true,
-          generalPageSize: '10',
-          trayMenu: {
-            chartEnabled: true,
-            providerTrafficEnabled: true,
-            trackersEnabled: true,
-            foxboardEnabled: true,
-            kernelManagerEnabled: true,
-            directoryLocationsEnabled: true,
-            copyShellExportCommandEnabled: true,
+        const defaults = mergeDefaultSettings(baseDefaults, {
+          userDataPaths: {
+            userAppDataDir: process.platform === 'win32'
+              ? '%USERPROFILE%/AppData/Roaming/ClashFox'
+              : '~/Library/Application Support/ClashFox',
+            configFile: 'default.yaml',
+            configDir: 'config',
+            coreDir: 'core',
+            dataDir: 'data',
+            logDir: 'logs',
+            pidDir: 'runtime',
           },
-          kernel: {},
+          generalPageSize: String(fallbackOf('generalPageSize', '10')),
+          kernel: baseDefaults && typeof baseDefaults.kernel === 'object' ? baseDefaults.kernel : {},
           device: resolveCurrentDeviceSnapshot('electron'),
-          mihomoStatus: {
-            running: false,
-            source: 'init',
-            updatedAt: new Date().toISOString(),
-          },
-        };
+          updatedAt: new Date().toISOString(),
+        });
         const status = await getHelperStatus();
         defaults.helperStatus = normalizeHelperStatusPayload(status);
+        defaults.helper = {
+          ...(defaults.helper && typeof defaults.helper === 'object' ? defaults.helper : {}),
+          ...defaults.helperStatus,
+        };
         writeAppSettings(defaults);
+        const normalizedDefaults = mergeAppearanceAliases(mergePanelManagerAliases(mergeUserDataPathAliases(normalizeSettingsForStorage(defaults))));
+        normalizedDefaults.helperStatus = {
+          ...(normalizedDefaults.helper && typeof normalizedDefaults.helper === 'object' ? normalizedDefaults.helper : {}),
+        };
         return {
           ok: true,
-          data: mergeAppearanceAliases(mergePanelManagerAliases(mergeUserDataPathAliases(normalizeSettingsForStorage(defaults)))),
+          data: normalizedDefaults,
         };
       }
       const raw = fs.readFileSync(settingsPath, 'utf8');
@@ -10904,53 +11499,47 @@ app.whenReady().then(() => {
         ? parsed.userDataPaths
         : {};
       let changed = false;
-      if (!parsed.configFile && typeof parsed.configPath === 'string') {
-        parsed.configFile = parsed.configPath;
+      if (!parsedPaths.configFile && typeof parsed.configPath === 'string') {
+        if (!parsed.userDataPaths) {
+          parsed.userDataPaths = {};
+        }
+        parsed.userDataPaths.configFile = path.basename(parsed.configPath);
         changed = true;
       }
       if (Object.prototype.hasOwnProperty.call(parsed, 'configPath')) {
         delete parsed.configPath;
         changed = true;
       }
-      if (!parsed.configFile && !(parsedPaths && parsedPaths.configFile)) {
-        parsed.configFile = defaultConfigPath;
-        changed = true;
-      }
-      if (!Object.prototype.hasOwnProperty.call(parsed, 'mixedPort')) {
-        parsed.mixedPort = 7893;
-        changed = true;
-      }
-      if (!Object.prototype.hasOwnProperty.call(parsed, 'port')) {
-        parsed.port = 7890;
-        changed = true;
-      }
-      if (!Object.prototype.hasOwnProperty.call(parsed, 'proxy')) {
-        parsed.proxy = 'rule';
-        changed = true;
-      }
-      if (!Object.prototype.hasOwnProperty.call(parsed, 'systemProxy')) {
-        parsed.systemProxy = false;
-        changed = true;
-      }
-      if (!Object.prototype.hasOwnProperty.call(parsed, 'tun')) {
-        parsed.tun = false;
-        changed = true;
-      }
-      if (!Object.prototype.hasOwnProperty.call(parsed, 'stack')) {
-        parsed.stack = 'Mixed';
-        changed = true;
-      }
-      if (!Object.prototype.hasOwnProperty.call(parsed, 'socksPort')) {
-        parsed.socksPort = 7891;
-        changed = true;
-      }
-      if (!Object.prototype.hasOwnProperty.call(parsed, 'allowLan')) {
-        parsed.allowLan = true;
+      if (!parsedPaths.configFile) {
+        if (!parsed.userDataPaths) {
+          parsed.userDataPaths = {};
+        }
+        parsed.userDataPaths.configFile = 'default.yaml';
         changed = true;
       }
       const parsedTrayMenu = parsed.trayMenu && typeof parsed.trayMenu === 'object'
         ? parsed.trayMenu
         : {};
+      const baseTrayMenu = baseDefaults.trayMenu && typeof baseDefaults.trayMenu === 'object'
+        ? baseDefaults.trayMenu
+        : {};
+      const resolveTrayDefault = (key) => {
+        const legacyMap = {
+          trayMenuChartEnabled: 'chartEnabled',
+          trayMenuProviderTrafficEnabled: 'providerTrafficEnabled',
+          trayMenuTrackersEnabled: 'trackersEnabled',
+          trayMenuFoxboardEnabled: 'foxboardEnabled',
+          trayMenuPanelEnabled: 'panelEnabled',
+          trayMenuKernelManagerEnabled: 'kernelManagerEnabled',
+          trayMenuDirectoryLocationsEnabled: 'directoryLocationsEnabled',
+          trayMenuCopyShellExportCommandEnabled: 'copyShellExportCommandEnabled',
+        };
+        const normalizedKey = legacyMap[key] || key;
+        if (Object.prototype.hasOwnProperty.call(baseTrayMenu, normalizedKey)) {
+          return Boolean(baseTrayMenu[normalizedKey]);
+        }
+        return false;
+      };
       if (!parsed.trayMenu || typeof parsed.trayMenu !== 'object') {
         parsed.trayMenu = parsedTrayMenu;
         changed = true;
@@ -10962,7 +11551,7 @@ app.whenReady().then(() => {
         if (Object.prototype.hasOwnProperty.call(parsed, key)) {
           parsedTrayMenu[key] = Boolean(parsed[key]);
         } else {
-          parsedTrayMenu[key] = true;
+          parsedTrayMenu[key] = resolveTrayDefault(key);
         }
         changed = true;
       };
@@ -10970,6 +11559,7 @@ app.whenReady().then(() => {
       ensureTrayFlag('providerTrafficEnabled');
       ensureTrayFlag('trackersEnabled');
       ensureTrayFlag('foxboardEnabled');
+      ensureTrayFlag('panelEnabled');
       ensureTrayFlag('kernelManagerEnabled');
       ensureTrayFlag('directoryLocationsEnabled');
       ensureTrayFlag('copyShellExportCommandEnabled');
@@ -10977,6 +11567,7 @@ app.whenReady().then(() => {
       ensureTrayFlag('trayMenuProviderTrafficEnabled');
       ensureTrayFlag('trayMenuTrackersEnabled');
       ensureTrayFlag('trayMenuFoxboardEnabled');
+      ensureTrayFlag('trayMenuPanelEnabled');
       ensureTrayFlag('trayMenuKernelManagerEnabled');
       ensureTrayFlag('trayMenuDirectoryLocationsEnabled');
       ensureTrayFlag('trayMenuCopyShellExportCommandEnabled');
@@ -10985,6 +11576,7 @@ app.whenReady().then(() => {
         'providerTrafficEnabled',
         'trackersEnabled',
         'foxboardEnabled',
+        'panelEnabled',
         'kernelManagerEnabled',
         'directoryLocationsEnabled',
         'copyShellExportCommandEnabled',
@@ -10992,6 +11584,7 @@ app.whenReady().then(() => {
         'trayMenuProviderTrafficEnabled',
         'trayMenuTrackersEnabled',
         'trayMenuFoxboardEnabled',
+        'trayMenuPanelEnabled',
         'trayMenuKernelManagerEnabled',
         'trayMenuDirectoryLocationsEnabled',
         'trayMenuCopyShellExportCommandEnabled',
@@ -11009,7 +11602,7 @@ app.whenReady().then(() => {
         || appearanceGeneralPageSize
         || parsed.backupsPageSize
         || parsed.kernelPageSize
-        || '10',
+        || fallbackOf('generalPageSize', '10'),
       ).trim() || '10';
       if ((!parsed.generalPageSize && !appearanceGeneralPageSize) || (parsed.generalPageSize && parsed.generalPageSize !== legacyGeneralPageSize)) {
         parsed.generalPageSize = legacyGeneralPageSize;
@@ -11065,12 +11658,30 @@ app.whenReady().then(() => {
         parsed.helperStatus = normalizeHelperStatusPayload(status);
         changed = true;
       }
-      if (!parsed.mihomoStatus || typeof parsed.mihomoStatus !== 'object' || typeof parsed.mihomoStatus.running !== 'boolean') {
-        parsed.mihomoStatus = {
-          running: false,
-          source: 'init',
-          updatedAt: new Date().toISOString(),
+      if (!parsed.helper || typeof parsed.helper !== 'object') {
+        parsed.helper = {};
+        changed = true;
+      }
+      if (parsed.helperStatus && typeof parsed.helperStatus === 'object') {
+        const nextHelper = {
+          ...parsed.helper,
+          ...parsed.helperStatus,
         };
+        if (JSON.stringify(nextHelper) !== JSON.stringify(parsed.helper)) {
+          parsed.helper = nextHelper;
+          changed = true;
+        }
+      }
+      if (!parsed.kernel || typeof parsed.kernel !== 'object' || typeof parsed.kernel.running !== 'boolean') {
+        if (!parsed.kernel) {
+          parsed.kernel = {};
+        }
+        parsed.kernel.running = false;
+        parsed.kernel.updatedAt = new Date().toISOString();
+        changed = true;
+      }
+      if (!parsed.updatedAt) {
+        parsed.updatedAt = new Date().toISOString();
         changed = true;
       }
       const normalized = normalizeSettingsForStorage(parsed);
@@ -11080,9 +11691,13 @@ app.whenReady().then(() => {
       if (changed) {
         writeAppSettings(normalized);
       }
+      const responseData = mergeAppearanceAliases(mergePanelManagerAliases(mergeUserDataPathAliases(normalized)));
+      responseData.helperStatus = {
+        ...(responseData.helper && typeof responseData.helper === 'object' ? responseData.helper : {}),
+      };
       return {
         ok: true,
-        data: mergeAppearanceAliases(mergePanelManagerAliases(mergeUserDataPathAliases(normalized))),
+        data: responseData,
       };
     } catch (err) {
       return { ok: false, error: err.message };
@@ -11110,7 +11725,9 @@ app.whenReady().then(() => {
       const existing = readAppSettings();
       const merged = { ...existing, ...payload };
       if (!payload.configFile && typeof payload.configPath === 'string') {
-        merged.configFile = payload.configPath;
+        merged.configFile = path.basename(payload.configPath);
+      } else if (typeof merged.configFile === 'string') {
+        merged.configFile = path.basename(merged.configFile);
       }
       if (Object.prototype.hasOwnProperty.call(merged, 'configPath')) {
         delete merged.configPath;
@@ -11150,6 +11767,10 @@ app.whenReady().then(() => {
         MAX_MAIN_WINDOW_HEIGHT,
       );
       const normalized = normalizeSettingsForStorage(merged);
+      const existingNormalized = normalizeSettingsForStorage(existing);
+      if (JSON.stringify(existingNormalized) === JSON.stringify(normalized)) {
+        return { ok: true };
+      }
       writeAppSettings(normalized);
       const normalizedForUi = mergeAppearanceAliases(
         mergePanelManagerAliases(
@@ -11165,12 +11786,28 @@ app.whenReady().then(() => {
       if (canApplySizeNow && Date.now() > Number(suppressMainWindowSizeApplyUntil || 0)) {
         mainWindow.setSize(normalizedForUi.windowWidth, normalizedForUi.windowHeight);
       }
-      trayMenuData = null;
-      trayMenuDataSignature = '';
-      trayMenuLastBuiltAt = 0;
-      resetTrayProxyMenuCache();
-      refreshTrayMenuLabelsOnly();
-      await createTrayMenu();
+      const currentTrayLabelsSignature = buildTrayLabelsSignature(existing);
+      const currentTrayStructureSignature = buildTrayStructureSignature(existing);
+      const nextTrayLabelsSignature = buildTrayLabelsSignature(normalizedForUi);
+      const nextTrayStructureSignature = buildTrayStructureSignature(normalizedForUi);
+      const trayVisible = Boolean(trayMenuWindow && !trayMenuWindow.isDestroyed() && trayMenuVisible);
+      const labelsChanged = currentTrayLabelsSignature !== nextTrayLabelsSignature;
+      const structureChanged = currentTrayStructureSignature !== nextTrayStructureSignature;
+      if (labelsChanged || structureChanged) {
+        trayMenuData = null;
+        trayMenuDataSignature = '';
+        trayMenuLastBuiltAt = 0;
+        resetTrayProxyMenuCache();
+      }
+      if (trayVisible) {
+        if (structureChanged) {
+          await createTrayMenu();
+        } else if (labelsChanged) {
+          refreshTrayMenuLabelsOnly();
+        } else if (!labelsChanged && trayMenuData && trayMenuWindow && !trayMenuWindow.isDestroyed()) {
+          trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
+        }
+      }
       emitSettingsUpdated(normalizedForUi);
       return { ok: true };
     } catch (err) {
@@ -11185,7 +11822,7 @@ app.whenReady().then(() => {
   async function cleanLogFiles(mode = 'all') {
     try {
       ensureAppDirs();
-      const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
+      const settingsPath = getSettingsPath();
       let logDir = path.join(APP_DATA_DIR, 'logs');
 
       if (fs.existsSync(settingsPath)) {
@@ -11193,7 +11830,12 @@ app.whenReady().then(() => {
           const settingsContent = fs.readFileSync(settingsPath, 'utf-8');
           const settings = JSON.parse(settingsContent);
           if (settings && settings.userDataPaths && settings.userDataPaths.logDir) {
-            logDir = String(settings.userDataPaths.logDir);
+            const userAppDataDir = settings.userDataPaths.userAppDataDir
+              ? path.resolve(expandUserHome(String(settings.userDataPaths.userAppDataDir)))
+              : path.resolve(expandUserHome(process.platform === 'win32'
+                  ? '%USERPROFILE%/AppData/Roaming/ClashFox'
+                  : '~/Library/Application Support/ClashFox'));
+            logDir = path.resolve(userAppDataDir, String(settings.userDataPaths.logDir));
           }
         } catch (e) {
         }
@@ -11456,6 +12098,10 @@ app.whenReady().then(() => {
       return;
     }
     showMainWindow();
+  });
+
+  app.on('deactivate', () => {
+    hideTrayMenuWindow();
   });
 });
 

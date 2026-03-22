@@ -1,0 +1,71 @@
+{
+  "appearance": {
+    "lang": "auto",
+    "theme": "auto",
+    "debugMode": false,
+    "acceptBeta": false,
+    "githubUser": "vernesong",
+    "windowWidth": 1075,
+    "windowHeight": 696,
+    "mainWindowClosed": false,
+    "sidebarCollapsed": false,
+    "generalPageSize": "10",
+    "logLines": 10,
+    "logAutoRefresh": false,
+    "logIntervalPreset": "3"
+  },
+  "proxy": {
+    "mode": "rule",
+    "systemProxy": false,
+    "tun": false,
+    "stack": "Mixed",
+    "mixedPort": 7893,
+    "port": 7890,
+    "socksPort": 7891,
+    "allowLan": true
+  },
+  "trayMenu": {
+    "chartEnabled": false,
+    "providerTrafficEnabled": false,
+    "trackersEnabled": false,
+    "foxboardEnabled": false,
+    "panelEnabled": false,
+    "kernelManagerEnabled": false,
+    "directoryLocationsEnabled": false,
+    "copyShellExportCommandEnabled": false
+  },
+  "userDataPaths": {
+    "userAppDataDir": "~/Library/Application Support/ClashFox/",
+    "configFile": "default.yaml",
+    "configDir": "config",
+    "coreDir": "core",
+    "dataDir": "data",
+    "logDir": "logs",
+    "pidDir": "runtime"
+  },
+  "panelManager": {
+    "externalController": "127.0.0.1:9090",
+    "secret": "clashfox",
+    "panelChoice": "zashboard",
+    "externalUi": "ui",
+    "authentication": [
+      "mihomo:clashfox"
+    ]
+  },
+  "kernel": {
+    "running": false
+  },
+  "device": {},
+  "helper": {},
+  "overviewOrder": [
+    "quick-actions",
+    "outbound-mode",
+    "running",
+    "network",
+    "conn-live",
+    "network-history",
+    "network-topology",
+    "provider-subscription",
+    "rules-overview"
+  ]
+}
