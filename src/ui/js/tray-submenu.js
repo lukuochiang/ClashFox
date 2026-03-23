@@ -3,6 +3,7 @@ const submenuListEl = document.getElementById('submenuList');
 
 let submenuKey = '';
 let submenuItems = [];
+let submenuMeta = {};
 let connectivityRefreshTimer = null;
 let lastResizeWidth = 0;
 let lastResizeHeight = 0;
@@ -34,6 +35,74 @@ const PANEL_TRAFFIC_INTERVAL_MS = 1500;
 const PANEL_TRAFFIC_RECONNECT_BASE_MS = 1200;
 const PANEL_TRAFFIC_RECONNECT_MAX_MS = 10000;
 let submenuRendererVisible = false;
+let resizeSubmenuFrame = null;
+let submenuMeasureGeneration = 0;
+let submenuMeasureObserver = null;
+
+function nextTick() {
+  return Promise.resolve();
+}
+
+function waitForFontsReady() {
+  if (!document.fonts || !document.fonts.ready || typeof document.fonts.ready.then !== 'function') {
+    return Promise.resolve();
+  }
+  return document.fonts.ready.catch(() => {});
+}
+
+function waitForAnimationFrame() {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame !== 'function') {
+      resolve();
+      return;
+    }
+    requestAnimationFrame(() => resolve());
+  });
+}
+
+function getTextVisualUnits(text = '') {
+  return Array.from(String(text || '')).reduce((count, char) => {
+    if (/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/u.test(char)) {
+      return count + 2;
+    }
+    return count + 1;
+  }, 0);
+}
+
+function getSubmenuLayout() {
+  return submenuMeta && typeof submenuMeta === 'object'
+    ? String(submenuMeta.layout || '').trim()
+    : '';
+}
+
+function clearSubmenuResizeObserver() {
+  if (submenuMeasureObserver) {
+    try {
+      submenuMeasureObserver.disconnect();
+    } catch {
+      // ignore
+    }
+    submenuMeasureObserver = null;
+  }
+}
+
+function ensureSubmenuResizeObserver() {
+  if (submenuMeasureObserver || typeof ResizeObserver !== 'function') {
+    return;
+  }
+  submenuMeasureObserver = new ResizeObserver(() => {
+    if (!submenuRendererVisible) {
+      return;
+    }
+    scheduleResizeSubmenuToContent();
+  });
+  if (submenuRootEl) {
+    submenuMeasureObserver.observe(submenuRootEl);
+  }
+  if (submenuListEl) {
+    submenuMeasureObserver.observe(submenuListEl);
+  }
+}
 
 async function applyTrayTheme(preloadedSettings = null) {
   try {
@@ -247,9 +316,19 @@ function setSubmenuRendererVisible(nextVisible) {
   }
   submenuRendererVisible = visible;
   if (!visible) {
+    submenuMeasureGeneration += 1;
+    if (resizeSubmenuFrame !== null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(resizeSubmenuFrame);
+      resizeSubmenuFrame = null;
+    }
+    clearSubmenuResizeObserver();
     stopSubmenuLiveActivity();
+    lastResizeWidth = 0;
+    lastResizeHeight = 0;
     return;
   }
+  ensureSubmenuResizeObserver();
+  submenuMeasureGeneration += 1;
   if (submenuKey) {
     renderSubmenu();
   }
@@ -607,10 +686,17 @@ async function runActionForItem(item) {
         && Array.isArray(data.submenus[response.submenu])
         ? data.submenus[response.submenu]
         : null;
+      const latestMeta = data
+        && data.submenuMeta
+        && data.submenuMeta[response.submenu]
+        && typeof data.submenuMeta[response.submenu] === 'object'
+        ? data.submenuMeta[response.submenu]
+        : {};
       if (latestItems) {
         setSubmenu({
           key: response.submenu,
           items: latestItems,
+          meta: latestMeta,
         });
       }
     } catch {
@@ -652,6 +738,11 @@ function makeRow(item) {
   if (item.type === 'provider') {
     const row = document.createElement('div');
     row.className = 'menu-row menu-row-provider disabled';
+    row.classList.add(`status-${String(item.status || 'unknown')}`);
+    const check = document.createElement('div');
+    check.className = 'menu-check empty';
+    check.textContent = ' ';
+    row.appendChild(check);
     const bullet = document.createElement('div');
     bullet.className = 'menu-leading provider-bullet';
     row.appendChild(bullet);
@@ -677,11 +768,14 @@ function makeRow(item) {
     } else {
       row.classList.add('disabled');
     }
-    if (item.checked) {
-      row.classList.add('selected');
-    }
     if (item.action) {
       row.dataset.action = String(item.action);
+    }
+    if (typeof item.checked === 'boolean') {
+      const check = document.createElement('div');
+      check.className = `menu-check${item.checked ? '' : ' empty'}`;
+      check.textContent = item.checked ? '✓' : ' ';
+      row.appendChild(check);
     }
     const bullet = document.createElement('div');
     bullet.className = 'menu-leading child-bullet';
@@ -695,6 +789,13 @@ function makeRow(item) {
       right.className = 'menu-right';
       right.textContent = String(item.rightText || '');
       row.appendChild(right);
+    }
+    if (item.rightBadge && item.rightBadge.text) {
+      const badge = document.createElement('div');
+      const tone = String(item.rightBadge.tone || 'neutral');
+      badge.className = `menu-badge tone-${tone}`;
+      badge.textContent = String(item.rightBadge.text);
+      row.appendChild(badge);
     }
     if (clickable) {
       row.addEventListener('click', async (event) => {
@@ -717,14 +818,10 @@ function makeRow(item) {
   const pending = NETWORK_TOGGLE_ACTIONS.has(actionName) && pendingActionSet.has(actionName);
   const isLoading = NETWORK_TOGGLE_ACTIONS.has(actionName) && loadingVisibleSet.has(actionName);
   const clickable = item.enabled !== false && !pending;
-  const checked = typeof item.checked === 'boolean' && item.checked;
   if (clickable) {
     row.classList.add('clickable');
   } else {
     row.classList.add('disabled');
-  }
-  if (checked) {
-    row.classList.add('selected');
   }
 
   const leadingParts = makeLeading(item, isLoading);
@@ -768,10 +865,6 @@ function makeRow(item) {
   return row;
 }
 
-function isScrollableSubmenuKey(key = '') {
-  return String(key || '').startsWith('outbound-group:');
-}
-
 function getVisibleSubmenuItems() {
   return submenuItems;
 }
@@ -781,58 +874,185 @@ function estimateSubmenuDimensions() {
   if (submenuKey === 'panel') {
     return { width: 260, height: 286 };
   }
-  const visibleRows = items.reduce((count, item) => {
+  if (submenuKey === 'network') {
+    const contentHeight = items.reduce((height, item) => {
+      if (!item || typeof item !== 'object') {
+        return height + 28;
+      }
+      switch (item.type) {
+        case 'separator':
+          return height + 11;
+        default:
+          if (item.iconKey === 'currentService') {
+            return height + 38;
+          }
+          return height + 28;
+      }
+    }, 20);
+    return {
+      width: 300,
+      height: Math.max(72, Math.min(220, Math.round(contentHeight))),
+    };
+  }
+  const layout = getSubmenuLayout();
+  let longestUnits = submenuKey === 'network' ? 16 : 10;
+  let hasBadge = false;
+  items.forEach((item) => {
+    if (!item || typeof item !== 'object' || item.type === 'separator') {
+      return;
+    }
+    const labelUnits = getTextVisualUnits(item.label || '');
+    const rightUnits = item.rightBadge && item.rightBadge.text
+      ? Math.max(6, getTextVisualUnits(item.rightBadge.text))
+      : (item.rightText ? getTextVisualUnits(item.rightText) : 0);
+    longestUnits = Math.max(longestUnits, labelUnits + Math.min(10, rightUnits));
+    hasBadge = hasBadge || Boolean((item.rightBadge && item.rightBadge.text) || item.rightText);
+  });
+  const chromeWidth = String(submenuKey || '').startsWith('outbound-group:') ? 92 : 110;
+  const badgeWidth = hasBadge ? 68 : 0;
+  const estimatedWidth = chromeWidth + badgeWidth + (longestUnits * 6) + 8;
+  const width = layout === 'scrollable'
+    ? Math.max(312, Math.min(336, Math.round(estimatedWidth)))
+    : Math.max(196, Math.min(300, Math.round(estimatedWidth)));
+  const contentHeight = items.reduce((height, item) => {
     if (!item || typeof item !== 'object') {
-      return count + 1;
+      return height + 28;
     }
     switch (item.type) {
       case 'separator':
-        return count + 0.35;
+        return height + 11;
       case 'provider':
-        return count + 0.9;
+        return height + 24;
       case 'child':
-        return count + 0.8;
+        return height + 22;
       case 'panel-chart':
-        return count + 3.2;
+        return height + 132;
       case 'panel-provider-traffic':
-        return count + 4.2;
+        return height + 154;
       default:
-        return count + 1;
+        if (submenuKey === 'network' && item.iconKey === 'currentService') {
+          return height + 38;
+        }
+        return height + 28;
     }
-  }, 0);
-  const isScrollable = String(submenuKey || '').startsWith('outbound-group:');
-  const width = submenuKey === 'network'
-    ? 280
-    : isScrollable
-      ? 320
-      : 260;
-  const baseHeight = submenuKey === 'network'
-    ? 170
-    : isScrollable
-      ? 150
-      : 120;
-  const heightCap = submenuKey === 'network'
-    ? 420
-    : isScrollable
-      ? 500
-      : 360;
-  const cappedHeight = Math.max(120, Math.min(heightCap, Math.round(baseHeight + (visibleRows * 28))));
-  return { width, height: cappedHeight };
+  }, 20);
+  const heightCap = submenuKey === 'panel'
+    ? 500
+    : (layout === 'scrollable'
+      ? 520
+      : (submenuKey === 'network' ? 220 : 420));
+  return {
+    width,
+    height: Math.max(72, Math.min(heightCap, Math.round(contentHeight))),
+  };
 }
 
-function resizeSubmenuToContent() {
+function isScrollableSubmenuKey(key = submenuKey) {
+  return key === submenuKey
+    ? getSubmenuLayout() === 'scrollable'
+    : false;
+}
+
+function measureSubmenuContentHeight() {
+  if (submenuListEl) {
+    if (typeof submenuListEl.scrollHeight === 'number') {
+      const measured = Math.ceil(submenuListEl.scrollHeight || 0);
+      if (measured > 0) {
+        return measured;
+      }
+    }
+  }
+  return Math.max(0, Math.ceil(submenuRootEl ? submenuRootEl.scrollHeight || 0 : 0));
+}
+
+function getSubmenuMeasureWidth() {
+  if (submenuKey === 'network') {
+    return 300;
+  }
   const metrics = estimateSubmenuDimensions();
-  const width = Math.max(SUBMENU_MIN_WIDTH, Math.ceil(metrics.width || 0));
-  const height = Math.max(60, Math.ceil(metrics.height || 0));
-  if (width === lastResizeWidth && height === lastResizeHeight) {
-    return;
+  const baseWidth = Math.max(SUBMENU_MIN_WIDTH, Math.ceil(metrics.width || 0));
+  if (lastResizeWidth > 0) {
+    return lastResizeWidth;
+  }
+  return baseWidth;
+}
+
+function getSubmenuHeightCap() {
+  if (submenuKey === 'panel') {
+    return 500;
+  }
+  if (isScrollableSubmenuKey()) {
+    return 520;
+  }
+  if (submenuKey === 'network') {
+    return 220;
+  }
+  return 420;
+}
+
+function resizeSubmenuToContent(force = false) {
+  const width = Math.max(SUBMENU_MIN_WIDTH, getSubmenuMeasureWidth());
+  const measuredHeight = measureSubmenuContentHeight();
+  const fallbackHeight = estimateSubmenuDimensions().height || 0;
+  const cap = getSubmenuHeightCap();
+  const contentHeight = Math.ceil(measuredHeight || fallbackHeight || 0);
+  const height = Math.max(60, Math.min(cap, contentHeight));
+  const scrollable = isScrollableSubmenuKey();
+  if (!force && width === lastResizeWidth && height === lastResizeHeight) {
+    return false;
   }
   lastResizeWidth = width;
   lastResizeHeight = height;
   if (submenuRootEl) {
     submenuRootEl.style.width = `${width}px`;
+    submenuRootEl.style.maxHeight = '';
+    submenuRootEl.classList.toggle('is-scrollable', scrollable);
+  }
+  if (submenuListEl) {
+    if (scrollable) {
+      submenuListEl.style.maxHeight = `${Math.max(96, height)}px`;
+      submenuListEl.style.overflowY = contentHeight > height ? 'auto' : 'hidden';
+    } else {
+      submenuListEl.style.maxHeight = `${Math.max(96, height)}px`;
+      submenuListEl.style.overflowY = contentHeight > height ? 'auto' : 'hidden';
+    }
   }
   window.clashfox.traySubmenuResize({ width, height });
+  return true;
+}
+
+function scheduleResizeSubmenuToContent() {
+  if (resizeSubmenuFrame !== null && typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(resizeSubmenuFrame);
+    resizeSubmenuFrame = null;
+  }
+  const generation = submenuMeasureGeneration;
+  const run = async () => {
+    resizeSubmenuFrame = null;
+    if (!submenuRendererVisible || generation !== submenuMeasureGeneration) {
+      return;
+    }
+    await nextTick();
+    if (!submenuRendererVisible || generation !== submenuMeasureGeneration) {
+      return;
+    }
+    await waitForFontsReady();
+    if (!submenuRendererVisible || generation !== submenuMeasureGeneration) {
+      return;
+    }
+    await waitForAnimationFrame();
+    if (!submenuRendererVisible || generation !== submenuMeasureGeneration) {
+      return;
+    }
+    resizeSubmenuToContent(false);
+  };
+  if (typeof requestAnimationFrame === 'function') {
+    resizeSubmenuFrame = requestAnimationFrame(() => {
+      run().catch(() => {});
+    });
+    return;
+  }
+  run().catch(() => {});
 }
 
 function renderSubmenu() {
@@ -843,7 +1063,7 @@ function renderSubmenu() {
   getVisibleSubmenuItems().forEach((item) => {
     submenuListEl.appendChild(makeRow(item));
   });
-  resizeSubmenuToContent();
+  scheduleResizeSubmenuToContent();
 }
 
 function setSubmenu(payload) {
@@ -851,16 +1071,19 @@ function setSubmenu(payload) {
   const keyChanged = nextKey !== submenuKey;
   submenuKey = nextKey;
   submenuItems = Array.isArray(payload && payload.items) ? payload.items : [];
+  submenuMeta = payload && payload.meta && typeof payload.meta === 'object' ? payload.meta : {};
   if (keyChanged) {
     lastResizeWidth = 0;
     lastResizeHeight = 0;
   }
   if (submenuRootEl) {
     submenuRootEl.dataset.submenuKey = submenuKey;
+    submenuRootEl.classList.toggle('is-scrollable', isScrollableSubmenuKey());
   }
   if (!submenuRendererVisible) {
     return;
   }
+  ensureSubmenuResizeObserver();
   renderSubmenu();
   ensureConnectivityRefresh();
   if (submenuKey === 'panel') {
@@ -968,5 +1191,10 @@ if (submenuListEl) {
 }
 
 window.addEventListener('beforeunload', () => {
+  clearSubmenuResizeObserver();
+  if (resizeSubmenuFrame !== null && typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(resizeSubmenuFrame);
+    resizeSubmenuFrame = null;
+  }
   stopSubmenuLiveActivity();
 });

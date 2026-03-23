@@ -69,6 +69,7 @@ let trayMenuWarmupPromise = null;
 let trayMenuContentHeight = 420;
 let trayMenuRefreshTimer = null;
 let trayMenuRendererReady = false;
+let trayMenuPaintReady = false;
 let trayMenuLastBuiltAt = 0;
 let trayMenuDataSignature = '';
 let trayProxyMenuCache = {
@@ -76,6 +77,7 @@ let trayProxyMenuCache = {
   builtAt: 0,
   outboundProxyCard: null,
   outboundProviderSubmenus: {},
+  submenuMeta: {},
 };
 let trayMenuClosing = false;
 let traySubmenuWindow = null;
@@ -87,6 +89,7 @@ let trayMenuCloseTimer = null;
 let traySubmenuAnchor = { top: 0, height: 0, rootHeight: 0 };
 let traySubmenuLastSize = { width: 0, height: 0 };
 let traySubmenuPendingPayload = null;
+let traySubmenuSide = '';
 let trayPanelWindow = null;
 let trayPanelVisible = false;
 let trayPanelReady = false;
@@ -129,6 +132,7 @@ function cloneTrayProxyMenuCacheEntry(entry = null) {
     return {
       outboundProxyCard: null,
       outboundProviderSubmenus: {},
+      submenuMeta: {},
     };
   }
   const outboundProxyCard = entry.outboundProxyCard && typeof entry.outboundProxyCard === 'object'
@@ -145,9 +149,14 @@ function cloneTrayProxyMenuCacheEntry(entry = null) {
       ? items.map((item) => (item && typeof item === 'object' ? { ...item } : item))
       : [];
   });
+  const submenuMeta = {};
+  Object.entries(entry.submenuMeta || {}).forEach(([key, value]) => {
+    submenuMeta[key] = value && typeof value === 'object' ? { ...value } : {};
+  });
   return {
     outboundProxyCard,
     outboundProviderSubmenus,
+    submenuMeta,
   };
 }
 
@@ -204,12 +213,17 @@ function sendTrayWindowVisibility(windowName, visible) {
   }
 }
 
+function clearTrayMenuPaintReadyTimer() {
+  return;
+}
+
 function resetTrayProxyMenuCache() {
   trayProxyMenuCache = {
     signature: '',
     builtAt: 0,
     outboundProxyCard: null,
     outboundProviderSubmenus: {},
+    submenuMeta: {},
   };
 }
 
@@ -223,6 +237,7 @@ function buildTrayProxyMenuCacheEntry(rawProxies = null) {
       builtAt: Date.now(),
       outboundProxyCard: null,
       outboundProviderSubmenus: {},
+      submenuMeta: {},
     };
   }
   const outboundProxyCard = {
@@ -234,7 +249,12 @@ function buildTrayProxyMenuCacheEntry(rawProxies = null) {
   Object.entries(proxyGroupTree.submenus || {}).forEach(([submenuKey, proxyItems]) => {
     const provider = proxyGroupTree.providers.find((item) => item && item.submenuKey === submenuKey);
     outboundProviderSubmenus[submenuKey] = [
-      { type: 'provider', label: provider && provider.name ? provider.name : '-', rightText: provider && provider.currentProxy ? provider.currentProxy : '-' },
+      {
+        type: 'provider',
+        label: provider && provider.name ? provider.name : '-',
+        rightText: provider && provider.currentProxy ? provider.currentProxy : '-',
+        status: provider && provider.currentStatus ? provider.currentStatus : 'unknown',
+      },
       { type: 'separator' },
       ...(Array.isArray(proxyItems) ? proxyItems : []),
     ];
@@ -244,6 +264,9 @@ function buildTrayProxyMenuCacheEntry(rawProxies = null) {
     builtAt: Date.now(),
     outboundProxyCard,
     outboundProviderSubmenus,
+    submenuMeta: proxyGroupTree.submenuMeta && typeof proxyGroupTree.submenuMeta === 'object'
+      ? { ...proxyGroupTree.submenuMeta }
+      : {},
   };
 }
 
@@ -767,6 +790,28 @@ function readAppSettings() {
 
 function normalizeTextValue(value) {
   return String(value || '').trim();
+}
+
+function normalizeProxyMode(value) {
+  const mode = normalizeTextValue(value).toLowerCase();
+  if (mode === 'global' || mode === 'direct' || mode === 'rule') {
+    return mode;
+  }
+  return 'rule';
+}
+
+function normalizeTunStack(value) {
+  const stack = normalizeTextValue(value).toLowerCase();
+  if (stack === 'mixed') {
+    return 'Mixed';
+  }
+  if (stack === 'gvisor') {
+    return 'gVisor';
+  }
+  if (stack === 'system') {
+    return 'System';
+  }
+  return 'Mixed';
 }
 
 function resolveDefaultDeviceOsName() {
@@ -1309,31 +1354,35 @@ function normalizeSettingsForStorage(input = {}) {
   delete parsed.logIntervalPreset;
   delete parsed.overviewTopOrder;
 
-  parsed.proxy = normalizeTextValue(parsed.proxy) || 'rule';
-  parsed.systemProxy = normalizeBool(parsed.systemProxy, false);
-  parsed.tun = normalizeBool(parsed.tun, false);
-  parsed.stack = normalizeTextValue(parsed.stack) || 'Mixed';
-  parsed.mixedPort = normalizePort(parsed.mixedPort, 7893);
-  parsed.port = normalizePort(parsed.port, 7890);
-  parsed.socksPort = normalizePort(parsed.socksPort, 7891);
-  parsed.allowLan = normalizeBool(parsed.allowLan, true);
+  const proxyInput = parsed.proxy && typeof parsed.proxy === 'object' ? parsed.proxy : {};
+  const proxyModeInput = typeof parsed.proxy === 'string'
+    ? normalizeTextValue(parsed.proxy)
+    : normalizeTextValue(proxyInput.mode || parsed.mode);
+  const legacySystemProxy = normalizeBool(parsed.systemProxy, false);
+  const legacyTun = normalizeBool(parsed.tun, false);
+  const legacyStack = normalizeTextValue(parsed.stack) || 'Mixed';
+  const legacyMixedPort = normalizePort(parsed.mixedPort, 7893);
+  const legacyPort = normalizePort(parsed.port, 7890);
+  const legacySocksPort = normalizePort(parsed.socksPort, 7891);
+  const legacyAllowLan = normalizeBool(parsed.allowLan, true);
   delete parsed.captureMixedPort;
   delete parsed.captureHttpPort;
   delete parsed.captureSocksPort;
   delete parsed.captureTunMode;
   delete parsed.captureAllowLan;
 
-  const proxy = parsed.proxy && typeof parsed.proxy === 'object' ? parsed.proxy : {};
-  const mode = normalizeTextValue(proxy.mode) || 'rule';
+  const mode = normalizeProxyMode(proxyModeInput || 'rule');
   parsed.proxy = {
     mode,
-    systemProxy: normalizeBool(parsed.systemProxy ?? proxy.systemProxy, false),
-    tun: normalizeBool(parsed.tun ?? proxy.tun, false),
-    stack: normalizeTextValue(parsed.stack || proxy.stack) || 'Mixed',
-    mixedPort: normalizePort(parsed.mixedPort ?? proxy.mixedPort, 7893),
-    port: normalizePort(parsed.port ?? proxy.port, 7890),
-    socksPort: normalizePort(parsed.socksPort ?? proxy.socksPort, 7891),
-    allowLan: normalizeBool(parsed.allowLan ?? proxy.allowLan, true),
+    systemProxy: normalizeBool(proxyInput.systemProxy ?? legacySystemProxy, false),
+    tun: normalizeBool(proxyInput.tun ?? legacyTun, false),
+    stack: normalizeTunStack(proxyInput.stack || legacyStack),
+    mixedPort: normalizePort(proxyInput.mixedPort ?? legacyMixedPort, 7893),
+    port: normalizePort(proxyInput.port ?? legacyPort, 7890),
+    socksPort: normalizePort(proxyInput.socksPort ?? legacySocksPort, 7891),
+    allowLan: Object.prototype.hasOwnProperty.call(proxyInput, 'allowLan')
+      ? Boolean(proxyInput.allowLan)
+      : legacyAllowLan,
   };
   delete parsed.systemProxy;
   delete parsed.tun;
@@ -5560,6 +5609,14 @@ function pickOverviewInternetLatencyValue(data = {}) {
 }
 
 async function getConnectivityQualitySnapshot(configPath, force = false) {
+  const formatLatencyText = (value) => {
+    const normalized = String(value || '').trim();
+    const numeric = Number.parseFloat(normalized);
+    if (!Number.isFinite(numeric) || numeric < 0) {
+      return '-';
+    }
+    return `${normalized} ms`;
+  };
   const now = Date.now();
   if (!force && (now - connectivityQualityCache.updatedAt) <= CONNECTIVITY_REFRESH_MS) {
     return connectivityQualityCache;
@@ -5574,7 +5631,7 @@ async function getConnectivityQualitySnapshot(configPath, force = false) {
       const internetMs = String(directPingMs || '').trim();
       if (internetMs && internetMs !== '-') {
         connectivityQualityCache = {
-          text: `${internetMs} ms`,
+          text: formatLatencyText(internetMs),
           tone: resolveConnectivityToneByLatency(internetMs),
           updatedAt: Date.now(),
         };
@@ -5586,7 +5643,7 @@ async function getConnectivityQualitySnapshot(configPath, force = false) {
         : '';
       if (overviewInternetMs && overviewInternetMs !== '-') {
         connectivityQualityCache = {
-          text: `${overviewInternetMs} ms`,
+          text: formatLatencyText(overviewInternetMs),
           tone: resolveConnectivityToneByLatency(overviewInternetMs),
           updatedAt: Date.now(),
         };
@@ -6097,6 +6154,22 @@ async function runBridgeViaHelperApi(bridgeArgs = []) {
       return { ok: false, error: 'parse_error', details: textBody };
     }
   };
+  const resolveTunStatusSource = () => {
+    const settings = readAppSettings();
+    const configPath = resolveConfigPathFromSettingsOrArgs(settings);
+    const configAccess = readControllerAccessFromConfigPath(configPath);
+    if (configAccess && (configAccess.controller || configAccess.secret)) {
+      return {
+        controller: configAccess.controller,
+        secret: configAccess.secret,
+      };
+    }
+    const fallbackAccess = resolveControllerAccessFromSettings('', '');
+    return {
+      controller: fallbackAccess.baseUrl ? fallbackAccess.baseUrl.replace(/^https?:\/\//i, '') : '',
+      secret: fallbackAccess.secret || '',
+    };
+  };
   const isInvalidServiceError = (resp = null) => {
     if (!resp || typeof resp !== 'object') {
       return false;
@@ -6196,9 +6269,36 @@ async function runBridgeViaHelperApi(bridgeArgs = []) {
         });
       }
       case 'tun-status':
-        return { ok: false, error: 'unsupported_command' };
-      case 'tun':
-        return { ok: false, error: 'unsupported_command' };
+      case 'tun': {
+        const source = resolveTunStatusSource();
+        const configs = await getControllerConfigsMain(source);
+        if (!configs || !configs.ok || !configs.data || typeof configs.data !== 'object') {
+          return configs;
+        }
+        const tun = configs.data.tun;
+        let enabled = null;
+        let stack = '';
+        if (typeof tun === 'boolean') {
+          enabled = tun;
+        } else if (tun && typeof tun === 'object') {
+          if (typeof tun.enable === 'boolean') {
+            enabled = tun.enable;
+          } else if (typeof tun.enabled === 'boolean') {
+            enabled = tun.enabled;
+          }
+          if (typeof tun.stack === 'string' && tun.stack.trim()) {
+            stack = tun.stack.trim();
+          }
+        }
+        return {
+          ok: true,
+          data: {
+            enabled: Boolean(enabled),
+            stack,
+            source: 'controller',
+          },
+        };
+      }
       case 'system-proxy-enable': {
         const settings = readAppSettings();
         const configPath = resolveConfigPathFromSettingsOrArgs(settings);
@@ -8303,6 +8403,22 @@ function resolveTrayProxyStatus(delay = null, alive = null, isCurrent = false) {
   return 'slow';
 }
 
+function resolveTrayLatencyTone(status = '') {
+  switch (String(status || '').trim().toLowerCase()) {
+    case 'fast':
+      return 'good';
+    case 'medium':
+      return 'warn';
+    case 'slow':
+      return 'slow';
+    case 'dead':
+    case 'current':
+    case 'unknown':
+    default:
+      return 'bad';
+  }
+}
+
 function compareTrayProxyGroupOrder(a = null, b = null) {
   const aName = String(a && a.name ? a.name : '').trim();
   const bName = String(b && b.name ? b.name : '').trim();
@@ -8408,6 +8524,7 @@ function buildTrayProxyGroupTreeData(rawData = {}) {
   const reservedGroupNames = new Set(['GLOBAL', 'DIRECT', 'REJECT', 'PASS', 'COMPATIBLE']);
   const providers = [];
   const submenus = {};
+  const submenuMeta = {};
   Object.entries(proxyMap).forEach(([key, value]) => {
     if (!value || typeof value !== 'object') {
       return;
@@ -8451,6 +8568,7 @@ function buildTrayProxyGroupTreeData(rawData = {}) {
     });
     const currentPath = Array.isArray(currentRuntime.path) ? currentRuntime.path.filter(Boolean) : [];
     const leafName = String(currentRuntime.leafName || '').trim();
+    const currentStatus = resolveTrayProxyStatus(currentRuntime.delay, currentRuntime.alive, false);
     const subtitle = leafName
       ? (currentPath.length > 1 ? `${currentPath[0]} -> ${leafName}` : leafName)
       : currentProxy;
@@ -8464,6 +8582,7 @@ function buildTrayProxyGroupTreeData(rawData = {}) {
       vehicleType: groupType,
       proxyCount: proxies.length,
       currentProxy: currentProxy || '-',
+      currentStatus,
       chartMode,
       chart: (chartMode === 'manual' ? proxies : proxies.slice(0, 18)).map((proxy) => ({
         status: resolveTrayProxyStatus(proxy.delay, proxy.alive, false),
@@ -8472,11 +8591,26 @@ function buildTrayProxyGroupTreeData(rawData = {}) {
     });
     submenus[submenuKey] = proxies.length
       ? proxies.flatMap((proxy, index) => {
+          const delayValue = Number(proxy.delay);
+          const hasDelay = Number.isFinite(delayValue) && delayValue >= 0;
+          const delayStatus = resolveTrayProxyStatus(proxy.delay, proxy.alive, false);
+          const delayTone = delayStatus === 'fast'
+            ? 'good'
+            : (delayStatus === 'medium'
+              ? 'warn'
+              : (delayStatus === 'slow'
+                ? 'slow'
+                : (delayStatus === 'dead'
+                  ? 'bad'
+                  : 'neutral')));
           const nextItem = {
             type: 'child',
             label: proxy.name || '-',
-            rightText: Number.isFinite(Number(proxy.delay)) ? `${Number(proxy.delay)} ms` : '',
-            status: resolveTrayProxyStatus(proxy.delay, proxy.alive, proxy.isCurrent),
+            rightBadge: {
+              text: hasDelay ? `${Math.round(delayValue)} ms` : '-',
+              tone: delayTone,
+            },
+            status: delayStatus,
             checked: Boolean(proxy.isCurrent),
             action: 'proxy-select',
             value: proxy.name || '',
@@ -8486,6 +8620,10 @@ function buildTrayProxyGroupTreeData(rawData = {}) {
           return index >= proxies.length - 1 ? [nextItem] : [nextItem, { type: 'separator' }];
         })
       : [{ type: 'child', label: '-', rightText: '', status: 'unknown', enabled: false }];
+    submenuMeta[submenuKey] = {
+      layout: chartMode === 'manual' ? 'scrollable' : 'content-fit',
+      proxyCount: proxies.length,
+    };
   });
   providers.sort(compareTrayProxyGroupOrder);
   return {
@@ -8494,6 +8632,7 @@ function buildTrayProxyGroupTreeData(rawData = {}) {
     totalProxies: providers.reduce((sum, provider) => sum + Number(provider.proxyCount || 0), 0),
     providers,
     submenus,
+    submenuMeta,
   };
 }
 
@@ -9038,26 +9177,50 @@ function patchTrayMenuNetworkState({ systemProxyEnabled, tunEnabled } = {}) {
     }
     if (item.action === 'toggle-system-proxy' && typeof systemProxyEnabled === 'boolean') {
       const nextRightText = systemProxyEnabled ? 'On' : 'Off';
-      if (item.checked === systemProxyEnabled && String(item.rightText || '') === nextRightText) {
+      const nextTone = systemProxyEnabled ? 'good' : 'neutral';
+      const currentBadge = item.rightBadge && typeof item.rightBadge === 'object' ? item.rightBadge : null;
+      if (
+        item.checked === systemProxyEnabled
+        && String(item.rightText || '') === nextRightText
+        && currentBadge
+        && String(currentBadge.text || '') === nextRightText
+        && String(currentBadge.tone || '') === nextTone
+      ) {
         return item;
       }
       changed = true;
       return {
         ...item,
         checked: systemProxyEnabled,
-        rightText: nextRightText,
+        rightText: '',
+        rightBadge: {
+          text: nextRightText,
+          tone: nextTone,
+        },
       };
     }
     if (item.action === 'toggle-tun' && typeof tunEnabled === 'boolean') {
       const nextRightText = tunEnabled ? 'On' : 'Off';
-      if (item.checked === tunEnabled && String(item.rightText || '') === nextRightText) {
+      const nextTone = tunEnabled ? 'good' : 'neutral';
+      const currentBadge = item.rightBadge && typeof item.rightBadge === 'object' ? item.rightBadge : null;
+      if (
+        item.checked === tunEnabled
+        && String(item.rightText || '') === nextRightText
+        && currentBadge
+        && String(currentBadge.text || '') === nextRightText
+        && String(currentBadge.tone || '') === nextTone
+      ) {
         return item;
       }
       changed = true;
       return {
         ...item,
         checked: tunEnabled,
-        rightText: nextRightText,
+        rightText: '',
+        rightBadge: {
+          text: nextRightText,
+          tone: nextTone,
+        },
       };
     }
     return item;
@@ -9146,6 +9309,9 @@ function buildTrayMenuShell() {
   const cachedSubmenus = trayProxyMenuCache && trayProxyMenuCache.outboundProviderSubmenus
     ? trayProxyMenuCache.outboundProviderSubmenus
     : {};
+  const cachedSubmenuMeta = trayProxyMenuCache && trayProxyMenuCache.submenuMeta
+    ? trayProxyMenuCache.submenuMeta
+    : {};
   return {
     header: {
       title: app.getName(),
@@ -9168,6 +9334,7 @@ function buildTrayMenuShell() {
     },
     providerTraffic: trayProviderPayload.providerTraffic,
     outboundProxyTree: trayProviderPayload.outboundProxyTree,
+    submenuMeta: cachedSubmenuMeta,
     items: buildTrayMainMenuItems({
       labels,
       currentOutboundBadge,
@@ -9282,7 +9449,10 @@ function buildTraySubmenuData({
         action: 'toggle-system-proxy',
         checked: networkTakeoverEnabled,
         enabled: true,
-        rightText: networkTakeoverEnabled ? 'On' : 'Off',
+        rightBadge: {
+          text: networkTakeoverEnabled ? 'On' : 'Off',
+          tone: networkTakeoverEnabled ? 'good' : 'neutral',
+        },
         iconKey: 'systemProxy',
       },
       {
@@ -9291,7 +9461,10 @@ function buildTraySubmenuData({
         action: 'toggle-tun',
         checked: tunEnabled,
         enabled: tunAvailable,
-        rightText: tunEnabled ? 'On' : 'Off',
+        rightBadge: {
+          text: tunEnabled ? 'On' : 'Off',
+          tone: tunEnabled ? 'good' : 'neutral',
+        },
         iconKey: 'tun',
       },
       { type: 'separator' },
@@ -9432,7 +9605,6 @@ async function buildTrayMenuOnce() {
       : (parsedProxyPorts && parsedProxyPorts.socksPort
         ? String(parsedProxyPorts.socksPort).trim()
         : networkTakeoverPort);
-    persistSystemProxyEnabledToSettings(networkTakeoverEnabled);
   } catch {
     networkTakeoverEnabled = Boolean(
       trayProxySettings && Object.prototype.hasOwnProperty.call(trayProxySettings, 'systemProxy')
@@ -9531,6 +9703,7 @@ async function buildTrayMenuOnce() {
   });
   let outboundProxyCard = null;
   const outboundProviderSubmenus = {};
+  const outboundSubmenuMeta = {};
   const rawProxies = proxiesResult.status === 'fulfilled' ? proxiesResult.value : null;
   let proxyGroupCacheHit = false;
   if (rawProxies && rawProxies.ok && rawProxies.data) {
@@ -9543,17 +9716,20 @@ async function buildTrayMenuOnce() {
       const cached = cloneTrayProxyMenuCacheEntry(trayProxyMenuCache);
       outboundProxyCard = cached.outboundProxyCard;
       Object.assign(outboundProviderSubmenus, cached.outboundProviderSubmenus);
+      Object.assign(outboundSubmenuMeta, cached.submenuMeta || {});
     } else {
       trayProxyMenuCache = buildTrayProxyMenuCacheEntry(rawProxies.data || {});
       const cached = cloneTrayProxyMenuCacheEntry(trayProxyMenuCache);
       outboundProxyCard = cached.outboundProxyCard;
       Object.assign(outboundProviderSubmenus, cached.outboundProviderSubmenus);
+      Object.assign(outboundSubmenuMeta, cached.submenuMeta || {});
     }
   } else if (trayProxyMenuCache.outboundProxyCard) {
     proxyGroupCacheHit = true;
     const cached = cloneTrayProxyMenuCacheEntry(trayProxyMenuCache);
     outboundProxyCard = cached.outboundProxyCard;
     Object.assign(outboundProviderSubmenus, cached.outboundProviderSubmenus);
+    Object.assign(outboundSubmenuMeta, cached.submenuMeta || {});
   }
   const nextMenuData = {
     header: {
@@ -9573,6 +9749,7 @@ async function buildTrayMenuOnce() {
     },
     providerTraffic: trayProviderPayload.providerTraffic,
     outboundProxyTree: outboundProxyCard,
+    submenuMeta: outboundSubmenuMeta,
     items,
     submenus: buildTraySubmenuData({
       labels,
@@ -9694,6 +9871,7 @@ function ensureTrayMenuWindow() {
     trayMenuVisible = false;
     trayMenuClosing = false;
     trayMenuRendererReady = false;
+    trayMenuPaintReady = false;
     if (trayMenuRefreshTimer) {
       clearInterval(trayMenuRefreshTimer);
       trayMenuRefreshTimer = null;
@@ -9709,6 +9887,7 @@ function hideTraySubmenuWindow() {
   }
   traySubmenuVisible = false;
   traySubmenuHovering = false;
+  traySubmenuSide = '';
   sendTrayWindowVisibility('submenu', false);
   if (traySubmenuWindow && !traySubmenuWindow.isDestroyed()) {
     traySubmenuWindow.hide();
@@ -9820,6 +9999,7 @@ function ensureTrayPanelWindow() {
 
 function hideTrayMenuWindow() {
   clearTrayMenuCloseTimer();
+  trayMenuPaintReady = false;
   if (!trayMenuWindow || trayMenuWindow.isDestroyed()) {
     trayMenuVisible = false;
     trayMenuClosing = false;
@@ -9895,7 +10075,7 @@ function sendTrayPanelUpdate(payload) {
   }
 }
 
-function computeTraySubmenuBounds(width, height) {
+function computeTraySubmenuBounds(width, height, preferredSide = '') {
   if (!trayMenuWindow || trayMenuWindow.isDestroyed()) {
     return null;
   }
@@ -9915,12 +10095,16 @@ function computeTraySubmenuBounds(width, height) {
   const anchorTop = Math.min(Math.max(8, Math.round(traySubmenuAnchor.top || 0)), maxTopWithinMain);
   const desiredY = mainBounds.y + anchorTop;
   const y = Math.max(area.y + 4, Math.min(desiredY, area.y + area.height - targetHeight - 4));
-  let xRight = mainBounds.x + mainBounds.width + gap;
-  let xLeft = mainBounds.x - targetWidth - gap;
-  let side = 'right';
+  const xRight = mainBounds.x + mainBounds.width + gap;
+  const xLeft = mainBounds.x - targetWidth - gap;
+  let side = preferredSide === 'left' || preferredSide === 'right' ? preferredSide : 'right';
   const canRight = (xRight + targetWidth) <= (area.x + area.width - 4);
   const canLeft = xLeft >= (area.x + 4);
-  if (!canRight && canLeft) {
+  if (preferredSide === 'left' && canLeft) {
+    side = 'left';
+  } else if (preferredSide === 'right' && canRight) {
+    side = 'right';
+  } else if (!canRight && canLeft) {
     side = 'left';
   } else if (!canRight && !canLeft) {
     const rightOverflow = (xRight + targetWidth) - (area.x + area.width - 4);
@@ -9937,10 +10121,11 @@ function positionTraySubmenuWindow(width, height) {
   if (!traySubmenuWindow || traySubmenuWindow.isDestroyed()) {
     return;
   }
-  const bounds = computeTraySubmenuBounds(width, height);
+  const bounds = computeTraySubmenuBounds(width, height, traySubmenuSide);
   if (!bounds) {
     return;
   }
+  traySubmenuSide = bounds.side;
   const nextBounds = {
     x: Math.round(bounds.x),
     y: Math.round(bounds.y),
@@ -10028,7 +10213,10 @@ async function openTrayPanelWindow(payload = {}) {
   let latestMenuData = trayMenuData;
   try {
     if (!latestMenuData) {
-      warmTrayMenuData().catch(() => {});
+      const warmup = warmTrayMenuData();
+      if (warmup && typeof warmup.catch === 'function') {
+        warmup.catch(() => {});
+      }
       latestMenuData = buildTrayMenuShell();
     }
   } finally {
@@ -10088,51 +10276,85 @@ function computeTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, expl
   };
 }
 
-function estimateTraySubmenuSize(key = '', items = []) {
-  if (key === 'panel') {
-    return { width: 260, height: 286 };
+function getTextVisualUnits(text = '') {
+  return Array.from(String(text || '')).reduce((count, char) => {
+    if (/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/u.test(char)) {
+      return count + 2;
+    }
+    return count + 1;
+  }, 0);
+}
+
+function estimateTraySubmenuContentWidth(items = [], key = '', meta = {}) {
+  if (key === 'network') {
+    return 300;
   }
   const safeItems = Array.isArray(items) ? items : [];
-  const visibleRows = safeItems.reduce((count, item) => {
+  const layout = meta && typeof meta === 'object' ? String(meta.layout || '').trim() : '';
+  let longestUnits = key === 'network' ? 16 : 10;
+  let hasBadge = false;
+  safeItems.forEach((item) => {
+    if (!item || typeof item !== 'object' || item.type === 'separator') {
+      return;
+    }
+    const labelUnits = getTextVisualUnits(item.label || '');
+    const rightUnits = item.rightBadge && item.rightBadge.text
+      ? Math.max(6, getTextVisualUnits(item.rightBadge.text))
+      : (item.rightText ? getTextVisualUnits(item.rightText) : 0);
+    longestUnits = Math.max(longestUnits, labelUnits + Math.min(10, rightUnits));
+    hasBadge = hasBadge || Boolean((item.rightBadge && item.rightBadge.text) || item.rightText);
+  });
+  const chromeWidth = String(key || '').startsWith('outbound-group:')
+    ? 92
+    : 110;
+  const badgeWidth = hasBadge ? 68 : 0;
+  const estimated = chromeWidth + badgeWidth + (longestUnits * 6) + 8;
+  const minWidth = layout === 'scrollable' ? 312 : 196;
+  const maxWidth = layout === 'scrollable' ? 336 : 300;
+  return Math.max(minWidth, Math.min(maxWidth, Math.round(estimated)));
+}
+
+function estimateTraySubmenuContentHeight(items = [], key = '', meta = {}) {
+  const safeItems = Array.isArray(items) ? items : [];
+  const layout = meta && typeof meta === 'object' ? String(meta.layout || '').trim() : '';
+  const contentHeight = safeItems.reduce((height, item) => {
     if (!item || typeof item !== 'object') {
-      return count + 1;
+      return height + 28;
     }
     switch (item.type) {
       case 'separator':
-        return count + 0.35;
+        return height + 11;
       case 'provider':
-        return count + 0.9;
+        return height + 24;
       case 'child':
-        return count + 0.8;
+        return height + 22;
       case 'panel-chart':
-        return count + 3.2;
+        return height + 132;
       case 'panel-provider-traffic':
-        return count + 4.2;
+        return height + 154;
       default:
-        return count + 1;
+        if (key === 'network' && item.iconKey === 'currentService') {
+          return height + 38;
+        }
+        return height + 28;
     }
-  }, 0);
-  const isScrollable = String(key || '').startsWith('outbound-group:');
-  const width = key === 'network'
-    ? 280
-    : isScrollable
-      ? 320
-      : 260;
-  const baseHeight = key === 'network'
-    ? 170
-    : isScrollable
-      ? 150
-      : 120;
-  const heightCap = key === 'network'
-    ? 420
-    : isScrollable
-      ? 500
-      : 360;
-  const estimatedHeight = Math.max(
-    120,
-    Math.min(heightCap, Math.round(baseHeight + (visibleRows * 28))),
-  );
-  return { width, height: estimatedHeight };
+  }, 20);
+  const heightCap = key === 'panel'
+    ? 500
+    : (layout === 'scrollable'
+      ? 520
+      : (key === 'network' ? 220 : 420));
+  return Math.max(72, Math.min(heightCap, Math.round(contentHeight)));
+}
+
+function estimateTraySubmenuSize(key = '', items = [], meta = {}) {
+  if (key === 'panel') {
+    return { width: 260, height: 286 };
+  }
+  return {
+    width: estimateTraySubmenuContentWidth(items, key, meta),
+    height: estimateTraySubmenuContentHeight(items, key, meta),
+  };
 }
 
 function applyTrayMenuWindowBounds(contentHeight = trayMenuContentHeight, preservePosition = false, explicitWidth = 260, syncMenuData = true) {
@@ -10201,6 +10423,13 @@ async function showTrayMenuWindow() {
   hideTraySubmenuWindow();
   hideTrayPanelWindow();
   const popup = ensureTrayMenuWindow();
+  if (!trayMenuData) {
+    try {
+      await warmTrayMenuData(true);
+    } catch {
+      // Fall back to cached shell if refresh fails.
+    }
+  }
   const currentBounds = popup.getBounds();
   if (
     currentBounds
@@ -10210,11 +10439,12 @@ async function showTrayMenuWindow() {
   ) {
     trayMenuContentHeight = currentBounds.height;
   }
-  if (!trayMenuData) {
-    warmTrayMenuData().catch(() => {});
-  } else if ((Date.now() - trayMenuLastBuiltAt) > 1000) {
+  if (trayMenuData && (Date.now() - trayMenuLastBuiltAt) > 1000) {
     // Refresh stale cache in background only when needed.
-    warmTrayMenuData().catch(() => {});
+    const warmup = warmTrayMenuData();
+    if (warmup && typeof warmup.catch === 'function') {
+      warmup.catch(() => {});
+    }
   } else {
     const connectivityItem = trayMenuData
       && trayMenuData.submenus
@@ -10225,9 +10455,26 @@ async function showTrayMenuWindow() {
       ? String(connectivityItem.rightBadge.text || '').trim()
       : '';
     if (!connectivityText || connectivityText === '-') {
-      warmTrayMenuData().catch(() => {});
+      const warmup = warmTrayMenuData();
+      if (warmup && typeof warmup.catch === 'function') {
+        warmup.catch(() => {});
+      }
     }
   }
+  const waitFor = async (predicate, timeoutMs = 220, intervalMs = 12) => {
+    const deadline = Date.now() + Math.max(40, Number(timeoutMs) || 0);
+    while (Date.now() < deadline) {
+      if (predicate()) {
+        return true;
+      }
+      await new Promise((resolve) => setTimeout(resolve, Math.max(4, Number(intervalMs) || 0)));
+    }
+    return predicate();
+  };
+  if (popup.webContents.isLoadingMainFrame()) {
+    await waitFor(() => !popup.webContents.isLoadingMainFrame(), 260, 12);
+  }
+  await waitFor(() => trayMenuRendererReady, 180, 10);
   applyTrayMenuWindowBounds(trayMenuContentHeight, false, 260);
   popup.show();
   popup.focus();
@@ -10873,6 +11120,7 @@ app.whenReady().then(() => {
   ensureAppDirs();
   setDockIcon();
   createTrayMenu();
+  ensureTrayMenuWindow();
   const shouldShowMainWindow = false;
   createWindow(shouldShowMainWindow);
   applyDevToolsState();
@@ -10883,22 +11131,21 @@ app.whenReady().then(() => {
       app.dock.hide();
     }
   }
-  ensureTrayMenuWindow();
   setTimeout(() => {
     checkHelperOnStartup().catch(() => {});
   }, 1200);
+  setTimeout(() => {
+    const warmup = warmTrayMenuData();
+    if (warmup && typeof warmup.catch === 'function') {
+      warmup.catch(() => {});
+    }
+  }, 240);
   setTimeout(() => {
     syncHelperStatusToSettings().catch(() => {});
   }, 1500);
   setTimeout(setDockIcon, 500);
   setTimeout(setDockIcon, 1500);
   setTimeout(setDockIcon, 3000);
-  setTimeout(() => {
-    preloadFoxboardWindow();
-  }, 1600);
-  setTimeout(() => {
-    preloadWorldwideWindow();
-  }, 1700);
 
   applyAppMenu();
 
@@ -11127,10 +11374,16 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:trayMenu:getData', async () => {
     if (trayMenuData) {
-      warmTrayMenuData().catch(() => {});
+      const warmup = warmTrayMenuData();
+      if (warmup && typeof warmup.catch === 'function') {
+        warmup.catch(() => {});
+      }
       return trayMenuData;
     }
-    warmTrayMenuData().catch(() => {});
+    const warmup = warmTrayMenuData();
+    if (warmup && typeof warmup.catch === 'function') {
+      warmup.catch(() => {});
+    }
     return buildTrayMenuShell();
   });
 
@@ -11151,6 +11404,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('clashfox:trayMenu:hide', () => {
+    trayMenuPaintReady = false;
     hideTrayMenuWindow();
   });
 
@@ -11159,6 +11413,19 @@ app.whenReady().then(() => {
     sendTrayWindowVisibility('menu', trayMenuVisible);
     if (trayMenuWindow && !trayMenuWindow.isDestroyed() && trayMenuData) {
       trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
+    }
+  });
+
+  ipcMain.on('clashfox:trayMenu:paintReady', () => {
+    trayMenuPaintReady = true;
+    if (
+      trayMenuVisible
+      && trayMenuWindow
+      && !trayMenuWindow.isDestroyed()
+      && !trayMenuWindow.isVisible()
+    ) {
+      trayMenuWindow.show();
+      trayMenuWindow.focus();
     }
   });
 
@@ -11193,6 +11460,9 @@ app.whenReady().then(() => {
       && Array.isArray(trayMenuData.submenus[key]))
       ? trayMenuData.submenus[key]
       : (Array.isArray(payload.items) ? payload.items : []);
+    const meta = payload && payload.meta && typeof payload.meta === 'object'
+      ? payload.meta
+      : {};
     if (key === 'panel') {
       trayPanelLastSize = { width: 260, height: 286 };
       await openTrayPanelWindow({
@@ -11203,19 +11473,21 @@ app.whenReady().then(() => {
       return;
     }
     hideTrayPanelWindow();
-    const popup = ensureTraySubmenuWindow();
+    ensureTraySubmenuWindow();
     traySubmenuAnchor = {
       top: Number(payload && payload.anchorTop) || 0,
       height: Number(payload && payload.anchorHeight) || 0,
       rootHeight: Number(payload && payload.rootHeight) || 0,
     };
-    traySubmenuLastSize = estimateTraySubmenuSize(key, items);
+    traySubmenuLastSize = estimateTraySubmenuSize(key, items, meta);
     traySubmenuVisible = true;
     positionTraySubmenuWindow(traySubmenuLastSize.width, traySubmenuLastSize.height);
     sendTraySubmenuUpdate({
       key,
       items,
+      meta,
     });
+    const popup = ensureTraySubmenuWindow();
     if (!popup.isVisible()) {
       popup.show();
     }
@@ -11277,7 +11549,6 @@ app.whenReady().then(() => {
 
   ipcMain.on('clashfox:traySubmenu:ready', () => {
     traySubmenuReady = true;
-    sendTrayWindowVisibility('submenu', traySubmenuVisible);
     if (
       !trayMenuVisible
       || trayMenuClosing
@@ -11290,12 +11561,7 @@ app.whenReady().then(() => {
     if (traySubmenuPendingPayload) {
       sendTraySubmenuUpdate(traySubmenuPendingPayload);
     }
-    if (traySubmenuVisible && traySubmenuLastSize.width && traySubmenuLastSize.height) {
-      positionTraySubmenuWindow(traySubmenuLastSize.width, traySubmenuLastSize.height);
-      if (traySubmenuWindow && !traySubmenuWindow.isDestroyed()) {
-        traySubmenuWindow.show();
-      }
-    }
+    sendTrayWindowVisibility('submenu', traySubmenuVisible);
   });
 
   ipcMain.on('clashfox:traySubmenu:hide', () => {
@@ -11801,10 +12067,11 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('clashfox:writeSettings', async (_event, data) => {
+  ipcMain.handle('clashfox:writeSettings', async (_event, data, options = {}) => {
     try {
       ensureAppDirs();
       const payload = data && typeof data === 'object' ? { ...data } : {};
+      const forceWrite = Boolean(options && typeof options === 'object' && options.forceWrite);
       const existing = readAppSettings();
       const merged = { ...existing, ...payload };
       if (!payload.configFile && typeof payload.configPath === 'string') {
@@ -11851,7 +12118,7 @@ app.whenReady().then(() => {
       );
       const normalized = normalizeSettingsForStorage(merged);
       const existingNormalized = normalizeSettingsForStorage(existing);
-      if (JSON.stringify(existingNormalized) === JSON.stringify(normalized)) {
+      if (!forceWrite && JSON.stringify(existingNormalized) === JSON.stringify(normalized)) {
         return { ok: true };
       }
       writeAppSettings(normalized);

@@ -82,7 +82,7 @@ contextBridge.exposeInMainWorld('clashfox', {
   setDebugMode: (enabled) => ipcRenderer.invoke('clashfox:setDebugMode', Boolean(enabled)),
   setThemeSource: (source) => ipcRenderer.invoke('clashfox:setThemeSource', source),
   readSettings: () => ipcRenderer.invoke('clashfox:readSettings'),
-  writeSettings: (data) => ipcRenderer.invoke('clashfox:writeSettings', data),
+  writeSettings: (data, options = {}) => ipcRenderer.invoke('clashfox:writeSettings', data, options),
   getSystemLocale: () => ipcRenderer.invoke('clashfox:getSystemLocale'),
   getUserDataPath: () => ipcRenderer.invoke('clashfox:userDataPath'),
   cleanLogs: (mode = 'all') => ipcRenderer.invoke('clashfox:cleanLogs', mode),
@@ -154,6 +154,7 @@ contextBridge.exposeInMainWorld('clashfox', {
   trayMenuOpenPanel: (payload = {}) => ipcRenderer.send('clashfox:trayMenu:openPanel', payload),
   trayMenuClosePanel: () => ipcRenderer.send('clashfox:trayMenu:closePanel'),
   trayMenuRendererReady: () => ipcRenderer.send('clashfox:trayMenu:rendererReady'),
+  trayMenuPaintReady: () => ipcRenderer.send('clashfox:trayMenu:paintReady'),
   onTrayMenuUpdate: (handler) => {
     if (typeof handler !== 'function') {
       return () => {};

@@ -6767,7 +6767,7 @@ body[data-theme="day"] select:focus-visible {
 body[data-theme="day"] .cf-select-trigger {
   background: linear-gradient(180deg, rgba(252, 254, 255, 0.99), rgba(243, 248, 253, 0.96));
   color: var(--ink);
-  font-size: 13px;
+  font-size: 12px;
   border-color: rgba(162, 183, 206, 0.54);
   box-shadow: 0 8px 18px rgba(58, 88, 120, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.86);
 }

@@ -3767,13 +3767,13 @@ async function syncSettingsFromFile() {
     const { externalUiUrl: _currentExternalUiUrl, externalUiName: _currentExternalUiName, ...currentRestSettings } = state.fileSettings || {};
     const currentFileSettings = mapSettingsForFile(currentRestSettings);
     if (JSON.stringify(fileSettings) !== JSON.stringify(currentFileSettings)) {
-      window.clashfox.writeSettings(fileSettings);
+    window.clashfox.writeSettings(fileSettings);
     }
   }
 }
 
-function saveSettings(patch) {
-  guiLog('settings', 'saveSettings called', patch);
+function saveSettings(patch, options = {}) {
+  const forceWrite = Boolean(options && options.forceWrite);
   const nextPatch = { ...(patch || {}) };
   const proxyPatchKeys = LEGACY_PROXY_FIELDS;
   const hasProxyPatch = Object.prototype.hasOwnProperty.call(nextPatch, 'proxy')
@@ -3892,7 +3892,7 @@ function saveSettings(patch) {
   const { externalUiUrl: _nextExternalUiUrl, externalUiName: _nextExternalUiName, ...nextRestSettings } = nextSettings;
   const currentFileSettings = mapSettingsForFile(currentRestSettings);
   const nextFileSettings = mapSettingsForFile(nextRestSettings);
-  if (JSON.stringify(currentFileSettings) === JSON.stringify(nextFileSettings)) {
+  if (!forceWrite && JSON.stringify(currentFileSettings) === JSON.stringify(nextFileSettings)) {
     state.settings = nextSettings;
     state.fileSettings = { ...state.fileSettings, ...nextPatch };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
@@ -3902,10 +3902,7 @@ function saveSettings(patch) {
   state.fileSettings = { ...state.fileSettings, ...nextPatch };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
   if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
-    Promise.resolve(window.clashfox.writeSettings(nextFileSettings)).catch((error) => {
-      guiLog('settings', 'writeSettings failed', {
-        error: error && error.message ? error.message : String(error || ''),
-      }, 'error');
+    Promise.resolve(window.clashfox.writeSettings(nextFileSettings, forceWrite ? { forceWrite: true } : {})).catch((error) => {
     });
   }
 }
@@ -4897,10 +4894,6 @@ function showToast(message, type = 'info') {
   showNoticePop(message, type);
 }
 
-function guiLog(scope, message, payload = null, level = 'log') {
-  return;
-}
-
 function hideNoticePop() {
   if (!noticePop) {
     return;
@@ -5572,7 +5565,6 @@ const resolveCommandPath = (relativePath) => {
 
 async function runCommand(command, args = [], options = {}) {
   if (!window.clashfox || typeof window.clashfox.runCommand !== 'function') {
-    guiLog('command', 'bridge missing', { command, args, options }, 'error');
     return { ok: false, error: 'bridge_missing' };
   }
   const effectiveSettings = { ...(state.fileSettings || {}), ...(state.settings || {}) };
@@ -5588,20 +5580,10 @@ async function runCommand(command, args = [], options = {}) {
     pathArgs.push('--data-dir', resolveCommandPath(userDataPaths.dataDir));
   }
   const finalArgs = [...pathArgs, ...args];
-  guiLog('command', 'runCommand start', { command, args: finalArgs, options });
   try {
     const result = await window.clashfox.runCommand(command, finalArgs, options);
-    guiLog('command', 'runCommand result', {
-      command,
-      ok: Boolean(result && result.ok),
-      error: result && result.error ? result.error : '',
-    });
     return result;
   } catch (error) {
-    guiLog('command', 'runCommand threw', {
-      command,
-      message: String(error && error.message ? error.message : error || ''),
-    }, 'error');
     throw error;
   }
 }
@@ -6261,7 +6243,6 @@ function startMihomoUptimeTracking() {
   const now = Date.now();
   state.mihomoStartTime = now;
   setMihomoStartTime(now);
-  guiLog('uptime', 'tracking started', { startTime: now });
 }
 
 
@@ -8592,20 +8573,12 @@ async function loadStatus() {
   if (!isMainWindowVisible()) {
     return;
   }
-  guiLog('status', 'loadStatus started');
   const response = await loadStatusSilently();
   if (!response.ok) {
     const msg = response.error === 'bridge_missing' ? t('labels.bridgeMissing') : (response.error || ti('labels.statusError', 'Status error'));
-    guiLog('status', 'loadStatus failed', {
-      error: response.error || 'unknown_error',
-    }, 'warn');
     showToast(msg, 'error');
     return;
   }
-  guiLog('status', 'loadStatus completed', {
-    running: Boolean(state.coreRunning),
-    source: response && response.data && response.data.source ? response.data.source : '',
-  });
 }
 
 async function waitForKernelState(expectedRunning, timeoutMs = 12000, intervalMs = 350) {
@@ -8656,9 +8629,6 @@ async function loadOverview(showToastOnSuccess = false) {
     return false;
   }
   state.overviewLoading = true;
-  guiLog('overview', 'loadOverview started', {
-    showToastOnSuccess: Boolean(showToastOnSuccess),
-  });
   try {
     const configPath = getCurrentConfigPath();
     const args = ['--cache-ttl', '1'];
@@ -8676,9 +8646,6 @@ async function loadOverview(showToastOnSuccess = false) {
       if (networkSnapshot && networkSnapshot.ok && networkSnapshot.data) {
         applyOverviewNetworkSnapshot(networkSnapshot.data);
       }
-      guiLog('overview', 'loadOverview failed', {
-        error: response.error || 'unknown_error',
-      }, 'warn');
       if (showToastOnSuccess) {
         showToast(response.error || ti('labels.overviewError', 'Overview error'), 'error');
       }
@@ -8688,19 +8655,11 @@ async function loadOverview(showToastOnSuccess = false) {
       ? { ...(response.data || {}), ...networkSnapshot.data }
       : response.data;
     updateOverviewUI(mergedOverviewData);
-    guiLog('overview', 'loadOverview completed', {
-      mode: mergedOverviewData && mergedOverviewData.mode ? mergedOverviewData.mode : '',
-      mixedPort: mergedOverviewData && mergedOverviewData.mixedPort ? mergedOverviewData.mixedPort : '',
-      running: mergedOverviewData && Object.prototype.hasOwnProperty.call(mergedOverviewData, 'running')
-        ? Boolean(mergedOverviewData.running)
-        : Boolean(state.coreRunning),
-    });
     if (showToastOnSuccess) {
       showToast(t('labels.statusRefreshed'));
     }
     return true;
   } catch {
-    guiLog('overview', 'loadOverview threw', null, 'error');
     if (showToastOnSuccess) {
       showToast(ti('labels.overviewError', 'Overview error'), 'error');
     }
@@ -8832,13 +8791,9 @@ async function loadProviderSubscriptionOverview() {
     return;
   }
   state.providerSubscriptionLoading = true;
-  guiLog('provider-traffic', 'load started');
   try {
     const response = await fetchMihomoProvidersProxies(getMihomoApiSource());
     if (!response || !response.ok || !response.data) {
-      guiLog('provider-traffic', 'load failed', {
-        error: response && response.error ? response.error : 'provider_subscription_overview_failed',
-      }, 'warn');
       if (!state.providerSubscriptionRenderSignature) {
         renderProviderSubscriptionOverview({ items: [], summary: { providerCount: 0 } });
       }
@@ -8846,15 +8801,7 @@ async function loadProviderSubscriptionOverview() {
     }
     const overviewData = buildProviderSubscriptionOverviewData(response.data);
     renderProviderSubscriptionOverview(overviewData);
-    guiLog('provider-traffic', 'load completed', {
-      providerCount: overviewData && overviewData.summary
-        ? Number(overviewData.summary.providerCount || 0)
-        : 0,
-      itemCount: Array.isArray(overviewData && overviewData.items) ? overviewData.items.length : 0,
-    });
   } catch {
-    guiLog('provider-traffic', 'load threw', {
-    }, 'error');
     if (!state.providerSubscriptionRenderSignature) {
       renderProviderSubscriptionOverview({ items: [], summary: { providerCount: 0 } });
     }
@@ -8872,7 +8819,6 @@ async function loadRulesOverviewCard() {
     return;
   }
   state.rulesOverviewLoading = true;
-  guiLog('rules-overview', 'load started');
   try {
     const source = getMihomoApiSource();
     const [rulesResp, providerResp] = await Promise.all([
@@ -8882,10 +8828,6 @@ async function loadRulesOverviewCard() {
     const hasRules = Boolean(rulesResp && rulesResp.ok && rulesResp.data);
     const hasProviders = Boolean(providerResp && providerResp.ok && providerResp.data);
     if (!hasRules && !hasProviders) {
-      guiLog('rules-overview', 'load failed', {
-        rulesError: rulesResp && rulesResp.error ? rulesResp.error : '',
-        providersError: providerResp && providerResp.error ? providerResp.error : '',
-      }, 'warn');
       if (
         state.rulesOverviewPayload
         || state.ruleProvidersOverviewPayload
@@ -8906,20 +8848,7 @@ async function loadRulesOverviewCard() {
       state.ruleProvidersOverviewPayload = { totalProviders: 0, totalRules: 0, behaviors: [], items: [], records: [] };
     }
     renderRulesOverviewCard();
-    guiLog('rules-overview', 'load completed', {
-      totalRules: state.rulesOverviewPayload
-        ? Number(state.rulesOverviewPayload.totalRules || 0)
-        : 0,
-      totalRuleProviders: state.ruleProvidersOverviewPayload
-        ? Number(state.ruleProvidersOverviewPayload.totalProviders || 0)
-        : 0,
-      records: state.rulesOverviewPayload && Array.isArray(state.rulesOverviewPayload.records)
-        ? state.rulesOverviewPayload.records.length
-        : 0,
-    });
   } catch {
-    guiLog('rules-overview', 'load threw', {
-    }, 'error');
     if (
       !state.rulesOverviewPayload
       && !state.ruleProvidersOverviewPayload
@@ -9167,23 +9096,15 @@ function syncRuntimeTunState(tunEnabled, tunStack = null) {
   if (!state.settings) {
     state.settings = { ...DEFAULT_SETTINGS };
   }
-  if (!state.fileSettings) {
-    state.fileSettings = {};
-  }
   if (!state.settings.proxy || typeof state.settings.proxy !== 'object') {
     state.settings.proxy = {};
   }
-  if (!state.fileSettings.proxy || typeof state.fileSettings.proxy !== 'object') {
-    state.fileSettings.proxy = {};
-  }
   if (typeof tunEnabled === 'boolean') {
     state.settings.proxy.tun = tunEnabled;
-    state.fileSettings.proxy.tun = tunEnabled;
   }
   if (typeof tunStack === 'string' && tunStack) {
     const normalizedStack = normalizeTunStack(tunStack);
     state.settings.proxy.stack = normalizedStack;
-    state.fileSettings.proxy.stack = normalizedStack;
   }
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
@@ -9491,15 +9412,12 @@ async function restartKernel() {
 }
 
 async function loadConfigs(showToastOnSuccess = false) {
-  guiLog('config', 'loadConfigs start', { showToastOnSuccess });
   const response = await runCommand('configs');
   if (!response.ok) {
-    guiLog('config', 'loadConfigs failed', response, 'warn');
     showToast(response.error || ti('labels.configsError', 'Configs error'), 'error');
     return;
   }
   state.configs = response.data || [];
-  guiLog('config', 'loadConfigs success', { count: state.configs.length });
   renderConfigTable();
   if (showToastOnSuccess) {
     showToast(t('labels.configsRefreshed'));
@@ -10652,7 +10570,6 @@ async function syncMainWindowActivity() {
 
 async function navigatePage(targetPage, pushState = true) {
   const normalized = String(targetPage || '').trim();
-  guiLog('nav', 'navigatePage called', { targetPage: normalized, currentPage, pushState });
   if (!VALID_PAGES.has(normalized)) {
     return;
   }
@@ -10933,7 +10850,6 @@ function bindPageEvents() {
         return;
       }
       const isReloadCore = button.id === 'proxyConfigReloadCoreBtn';
-      guiLog('proxy-config', isReloadCore ? 'reload core requested' : 'reload config requested');
       button.disabled = true;
       try {
         const response = isReloadCore
@@ -11186,7 +11102,7 @@ function bindPageEvents() {
           showToast(`${ti('settings.proxyMixedPortUpdateFailed', 'Mixed port update failed')}${detail}`, 'error');
           return;
         }
-        saveSettings({mixedPort: next});
+        saveSettings({mixedPort: next}, { forceWrite: true });
       } finally {
         event.target.disabled = false;
       }
@@ -11210,7 +11126,7 @@ function bindPageEvents() {
           showToast(`${ti('settings.proxyPortUpdateFailed', 'Port update failed')}${detail}`, 'error');
           return;
         }
-        saveSettings({port: next});
+        saveSettings({port: next}, { forceWrite: true });
       } finally {
         event.target.disabled = false;
       }
@@ -11234,7 +11150,7 @@ function bindPageEvents() {
           showToast(`${ti('settings.proxySocksPortUpdateFailed', 'Socks port update failed')}${detail}`, 'error');
           return;
         }
-        saveSettings({socksPort: next});
+        saveSettings({socksPort: next}, { forceWrite: true });
       } finally {
         event.target.disabled = false;
       }
@@ -11256,7 +11172,7 @@ function bindPageEvents() {
           showToast(`${ti('settings.proxyAllowLanUpdateFailed', 'Allow LAN update failed')}${detail}`, 'error');
           return;
         }
-        saveSettings({allowLan: nextChecked});
+        saveSettings({allowLan: nextChecked}, { forceWrite: true });
       } finally {
         event.target.disabled = false;
       }
@@ -11297,20 +11213,12 @@ async function refreshHelperInstallPath() {
   if (!helperInstallPath) {
     return;
   }
-  guiLog('helper-panel', 'refresh install path started');
   const response = await getHelperInstallPath();
   if (response && response.ok) {
     helperInstallPath.textContent = response.path || '-';
     helperInstallPath.dataset.exists = response.exists ? 'true' : 'false';
-    guiLog('helper-panel', 'refresh install path completed', {
-      exists: Boolean(response.exists),
-      path: response.path || '',
-    });
     return;
   }
-  guiLog('helper-panel', 'refresh install path failed', {
-    error: response && response.error ? response.error : 'get_helper_install_path_failed',
-  }, 'warn');
 }
 
 function refreshHelperLogPath() {
@@ -11431,7 +11339,6 @@ function applyHelperStatusSnapshot(snapshot) {
 }
 
 async function refreshHelperStatus(force = false) {
-  guiLog('helper-panel', 'refresh status started', {force: Boolean(force)});
   try {
     const response = await getHelperStatus();
     if (response && response.ok && response.data) {
@@ -11445,18 +11352,9 @@ async function refreshHelperStatus(force = false) {
         state.fileSettings.helperStatus = snapshot;
       }
       applyHelperStatusSnapshot(snapshot);
-      guiLog('helper-panel', 'refresh status completed', {
-        state: snapshot.state,
-        installed: snapshot.installed,
-        running: snapshot.running,
-        updateAvailable: Boolean(snapshot.updateAvailable ?? snapshot.helperUpdateAvailable),
-      });
       return;
     }
   } catch (err) {
-    guiLog('helper-panel', 'refresh status threw', {
-      error: err && err.message ? err.message : String(err || ''),
-    }, 'error');
   }
 
   await hydrateHelperStatusFromFile();
@@ -11467,14 +11365,12 @@ async function refreshHelperStatus(force = false) {
 }
 
 async function refreshHelperPanel(force = false) {
-  guiLog('helper-panel', 'refresh panel started', {force: Boolean(force)});
   await hydrateHelperStatusFromFile();
   await Promise.all([
     refreshHelperStatus(force),
     refreshHelperInstallPath(),
     Promise.resolve(refreshHelperLogPath()),
   ]);
-  guiLog('helper-panel', 'refresh panel completed');
 }
 
 window.__refreshHelperPanel = refreshHelperPanel;
@@ -11893,10 +11789,8 @@ if (githubUser) {
 }
 
 async function handleConfigBrowse() {
-  guiLog('config', 'browse requested');
   const result = await window.clashfox.selectConfig();
   if (result.ok) {
-    guiLog('config', 'browse completed', {path: result.path || ''});
     configPathInput.value = result.path;
     if (overviewConfigPath) {
       overviewConfigPath.value = result.path;
@@ -11909,13 +11803,9 @@ async function handleConfigBrowse() {
     renderConfigTable();
     return;
   }
-  guiLog('config', 'browse cancelled or failed', {
-    error: result && result.error ? result.error : '',
-  }, result && result.error && result.error !== 'cancelled' ? 'warn' : 'log');
 }
 
 async function handleConfigReload() {
-  guiLog('config', 'reload requested');
   const button = configsReload;
   if (button) {
     button.disabled = true;
@@ -11926,19 +11816,12 @@ async function handleConfigReload() {
       const detail = response && (response.details || response.error)
           ? `: ${String(response.details || response.error)}`
           : '';
-      guiLog('config', 'reload failed', {
-        error: response && response.error ? response.error : 'reload_config_failed',
-      }, 'warn');
       showToast(`${ti('labels.configReloadFailed', 'Reload config failed')}${detail}`, 'error');
       return;
     }
-    guiLog('config', 'reload completed');
     showToast(ti('labels.configReloaded', 'Config reloaded'), 'info');
     await loadConfigs(true);
   } catch (error) {
-    guiLog('config', 'reload failed', {
-      error: String(error && error.message ? error.message : error || ''),
-    }, 'warn');
     showToast(ti('labels.configReloadFailed', 'Reload config failed'), 'error');
   } finally {
     if (button) {
@@ -11951,19 +11834,14 @@ async function handleConfigImport() {
   if (!window.clashfox || typeof window.clashfox.importConfig !== 'function') {
     return;
   }
-  guiLog('config', 'import requested');
   const result = await window.clashfox.importConfig();
   if (!result || !result.ok) {
-    guiLog('config', 'import failed', {
-      error: result && result.error ? result.error : 'import_config_failed',
-    }, result && result.error && result.error !== 'cancelled' ? 'warn' : 'log');
     if (result && result.error && result.error !== 'cancelled') {
       showToast(`${t('labels.configImportFailed')}: ${result.error}`, 'error');
     }
     return;
   }
   const fileName = result.data && result.data.fileName ? result.data.fileName : '';
-  guiLog('config', 'import completed', {fileName});
   if (fileName) {
     showToast(`${t('labels.configImported')}: ${fileName}`, 'info');
   } else {
@@ -11976,10 +11854,6 @@ async function handleConfigDelete(targetPath, configName = '') {
   if (!targetPath || !window.clashfox || typeof window.clashfox.deleteConfig !== 'function') {
     return;
   }
-  guiLog('config', 'delete requested', {
-    targetPath,
-    configName,
-  });
   const confirmed = await promptConfirm({
     title: ti('confirm.deleteConfigTitle', 'Delete Config?'),
     body: `${ti('confirm.deleteConfigBody', 'This will permanently delete the selected config file.')} ${configName || ''}`.trim(),
@@ -11987,28 +11861,18 @@ async function handleConfigDelete(targetPath, configName = '') {
     confirmTone: 'danger',
   });
   if (!confirmed) {
-    guiLog('config', 'delete cancelled', {targetPath});
     return;
   }
   const response = await window.clashfox.deleteConfig(targetPath);
   if (response && response.ok) {
-    guiLog('config', 'delete completed', {targetPath});
     showToast(ti('labels.configDeleteSuccess', 'Config deleted.'));
     await loadConfigs();
     return;
   }
   if (response && response.error === 'current_config') {
-    guiLog('config', 'delete rejected', {
-      targetPath,
-      error: response.error,
-    }, 'warn');
     showToast(ti('labels.configDeleteCurrent', 'Cannot delete current config.'), 'error');
     return;
   }
-  guiLog('config', 'delete failed', {
-    targetPath,
-    error: response && response.error ? response.error : 'delete_config_failed',
-  }, 'warn');
   showToast(`${ti('labels.configDeleteFailed', 'Delete config failed')}: ${response && response.error ? response.error : ''}`.trim(), 'error');
 }
 
@@ -12295,10 +12159,6 @@ if (settingsBrowseConfig) {
 
 // 统一的核心操作处理函数
 async function handleCoreAction(action, button) {
-  guiLog('core-action', 'requested', {
-    action,
-    button: button && button.id ? button.id : '',
-  });
   // Keep quick actions always responsive.
   setCoreActionState(false);
   const helperStateSnapshot = () => {
@@ -12368,7 +12228,6 @@ async function handleCoreAction(action, button) {
             const message = (tunApply && tunApply.error) || ti('labels.tunUpdateFailed', 'TUN update failed');
             showToast(message, 'warn');
           }
-          guiLog('core-action', 'completed', {action, running: true});
         } else {
           // Failed to start, reset uptime tracking
           resetMihomoUptimeTracking();
@@ -12379,7 +12238,6 @@ async function handleCoreAction(action, button) {
           if (!helperNotInstalled()) {
             showToast(ti('labels.startFailed', 'Start failed'), 'error');
           }
-          guiLog('core-action', 'failed after wait', {action, reason: 'wait_for_running_timeout'}, 'warn');
         }
       } else if (action === 'restart') {
         // For restart: reset tracking and start fresh
@@ -12402,7 +12260,6 @@ async function handleCoreAction(action, button) {
             const message = (tunApply && tunApply.error) || ti('labels.tunUpdateFailed', 'TUN update failed');
             showToast(message, 'warn');
           }
-          guiLog('core-action', 'completed', {action, running: true});
         } else {
           // Failed to restart, reset uptime tracking
           resetMihomoUptimeTracking();
@@ -12413,7 +12270,6 @@ async function handleCoreAction(action, button) {
           if (!helperNotInstalled()) {
             showToast(ti('labels.restartFailed', 'Restart failed'), 'error');
           }
-          guiLog('core-action', 'failed after wait', {action, reason: 'wait_for_running_timeout'}, 'warn');
         }
       } else {
         // Stop action: reset uptime tracking
@@ -12428,21 +12284,15 @@ async function handleCoreAction(action, button) {
             updateOverviewUI();
           }
           showToast(t('labels.stopped'));
-          guiLog('core-action', 'completed', {action, running: false});
         } else {
           state.coreRunningGuardUntil = 0;
           await loadStatusSilently();
           syncQuickActionButtons();
           showToast(ti('labels.stopFailed', 'Stop failed'), 'error');
-          guiLog('core-action', 'failed after wait', {action, reason: 'wait_for_stopped_timeout'}, 'warn');
         }
       }
       loadOverview();
     } else {
-      guiLog('core-action', 'command failed', {
-        action,
-        error: response.error || 'unknown_error',
-      }, 'warn');
       state.coreRunningGuardUntil = 0;
       await loadStatusSilently();
       syncQuickActionButtons();
@@ -12453,10 +12303,6 @@ async function handleCoreAction(action, button) {
     }
 
   } catch (error) {
-    guiLog('core-action', 'threw', {
-      action,
-      error: error && error.message ? error.message : String(error || ''),
-    }, 'error');
     showToast(error.message || ti('labels.unexpectedError', 'An unexpected error occurred'), 'error');
   } finally {
     setCoreActionState(false);
@@ -12494,20 +12340,14 @@ if (restartBtn) {
       }
       const value = getProxyModeValue();
       const previous = (state.settings?.proxy?.mode) || 'rule';
-      guiLog('proxy-config', 'mode change requested', {value, previous});
-      saveSettings({proxy: { mode: value }});
+      saveSettings({proxy: { mode: value }}, { forceWrite: true });
       const response = await updateModeViaController(value, getMihomoApiSource());
       if (response.ok) {
-        guiLog('proxy-config', 'mode change completed', {value});
         showToast(t('labels.proxyModeUpdated'));
         return;
       }
-      guiLog('proxy-config', 'mode change failed', {
-        value,
-        error: response.error || 'unknown_error',
-      }, 'warn');
       setProxyModeValue(previous);
-      saveSettings({proxy: { mode: previous }});
+      saveSettings({proxy: { mode: previous }}, { forceWrite: true });
       const details = response && response.details ? `: ${String(response.details)}` : '';
       const message = response.error === 'controller_missing'
           ? t('labels.controllerMissing')
@@ -12521,32 +12361,19 @@ if (tunToggle) {
   tunToggle.addEventListener('change', async () => {
     const enabled = Boolean(tunToggle.checked);
     const previous = !enabled;
-    guiLog('proxy-config', 'tun toggle requested', {enabled, previous});
     if (enabled && !previous && window.clashfox && typeof window.clashfox.detectTunConflict === 'function') {
       try {
         const conflictProbe = await window.clashfox.detectTunConflict();
         const conflictLikely = Boolean(conflictProbe && conflictProbe.ok && conflictProbe.data && conflictProbe.data.conflictLikely);
         if (conflictLikely) {
-          const proceed = await promptConfirm({
-            title: ti('confirm.tunConflictTitle', 'TUN Conflict Detected'),
-            body: ti('labels.tunConflictHint', 'TUN conflict detected. Turn off TUN mode in other proxy apps, then try again.'),
-            confirmLabel: ti('confirm.tunConflictProceed', 'Continue'),
-            confirmTone: 'primary',
-          });
-          if (!proceed) {
-            tunToggle.checked = previous;
-            saveSettings({tun: previous});
-            showToast(ti('labels.tunConflictHint', 'TUN conflict detected. Turn off TUN mode in other proxy apps, then try again.'), 'warn');
-            return;
-          }
+          showToast(ti('labels.tunConflictHint', 'TUN conflict detected. Turn off TUN mode in other proxy apps, then try again.'), 'warn');
         }
       } catch {
         // ignore preflight detection failures
       }
     }
     if (!state.coreRunning) {
-      saveSettings({tun: enabled});
-      guiLog('proxy-config', 'tun toggle deferred until next start', {enabled});
+      saveSettings({tun: enabled}, { forceWrite: true });
       showToast(ti('labels.tunApplyOnStart', 'TUN setting saved, it will be applied on next start.'));
       return;
     }
@@ -12561,7 +12388,7 @@ if (tunToggle) {
     if (!response.ok || tunMismatch || !statusOk || actual !== enabled) {
       const nextChecked = statusOk ? actual : previous;
       tunToggle.checked = nextChecked;
-      saveSettings({tun: nextChecked});
+      saveSettings({tun: nextChecked}, { forceWrite: true });
       const message = formatTunUpdateError(
           response,
           statusResponse,
@@ -12575,16 +12402,10 @@ if (tunToggle) {
               'TUN update failed. Turn off TUN mode in other proxy apps, then try again.',
           )
           : message;
-      guiLog('proxy-config', 'tun toggle failed', {
-        enabled,
-        actual,
-        error: response && response.error ? response.error : 'tun_update_failed',
-      }, 'warn');
       showToast(finalMessage, 'error');
       return;
     }
-    saveSettings({tun: actual});
-    guiLog('proxy-config', 'tun toggle completed', {enabled: actual});
+    saveSettings({tun: actual}, { forceWrite: true });
     showToast(actual ? t('labels.tunEnabled') : t('labels.tunDisabled'));
   });
 }
@@ -12593,11 +12414,9 @@ if (tunStackSelect) {
   tunStackSelect.addEventListener('change', async () => {
     const previous = normalizeTunStack(state.settings?.proxy?.stack);
     const value = normalizeTunStack(tunStackSelect.value);
-    guiLog('proxy-config', 'tun stack change requested', {value, previous});
     tunStackSelect.value = value;
     if (!state.coreRunning) {
-      saveSettings({stack: value});
-      guiLog('proxy-config', 'tun stack deferred until next start', {value});
+      saveSettings({stack: value}, { forceWrite: true });
       showToast(ti('labels.tunApplyOnStart', 'TUN setting saved, it will be applied on next start.'));
       return;
     }
@@ -12608,7 +12427,7 @@ if (tunStackSelect) {
     if (!response.ok || !statusOk || actual !== value) {
       const nextValue = statusOk ? actual : previous;
       tunStackSelect.value = nextValue;
-      saveSettings({stack: nextValue});
+      saveSettings({stack: nextValue}, { forceWrite: true });
       const message = formatTunUpdateError(
           response,
           statusResponse,
@@ -12616,16 +12435,10 @@ if (tunStackSelect) {
               ? ti('labels.tunStatusFailed', 'TUN status unavailable')
               : ti('labels.tunStackUpdateFailed', 'TUN stack update failed'),
       );
-      guiLog('proxy-config', 'tun stack change failed', {
-        value,
-        actual,
-        error: response && response.error ? response.error : 'tun_stack_update_failed',
-      }, 'warn');
       showToast(message, 'error');
       return;
     }
-    saveSettings({stack: actual});
-    guiLog('proxy-config', 'tun stack change completed', {value: actual});
+    saveSettings({stack: actual}, { forceWrite: true });
   });
 }
 
@@ -12648,10 +12461,6 @@ if (configTable) {
     if (!path || path === getCurrentConfigPath()) {
       return;
     }
-    guiLog('config', 'switch requested', {
-      path,
-      currentPath: getCurrentConfigPath(),
-    });
     // Avoid radio input switching before user confirms.
     event.preventDefault();
     const confirmed = await promptConfirm({
@@ -12661,12 +12470,10 @@ if (configTable) {
       confirmTone: 'primary',
     });
     if (!confirmed) {
-      guiLog('config', 'switch cancelled', {path});
       renderConfigTable();
       return;
     }
     saveSettings({configPath: path});
-    guiLog('config', 'switch completed', {path});
     showToast(t('labels.configNeedsRestart'));
     renderConfigTable();
   });
@@ -12680,7 +12487,6 @@ if (backupsRefresh) {
 }
 if (configsRefresh) {
   configsRefresh.addEventListener('click', () => {
-    guiLog('config', 'refresh requested');
     loadConfigs(true);
   });
 }
@@ -12904,7 +12710,6 @@ if (backupsDelete) {
 if (switchBtn) {
   switchBtn.addEventListener('click', async () => {
     const index = getSelectedBackupIndex();
-    guiLog('kernel', 'switch backup requested', {index: index || ''});
     await switchKernelByIndex(index);
   });
 }

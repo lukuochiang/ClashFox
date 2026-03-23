@@ -30,6 +30,12 @@ let trayMenuSettingsRefreshTimer = null;
 let lastSettingsSignature = '';
 let lastMenuDataSettingsSignature = '';
 let trayThemeSettingsSnapshot = null;
+let trayMenuPaintReadySent = false;
+let trayMenuPaintReadyFrame = null;
+
+function nextTick() {
+  return Promise.resolve();
+}
 const TRAFFIC_HISTORY_POINTS = 520;
 const TRAFFIC_INTERVAL_MS = 1000;
 const OVERVIEW_INTERVAL_MS = 5000;
@@ -86,6 +92,58 @@ function syncTrafficChartVisibility() {
 function stopMenuLiveActivity() {
   stopProviderTrafficRotation();
   stopTrafficTimers();
+}
+
+function clearTrayMenuPaintReadyFrame() {
+  if (trayMenuPaintReadyFrame !== null && typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(trayMenuPaintReadyFrame);
+    trayMenuPaintReadyFrame = null;
+  }
+}
+
+function scheduleTrayMenuPaintReady() {
+  if (!trayMenuRendererVisible || trayMenuPaintReadySent || !menuData) {
+    return;
+  }
+  clearTrayMenuPaintReadyFrame();
+  const run = async () => {
+    trayMenuPaintReadyFrame = null;
+    if (!trayMenuRendererVisible || trayMenuPaintReadySent) {
+      return;
+    }
+    await nextTick();
+    if (!trayMenuRendererVisible || trayMenuPaintReadySent) {
+      return;
+    }
+    await applyTrayTheme().catch(() => {});
+    await Promise.resolve();
+    if (!trayMenuRendererVisible || trayMenuPaintReadySent) {
+      return;
+    }
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        if (!trayMenuRendererVisible || trayMenuPaintReadySent) {
+          return;
+        }
+        trayMenuPaintReadySent = true;
+        if (window.clashfox && typeof window.clashfox.trayMenuPaintReady === 'function') {
+          window.clashfox.trayMenuPaintReady();
+        }
+      });
+      return;
+    }
+    trayMenuPaintReadySent = true;
+    if (window.clashfox && typeof window.clashfox.trayMenuPaintReady === 'function') {
+      window.clashfox.trayMenuPaintReady();
+    }
+  };
+  if (typeof requestAnimationFrame === 'function') {
+    trayMenuPaintReadyFrame = requestAnimationFrame(() => {
+      run().catch(() => {});
+    });
+    return;
+  }
+  run().catch(() => {});
 }
 
 function stopTrayMenuSettingsRefresh() {
@@ -146,10 +204,12 @@ function setTrayMenuRendererVisible(nextVisible) {
   if (!visible) {
     stopMenuLiveActivity();
     stopTrayMenuSettingsRefresh();
+    clearTrayMenuPaintReadyFrame();
+    trayMenuPaintReadySent = false;
     blockClickUntil = 0;
     return;
   }
-  renderAll();
+  renderAll(true);
   syncTrafficChartVisibility();
   if (chartEl) {
     startTrafficTimers();
@@ -434,7 +494,7 @@ function startProviderTrafficRotation(totalItems) {
   }, 2500);
 }
 
-function renderProviderTraffic() {
+function renderProviderTraffic(force = false) {
   if (!trayMenuRendererVisible || !providerTrafficEl) {
     return;
   }
@@ -475,7 +535,7 @@ function renderProviderTraffic() {
     summary.usedBytes || 0,
     summary.remainingBytes || 0,
   ].join('|');
-  if (providerTrafficState.renderKey === renderKey) {
+  if (!force && providerTrafficState.renderKey === renderKey) {
     startProviderTrafficRotation(totalItems);
     return;
   }
@@ -1183,6 +1243,7 @@ function buildOutboundProxyTreeItems(payload = null) {
       subtitle: provider.subtitle || '',
       iconUrl: provider.iconUrl || '',
       iconKey: provider.iconKey || 'outboundMode',
+      status: provider.currentStatus || 'unknown',
       currentProxy: provider.currentProxy || '',
       chart: Array.isArray(provider.chart) ? provider.chart : [],
       submenu: provider.submenuKey || '',
@@ -1235,6 +1296,7 @@ function makeRow(item) {
   if (item.type === 'provider-link') {
     const row = document.createElement('div');
     row.className = 'menu-row clickable menu-row-provider-link';
+    row.classList.add(`status-${String(item.status || 'unknown')}`);
     if (item.submenu) {
       row.dataset.submenuKey = String(item.submenu);
     }
@@ -1458,7 +1520,7 @@ function findShortcutItem(shortcut) {
   ));
 }
 
-function renderHeader() {
+function renderHeader(force = false) {
   if (!menuData || !menuData.header) {
     if (headerEl.innerHTML) {
       headerEl.innerHTML = '';
@@ -1467,7 +1529,7 @@ function renderHeader() {
     return;
   }
   const nextSignature = buildHeaderRenderSignature(menuData);
-  if (nextSignature === lastHeaderRenderSignature) {
+  if (!force && nextSignature === lastHeaderRenderSignature) {
     return;
   }
   lastHeaderRenderSignature = nextSignature;
@@ -1499,10 +1561,10 @@ function renderHeader() {
   `;
 }
 
-function renderMainList() {
+function renderMainList(force = false) {
   const items = Array.isArray(menuData && menuData.items) ? menuData.items : [];
   const nextSignature = buildMainListRenderSignature(menuData);
-  if (nextSignature === lastMainListRenderSignature) {
+  if (!force && nextSignature === lastMainListRenderSignature) {
     return;
   }
   lastMainListRenderSignature = nextSignature;
@@ -1603,6 +1665,9 @@ function openSubmenu(submenuKey, anchorRow, keepAnchor = false) {
     items: (menuData && menuData.submenus && Array.isArray(menuData.submenus[submenuKey]))
       ? menuData.submenus[submenuKey]
       : [],
+    meta: (menuData && menuData.submenuMeta && menuData.submenuMeta[submenuKey] && typeof menuData.submenuMeta[submenuKey] === 'object')
+      ? menuData.submenuMeta[submenuKey]
+      : {},
     anchorTop: Math.max(0, Math.round(anchorTop)),
     anchorHeight: Math.max(0, Math.round(anchorHeight)),
     rootHeight: Math.max(0, Math.round(rootRect.height || 0)),
@@ -1621,17 +1686,28 @@ function openSubmenu(submenuKey, anchorRow, keepAnchor = false) {
   }
 }
 
-function renderAll() {
-  renderHeader();
-  renderProviderTraffic();
-  renderMainList();
+function renderAll(force = false) {
+  renderHeader(force);
+  renderProviderTraffic(force);
+  renderMainList(force);
   hideSubmenu();
   scheduleGeometrySync();
+  scheduleTrayMenuPaintReady();
 }
 
 async function init() {
   await applyTrayTheme();
   ensureMenuAutoResize();
+  if (window.clashfox && typeof window.clashfox.onTrayMenuVisibility === 'function') {
+    window.clashfox.onTrayMenuVisibility((payload = {}) => {
+      setTrayMenuRendererVisible(Boolean(payload && payload.visible));
+      if (trayMenuRendererVisible && menuData) {
+        if (chartEl && !trafficState.trafficTimer && !trafficState.overviewTimer) {
+          startTrafficTimers();
+        }
+      }
+    });
+  }
   if (window.clashfox && typeof window.clashfox.onTrayMenuUpdate === 'function') {
     window.clashfox.onTrayMenuUpdate((payload) => {
       if (!payload) {
@@ -1654,6 +1730,18 @@ async function init() {
         && activeSubmenuAnchor.dataset.submenuKey
         ? activeSubmenuAnchor.dataset.submenuKey
         : keepSubmenuKey;
+      const prevSubmenuSignature = keepSubmenuKey
+        && menuData
+        && menuData.submenus
+        && Array.isArray(menuData.submenus[keepSubmenuKey])
+        ? buildMenuRenderSignature(menuData.submenus[keepSubmenuKey])
+        : '';
+      const nextSubmenuSignature = keepSubmenuKey
+        && payload
+        && payload.submenus
+        && Array.isArray(payload.submenus[keepSubmenuKey])
+        ? buildMenuRenderSignature(payload.submenus[keepSubmenuKey])
+        : '';
       menuData = payload;
       lastMenuRenderSignature = nextSignature;
       renderHeader();
@@ -1667,6 +1755,13 @@ async function init() {
       if (keepSubmenuKey && keepSubmenuAnchorKey) {
         const nextAnchor = findMainAnchorBySubmenuKey(keepSubmenuAnchorKey);
         if (nextAnchor) {
+          activeSubmenuKey = keepSubmenuKey;
+          activeSubmenuAnchor = nextAnchor;
+          nextAnchor.classList.add('expanded');
+          if (prevSubmenuSignature === nextSubmenuSignature) {
+            syncWindowGeometry();
+            return;
+          }
           activeSubmenuKey = null;
           activeSubmenuAnchor = null;
           openSubmenu(keepSubmenuKey, nextAnchor, true);
@@ -1689,7 +1784,7 @@ async function init() {
       menuData = initial;
       lastMenuRenderSignature = nextSignature;
       if (trayMenuRendererVisible) {
-        renderAll();
+        renderAll(true);
         if (chartEl) {
           if (!restoreTrafficCache()) {
             resetTrafficChart();
@@ -1781,16 +1876,6 @@ async function init() {
     } else if (typeof media.addListener === 'function') {
       media.addListener(handleThemeChange);
     }
-  }
-  if (window.clashfox && typeof window.clashfox.onTrayMenuVisibility === 'function') {
-    window.clashfox.onTrayMenuVisibility((payload = {}) => {
-      setTrayMenuRendererVisible(Boolean(payload && payload.visible));
-      if (trayMenuRendererVisible && menuData) {
-        if (chartEl && !trafficState.trafficTimer && !trafficState.overviewTimer) {
-          startTrafficTimers();
-        }
-      }
-    });
   }
 }
 
