@@ -774,6 +774,9 @@ function ensureConnectivityRefresh() {
     return;
   }
   refreshConnectivityBadge(true);
+  // connectivityRefreshTimer = setInterval(() => {
+  //   refreshConnectivityBadge(false);
+  // }, CONNECTIVITY_REFRESH_MS);
 }
 
 function makeLeading(item, isLoading = false) {
