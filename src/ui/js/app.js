@@ -71,11 +71,15 @@ const FOX_RANK_USAGE_RESET_VERSION = '2026-03-16-reset-usage-v1';
 const FOX_RANK_EXPLORATION_COOLDOWN_MS = 45000;
 const FOX_RANK_TIERS = [
   { name: 'Fox Pup', minXp: 0, colorStart: '#ffd86a', colorEnd: '#ffb347' },
-  { name: 'Trail Fox', minXp: 400, colorStart: '#ff8f57', colorEnd: '#ff5e44' },
-  { name: 'Lunar Fox', minXp: 900, colorStart: '#8ac1ff', colorEnd: '#5e9bff' },
-  { name: 'Ember Fox', minXp: 1600, colorStart: '#ffb36a', colorEnd: '#ff8f57' },
-  { name: 'Star Fox', minXp: 2400, colorStart: '#c685ff', colorEnd: '#8d6dff' },
-  { name: 'Apex Fox', minXp: 3400, colorStart: '#7df3d2', colorEnd: '#4bc6ff' },
+  { name: 'Trail Fox', minXp: 900, colorStart: '#ff8f57', colorEnd: '#ff5e44' },
+  { name: 'Lunar Fox', minXp: 2200, colorStart: '#8ac1ff', colorEnd: '#5e9bff' },
+  { name: 'Ember Fox', minXp: 4200, colorStart: '#ffb36a', colorEnd: '#ff8f57' },
+  { name: 'Star Fox', minXp: 7000, colorStart: '#c685ff', colorEnd: '#8d6dff' },
+  { name: 'Apex Fox', minXp: 10500, colorStart: '#7df3d2', colorEnd: '#4bc6ff' },
+  { name: 'Aurora Fox', minXp: 14800, colorStart: '#89f7fe', colorEnd: '#66a6ff' },
+  { name: 'Mythic Fox', minXp: 20000, colorStart: '#f6d365', colorEnd: '#fda085' },
+  { name: 'Nova Fox', minXp: 26200, colorStart: '#a18cd1', colorEnd: '#fbc2eb' },
+  { name: 'Eternal Fox', minXp: 33500, colorStart: '#84fab0', colorEnd: '#8fd3f4' },
 ];
 const FOX_RANK_SKINS = [
   { id: 'campfire', name: 'Campfire', unlockTier: 0, desc: 'Warm amber glow for daily routine.' },
@@ -1977,12 +1981,17 @@ function maskIpAddress(ip) {
 let overviewNetworkRefresh = document.getElementById('overviewNetworkRefresh');
 
 let githubUser = document.getElementById('githubUser');
+let kernelSourcePicker = document.getElementById('kernelSourcePicker');
+let kernelSourceCards = Array.from(document.querySelectorAll('.kernel-source-card'));
 let installBtn = document.getElementById('installBtn');
 let updateBtn = document.getElementById('updateBtn');
 let installStatus = document.getElementById('installStatus');
 let installCurrentKernel = document.getElementById('installCurrentKernel');
 let installVersionRow = document.getElementById('installVersionRow');
+let installVersionMode = document.getElementById('installVersionMode');
 let installVersion = document.getElementById('installVersion');
+let installVersionRefreshBtn = document.getElementById('installVersionRefreshBtn');
+let installVersionOptionsSignature = '';
 let cancelInstallBtn = document.getElementById('cancelInstallBtn');
 let configPathInput = document.getElementById('configPath');
 let overviewConfigPath = document.getElementById('overviewConfigPath');
@@ -2083,9 +2092,13 @@ let settingsLogPath = document.getElementById('settingsLogPath');
 let settingsConfigDir = document.getElementById('settingsConfigDir');
 let settingsCoreDir = document.getElementById('settingsCoreDir');
 let settingsDataDir = document.getElementById('settingsDataDir');
+let settingsHelperDir = document.getElementById('settingsHelperDir');
+let settingsLogDir = document.getElementById('settingsLogDir');
 let settingsConfigDirReveal = document.getElementById('settingsConfigDirReveal');
 let settingsCoreDirReveal = document.getElementById('settingsCoreDirReveal');
 let settingsDataDirReveal = document.getElementById('settingsDataDirReveal');
+let settingsHelperDirReveal = document.getElementById('settingsHelperDirReveal');
+let settingsLogDirReveal = document.getElementById('settingsLogDirReveal');
 let helperInstallBtn = document.getElementById('helperInstallBtn');
 let helperUninstallBtn = document.getElementById('helperUninstallBtn');
 let helperRepairBtn = document.getElementById('helperRepairBtn');
@@ -2137,6 +2150,8 @@ const I18N = window.CLASHFOX_I18N || {};
 ;
 
 const SETTINGS_KEY = 'clashfox-settings';
+const METACUBEX_CATALOG_CACHE_KEY = 'clashfox-metacubex-version-catalog-v1';
+const METACUBEX_CATALOG_CACHE_MAX_AGE_MS = 30 * 60 * 1000;
 const MAIN_WINDOW_DEFAULT_WIDTH = 980;
 const MAIN_WINDOW_DEFAULT_HEIGHT = 640;
 const MAIN_WINDOW_MIN_WIDTH = 980;
@@ -2190,6 +2205,12 @@ const state = {
   kernelUpdateNotifiedVersion: '',
   kernelUpdateRequestSeq: 0,
   githubSourceManualOverride: false,
+  metaCubeXVersionCatalog: null,
+  metaCubeXVersionCatalogLoaded: false,
+  metaCubeXVersionCatalogLoading: false,
+  metaCubeXVersionCatalogPromise: null,
+  metaCubeXCatalogErrorNotifiedAt: 0,
+  metaCubeXCatalogLastLoadFailed: false,
   coreVersionRaw: '',
   coreStatusTimer: null,
   providerSubscriptionTimer: null,
@@ -2555,6 +2576,7 @@ function applyI18n() {
   }
   updateThemeToggle();
   refreshNavButtonTooltips();
+  updateInstallVersionModeOptionText();
   setInstallState(state.installState);
   refreshLocalizedVisibleContent();
   refreshCustomSelects();
@@ -3087,6 +3109,10 @@ function normalizeSettingsForUi(settings) {
   const trayMenu = normalized.trayMenu && typeof normalized.trayMenu === 'object'
     ? normalized.trayMenu
     : {};
+  const kernelSettingsRaw = normalized.kernel && typeof normalized.kernel === 'object'
+    ? normalized.kernel
+    : {};
+  const { source: _kernelSource, updatedAt: _kernelUpdatedAt, ...kernelSettings } = kernelSettingsRaw;
   const readAppearanceString = (key, fallback = '') => {
     const top = normalized[key];
     if (typeof top === 'string' && top.trim()) {
@@ -3130,7 +3156,12 @@ function normalizeSettingsForUi(settings) {
   normalized.theme = readAppearanceString('theme', 'auto');
   normalized.debugMode = readAppearanceBool('debugMode', false);
   normalized.acceptBeta = readAppearanceBool('acceptBeta', false);
-  normalized.githubUser = readAppearanceString('githubUser', 'vernesong');
+  const kernelGithubUser = String(kernelSettings.githubUser || '').trim();
+  const kernelInstallVersionMode = String(kernelSettings.installVersionMode || '').trim();
+  const kernelInstallVersion = String(kernelSettings.installVersion || '').trim();
+  normalized.githubUser = normalizeKernelSource(kernelGithubUser || readAppearanceString('githubUser', 'vernesong')) || 'vernesong';
+  normalized.installVersionMode = normalizeInstallVersionMode(kernelInstallVersionMode || readAppearanceString('installVersionMode', 'latest'));
+  normalized.installVersion = kernelInstallVersion || readAppearanceString('installVersion', '');
   normalized.chartEnabled = readTrayMenuBool('chartEnabled', readTrayMenuBool('trayMenuChartEnabled', true));
   normalized.providerTrafficEnabled = readTrayMenuBool('providerTrafficEnabled', readTrayMenuBool('trayMenuProviderTrafficEnabled', true));
   normalized.trackersEnabled = readTrayMenuBool('trackersEnabled', readTrayMenuBool('trayMenuTrackersEnabled', true));
@@ -3151,21 +3182,26 @@ function normalizeSettingsForUi(settings) {
   const legacyGeneralPageSize = normalized.generalPageSize || normalized.backupsPageSize || normalized.kernelPageSize || '10';
   const unifiedPageSize = readAppearanceString('generalPageSize', String(legacyGeneralPageSize || '10')) || '10';
   normalized.generalPageSize = unifiedPageSize;
+  const {
+    logLines: _appearanceLogLines,
+    logAutoRefresh: _appearanceLogAutoRefresh,
+    logIntervalPreset: _appearanceLogIntervalPreset,
+    githubUser: _appearanceGithubUser,
+    installVersionMode: _appearanceInstallVersionMode,
+    installVersion: _appearanceInstallVersion,
+    ...appearanceRest
+  } = appearance;
   normalized.appearance = {
-    ...appearance,
+    ...appearanceRest,
     lang: normalized.lang,
     theme: normalized.theme,
     debugMode: normalized.debugMode,
     acceptBeta: normalized.acceptBeta,
-    githubUser: normalized.githubUser,
     windowWidth: normalized.windowWidth,
     windowHeight: normalized.windowHeight,
     mainWindowClosed: normalized.mainWindowClosed,
     sidebarCollapsed: normalized.sidebarCollapsed,
     generalPageSize: normalized.generalPageSize,
-    logLines: normalized.logLines,
-    logAutoRefresh: normalized.logAutoRefresh,
-    logIntervalPreset: normalized.logIntervalPreset,
   };
   normalized.trayMenu = {
     ...trayMenu,
@@ -3178,6 +3214,12 @@ function normalizeSettingsForUi(settings) {
     kernelManagerEnabled: normalized.kernelManagerEnabled,
     directoryLocationsEnabled: normalized.directoryLocationsEnabled,
     copyShellExportCommandEnabled: normalized.copyShellExportCommandEnabled,
+  };
+  normalized.kernel = {
+    ...kernelSettings,
+    githubUser: normalized.githubUser,
+    installVersionMode: normalized.installVersionMode,
+    installVersion: normalized.installVersion,
   };
 
   const panelManager = normalized.panelManager && typeof normalized.panelManager === 'object'
@@ -3287,6 +3329,9 @@ function normalizeSettingsForUi(settings) {
   if (Object.prototype.hasOwnProperty.call(normalized, 'configFileDir')) {
     delete normalized.configFileDir;
   }
+  if (Object.prototype.hasOwnProperty.call(normalized, 'foxRank')) {
+    delete normalized.foxRank;
+  }
   return normalized;
 }
 
@@ -3327,8 +3372,17 @@ function mapSettingsForFile(settings) {
       delete mapped[key];
     }
   });
+  const {
+    logLines: _existingLogLines,
+    logAutoRefresh: _existingLogAutoRefresh,
+    logIntervalPreset: _existingLogIntervalPreset,
+    githubUser: _existingAppearanceGithubUser,
+    installVersionMode: _existingAppearanceInstallVersionMode,
+    installVersion: _existingAppearanceInstallVersion,
+    ...existingAppearanceSansLogs
+  } = existingAppearance;
   mapped.appearance = {
-    ...existingAppearance,
+    ...existingAppearanceSansLogs,
     lang: String(mapped.lang || existingAppearance.lang || 'auto'),
     theme: String(mapped.theme || existingAppearance.theme || 'auto'),
     debugMode: Object.prototype.hasOwnProperty.call(mapped, 'debugMode')
@@ -3337,7 +3391,6 @@ function mapSettingsForFile(settings) {
     acceptBeta: Object.prototype.hasOwnProperty.call(mapped, 'acceptBeta')
       ? Boolean(mapped.acceptBeta)
       : Boolean(existingAppearance.acceptBeta),
-    githubUser: String(mapped.githubUser || existingAppearance.githubUser || 'vernesong'),
     windowWidth: Number.parseInt(String(mapped.windowWidth ?? existingAppearance.windowWidth ?? MAIN_WINDOW_DEFAULT_WIDTH), 10) || MAIN_WINDOW_DEFAULT_WIDTH,
     windowHeight: Number.parseInt(String(mapped.windowHeight ?? existingAppearance.windowHeight ?? MAIN_WINDOW_DEFAULT_HEIGHT), 10) || MAIN_WINDOW_DEFAULT_HEIGHT,
     mainWindowClosed: Object.prototype.hasOwnProperty.call(mapped, 'mainWindowClosed')
@@ -3353,11 +3406,6 @@ function mapSettingsForFile(settings) {
       || mapped.kernelPageSize
       || '10'
     ).trim() || '10',
-    logLines: Number.parseInt(String(mapped.logLines ?? existingAppearance.logLines ?? 10), 10) || 10,
-    logAutoRefresh: Object.prototype.hasOwnProperty.call(mapped, 'logAutoRefresh')
-      ? Boolean(mapped.logAutoRefresh)
-      : Boolean(existingAppearance.logAutoRefresh),
-    logIntervalPreset: String(mapped.logIntervalPreset || existingAppearance.logIntervalPreset || '3'),
   };
   mapped.trayMenu = {
     ...existingTrayMenu,
@@ -3478,6 +3526,20 @@ function mapSettingsForFile(settings) {
   const existingPaths = mapped.userDataPaths && typeof mapped.userDataPaths === 'object'
     ? mapped.userDataPaths
     : {};
+  const existingKernelRaw = mapped.kernel && typeof mapped.kernel === 'object'
+    ? mapped.kernel
+    : {};
+  const { source: _mappedKernelSource, updatedAt: _mappedKernelUpdatedAt, ...existingKernel } = existingKernelRaw;
+  mapped.kernel = {
+    ...existingKernel,
+    githubUser: normalizeKernelSource(
+      String(mapped.githubUser || existingKernel.githubUser || 'vernesong'),
+    ) || 'vernesong',
+    installVersionMode: normalizeInstallVersionMode(
+      mapped.installVersionMode || existingKernel.installVersionMode || 'latest',
+    ),
+    installVersion: String(mapped.installVersion ?? existingKernel.installVersion ?? '').trim(),
+  };
   mapped.userDataPaths = {
     ...existingPaths,
     ...(mapped.configFile ? { configFile: normalizeConfigFileName(mapped.configFile) } : {}),
@@ -3509,15 +3571,12 @@ function mapSettingsForFile(settings) {
   if (Object.prototype.hasOwnProperty.call(mapped, 'recommendPageSize')) {
     delete mapped.recommendPageSize;
   }
-  // Kernel identity is maintained by main process command results.
+  // Kernel metadata remains under mapped.kernel.
   if (Object.prototype.hasOwnProperty.call(mapped, 'kernelVersion')) {
     delete mapped.kernelVersion;
   }
   if (Object.prototype.hasOwnProperty.call(mapped, 'kernelVersionMeta')) {
     delete mapped.kernelVersionMeta;
-  }
-  if (Object.prototype.hasOwnProperty.call(mapped, 'kernel')) {
-    delete mapped.kernel;
   }
   if (Object.prototype.hasOwnProperty.call(mapped, 'configPath')) {
     delete mapped.configPath;
@@ -3572,6 +3631,12 @@ function mapSettingsForFile(settings) {
   }
   if (Object.prototype.hasOwnProperty.call(mapped, 'githubUser')) {
     delete mapped.githubUser;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'installVersionMode')) {
+    delete mapped.installVersionMode;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'installVersion')) {
+    delete mapped.installVersion;
   }
   if (Object.prototype.hasOwnProperty.call(mapped, 'chartEnabled')) {
     delete mapped.chartEnabled;
@@ -3666,6 +3731,9 @@ function mapSettingsForFile(settings) {
   if (Object.prototype.hasOwnProperty.call(mapped, 'captureAllowLan')) {
     delete mapped.captureAllowLan;
   }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'foxRank')) {
+    delete mapped.foxRank;
+  }
   return mapped;
 }
 
@@ -3723,25 +3791,6 @@ async function syncSettingsFromFile() {
     return;
   }
   const merged = normalizeSettingsForUi({ ...DEFAULT_SETTINGS, ...response.data });
-  let foxRankBackup = null;
-  try {
-    foxRankBackup = (state.settings && state.settings.foxRank && typeof state.settings.foxRank === 'object')
-      ? state.settings.foxRank
-      : (state.fileSettings && state.fileSettings.foxRank && typeof state.fileSettings.foxRank === 'object')
-        ? state.fileSettings.foxRank
-        : null;
-    if (!foxRankBackup) {
-      const rawStoredSettings = localStorage.getItem(SETTINGS_KEY);
-      if (rawStoredSettings) {
-        const parsedStoredSettings = JSON.parse(rawStoredSettings);
-        if (parsedStoredSettings && parsedStoredSettings.foxRank && typeof parsedStoredSettings.foxRank === 'object') {
-          foxRankBackup = parsedStoredSettings.foxRank;
-        }
-      }
-    }
-  } catch {
-    foxRankBackup = foxRankBackup && typeof foxRankBackup === 'object' ? foxRankBackup : null;
-  }
   if (window.clashfox && typeof window.clashfox.getUserDataPath === 'function') {
     const userData = await window.clashfox.getUserDataPath();
     if (userData && userData.ok && userData.path) {
@@ -3761,6 +3810,9 @@ async function syncSettingsFromFile() {
       if (!merged.userDataPaths.logDir) {
         merged.userDataPaths.logDir = 'logs';
       }
+      if (!merged.userDataPaths.helperDir) {
+        merged.userDataPaths.helperDir = 'helper';
+      }
       if (!merged.userDataPaths.pidDir) {
         merged.userDataPaths.pidDir = 'runtime';
       }
@@ -3769,16 +3821,7 @@ async function syncSettingsFromFile() {
       }
     }
   }
-  if (foxRankBackup && typeof foxRankBackup === 'object') {
-    merged.foxRank = foxRankBackup;
-  }
   state.fileSettings = { ...merged };
-  if (merged.foxRank && typeof merged.foxRank === 'object') {
-    state.foxRank = {
-      ...(state.foxRank && typeof state.foxRank === 'object' ? state.foxRank : {}),
-      ...merged.foxRank,
-    };
-  }
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
   if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
     const { externalUiUrl: _externalUiUrl, externalUiName: _externalUiName, ...restSettings } = merged;
@@ -3825,15 +3868,11 @@ function saveSettings(patch, options = {}) {
     'theme',
     'debugMode',
     'acceptBeta',
-    'githubUser',
     'windowWidth',
     'windowHeight',
     'mainWindowClosed',
     'sidebarCollapsed',
     'generalPageSize',
-    'logLines',
-    'logAutoRefresh',
-    'logIntervalPreset',
   ];
   appearanceKeys.forEach((key) => {
     if (Object.prototype.hasOwnProperty.call(nextPatch, key)) {
@@ -3842,6 +3881,24 @@ function saveSettings(patch, options = {}) {
   });
   if (Object.keys(nextAppearance).length) {
     nextPatch.appearance = nextAppearance;
+  }
+  const nextKernel = {
+    ...((state.settings && state.settings.kernel) || {}),
+    ...((state.fileSettings && state.fileSettings.kernel) || {}),
+    ...((nextPatch.kernel && typeof nextPatch.kernel === 'object') ? nextPatch.kernel : {}),
+  };
+  const kernelKeys = [
+    'githubUser',
+    'installVersionMode',
+    'installVersion',
+  ];
+  kernelKeys.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(nextPatch, key)) {
+      nextKernel[key] = nextPatch[key];
+    }
+  });
+  if (Object.keys(nextKernel).length) {
+    nextPatch.kernel = nextKernel;
   }
   const nextTrayMenu = {
     ...((state.settings && state.settings.trayMenu) || {}),
@@ -3875,6 +3932,29 @@ function saveSettings(patch, options = {}) {
   });
   if (Object.keys(nextTrayMenu).length) {
     nextPatch.trayMenu = nextTrayMenu;
+  }
+  const nextUserDataPaths = {
+    ...((state.settings && state.settings.userDataPaths) || {}),
+    ...((state.fileSettings && state.fileSettings.userDataPaths) || {}),
+    ...((nextPatch.userDataPaths && typeof nextPatch.userDataPaths === 'object') ? nextPatch.userDataPaths : {}),
+  };
+  const userDataPathKeys = [
+    'userAppDataDir',
+    'configFile',
+    'configDir',
+    'coreDir',
+    'dataDir',
+    'helperDir',
+    'logDir',
+    'pidDir',
+  ];
+  userDataPathKeys.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(nextPatch, key)) {
+      nextUserDataPaths[key] = nextPatch[key];
+    }
+  });
+  if (Object.keys(nextUserDataPaths).length) {
+    nextPatch.userDataPaths = nextUserDataPaths;
   }
 
   const nextPanelManager = {
@@ -4244,17 +4324,21 @@ function applyThemePreference(preference, persist = true) {
 }
 
 const resolveAbsolutePath = (relativePath) => {
+  const inputPath = String(relativePath || '').trim();
+  if (!inputPath) {
+    return '';
+  }
   const userDataPaths = state.settings?.userDataPaths || {};
   const userAppDataDir = userDataPaths.userAppDataDir || '';
   if (!userAppDataDir) {
-    return relativePath;
+    return inputPath;
   }
-  if (relativePath.startsWith('/') || /^[A-Za-z]:/.test(relativePath)) {
-    return relativePath;
+  if (inputPath.startsWith('/') || inputPath.startsWith('~') || /^[A-Za-z]:/.test(inputPath)) {
+    return inputPath;
   }
   return userAppDataDir.endsWith('/')
-      ? `${userAppDataDir}${relativePath}`
-      : `${userAppDataDir}/${relativePath}`;
+      ? `${userAppDataDir}${inputPath}`
+      : `${userAppDataDir}/${inputPath}`;
 };
 
 function applySettings(settings) {
@@ -4349,6 +4433,12 @@ function applySettings(settings) {
   if (settingsDataDir) {
     settingsDataDir.value = resolveAbsolutePath(state.settings.userDataPaths?.dataDir || '');
   }
+  if (settingsHelperDir) {
+    settingsHelperDir.value = resolveAbsolutePath(state.settings.userDataPaths?.helperDir || 'helper');
+  }
+  if (settingsLogDir) {
+    settingsLogDir.value = resolveAbsolutePath(state.settings.userDataPaths?.logDir || 'logs');
+  }
   if (settingsExternalUi) {
     settingsExternalUi.value = state.settings.externalUi || 'ui';
   }
@@ -4358,6 +4448,18 @@ function applySettings(settings) {
   }
   if (settingsGithubUser) {
     settingsGithubUser.value = state.settings.githubUser;
+  }
+  if (installVersionMode) {
+    installVersionMode.value = normalizeInstallVersionMode(state.settings.installVersionMode || 'latest');
+  }
+  if (installVersion) {
+    installVersion.value = String(state.settings.installVersion || '').trim();
+  }
+  rebuildInstallVersionOptions();
+  if (String(state.settings.githubUser || '').trim() === 'MetaCubeX') {
+    ensureMetaCubeXVersionCatalog().catch(() => {});
+  } else {
+    rebuildInstallVersionOptions();
   }
   state.coreVersionRaw = readKernelVersionFromSettings();
   applyKernelVersionDisplay(state.coreVersionRaw || '');
@@ -5059,6 +5161,11 @@ function setInstallState(nextState, errorMessage = '') {
   if (installVersion) {
     installVersion.disabled = nextState === 'loading';
   }
+  if (installVersionMode) {
+    installVersionMode.disabled = nextState === 'loading';
+  }
+  syncInstallVersionPickerUi();
+  syncKernelSourceCards();
   if (nextState === 'idle') {
     applyKernelUpdateInstallHint();
   }
@@ -5068,13 +5175,31 @@ async function performMihomoInstall(mode = 'install') {
   setInstallState('loading');
   const githubUserValue = githubUser ? githubUser.value : 'vernesong';
   const installMode = typeof mode === 'string' ? mode : (mode && mode.mode) || 'install';
-  const targetChannel = (mode && typeof mode === 'object' && mode.channel) ? mode.channel : 'default';
-  const versionValue = (
-    installMode === 'install'
-    && githubUserValue === 'MetaCubeX'
-    && installVersion
-    && installVersion.value.trim()
-  ) ? installVersion.value.trim() : '';
+  let targetChannel = (mode && typeof mode === 'object' && mode.channel) ? mode.channel : 'default';
+  const installVersionModeValue = normalizeInstallVersionMode(
+    (installVersionMode && installVersionMode.value)
+    || (state.settings && state.settings.installVersionMode)
+    || 'latest',
+  );
+  let versionValue = '';
+  if (installMode === 'install' && githubUserValue === 'MetaCubeX') {
+    if (installVersionModeValue === 'manual') {
+      versionValue = installVersion && installVersion.value.trim() ? installVersion.value.trim() : '';
+      if (versionValue && !validateMetaCubeXManualVersion(versionValue)) {
+        setInstallState('error');
+        showToast(ti('install.versionManualInvalid', 'Manual version is not found in recent tags/releases.'), 'error');
+        return;
+      }
+    } else if (installVersionModeValue.startsWith('tag:')) {
+      versionValue = String(installVersionModeValue.slice(4) || '').trim();
+    } else if (installVersionModeValue === 'latest') {
+      const catalog = getMetaCubeXCatalog();
+      const latestStableTag = String(catalog && catalog.latestStableTag ? catalog.latestStableTag : '').trim();
+      const latestStableVersion = String(catalog && catalog.latestStableVersion ? catalog.latestStableVersion : '').trim();
+      versionValue = latestStableTag || latestStableVersion || '';
+      targetChannel = 'default';
+    }
+  }
 
   if (typeof window.clashfox.installMihomo !== 'function') {
     setInstallState('error', 'installMihomo_not_available');
@@ -5123,6 +5248,16 @@ async function performMihomoInstall(mode = 'install') {
       return;
     }
     setInstallState('success');
+    try {
+      const restartResponse = await reloadMihomoCore(getMihomoApiSource(), window.clashfox);
+      if (!restartResponse || !restartResponse.ok) {
+        const detail = String((restartResponse && (restartResponse.details || restartResponse.error)) || '').trim();
+        showToast(detail || ti('labels.restartFailed', 'Restart failed'), 'warn');
+      }
+    } catch (error) {
+      const message = String(error && error.message ? error.message : '').trim();
+      showToast(message || ti('labels.restartFailed', 'Restart failed'), 'warn');
+    }
     showNoticePop(`${t('labels.installSuccess')} ${t('labels.installConfigHint')}`, 'success');
     loadKernels();
     loadStatus();
@@ -5173,6 +5308,328 @@ function normalizeKernelSource(source = '') {
     return text;
   }
   return '';
+}
+
+function normalizeInstallVersionMode(value = '') {
+  const raw = String(value || '').trim();
+  const mode = raw.toLowerCase();
+  if (mode === 'manual') {
+    return 'manual';
+  }
+  if (mode.startsWith('tag:')) {
+    const tag = String(raw.slice(raw.indexOf(':') + 1) || '').trim();
+    return tag ? `tag:${tag}` : 'latest';
+  }
+  return 'latest';
+}
+
+function normalizeVersionTag(version = '') {
+  return String(version || '').trim().replace(/^v/i, '');
+}
+
+function buildVersionSelectOption(value = '', label = '') {
+  const option = document.createElement('option');
+  option.value = String(value || '').trim();
+  option.textContent = String(label || '').trim();
+  return option;
+}
+
+function getMetaCubeXCatalog() {
+  const catalog = state.metaCubeXVersionCatalog;
+  return catalog && typeof catalog === 'object' ? catalog : null;
+}
+
+function normalizeMetaCubeXCatalogPayload(payload = null) {
+  const source = payload && typeof payload === 'object' ? payload : {};
+  const normalizeTagList = (input = []) => {
+    if (!Array.isArray(input)) {
+      return [];
+    }
+    return input
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+      .slice(0, 120);
+  };
+  return {
+    latestStableVersion: String(source.latestStableVersion || '').trim(),
+    latestStableTag: String(source.latestStableTag || '').trim(),
+    latestTestingVersion: String(source.latestTestingVersion || '').trim(),
+    latestTestingTag: String(source.latestTestingTag || '').trim(),
+    historyTags: normalizeTagList(source.historyTags),
+    tags: normalizeTagList(source.tags),
+  };
+}
+
+function hydrateMetaCubeXCatalogFromCache() {
+  try {
+    const raw = localStorage.getItem(METACUBEX_CATALOG_CACHE_KEY);
+    if (!raw) {
+      return false;
+    }
+    const parsed = JSON.parse(raw);
+    const updatedAt = Number(parsed && parsed.updatedAt ? parsed.updatedAt : 0);
+    if (!Number.isFinite(updatedAt) || updatedAt <= 0) {
+      return false;
+    }
+    if ((Date.now() - updatedAt) > METACUBEX_CATALOG_CACHE_MAX_AGE_MS) {
+      return false;
+    }
+    const catalog = normalizeMetaCubeXCatalogPayload(parsed && parsed.catalog ? parsed.catalog : {});
+    state.metaCubeXVersionCatalog = catalog;
+    state.metaCubeXVersionCatalogLoaded = true;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function persistMetaCubeXCatalogToCache(catalog = null) {
+  try {
+    if (!catalog || typeof catalog !== 'object') {
+      return;
+    }
+    localStorage.setItem(METACUBEX_CATALOG_CACHE_KEY, JSON.stringify({
+      updatedAt: Date.now(),
+      catalog: normalizeMetaCubeXCatalogPayload(catalog),
+    }));
+  } catch {
+    // Ignore localStorage write errors.
+  }
+}
+
+function validateMetaCubeXManualVersion(rawValue = '') {
+  const value = String(rawValue || '').trim();
+  if (!value) {
+    return true;
+  }
+  const catalog = getMetaCubeXCatalog();
+  const tags = Array.isArray(catalog && catalog.tags) ? catalog.tags : [];
+  const releaseDerivedTags = [
+    String(catalog && catalog.latestStableTag ? catalog.latestStableTag : '').trim(),
+    String(catalog && catalog.latestTestingTag ? catalog.latestTestingTag : '').trim(),
+    ...(Array.isArray(catalog && catalog.historyTags) ? catalog.historyTags : []),
+  ].map((item) => String(item || '').trim()).filter(Boolean);
+  const candidateTags = [...new Set([...tags, ...releaseDerivedTags])];
+  if (!candidateTags.length) {
+    return true;
+  }
+  const normalizedValue = normalizeVersionTag(value).toLowerCase();
+  return candidateTags.some((tag) => {
+    const normalizedTag = normalizeVersionTag(tag).toLowerCase();
+    return normalizedTag === normalizedValue || normalizedTag.includes(normalizedValue) || normalizedValue.includes(normalizedTag);
+  });
+}
+
+function rebuildInstallVersionOptions() {
+  if (!installVersionMode) {
+    return;
+  }
+  const selectedRaw = normalizeInstallVersionMode(
+    (state.settings && state.settings.installVersionMode)
+    || installVersionMode.value
+    || 'latest',
+  );
+  const catalog = getMetaCubeXCatalog();
+  const latestStableVersion = String(catalog && catalog.latestStableVersion ? catalog.latestStableVersion : '').trim();
+  const latestStableTag = String(catalog && catalog.latestStableTag ? catalog.latestStableTag : latestStableVersion).trim();
+  const latestTestingVersion = String(catalog && catalog.latestTestingVersion ? catalog.latestTestingVersion : '').trim();
+  const latestTestingTag = String(catalog && catalog.latestTestingTag ? catalog.latestTestingTag : latestTestingVersion).trim();
+  const historyTags = Array.isArray(catalog && catalog.historyTags) ? catalog.historyTags : [];
+  const latestLabelBase = ti('install.versionLatestOption', 'Latest Stable');
+  const latestLabel = latestStableVersion
+    ? `${latestLabelBase} (${latestStableVersion})`
+    : latestLabelBase;
+  const latestTestingLabelBase = ti('install.versionLatestTestingOption', 'Latest Testing');
+  const latestTestingLabel = latestTestingVersion
+    ? `${latestTestingLabelBase} (${latestTestingVersion})`
+    : latestTestingLabelBase;
+
+  const manualLabel = ti('install.versionManualOption', 'Manual Input');
+  const options = [];
+  if (latestStableTag || latestStableVersion) {
+    options.push(buildVersionSelectOption('latest', latestLabel));
+  }
+  if (latestTestingTag || latestTestingVersion) {
+    const latestTestingValue = latestTestingTag || latestTestingVersion;
+    options.push(buildVersionSelectOption(`tag:${latestTestingValue}`, latestTestingLabel));
+  }
+  const historyOptions = [];
+  historyTags.forEach((tagText) => {
+    const tag = String(tagText || '').trim();
+    if (!tag || tag === latestTestingTag || tag === latestStableTag) {
+      return;
+    }
+    historyOptions.push(buildVersionSelectOption(`tag:${tag}`, `${tag}`));
+  });
+  historyOptions.slice(0, 10).forEach((option) => options.push(option));
+  options.push(buildVersionSelectOption('manual', manualLabel));
+
+  const optionsSignature = options.map((option) => `${option.value}::${option.textContent}`).join('|');
+  if (installVersionOptionsSignature === optionsSignature) {
+    const existingValues = new Set(Array.from(installVersionMode.options || []).map((option) => option.value));
+    const selected = existingValues.has(selectedRaw)
+      ? selectedRaw
+      : (existingValues.has('latest') ? 'latest' : 'manual');
+    if (installVersionMode.value !== selected) {
+      installVersionMode.value = selected;
+      if (state.settings && state.settings.installVersionMode !== selected) {
+        state.settings.installVersionMode = selected;
+      }
+      refreshCustomSelects();
+    }
+    return;
+  }
+  installVersionOptionsSignature = optionsSignature;
+
+  installVersionMode.innerHTML = '';
+  options.forEach((option) => installVersionMode.appendChild(option));
+  const availableValues = new Set(options.map((option) => option.value));
+  const selected = availableValues.has(selectedRaw)
+    ? selectedRaw
+    : (availableValues.has('latest') ? 'latest' : 'manual');
+  installVersionMode.value = selected;
+  if (state.settings && state.settings.installVersionMode !== selected) {
+    state.settings.installVersionMode = selected;
+  }
+  refreshCustomSelects();
+}
+
+async function ensureMetaCubeXVersionCatalog(force = false) {
+  if (!force && !state.metaCubeXVersionCatalogLoaded) {
+    hydrateMetaCubeXCatalogFromCache();
+  }
+  rebuildInstallVersionOptions();
+  if (!window.clashfox || typeof window.clashfox.listKernelVersions !== 'function') {
+    return;
+  }
+  if (!force && state.metaCubeXVersionCatalogLoaded) {
+    return;
+  }
+  if (state.metaCubeXVersionCatalogPromise) {
+    return state.metaCubeXVersionCatalogPromise;
+  }
+  state.metaCubeXVersionCatalogLoading = true;
+  const request = (async () => {
+    try {
+      const result = await window.clashfox.listKernelVersions({ source: 'MetaCubeX' });
+      if (result && result.ok) {
+        const normalizedCatalog = normalizeMetaCubeXCatalogPayload(result);
+        state.metaCubeXVersionCatalog = normalizedCatalog;
+        state.metaCubeXVersionCatalogLoaded = true;
+        state.metaCubeXCatalogLastLoadFailed = false;
+        persistMetaCubeXCatalogToCache(normalizedCatalog);
+        return;
+      }
+      throw new Error(result && result.error ? String(result.error) : 'LIST_KERNEL_VERSIONS_FAILED');
+    } catch {
+      state.metaCubeXCatalogLastLoadFailed = true;
+      const now = Date.now();
+      const selectedSource = normalizeKernelSource(
+        (githubUser && githubUser.value)
+        || (state.settings && state.settings.githubUser)
+        || '',
+      );
+      const shouldNotify = selectedSource === 'MetaCubeX'
+        && (now - Number(state.metaCubeXCatalogErrorNotifiedAt || 0) > 15000);
+      if (shouldNotify) {
+        state.metaCubeXCatalogErrorNotifiedAt = now;
+        showToast(
+          ti(
+            'install.metaCubeXCatalogLoadFailed',
+            'MetaCubeX version list failed to load. You can use Manual Input and retry later.',
+          ),
+          'warn',
+        );
+      }
+    } finally {
+      state.metaCubeXVersionCatalogLoading = false;
+      state.metaCubeXVersionCatalogPromise = null;
+      rebuildInstallVersionOptions();
+    }
+  })();
+  state.metaCubeXVersionCatalogPromise = request;
+  return request;
+}
+
+function updateInstallVersionModeOptionText() {
+  rebuildInstallVersionOptions();
+  refreshCustomSelects();
+}
+
+function syncInstallVersionPickerUi() {
+  if (!installVersionMode || !installVersion) {
+    return;
+  }
+  const mode = normalizeInstallVersionMode(
+    (state.settings && state.settings.installVersionMode)
+    || installVersionMode.value
+    || 'latest',
+  );
+  installVersionMode.value = mode;
+  const showManualInput = mode === 'manual';
+  installVersion.classList.toggle('is-hidden', !showManualInput);
+  installVersion.readOnly = !showManualInput;
+  const isLoading = state.installState === 'loading';
+  installVersionMode.disabled = isLoading;
+  installVersion.disabled = isLoading || !showManualInput;
+}
+
+function syncKernelSourceCards() {
+  if (!Array.isArray(kernelSourceCards) || !kernelSourceCards.length) {
+    return;
+  }
+  const selected = normalizeKernelSource((githubUser && githubUser.value) || '') || 'vernesong';
+  const disabled = state.installState === 'loading';
+  kernelSourceCards.forEach((card) => {
+    const value = normalizeKernelSource(card && card.dataset ? card.dataset.sourceValue : '') || '';
+    const active = value === selected;
+    card.classList.toggle('is-active', active);
+    card.setAttribute('aria-checked', active ? 'true' : 'false');
+    card.disabled = disabled;
+  });
+  if (kernelSourcePicker) {
+    kernelSourcePicker.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+  }
+}
+
+function selectKernelSource(nextSource = '', { persist = false } = {}) {
+  const normalized = normalizeKernelSource(nextSource) || 'vernesong';
+  if (githubUser) {
+    githubUser.value = normalized;
+  }
+  if (settingsGithubUser) {
+    settingsGithubUser.value = normalized;
+  }
+  if (!state.settings || typeof state.settings !== 'object') {
+    state.settings = { ...DEFAULT_SETTINGS };
+  }
+  state.settings.githubUser = normalized;
+  if (!state.settings.kernel || typeof state.settings.kernel !== 'object') {
+    state.settings.kernel = {};
+  }
+  state.settings.kernel.githubUser = normalized;
+  refreshCustomSelects();
+  if (normalized === 'MetaCubeX') {
+    ensureMetaCubeXVersionCatalog().catch(() => {});
+  }
+  state.githubSourceManualOverride = true;
+  updateInstallVersionVisibility();
+  state.kernelUpdateCheckedAt = 0;
+  state.kernelUpdateInfo = {
+    ok: false,
+    status: 'checking',
+    source: normalized,
+  };
+  applyKernelUpdateInstallHint();
+  if (state.installState !== 'loading') {
+    setInstallState('idle');
+  }
+  if (persist) {
+    saveSettings({ githubUser: normalized });
+  }
+  if (currentPage === 'kernel') {
+    refreshKernelUpdateNotice(true);
+  }
 }
 
 function formatKernelVersionForDisplay(version = '', source = '', prerelease = false) {
@@ -5495,10 +5952,13 @@ async function refreshKernelUpdateNotice(force = false) {
       && cachedResult.latestVersion
       && String(source || '').toLowerCase() === 'metacubex'
       && !cachedResult.prerelease
-      && installVersion
     ) {
       const latest = String(cachedResult.latestVersion || '').trim();
-      installVersion.value = latest;
+      state.metaCubeXVersionCatalog = {
+        ...(state.metaCubeXVersionCatalog || {}),
+        latestStableVersion: latest,
+      };
+      updateInstallVersionModeOptionText();
     }
     applyKernelUpdateInstallHint();
     return;
@@ -5527,10 +5987,13 @@ async function refreshKernelUpdateNotice(force = false) {
       && result.latestVersion
       && String(source || '').toLowerCase() === 'metacubex'
       && !result.prerelease
-      && installVersion
     ) {
       const latest = String(result.latestVersion || '').trim();
-      installVersion.value = latest;
+      state.metaCubeXVersionCatalog = {
+        ...(state.metaCubeXVersionCatalog || {}),
+        latestStableVersion: latest,
+      };
+      updateInstallVersionModeOptionText();
     }
     if (
       result
@@ -5995,6 +6458,12 @@ function updateStatusUI(data) {
   if (settingsDataDir) {
     settingsDataDir.placeholder = data.dataDir || '-';
   }
+  if (settingsHelperDir) {
+    settingsHelperDir.placeholder = resolveAbsolutePath(state.settings.userDataPaths?.helperDir || 'helper') || '-';
+  }
+  if (settingsLogDir) {
+    settingsLogDir.placeholder = resolveAbsolutePath(state.settings.userDataPaths?.logDir || 'logs') || '-';
+  }
   if (settingsExternalUi) {
     settingsExternalUi.placeholder = 'ui';
   }
@@ -6048,8 +6517,6 @@ function getPersistedMihomoStatusSnapshot() {
   }
   return {
     running: kernel.running,
-    source: 'settings',
-    updatedAt: kernel.updatedAt || new Date().toISOString(),
   };
 }
 
@@ -6081,9 +6548,7 @@ function cacheMihomoStatusForUi(running, source = 'status') {
     state.fileSettings.kernel = {};
   }
   state.settings.kernel.running = snapshot.running;
-  state.settings.kernel.updatedAt = snapshot.updatedAt;
   state.fileSettings.kernel.running = snapshot.running;
-  state.fileSettings.kernel.updatedAt = snapshot.updatedAt;
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
   } catch {
@@ -6152,7 +6617,8 @@ function syncRunningIndicators(running) {
 }
 
 function updateInstallVersionVisibility() {
-  if (!installVersionRow || !installVersion) {
+  if (!installVersionRow || !installVersion || !installVersionMode) {
+    syncKernelSourceCards();
     return;
   }
   const currentUser =
@@ -6162,11 +6628,29 @@ function updateInstallVersionVisibility() {
     '';
   const isMetaCubeX = String(currentUser).toLowerCase() === 'metacubex';
   installVersionRow.classList.toggle('is-hidden', !isMetaCubeX);
-  installVersion.readOnly = !isMetaCubeX;
-  if (!isMetaCubeX) {
-    installVersion.value = '';
+  if (isMetaCubeX) {
+    ensureMetaCubeXVersionCatalog().catch(() => {});
+  } else {
+    rebuildInstallVersionOptions();
   }
-  installVersion.disabled = state.installState === 'loading';
+  const installMode = normalizeInstallVersionMode(
+    (state.settings && state.settings.installVersionMode)
+    || installVersionMode.value
+    || 'latest',
+  );
+  installVersionMode.value = installMode;
+  const isLoading = state.installState === 'loading' || state.metaCubeXVersionCatalogLoading;
+  installVersionMode.disabled = isLoading || !isMetaCubeX;
+  installVersion.disabled = isLoading || !isMetaCubeX || installMode !== 'manual';
+  installVersion.readOnly = !isMetaCubeX || installMode !== 'manual';
+  installVersion.classList.toggle('is-hidden', installMode !== 'manual');
+  if (installVersionRefreshBtn) {
+    installVersionRefreshBtn.disabled = isLoading || !isMetaCubeX;
+    installVersionRefreshBtn.classList.toggle('is-hidden', !isMetaCubeX || !state.metaCubeXCatalogLastLoadFailed);
+  }
+  updateInstallVersionModeOptionText();
+  syncInstallVersionPickerUi();
+  syncKernelSourceCards();
 }
 
 function formatUptime(seconds) {
@@ -7436,27 +7920,6 @@ function loadFoxRankFromStorage() {
       }
       : null,
   });
-  const readFoxRankBackup = () => {
-    const candidates = [
-      state.settings && state.settings.foxRank,
-      state.fileSettings && state.fileSettings.foxRank,
-    ];
-    for (const candidate of candidates) {
-      if (candidate && typeof candidate === 'object') {
-        return candidate;
-      }
-    }
-    try {
-      const rawSettings = localStorage.getItem(SETTINGS_KEY);
-      if (!rawSettings) {
-        return null;
-      }
-      const parsed = JSON.parse(rawSettings);
-      return parsed && parsed.foxRank && typeof parsed.foxRank === 'object' ? parsed.foxRank : null;
-    } catch {
-      return null;
-    }
-  };
   const normalizeHistory = (value) => (Array.isArray(value) ? value : [])
     .map((item) => ({
       day: String(item && item.day ? item.day : ''),
@@ -7472,8 +7935,7 @@ function loadFoxRankFromStorage() {
   try {
     const payload = localStorage.getItem(FOX_RANK_STORAGE_KEY);
     if (!payload) {
-      const backup = readFoxRankBackup();
-      return backup ? normalizeFoxRankSnapshot(backup) : createDefaultFoxRankState();
+      return createDefaultFoxRankState();
     }
     const parsed = JSON.parse(payload);
     const usageResetVersion = parsed.usageResetVersion
@@ -7486,8 +7948,7 @@ function loadFoxRankFromStorage() {
       usageResetVersion: FOX_RANK_USAGE_RESET_VERSION,
     });
   } catch {
-    const backup = readFoxRankBackup();
-    return backup ? normalizeFoxRankSnapshot(backup) : createDefaultFoxRankState();
+    return createDefaultFoxRankState();
   }
 }
 
@@ -7526,37 +7987,33 @@ function saveFoxRankToStorage() {
     localStorage.setItem(FOX_RANK_STORAGE_KEY, JSON.stringify({
       ...snapshot,
     }));
-    if (!state.settings || typeof state.settings !== 'object') {
-      state.settings = {};
-    }
-    if (!state.fileSettings || typeof state.fileSettings !== 'object') {
-      state.fileSettings = {};
-    }
-    state.settings.foxRank = snapshot;
-    state.fileSettings.foxRank = snapshot;
-    try {
-      const settingsRaw = localStorage.getItem(SETTINGS_KEY);
-      const settingsPayload = settingsRaw ? JSON.parse(settingsRaw) : {};
-      if (settingsPayload && typeof settingsPayload === 'object') {
-        settingsPayload.foxRank = snapshot;
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsPayload));
-      }
-    } catch {
-      // ignore settings backup failures
-    }
   } catch {
     // ignore storage failures
   }
 }
 
+async function resetFoxRankProgress() {
+  try {
+    localStorage.removeItem(FOX_RANK_STORAGE_KEY);
+  } catch {
+    // ignore localStorage errors
+  }
+  state.foxRank = loadFoxRankFromStorage();
+  saveFoxRankToStorage();
+  renderFoxRankPanel(null, { suppressBrief: true });
+  showToast(foxRankText('resetDone', 'Fox Rank data has been reset and restarted.'), 'info');
+}
+
+window.__clashfoxResetFoxRank = resetFoxRankProgress;
+
 function computeFoxRankXp() {
   if (!state.foxRank) {
     return 0;
   }
-  const usageXp = Math.floor((state.foxRank.totalUsageSec || 0) / 600);
-  const stabilityXp = (state.foxRank.stableDays || 0) * 20;
-  const qualityXp = Math.round((state.foxRank.qualityScore || 0) * 120);
-  const explorationXp = (state.foxRank.explorationCount || 0) * 12;
+  const usageXp = Math.floor((state.foxRank.totalUsageSec || 0) / 1800);
+  const stabilityXp = (state.foxRank.stableDays || 0) * 6;
+  const qualityXp = Math.round((state.foxRank.qualityScore || 0) * 35);
+  const explorationXp = (state.foxRank.explorationCount || 0) * 4;
   return usageXp + stabilityXp + qualityXp + explorationXp;
 }
 
@@ -8470,13 +8927,9 @@ function updateFoxRankFromOverviewSnapshot(data) {
       state.foxRank.lastUsageBaseSec = uptime;
     }
     state.foxRank.lastUsageTickSec = nowSec;
-    if (uptime >= 300) {
-      const today = getTodayKey();
-      if (state.foxRank.lastStableDay !== today) {
-        state.foxRank.stableDays = Math.min(365, (state.foxRank.stableDays || 0) + 1);
-        state.foxRank.lastStableDay = today;
-      }
-    }
+    const stableDaysByUsage = Math.floor(Math.max(0, Number(state.foxRank.totalUsageSec || 0)) / 86400);
+    state.foxRank.stableDays = Math.min(3650, stableDaysByUsage);
+    state.foxRank.lastStableDay = getTodayKey();
   } else {
     state.foxRank.lastUsageBaseSec = 0;
     state.foxRank.lastUsageTickSec = 0;
@@ -8492,7 +8945,7 @@ function updateFoxRankFromOverviewSnapshot(data) {
       state.foxRank.explorationCount = Math.min(9999, (state.foxRank.explorationCount || 0) + 1);
       state.foxRank.lastExplorationFingerprint = proxyFingerprint;
       state.foxRank.lastExplorationAt = nowMs;
-      showToast(`Exploration +12 XP • ${formatFoxRankText('hops', { count: state.foxRank.explorationCount }, `${state.foxRank.explorationCount} hops`)}`, 'info');
+      showToast(`Exploration +4 XP • ${formatFoxRankText('hops', { count: state.foxRank.explorationCount }, `${state.foxRank.explorationCount} hops`)}`, 'info');
     }
   }
   state.foxRank.qualityScore = computeFoxRankQualityScore(data);
@@ -10137,12 +10590,16 @@ function refreshPageRefs() {
   overviewNetworkRefresh = document.getElementById('overviewNetworkRefresh');
 
   githubUser = document.getElementById('githubUser');
+  kernelSourcePicker = document.getElementById('kernelSourcePicker');
+  kernelSourceCards = Array.from(document.querySelectorAll('.kernel-source-card'));
   installBtn = document.getElementById('installBtn');
   updateBtn = document.getElementById('updateBtn');
   installStatus = document.getElementById('installStatus');
   installCurrentKernel = document.getElementById('installCurrentKernel');
   installVersionRow = document.getElementById('installVersionRow');
+  installVersionMode = document.getElementById('installVersionMode');
   installVersion = document.getElementById('installVersion');
+  installVersionRefreshBtn = document.getElementById('installVersionRefreshBtn');
   cancelInstallBtn = document.getElementById('cancelInstallBtn');
   configPathInput = document.getElementById('configPath');
   overviewConfigPath = document.getElementById('overviewConfigPath');
@@ -10243,9 +10700,13 @@ function refreshPageRefs() {
   settingsConfigDir = document.getElementById('settingsConfigDir');
   settingsCoreDir = document.getElementById('settingsCoreDir');
   settingsDataDir = document.getElementById('settingsDataDir');
+  settingsHelperDir = document.getElementById('settingsHelperDir');
+  settingsLogDir = document.getElementById('settingsLogDir');
   settingsConfigDirReveal = document.getElementById('settingsConfigDirReveal');
   settingsCoreDirReveal = document.getElementById('settingsCoreDirReveal');
   settingsDataDirReveal = document.getElementById('settingsDataDirReveal');
+  settingsHelperDirReveal = document.getElementById('settingsHelperDirReveal');
+  settingsLogDirReveal = document.getElementById('settingsLogDirReveal');
   helperInstallBtn = document.getElementById('helperInstallBtn');
   helperUninstallBtn = document.getElementById('helperUninstallBtn');
   helperRepairBtn = document.getElementById('helperRepairBtn');
@@ -10891,6 +11352,7 @@ async function loadLayoutParts() {
 }
 
 function bindPageEvents() {
+  bindKernelInstallControls();
   if (noticePopClose && noticePopClose.dataset.bound !== 'true') {
     noticePopClose.dataset.bound = 'true';
     noticePopClose.addEventListener('click', hideNoticePop);
@@ -11327,17 +11789,21 @@ const getRevealPath = (inputEl) => {
 
 // Display-only path resolver. Does not mutate settings or storage.
 const resolveAbsolutePath = (relativePath) => {
+  const inputPath = String(relativePath || '').trim();
+  if (!inputPath) {
+    return '';
+  }
   const userDataPaths = state.settings?.userDataPaths || {};
   const userAppDataDir = userDataPaths.userAppDataDir || '';
   if (!userAppDataDir) {
-    return relativePath;
+    return inputPath;
   }
-  if (relativePath.startsWith('/') || /^[A-Za-z]:/.test(relativePath)) {
-    return relativePath;
+  if (inputPath.startsWith('/') || inputPath.startsWith('~') || /^[A-Za-z]:/.test(inputPath)) {
+    return inputPath;
   }
   return userAppDataDir.endsWith('/')
-    ? `${userAppDataDir}${relativePath}`
-    : `${userAppDataDir}/${relativePath}`;
+    ? `${userAppDataDir}${inputPath}`
+    : `${userAppDataDir}/${inputPath}`;
 };
 
 async function refreshHelperInstallPath() {
@@ -11506,30 +11972,49 @@ async function refreshHelperPanel(force = false) {
 
 window.__refreshHelperPanel = refreshHelperPanel;
 
+async function revealSettingsDirectory(targetPath) {
+  if (!targetPath || !window.clashfox || typeof window.clashfox.revealInFinder !== 'function') {
+    return;
+  }
+  const result = await window.clashfox.revealInFinder(targetPath);
+  if (!result || !result.ok) {
+    const detail = result && result.error ? `: ${String(result.error)}` : '';
+    showToast(`${ti('settings.openDirFailed', 'Unable to open directory')}${detail}`, 'error');
+  }
+}
+
 if (settingsConfigDirReveal) {
   settingsConfigDirReveal.addEventListener('click', async () => {
     const target = getRevealPath(settingsConfigDir);
-    if (target && window.clashfox && typeof window.clashfox.revealInFinder === 'function') {
-      await window.clashfox.revealInFinder(target);
-    }
+    await revealSettingsDirectory(target);
   });
 }
 
 if (settingsCoreDirReveal) {
   settingsCoreDirReveal.addEventListener('click', async () => {
     const target = getRevealPath(settingsCoreDir);
-    if (target && window.clashfox && typeof window.clashfox.revealInFinder === 'function') {
-      await window.clashfox.revealInFinder(target);
-    }
+    await revealSettingsDirectory(target);
   });
 }
 
 if (settingsDataDirReveal) {
   settingsDataDirReveal.addEventListener('click', async () => {
     const target = getRevealPath(settingsDataDir);
-    if (target && window.clashfox && typeof window.clashfox.revealInFinder === 'function') {
-      await window.clashfox.revealInFinder(target);
-    }
+    await revealSettingsDirectory(target);
+  });
+}
+
+if (settingsHelperDirReveal) {
+  settingsHelperDirReveal.addEventListener('click', async () => {
+    const target = getRevealPath(settingsHelperDir);
+    await revealSettingsDirectory(target);
+  });
+}
+
+if (settingsLogDirReveal) {
+  settingsLogDirReveal.addEventListener('click', async () => {
+    const target = getRevealPath(settingsLogDir);
+    await revealSettingsDirectory(target);
   });
 }
 
@@ -11870,54 +12355,86 @@ if (cancelInstallBtn) {
   });
 }
 
-if (settingsGithubUser) {
-  settingsGithubUser.addEventListener('change', (event) => {
-    const value = event.target.value;
-    const normalized = normalizeKernelSource(value) || 'vernesong';
-    if (githubUser) {
-      githubUser.value = normalized;
-    }
-    state.githubSourceManualOverride = true;
-    updateInstallVersionVisibility();
-    saveSettings({githubUser: normalized});
-    state.kernelUpdateCheckedAt = 0;
-    state.kernelUpdateInfo = {
-      ok: false,
-      status: 'checking',
-      source: normalized,
+function bindKernelInstallControls() {
+  if (settingsGithubUser && settingsGithubUser.dataset.bound !== 'true') {
+    settingsGithubUser.dataset.bound = 'true';
+    settingsGithubUser.addEventListener('change', (event) => {
+      const value = event.target.value;
+      selectKernelSource(value, { persist: true });
+    });
+  }
+
+  if (githubUser && githubUser.dataset.bound !== 'true') {
+    githubUser.dataset.bound = 'true';
+    githubUser.addEventListener('change', (event) => {
+      const value = event.target.value;
+      selectKernelSource(value, { persist: true });
+    });
+  }
+
+  if (installVersionMode && installVersionMode.dataset.bound !== 'true') {
+    installVersionMode.dataset.bound = 'true';
+    installVersionMode.addEventListener('change', (event) => {
+      const mode = normalizeInstallVersionMode(event.target.value || 'latest');
+      installVersionMode.value = mode;
+      saveSettings({ installVersionMode: mode });
+      syncInstallVersionPickerUi();
+    });
+  }
+
+  if (installVersion && installVersion.dataset.bound !== 'true') {
+    installVersion.dataset.bound = 'true';
+    const persistInstallVersion = () => {
+      const value = String(installVersion.value || '').trim();
+      saveSettings({ installVersion: value });
     };
-    applyKernelUpdateInstallHint();
-    if (state.installState !== 'loading') {
-      setInstallState('idle');
-    }
-    if (currentPage === 'kernel') {
-      refreshKernelUpdateNotice(true);
-    }
-  });
+    installVersion.addEventListener('change', persistInstallVersion);
+    installVersion.addEventListener('blur', persistInstallVersion);
+  }
+
+  if (installVersionRefreshBtn && installVersionRefreshBtn.dataset.bound !== 'true') {
+    installVersionRefreshBtn.dataset.bound = 'true';
+    installVersionRefreshBtn.addEventListener('click', async () => {
+      const currentUser =
+        (githubUser && githubUser.value) ||
+        (settingsGithubUser && settingsGithubUser.value) ||
+        (state.settings && state.settings.githubUser) ||
+        '';
+      if (String(currentUser).toLowerCase() !== 'metacubex') {
+        return;
+      }
+      installVersionRefreshBtn.disabled = true;
+      installVersionRefreshBtn.classList.add('is-loading');
+      try {
+        await ensureMetaCubeXVersionCatalog(true);
+      } finally {
+        installVersionRefreshBtn.classList.remove('is-loading');
+        updateInstallVersionVisibility();
+      }
+    });
+  }
+
+  if (Array.isArray(kernelSourceCards) && kernelSourceCards.length) {
+    kernelSourceCards.forEach((card) => {
+      if (!card || card.dataset.bound === 'true') {
+        return;
+      }
+      card.dataset.bound = 'true';
+      card.addEventListener('click', () => {
+        if (state.installState === 'loading') {
+          return;
+        }
+        const source = normalizeKernelSource(card.dataset.sourceValue || '');
+        if (!source) {
+          return;
+        }
+        selectKernelSource(source, { persist: true });
+      });
+    });
+  }
 }
 
-if (githubUser) {
-  githubUser.addEventListener('change', (event) => {
-    const value = event.target.value;
-    const normalized = normalizeKernelSource(value) || 'vernesong';
-    githubUser.value = normalized;
-    state.githubSourceManualOverride = true;
-    updateInstallVersionVisibility();
-    state.kernelUpdateCheckedAt = 0;
-    state.kernelUpdateInfo = {
-      ok: false,
-      status: 'checking',
-      source: normalized,
-    };
-    applyKernelUpdateInstallHint();
-    if (state.installState !== 'loading') {
-      setInstallState('idle');
-    }
-    if (currentPage === 'kernel') {
-      refreshKernelUpdateNotice(true);
-    }
-  });
-}
+bindKernelInstallControls();
 
 async function handleConfigBrowse() {
   const result = await window.clashfox.selectConfig();

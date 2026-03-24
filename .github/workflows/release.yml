@@ -1,4 +1,4 @@
-name: Build & Release macOS
+name: Build & Release
 
 on:
   push:
@@ -19,7 +19,7 @@ on:
         required: false
 
 permissions:
-  contents: write
+  contents: "write"
 
 jobs:
   build:
@@ -98,21 +98,32 @@ jobs:
           set -euo pipefail
           npm run build:mac
 
-      - name: Verify zip artifacts
+      - name: Verify macOS artifacts
         shell: bash
         run: |
           set -euo pipefail
           VERSION="${{ steps.meta.outputs.version }}"
-          EXPECTED=(
+          EXPECTED_ZIP=(
             "ClashFox-${VERSION}-mac-x64.zip"
             "ClashFox-${VERSION}-mac-arm64.zip"
             "ClashFox-${VERSION}-mac-universal.zip"
           )
+          EXPECTED_DMG=(
+            "ClashFox-${VERSION}-mac-x64.dmg"
+            "ClashFox-${VERSION}-mac-arm64.dmg"
+            "ClashFox-${VERSION}-mac-universal.dmg"
+          )
 
-          echo "Checking expected zip outputs..."
-          find dist -type f -name "*.zip" -print | sort
+          echo "Checking expected macOS outputs..."
+          find dist -type f \( -name "*.zip" -o -name "*.dmg" \) -print | sort
 
-          for artifact in "${EXPECTED[@]}"; do
+          for artifact in "${EXPECTED_ZIP[@]}"; do
+            if ! find dist -type f -name "$artifact" | grep -q .; then
+              echo "Missing expected artifact: $artifact"
+              exit 1
+            fi
+          done
+          for artifact in "${EXPECTED_DMG[@]}"; do
             if ! find dist -type f -name "$artifact" | grep -q .; then
               echo "Missing expected artifact: $artifact"
               exit 1
@@ -125,12 +136,13 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts
 
-          if ! find dist -type f -name "*.zip" | grep -q .; then
-            echo "No zip artifacts found under dist/"
+          if ! find dist -type f \( -name "*.zip" -o -name "*.dmg" \) | grep -q .; then
+            echo "No macOS artifacts found under dist/"
             exit 1
           fi
 
           find dist -type f -name "*.zip" -exec cp -v {} artifacts/ \;
+          find dist -type f -name "*.dmg" -exec cp -v {} artifacts/ \;
           find dist -type f -name "*.yml" \
             ! -name "builder-debug.yml" \
             ! -name "latest-mac.yml" \

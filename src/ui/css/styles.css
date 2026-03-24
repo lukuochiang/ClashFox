@@ -4914,10 +4914,15 @@ body[data-theme="day"] .topology-node-card {
   gap: 14px 16px;
 }
 
+body[data-page="settings"] .user-paths-card .paths-row-grid {
+  grid-template-columns: 1fr;
+}
+
 .paths-row-grid .paths-item {
-  flex-direction: column;
-  align-items: stretch;
+  flex-direction: row;
+  align-items: center;
   margin-bottom: 0;
+  gap: 10px;
 }
 
 .paths-item {
@@ -4932,7 +4937,8 @@ body[data-theme="day"] .topology-node-card {
   color: var(--muted);
   font-size: 13px;
   display: inline-block;
-  margin-bottom: 6px;
+  margin-bottom: 0;
+  white-space: nowrap;
 }
 
 .helper-card {
@@ -5006,6 +5012,7 @@ body[data-theme="day"] .topology-node-card {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .helper-card-actions .btn {
@@ -6393,9 +6400,192 @@ body[data-page="kernel"] #kernel.panel .pagination {
   /*gap: 12px;*/
 }
 
+body[data-page="kernel"] .install-form .form-row.source-row {
+  align-items: flex-start;
+}
+
+body[data-page="kernel"] .install-card .action-row {
+  justify-content: flex-end;
+}
+
+body[data-page="kernel"] .install-card .action-row #installBtn {
+  margin-left: auto;
+}
+
+.kernel-source-picker {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.kernel-source-card {
+  position: relative;
+  appearance: none;
+  border: 1px solid rgba(126, 149, 177, 0.28);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+  padding: 10px 12px;
+  display: grid;
+  gap: 5px;
+  text-align: left;
+  cursor: pointer;
+  min-height: 96px;
+  transition: border-color 80ms ease, background-color 80ms ease, box-shadow 80ms ease, transform 80ms ease;
+}
+
+.kernel-source-card:hover {
+  border-color: rgba(144, 179, 221, 0.48);
+  background: rgba(148, 171, 197, 0.13);
+}
+
+.kernel-source-card:focus-visible {
+  outline: none;
+  border-color: rgba(101, 160, 228, 0.62);
+  box-shadow: 0 0 0 3px rgba(131, 182, 239, 0.2);
+}
+
+.kernel-source-card.is-active {
+  border-color: rgba(140, 224, 198, 0.6);
+  background: rgba(140, 224, 198, 0.12);
+  box-shadow: 0 8px 18px rgba(19, 33, 48, 0.22);
+}
+
+.kernel-source-card.is-active::after {
+  content: '✅';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.kernel-source-card.is-primary {
+  background: linear-gradient(145deg, rgba(95, 139, 205, 0.16), rgba(76, 115, 170, 0.08));
+}
+
+.kernel-source-card.is-primary.is-active {
+  background: linear-gradient(145deg, rgba(106, 154, 225, 0.24), rgba(84, 126, 188, 0.14));
+}
+
+.kernel-source-card:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+
+.kernel-source-mainline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.kernel-source-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.kernel-source-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.kernel-source-tag.is-recommended {
+  color: #7fe2ba;
+  border: 1px solid rgba(121, 230, 181, 0.48);
+  background: rgba(93, 206, 155, 0.14);
+}
+
+.kernel-source-tag.is-try {
+  color: #ffbe6d;
+  border: 1px solid rgba(251, 178, 90, 0.45);
+  background: rgba(246, 171, 84, 0.14);
+}
+
+.kernel-source-line {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.kernel-source-desc {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.28;
+}
+
+body[data-theme="day"] .kernel-source-card {
+  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(138, 165, 196, 0.35);
+}
+
+body[data-theme="day"] .kernel-source-card:hover {
+  border-color: rgba(116, 159, 211, 0.52);
+  background: rgba(235, 244, 252, 0.95);
+}
+
+body[data-theme="day"] .kernel-source-card.is-active {
+  border-color: rgba(119, 182, 160, 0.68);
+  background: linear-gradient(145deg, rgba(229, 246, 240, 0.96), rgba(240, 250, 247, 0.96));
+}
+
+body[data-theme="day"] .kernel-source-card.is-primary {
+  background: linear-gradient(145deg, rgba(227, 238, 252, 0.96), rgba(242, 247, 255, 0.96));
+}
+
+body[data-theme="day"] .kernel-source-card.is-primary.is-active {
+  background: linear-gradient(145deg, rgba(218, 237, 253, 0.98), rgba(233, 247, 255, 0.98));
+}
+
+body[data-theme="day"] .kernel-source-tag.is-recommended {
+  color: #1d7a56;
+  border-color: rgba(89, 181, 137, 0.4);
+  background: rgba(152, 230, 195, 0.28);
+}
+
+body[data-theme="day"] .kernel-source-tag.is-try {
+  color: #9a5d09;
+  border-color: rgba(223, 158, 79, 0.38);
+  background: rgba(249, 205, 145, 0.28);
+}
+
 .install-current-row {
   margin-top: -2px;
   margin-bottom: 0;
+}
+
+.kernel-version-picker {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kernel-version-picker > .cf-select,
+.kernel-version-picker > select {
+  flex: 0 0 220px;
+  min-width: 180px;
+}
+
+.kernel-version-picker > input {
+  flex: 1 1 auto;
+  min-width: 180px;
+}
+
+.kernel-version-picker > .version-refresh-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .install-current-row .install-current-kernel {
@@ -6672,7 +6862,7 @@ body[data-theme="day"] .quick-actions-buttons #restartBtn {
 }
 
 .form-row > label {
-  min-width: 120px;
+  min-width: 40px;
   color: var(--muted);
   font-size: 13px;
 }
@@ -6942,6 +7132,34 @@ body[data-theme="day"] input::placeholder {
 
 .paths-row-grid .input-group {
   width: 100%;
+}
+
+.paths-row-grid .input-group > .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+body[data-page="settings"] .settings-reveal-icon-btn {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  padding: 0;
+  border-radius: 10px;
+}
+
+body[data-page="settings"] .settings-reveal-icon-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+@media (max-width: 980px) {
+  .paths-row-grid .paths-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .paths-label {
+    margin-bottom: 6px;
+  }
 }
 
 body[data-page="settings"] .proxy-config-columns {

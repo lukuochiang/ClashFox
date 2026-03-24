@@ -4,15 +4,11 @@
     "theme": "auto",
     "debugMode": false,
     "acceptBeta": false,
-    "githubUser": "vernesong",
     "windowWidth": 1075,
     "windowHeight": 696,
     "mainWindowClosed": false,
     "sidebarCollapsed": false,
-    "generalPageSize": "10",
-    "logLines": 10,
-    "logAutoRefresh": false,
-    "logIntervalPreset": "3"
+    "generalPageSize": "10"
   },
   "proxy": {
     "mode": "rule",
@@ -54,7 +50,10 @@
     ]
   },
   "kernel": {
-    "running": false
+    "running": false,
+    "githubUser": "vernesong",
+    "installVersionMode": "latest",
+    "installVersion": ""
   },
   "device": {},
   "helper": {},

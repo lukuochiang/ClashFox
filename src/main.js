@@ -368,6 +368,10 @@ const KERNEL_RELEASE_API = {
   vernesong: 'https://api.github.com/repos/vernesong/mihomo/releases?per_page=50',
   MetaCubeX: 'https://api.github.com/repos/MetaCubeX/mihomo/releases?per_page=50',
 };
+const KERNEL_TAGS_API = {
+  vernesong: 'https://api.github.com/repos/vernesong/mihomo/tags?per_page=100',
+  MetaCubeX: 'https://api.github.com/repos/MetaCubeX/mihomo/tags?per_page=100',
+};
 const KERNEL_BETA_VERSION_TXT_URL = {
   vernesong: 'https://github.com/vernesong/mihomo/releases/download/Prerelease-Alpha/version.txt',
   MetaCubeX: 'https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/version.txt',
@@ -460,9 +464,44 @@ function getTrayLabels() {
   return tray;
 }
 
+function getOverviewLabels() {
+  const lang = resolveTrayLang();
+  return (I18N[lang] && I18N[lang].overview) || (I18N.en && I18N.en.overview) || {};
+}
+
+function getStatusLabels() {
+  const lang = resolveTrayLang();
+  return (I18N[lang] && I18N[lang].status) || (I18N.en && I18N.en.status) || {};
+}
+
+function getProvidersLabels() {
+  const lang = resolveTrayLang();
+  return (I18N[lang] && I18N[lang].providers) || (I18N.en && I18N.en.providers) || {};
+}
+
 function getUiLabels() {
   const lang = resolveTrayLang();
   return (I18N[lang] && I18N[lang].labels) || (I18N.en && I18N.en.labels) || {};
+}
+
+function buildTrayPanelLabels() {
+  const overview = getOverviewLabels();
+  const status = getStatusLabels();
+  const providers = getProvidersLabels();
+  const labels = getUiLabels();
+  return {
+    chartTitle: status.trafficTitle || 'Network Rate',
+    chartLoading: labels.loading || 'Loading...',
+    chartNow: labels.now || 'Now',
+    providerTitle: overview.providerTrafficTitle || 'Subscription Traffic',
+    providerCount: providers.summaryCount || 'Providers',
+    providerUsed: providers.summaryUsed || 'Used',
+    providerRemaining: providers.summaryRemain || 'Remaining',
+    providerEmpty: providers.empty || 'No provider subscription data.',
+    providerUsedMeta: providers.used || 'Used',
+    providerRemainMeta: providers.remaining || 'Remaining',
+    providerExpire: providers.expire || 'Expire',
+  };
 }
 
 function getConfigPathFromSettings() {
@@ -623,8 +662,17 @@ function refreshTrayMenuLabelsOnly() {
     });
   }
 
+  trayMenuData.panelLabels = buildTrayPanelLabels();
+
   if (trayMenuWindow && !trayMenuWindow.isDestroyed()) {
     trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
+  }
+  if (trayPanelWindow && trayPanelVisible) {
+    sendTrayPanelUpdate({
+      key: 'panel',
+      items: trayMenuData.submenus && Array.isArray(trayMenuData.submenus.panel) ? trayMenuData.submenus.panel : [],
+      labels: trayMenuData.panelLabels || buildTrayPanelLabels(),
+    });
   }
 }
 
@@ -1092,7 +1140,6 @@ function mergeAppearanceAliases(settings = {}) {
     theme: readString('theme', 'auto'),
     debugMode: readBoolean('debugMode', false),
     acceptBeta: readBoolean('acceptBeta', false),
-    githubUser: readString('githubUser', 'vernesong'),
     chartEnabled: readTrayBoolean('chartEnabled', readTrayBoolean('trayMenuChartEnabled', true)),
     providerTrafficEnabled: readTrayBoolean('providerTrafficEnabled', readTrayBoolean('trayMenuProviderTrafficEnabled', true)),
     trackersEnabled: readTrayBoolean('trackersEnabled', readTrayBoolean('trayMenuTrackersEnabled', true)),
@@ -1106,14 +1153,58 @@ function mergeAppearanceAliases(settings = {}) {
     windowHeight: readNumber('windowHeight', DEFAULT_MAIN_WINDOW_HEIGHT),
     mainWindowClosed: readBoolean('mainWindowClosed', false),
     generalPageSize: readString('generalPageSize', '10'),
-    logLines: readNumber('logLines', 10),
-    logAutoRefresh: readBoolean('logAutoRefresh', false),
-    logIntervalPreset: readString('logIntervalPreset', '3'),
+  };
+}
+
+function mergeKernelAliases(settings = {}) {
+  const source = settings && typeof settings === 'object' ? settings : {};
+  const kernel = source.kernel && typeof source.kernel === 'object'
+    ? source.kernel
+    : {};
+  const appearance = source.appearance && typeof source.appearance === 'object'
+    ? source.appearance
+    : {};
+  const normalizeKernelSource = (value) => {
+    const text = normalizeTextValue(value);
+    if (text === 'MetaCubeX') {
+      return 'MetaCubeX';
+    }
+    return 'vernesong';
+  };
+  const normalizeInstallVersionMode = (value) => {
+    const text = normalizeTextValue(value) || 'latest';
+    if (text === 'manual' || text === 'latest') {
+      return text;
+    }
+    return text.startsWith('tag:') ? text : 'latest';
+  };
+  return {
+    ...source,
+    githubUser: normalizeKernelSource(kernel.githubUser || source.githubUser || appearance.githubUser || 'vernesong'),
+    installVersionMode: normalizeInstallVersionMode(
+      kernel.installVersionMode || source.installVersionMode || appearance.installVersionMode || 'latest',
+    ),
+    installVersion: normalizeTextValue(
+      kernel.installVersion !== undefined
+        ? kernel.installVersion
+        : (source.installVersion !== undefined ? source.installVersion : appearance.installVersion),
+    ) || '',
   };
 }
 
 function normalizeKernelSettings(value = {}) {
   const kernel = value && typeof value === 'object' ? value : {};
+  const normalizeKernelSource = (input) => {
+    const text = normalizeTextValue(input);
+    return text === 'MetaCubeX' ? 'MetaCubeX' : 'vernesong';
+  };
+  const normalizeInstallVersionMode = (input) => {
+    const text = normalizeTextValue(input) || 'latest';
+    if (text === 'latest' || text === 'manual') {
+      return text;
+    }
+    return text.startsWith('tag:') ? text : 'latest';
+  };
   const ordered = mapOrderedFields(kernel, [
     'raw',
     'core',
@@ -1124,7 +1215,20 @@ function normalizeKernelSettings(value = {}) {
     'language',
     'languageVersion',
     'buildTime',
+    'running',
+    'githubUser',
+    'installVersionMode',
+    'installVersion',
   ]);
+  if (Object.prototype.hasOwnProperty.call(ordered, 'githubUser')) {
+    ordered.githubUser = normalizeKernelSource(ordered.githubUser);
+  }
+  if (Object.prototype.hasOwnProperty.call(ordered, 'installVersionMode')) {
+    ordered.installVersionMode = normalizeInstallVersionMode(ordered.installVersionMode);
+  }
+  if (Object.prototype.hasOwnProperty.call(ordered, 'installVersion')) {
+    ordered.installVersion = normalizeTextValue(ordered.installVersion) || '';
+  }
   if (!Object.keys(ordered).length) {
     return {};
   }
@@ -1163,7 +1267,7 @@ function normalizeDeviceSettings(value = {}, overviewValue = {}) {
 }
 
 function normalizeSettingsForStorage(input = {}) {
-  const parsed = mergeAppearanceAliases(mergePanelManagerAliases(mergeUserDataPathAliases(input)));
+  const parsed = mergeKernelAliases(mergeAppearanceAliases(mergePanelManagerAliases(mergeUserDataPathAliases(input))));
   const defaultDirs = buildDefaultDirectorySettings();
   const normalizePort = (value, fallback) => {
     const parsedPort = Number.parseInt(String(value ?? ''), 10);
@@ -1261,21 +1365,20 @@ function normalizeSettingsForStorage(input = {}) {
   const trayMenuConfig = parsed.trayMenu && typeof parsed.trayMenu === 'object'
     ? parsed.trayMenu
     : {};
+  const legacyGithubUser = normalizeTextValue(parsed.githubUser);
+  const legacyInstallVersionMode = normalizeTextValue(parsed.installVersionMode);
+  const legacyInstallVersion = normalizeTextValue(parsed.installVersion);
 
   parsed.appearance = {
     lang: normalizeTextValue(parsed.lang) || 'auto',
     theme: normalizeTextValue(parsed.theme) || 'auto',
     debugMode: Boolean(parsed.debugMode),
     acceptBeta: Boolean(parsed.acceptBeta),
-    githubUser: normalizeTextValue(parsed.githubUser) || 'vernesong',
     windowWidth: Number.parseInt(String(parsed.windowWidth ?? ''), 10) || DEFAULT_MAIN_WINDOW_WIDTH,
     windowHeight: Number.parseInt(String(parsed.windowHeight ?? ''), 10) || DEFAULT_MAIN_WINDOW_HEIGHT,
     mainWindowClosed: Boolean(parsed.mainWindowClosed),
     sidebarCollapsed: Boolean(parsed.sidebarCollapsed),
     generalPageSize,
-    logLines: Number.parseInt(String(parsed.logLines ?? ''), 10) || 10,
-    logAutoRefresh: Boolean(parsed.logAutoRefresh),
-    logIntervalPreset: normalizeTextValue(parsed.logIntervalPreset) || '3',
   };
   parsed.trayMenu = {
     chartEnabled: normalizeBool(
@@ -1356,6 +1459,8 @@ function normalizeSettingsForStorage(input = {}) {
   delete parsed.debugMode;
   delete parsed.acceptBeta;
   delete parsed.githubUser;
+  delete parsed.installVersionMode;
+  delete parsed.installVersion;
   delete parsed.chartEnabled;
   delete parsed.providerTrafficEnabled;
   delete parsed.trackersEnabled;
@@ -1422,22 +1527,45 @@ function normalizeSettingsForStorage(input = {}) {
   delete parsed.allowLan;
 
   const legacyKernelVersion = normalizeKernelVersionValue(parsed.kernelVersion);
+  const currentKernel = parsed.kernel && typeof parsed.kernel === 'object' ? parsed.kernel : {};
+  const normalizedKernelSource = normalizeTextValue(currentKernel.githubUser || legacyGithubUser) === 'MetaCubeX'
+    ? 'MetaCubeX'
+    : 'vernesong';
+  const normalizedInstallVersionMode = (() => {
+    const mode = normalizeTextValue(currentKernel.installVersionMode || legacyInstallVersionMode) || 'latest';
+    if (mode === 'latest' || mode === 'manual') {
+      return mode;
+    }
+    return mode.startsWith('tag:') ? mode : 'latest';
+  })();
+  const normalizedInstallVersion = normalizeTextValue(
+    currentKernel.installVersion !== undefined ? currentKernel.installVersion : legacyInstallVersion,
+  ) || '';
   const kernelCandidate = normalizeKernelVersionValue(
     (parsed.kernel && typeof parsed.kernel === 'object' && (parsed.kernel.raw || parsed.kernel.version))
     || legacyKernelVersion,
   );
+  const kernelMetadata = {
+    githubUser: normalizedKernelSource,
+    installVersionMode: normalizedInstallVersionMode,
+    installVersion: normalizedInstallVersion,
+  };
   if (kernelCandidate) {
     const parsedKernel = parseKernelVersionDetails(kernelCandidate) || {};
     const mergedKernel = {
       ...(parsed.kernel && typeof parsed.kernel === 'object' ? parsed.kernel : {}),
       ...parsedKernel,
+      ...kernelMetadata,
     };
     if (!normalizeTextValue(mergedKernel.raw)) {
       mergedKernel.raw = kernelCandidate;
     }
     parsed.kernel = normalizeKernelSettings(mergedKernel);
   } else {
-    parsed.kernel = normalizeKernelSettings(parsed.kernel);
+    parsed.kernel = normalizeKernelSettings({
+      ...(parsed.kernel && typeof parsed.kernel === 'object' ? parsed.kernel : {}),
+      ...kernelMetadata,
+    });
   }
   delete parsed.kernelVersion;
   delete parsed.kernelVersionMeta;
@@ -1446,6 +1574,7 @@ function normalizeSettingsForStorage(input = {}) {
   delete parsed.overview;
   delete parsed.sidebarCollapsed;
   delete parsed.mihomoStatus;
+  delete parsed.foxRank;
   const helperSource = parsed.helper && typeof parsed.helper === 'object' ? parsed.helper : {};
   const helperLegacySource = parsed.helperStatus && typeof parsed.helperStatus === 'object'
     ? parsed.helperStatus
@@ -2043,6 +2172,55 @@ function fetchJson(url, timeoutMs = 6000) {
       req.destroy(new Error('TIMEOUT'));
     });
   });
+}
+
+function isRetryableHttpError(error) {
+  const text = String((error && error.message) || error || '').trim().toUpperCase();
+  if (!text) {
+    return false;
+  }
+  if (
+    text.includes('TIMEOUT')
+    || text.includes('ECONNRESET')
+    || text.includes('ETIMEDOUT')
+    || text.includes('EAI_AGAIN')
+    || text.includes('ENOTFOUND')
+    || text.includes('ECONNREFUSED')
+  ) {
+    return true;
+  }
+  const match = text.match(/^HTTP_(\d{3})$/);
+  if (!match) {
+    return false;
+  }
+  const code = Number.parseInt(match[1], 10);
+  if (!Number.isFinite(code)) {
+    return false;
+  }
+  return code === 403 || code === 408 || code === 409 || code === 425 || code === 429 || code >= 500;
+}
+
+async function fetchJsonWithRetry(url, {
+  timeoutMs = 8000,
+  retries = 2,
+  baseDelayMs = 280,
+} = {}) {
+  let lastError = null;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await fetchJson(url, timeoutMs);
+    } catch (error) {
+      lastError = error;
+      const shouldRetry = attempt < retries && isRetryableHttpError(error);
+      if (!shouldRetry) {
+        throw error;
+      }
+      const jitter = Math.floor(Math.random() * 140);
+      const delay = baseDelayMs * (2 ** attempt) + jitter;
+      await sleep(delay);
+    }
+  }
+  throw lastError || new Error('FETCH_JSON_WITH_RETRY_FAILED');
 }
 
 function fetchText(url, timeoutMs = 6000) {
@@ -3072,6 +3250,120 @@ async function checkKernelUpdates({ source = 'vernesong', currentVersion = '', a
       source: sourceKey,
       currentVersion: current,
       error: err && err.message ? err.message : 'CHECK_KERNEL_UPDATE_FAILED',
+    };
+  }
+}
+
+async function listKernelVersions({ source = 'MetaCubeX' } = {}) {
+  const sourceKey = Object.prototype.hasOwnProperty.call(KERNEL_RELEASE_API, source) ? source : 'MetaCubeX';
+  const betaLikePattern = /(alpha|beta|rc|pre(?:release)?|preview|nightly|canary|dev|smart)/i;
+  const isTestingRelease = (release) => {
+    if (!release || release.draft) {
+      return false;
+    }
+    if (release.prerelease) {
+      return true;
+    }
+    const tagOrName = String(release.tag_name || release.name || '').trim();
+    return betaLikePattern.test(tagOrName);
+  };
+  const splitTagBuckets = (tagList = []) => {
+    const stable = [];
+    const testing = [];
+    const unique = new Set();
+    tagList.forEach((raw) => {
+      const tag = normalizeVersionTag(raw);
+      if (!tag || unique.has(tag)) {
+        return;
+      }
+      unique.add(tag);
+      if (betaLikePattern.test(tag)) {
+        testing.push(tag);
+      } else {
+        stable.push(tag);
+      }
+    });
+    stable.sort((left, right) => compareVersions(right, left));
+    testing.sort((left, right) => compareVersions(right, left));
+    return { stable, testing };
+  };
+  try {
+    let stableReleases = [];
+    let testingReleases = [];
+    let releasesError = '';
+    try {
+      const releasesRaw = await fetchJsonWithRetry(KERNEL_RELEASE_API[sourceKey], {
+        timeoutMs: 9000,
+        retries: 2,
+        baseDelayMs: 260,
+      });
+      const releases = Array.isArray(releasesRaw) ? releasesRaw.filter((release) => release && !release.draft) : [];
+      const seen = new Set();
+      releases.forEach((release) => {
+        const tag = String(release.tag_name || release.name || '').trim();
+        const normalizedTag = normalizeVersionTag(tag);
+        if (!normalizedTag || seen.has(normalizedTag)) {
+          return;
+        }
+        seen.add(normalizedTag);
+        if (isTestingRelease(release)) {
+          testingReleases.push(normalizedTag);
+        } else {
+          stableReleases.push(normalizedTag);
+        }
+      });
+    } catch (error) {
+      releasesError = String((error && error.message) || error || '').trim() || 'RELEASES_FETCH_FAILED';
+    }
+    let tags = [];
+    let tagsError = '';
+    try {
+      const tagsRaw = await fetchJsonWithRetry(KERNEL_TAGS_API[sourceKey], {
+        timeoutMs: 8000,
+        retries: 2,
+        baseDelayMs: 220,
+      });
+      if (Array.isArray(tagsRaw)) {
+        tags = tagsRaw
+          .map((item) => normalizeVersionTag(item && item.name ? item.name : ''))
+          .filter(Boolean)
+          .slice(0, 120);
+      }
+    } catch (error) {
+      tags = [];
+      tagsError = String((error && error.message) || error || '').trim() || 'TAGS_FETCH_FAILED';
+    }
+
+    if (!stableReleases.length && !testingReleases.length && tags.length) {
+      const buckets = splitTagBuckets(tags);
+      stableReleases = buckets.stable;
+      testingReleases = buckets.testing;
+    }
+
+    if (!stableReleases.length && !testingReleases.length) {
+      throw new Error(releasesError || tagsError || 'LIST_KERNEL_VERSIONS_FAILED');
+    }
+    const latestStableTag = stableReleases[0] || '';
+    const latestTestingTag = testingReleases[0] || '';
+    const historyTags = stableReleases.slice(1, 11);
+
+    return {
+      ok: true,
+      source: sourceKey,
+      latestStableTag,
+      latestStableVersion: extractKernelSemver(latestStableTag) || latestStableTag,
+      latestTestingTag,
+      latestTestingVersion: extractKernelSemver(latestTestingTag) || latestTestingTag,
+      historyTags,
+      tags,
+      releaseFetchWarning: releasesError || '',
+      tagsFetchWarning: tagsError || '',
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      source: sourceKey,
+      error: err && err.message ? err.message : 'LIST_KERNEL_VERSIONS_FAILED',
     };
   }
 }
@@ -5407,7 +5699,6 @@ function persistMihomoStatusToSettings(runningValue, source = 'unknown') {
       parsed.kernel = {};
     }
     parsed.kernel.running = running;
-    parsed.kernel.updatedAt = new Date().toISOString();
     writeAppSettings(parsed);
     return true;
   } catch {
@@ -5420,13 +5711,25 @@ function normalizeKernelVersionValue(value) {
   return text || '';
 }
 
+function isLikelyKernelVersionToken(value) {
+  const text = normalizeKernelVersionValue(value);
+  if (!text) {
+    return false;
+  }
+  return /^(?:alpha-smart|alpha|beta|rc)-[0-9A-Za-z.-]+$/i.test(text)
+    || /^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/i.test(text);
+}
+
 function parseKernelVersionDetails(rawVersion = '') {
   const raw = normalizeKernelVersionValue(rawVersion);
   if (!raw) {
     return null;
   }
   const tokens = raw.split(/\s+/).filter(Boolean);
-  const core = tokens[0] ? String(tokens[0]).toLowerCase() : '';
+  const coreCandidate = tokens[0] ? String(tokens[0]).trim() : '';
+  const core = coreCandidate && !isLikelyKernelVersionToken(coreCandidate)
+    ? coreCandidate.toLowerCase()
+    : '';
   const versionMatch = raw.match(/(?:^|\s)((?:alpha-smart|alpha|beta|rc)-[0-9a-z]+|v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)/i);
   const platformMatch = raw.match(/\b(darwin|linux|windows|freebsd|android)\b/i);
   const archMatch = raw.match(/\b(amd64|arm64|386|armv7|armv6|s390x|ppc64le|riscv64)\b/i);
@@ -5444,17 +5747,22 @@ function parseKernelVersionDetails(rawVersion = '') {
       buildTime = raw.slice(idx + goToken.length).trim();
     }
   }
-  return {
-    raw,
-    core,
-    type,
-    version: versionMatch ? String(versionMatch[1] || '').trim() : '',
-    platform: platformMatch ? String(platformMatch[1] || '').toLowerCase() : '',
-    arch: archMatch ? String(archMatch[1] || '').toLowerCase() : '',
-    language: goMatch ? 'go' : '',
-    languageVersion: goMatch ? String(goMatch[1] || '').trim() : '',
-    buildTime,
-  };
+  const result = { raw };
+  const version = versionMatch ? String(versionMatch[1] || '').trim() : '';
+  const platform = platformMatch ? String(platformMatch[1] || '').toLowerCase() : '';
+  const arch = archMatch ? String(archMatch[1] || '').toLowerCase() : '';
+  const languageVersion = goMatch ? String(goMatch[1] || '').trim() : '';
+  if (core) result.core = core;
+  if (type) result.type = type;
+  if (version) result.version = version;
+  if (platform) result.platform = platform;
+  if (arch) result.arch = arch;
+  if (languageVersion) {
+    result.language = 'go';
+    result.languageVersion = languageVersion;
+  }
+  if (buildTime) result.buildTime = buildTime;
+  return result;
 }
 
 function persistKernelVersionToSettings(versionValue, source = 'unknown') {
@@ -5479,11 +5787,12 @@ function persistKernelVersionToSettings(versionValue, source = 'unknown') {
     if (existingKernelRaw === kernelVersion && hasStructuredKernel) {
       return false;
     }
-    const parsedKernel = parseKernelVersionDetails(kernelVersion);
+    const parsedKernel = parseKernelVersionDetails(kernelVersion) || {};
     parsed.kernel = {
-      ...(parsedKernel || {}),
-      source: String(source || 'unknown'),
-      updatedAt: new Date().toISOString(),
+      ...(existingKernel || {}),
+      ...parsedKernel,
+      raw: kernelVersion,
+      version: normalizeKernelVersionValue(parsedKernel.version || (existingKernel && existingKernel.version) || kernelVersion),
     };
     if (Object.prototype.hasOwnProperty.call(parsed, 'kernelVersion')) {
       delete parsed.kernelVersion;
@@ -9482,6 +9791,7 @@ function patchTrayMenuNetworkState({ systemProxyEnabled, tunEnabled } = {}) {
     sendTrayPanelUpdate({
       key: 'panel',
       items: trayMenuData.submenus.panel,
+      labels: trayMenuData.panelLabels || buildTrayPanelLabels(),
     });
   }
   const settings = readAppSettings();
@@ -9631,6 +9941,7 @@ function buildTrayMenuShell() {
       submenuSide: 'right',
     },
     providerTraffic: trayProviderPayload.providerTraffic,
+    panelLabels: buildTrayPanelLabels(),
     outboundProxyTree: trayProviderPayload.outboundProxyTree,
     submenuMeta: cachedSubmenuMeta,
     items: buildTrayMainMenuItems({
@@ -10057,6 +10368,7 @@ async function buildTrayMenuOnce() {
       submenuSide: 'right',
     },
     providerTraffic: trayProviderPayload.providerTraffic,
+    panelLabels: buildTrayPanelLabels(),
     outboundProxyTree: outboundProxyCard,
     submenuMeta: outboundSubmenuMeta,
     items,
@@ -10088,6 +10400,7 @@ async function buildTrayMenuOnce() {
     sendTrayPanelUpdate({
       key: 'panel',
       items: trayMenuData.submenus.panel,
+      labels: trayMenuData.panelLabels || buildTrayPanelLabels(),
     });
   }
   return trayMenuData;
@@ -10553,6 +10866,7 @@ async function openTrayPanelWindow(payload = {}) {
   sendTrayPanelUpdate({
     key: 'panel',
     items,
+    labels: (latestMenuData && latestMenuData.panelLabels) ? latestMenuData.panelLabels : buildTrayPanelLabels(),
   });
   if (trayPanelReady && !popup.isVisible()) {
     popup.show();
@@ -12120,12 +12434,22 @@ app.whenReady().then(() => {
       if (!targetPath || typeof targetPath !== 'string') {
         return { ok: false };
       }
-      const resolved = path.resolve(String(targetPath));
+      const normalizedInput = expandUserHome(String(targetPath || '').trim());
+      const resolved = path.resolve(normalizedInput);
       let openTarget = resolved;
       try {
         const stat = fs.existsSync(resolved) ? fs.statSync(resolved) : null;
         if (stat && stat.isFile()) {
           openTarget = path.dirname(resolved);
+        }
+        if (!stat) {
+          let candidate = resolved;
+          while (candidate && candidate !== path.dirname(candidate) && !fs.existsSync(candidate)) {
+            candidate = path.dirname(candidate);
+          }
+          if (candidate && fs.existsSync(candidate)) {
+            openTarget = candidate;
+          }
         }
       } catch {
         // ignore
@@ -12345,6 +12669,33 @@ app.whenReady().then(() => {
         parsed.kernel = {};
         changed = true;
       }
+      if (parsed.appearance && typeof parsed.appearance === 'object') {
+        if (!parsed.kernel.githubUser && normalizeTextValue(parsed.appearance.githubUser)) {
+          parsed.kernel.githubUser = normalizeTextValue(parsed.appearance.githubUser) === 'MetaCubeX' ? 'MetaCubeX' : 'vernesong';
+          changed = true;
+        }
+        if (!parsed.kernel.installVersionMode && normalizeTextValue(parsed.appearance.installVersionMode)) {
+          const mode = normalizeTextValue(parsed.appearance.installVersionMode);
+          parsed.kernel.installVersionMode = (mode === 'latest' || mode === 'manual' || mode.startsWith('tag:')) ? mode : 'latest';
+          changed = true;
+        }
+        if (parsed.kernel.installVersion === undefined && parsed.appearance.installVersion !== undefined) {
+          parsed.kernel.installVersion = normalizeTextValue(parsed.appearance.installVersion) || '';
+          changed = true;
+        }
+        if (Object.prototype.hasOwnProperty.call(parsed.appearance, 'githubUser')) {
+          delete parsed.appearance.githubUser;
+          changed = true;
+        }
+        if (Object.prototype.hasOwnProperty.call(parsed.appearance, 'installVersionMode')) {
+          delete parsed.appearance.installVersionMode;
+          changed = true;
+        }
+        if (Object.prototype.hasOwnProperty.call(parsed.appearance, 'installVersion')) {
+          delete parsed.appearance.installVersion;
+          changed = true;
+        }
+      }
       const existingKernel = parsed.kernel && typeof parsed.kernel === 'object' ? parsed.kernel : {};
       const legacyKernelVersion = normalizeKernelVersionValue(parsed.kernelVersion);
       const kernelRawCandidate = normalizeKernelVersionValue(existingKernel.raw || existingKernel.version || legacyKernelVersion);
@@ -12352,11 +12703,22 @@ app.whenReady().then(() => {
       if (kernelRawCandidate && (!normalizeKernelVersionValue(existingKernel.raw) || missingCoreFields)) {
         const parsedKernel = parseKernelVersionDetails(kernelRawCandidate) || {};
         parsed.kernel = {
+          ...existingKernel,
           ...parsedKernel,
-          source: existingKernel.source || 'migrate',
-          updatedAt: existingKernel.updatedAt || new Date().toISOString(),
+          raw: normalizeKernelVersionValue(parsedKernel.raw || existingKernel.raw || kernelRawCandidate),
+          version: normalizeKernelVersionValue(parsedKernel.version || existingKernel.version || kernelRawCandidate),
         };
         changed = true;
+      }
+      if (parsed.kernel && typeof parsed.kernel === 'object') {
+        if (Object.prototype.hasOwnProperty.call(parsed.kernel, 'source')) {
+          delete parsed.kernel.source;
+          changed = true;
+        }
+        if (Object.prototype.hasOwnProperty.call(parsed.kernel, 'updatedAt')) {
+          delete parsed.kernel.updatedAt;
+          changed = true;
+        }
       }
       if (Object.prototype.hasOwnProperty.call(parsed, 'kernelVersion')) {
         delete parsed.kernelVersion;
@@ -12390,7 +12752,6 @@ app.whenReady().then(() => {
           parsed.kernel = {};
         }
         parsed.kernel.running = false;
-        parsed.kernel.updatedAt = new Date().toISOString();
         changed = true;
       }
       if (!parsed.updatedAt) {
@@ -12683,6 +13044,10 @@ app.whenReady().then(() => {
     return checkKernelUpdates(options || {});
   });
 
+  ipcMain.handle('clashfox:listKernelVersions', async (_event, options = {}) => {
+    return listKernelVersions(options || {});
+  });
+
   ipcMain.handle('clashfox:install-mihomo', async (event, options = {}) => {
     const githubUser = options.githubUser || 'vernesong';
     const version = options.version || '';
@@ -12789,7 +13154,9 @@ app.whenReady().then(() => {
       if (!targetPath || typeof targetPath !== 'string') {
         return { ok: false };
       }
-      const result = await shell.openPath(targetPath);
+      const normalizedInput = expandUserHome(String(targetPath || '').trim());
+      const resolved = path.resolve(normalizedInput);
+      const result = await shell.openPath(resolved);
       if (result) {
         return { ok: false, error: result };
       }

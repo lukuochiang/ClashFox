@@ -42,16 +42,53 @@
                 </div>
               </div>
               <div class="install-form">
-                <div class="form-row">
-                  <label data-i18n="install.github">GitHub Source</label>
-                  <select id="githubUser">
-                    <option value="vernesong">vernesong</option>
+                <div class="form-row source-row">
+                  <label data-i18n="install.github">Release Source</label>
+                  <div class="kernel-source-picker" id="kernelSourcePicker" role="radiogroup">
+                    <button type="button" class="kernel-source-card is-primary" data-source-value="MetaCubeX" role="radio" aria-checked="false">
+                      <span class="kernel-source-mainline">
+                        <span class="kernel-source-name">MetaCubeX</span>
+                        <span class="kernel-source-tag is-recommended" data-i18n="install.sourceMetaTag">[Recommended]</span>
+                      </span>
+                      <span class="kernel-source-line" data-i18n="install.sourceMetaLine">Recommended · Official Stable</span>
+                      <span class="kernel-source-desc" data-i18n="install.sourceMetaDesc">Officially maintained, stable updates, recommended.</span>
+                      <span class="kernel-source-desc" data-i18n="install.sourceMetaSupport">Supports historical version installation.</span>
+                    </button>
+                    <button type="button" class="kernel-source-card" data-source-value="vernesong" role="radio" aria-checked="false">
+                      <span class="kernel-source-mainline">
+                        <span class="kernel-source-name">vernesong</span>
+                        <span class="kernel-source-tag is-try" data-i18n="install.sourceTryTag">[Try]</span>
+                      </span>
+                      <span class="kernel-source-line" data-i18n="install.sourceVernesongLine">Community Edition · Faster Updates</span>
+                      <span class="kernel-source-desc" data-i18n="install.sourceVernesongDesc">May be unstable, latest version only.</span>
+                    </button>
+                  </div>
+                  <select id="githubUser" class="is-hidden" aria-hidden="true" tabindex="-1" data-native-select="true">
                     <option value="MetaCubeX">MetaCubeX</option>
+                    <option value="vernesong">vernesong</option>
                   </select>
                 </div>
                 <div class="form-row is-hidden" id="installVersionRow">
                   <label data-i18n="install.version">Version</label>
-                  <input id="installVersion" type="text" data-i18n-placeholder="install.versionPlaceholder" placeholder="e.g. v1.19.0" />
+                  <div class="kernel-version-picker">
+                    <select id="installVersionMode">
+                      <option value="latest" data-i18n="install.versionLatestOption">Latest Version</option>
+                      <option value="manual" data-i18n="install.versionManualOption">Manual Input</option>
+                    </select>
+                    <button
+                      type="button"
+                      class="btn ghost compact version-refresh-btn is-hidden"
+                      id="installVersionRefreshBtn"
+                      data-i18n="install.versionRefresh"
+                    >Refresh</button>
+                    <input
+                      id="installVersion"
+                      class="is-hidden"
+                      type="text"
+                      data-i18n-placeholder="install.versionPlaceholder"
+                      placeholder="e.g. v1.19.0"
+                    />
+                  </div>
                 </div>
                 <div class="form-row install-current-row">
                   <label><span data-i18n="labels.current">Current</span> <span data-i18n="status.kernel">Kernel</span></label>
@@ -59,8 +96,7 @@
                 </div>
               </div>
               <div class="action-row">
-                <button class="btn primary" id="installBtn" data-i18n="install.installAction">Install</button>
-                <button class="btn secondary" id="updateBtn" data-i18n="install.updateAction">Update</button>
+                <button class="btn primary" id="installBtn" data-i18n="install.installOneClickAction">One-click Install / Update</button>
                 <button class="btn danger" id="cancelInstallBtn" data-i18n="install.cancel">Cancel</button>
               </div>
             </div>

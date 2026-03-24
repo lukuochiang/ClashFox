@@ -821,6 +821,10 @@ body[data-theme="day"] .provider-traffic-item-meta.secondary {
   margin-top: 0;
 }
 
+.submenu-window .submenu-root[data-submenu-key="panel"] .menu-provider-traffic {
+  border-bottom: none;
+}
+
 body[data-theme="day"] .panel-card-title {
   color: rgba(61, 78, 99, 0.88);
 }

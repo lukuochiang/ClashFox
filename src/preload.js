@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld('clashfox', {
   },
   checkUpdates: (options = {}) => ipcRenderer.invoke('clashfox:checkUpdates', options),
   checkKernelUpdates: (options = {}) => ipcRenderer.invoke('clashfox:checkKernelUpdates', options),
+  listKernelVersions: (options = {}) => ipcRenderer.invoke('clashfox:listKernelVersions', options),
   installMihomo: (options = {}) => ipcRenderer.invoke('clashfox:install-mihomo', options),
   onInstallMihomoProgress: (handler) => {
     if (typeof handler !== 'function') {

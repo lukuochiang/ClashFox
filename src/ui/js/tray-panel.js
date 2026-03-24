@@ -33,6 +33,29 @@ const PANEL_MIN_HEIGHT = 286;
 const PANEL_RESIZE_DIFF_THRESHOLD = 4;
 let panelResizeScheduled = false;
 let panelRendererVisible = false;
+let panelI18n = {
+  chartTitle: 'Network Rate',
+  chartLoading: 'Loading...',
+  chartNow: 'Now',
+  providerTitle: 'Subscription Traffic',
+  providerCount: 'Providers',
+  providerUsed: 'Used',
+  providerRemaining: 'Remaining',
+  providerEmpty: 'No provider subscription data.',
+  providerUsedMeta: 'Used',
+  providerRemainMeta: 'Remaining',
+  providerExpire: 'Expire',
+};
+
+function applyPanelI18n(nextLabels = null) {
+  if (!nextLabels || typeof nextLabels !== 'object') {
+    return;
+  }
+  panelI18n = {
+    ...panelI18n,
+    ...nextLabels,
+  };
+}
 
 async function applyTrayTheme() {
   try {
@@ -200,9 +223,9 @@ function schedulePanelTrafficReconnect() {
 function buildPanelChartMarkup() {
   return `
     <div class="menu-chart">
-      <div class="panel-card-title">Traffic Chart</div>
+      <div class="panel-card-title">${panelI18n.chartTitle}</div>
       <div class="menu-chart-body">
-        <div id="panelChartLoading" class="menu-chart-loading">Loading traffic...</div>
+        <div id="panelChartLoading" class="menu-chart-loading">${panelI18n.chartLoading}</div>
         <div class="menu-chart-overlay">
           <div id="panelChartTopLabel" class="menu-chart-label top">--</div>
           <div id="panelChartBottomLabel" class="menu-chart-label bottom">--</div>
@@ -228,7 +251,7 @@ function buildPanelChartMarkup() {
       </div>
       <div class="menu-chart-footer">
         <span id="panelChartLeftTime">-</span>
-        <span id="panelChartRightTime">now</span>
+        <span id="panelChartRightTime">${panelI18n.chartNow}</span>
       </div>
     </div>
   `;
@@ -265,24 +288,24 @@ function buildPanelProviderTrafficMarkup(payload = null) {
   if (!summary || !items.length) {
     return `
       <div class="menu-provider-traffic">
-        <div class="panel-card-title">Subscription Traffic</div>
+        <div class="panel-card-title">${panelI18n.providerTitle}</div>
         <div class="provider-traffic-summary">
           <div class="provider-traffic-stat">
-            <span class="provider-traffic-stat-label">Providers</span>
+            <span class="provider-traffic-stat-label">${panelI18n.providerCount}</span>
             <span class="provider-traffic-stat-value">0</span>
           </div>
           <div class="provider-traffic-stat">
-            <span class="provider-traffic-stat-label">Used</span>
+            <span class="provider-traffic-stat-label">${panelI18n.providerUsed}</span>
             <span class="provider-traffic-stat-value">-</span>
           </div>
           <div class="provider-traffic-stat">
-            <span class="provider-traffic-stat-label">Remaining</span>
+            <span class="provider-traffic-stat-label">${panelI18n.providerRemaining}</span>
             <span class="provider-traffic-stat-value">-</span>
           </div>
         </div>
         <div class="provider-traffic-item">
           <div class="provider-traffic-item-head">
-            <div class="provider-traffic-item-name">No subscription data</div>
+            <div class="provider-traffic-item-name">${panelI18n.providerEmpty}</div>
             <div class="provider-traffic-item-percent">-</div>
           </div>
           <div class="provider-traffic-progress">
@@ -305,18 +328,18 @@ function buildPanelProviderTrafficMarkup(payload = null) {
   const usedPercent = Number.parseFloat(current.usedPercent || 0) || 0;
   return `
     <div class="menu-provider-traffic">
-      <div class="panel-card-title">Subscription Traffic</div>
+      <div class="panel-card-title">${panelI18n.providerTitle}</div>
       <div class="provider-traffic-summary">
         <div class="provider-traffic-stat">
-          <span class="provider-traffic-stat-label">Providers</span>
+          <span class="provider-traffic-stat-label">${panelI18n.providerCount}</span>
           <span class="provider-traffic-stat-value">${Number.parseInt(String(summary.providerCount || 0), 10) || 0}</span>
         </div>
         <div class="provider-traffic-stat">
-          <span class="provider-traffic-stat-label">Used</span>
+          <span class="provider-traffic-stat-label">${panelI18n.providerUsed}</span>
           <span class="provider-traffic-stat-value">${formatBytes(summary.usedBytes || 0)}</span>
         </div>
         <div class="provider-traffic-stat">
-          <span class="provider-traffic-stat-label">Remaining</span>
+          <span class="provider-traffic-stat-label">${panelI18n.providerRemaining}</span>
           <span class="provider-traffic-stat-value">${formatBytes(summary.remainingBytes || 0)}</span>
         </div>
       </div>
@@ -329,12 +352,12 @@ function buildPanelProviderTrafficMarkup(payload = null) {
           <div class="provider-traffic-progress-bar" style="width:${Math.max(0, Math.min(100, usedPercent)).toFixed(2)}%"></div>
         </div>
         <div class="provider-traffic-item-meta">
-          <span>${formatBytes(current.usedBytes || 0)} used</span>
-          <span>${formatBytes(current.remainingBytes || 0)} left</span>
+          <span>${formatBytes(current.usedBytes || 0)} ${panelI18n.providerUsedMeta}</span>
+          <span>${formatBytes(current.remainingBytes || 0)} ${panelI18n.providerRemainMeta}</span>
         </div>
         <div class="provider-traffic-item-meta secondary">
           <span>${current.vehicleType || '-'}</span>
-          <span>Expire ${formatExpireAt(current.expireAt)}</span>
+          <span>${panelI18n.providerExpire} ${formatExpireAt(current.expireAt)}</span>
         </div>
       </div>
     </div>
@@ -372,11 +395,11 @@ function renderPanelTrafficChart() {
     } else {
       const totalSec = Math.max(1, Math.round(((points - 1) * PANEL_TRAFFIC_INTERVAL_MS) / 1000));
       leftTimeEl.textContent = totalSec < 60
-        ? `${totalSec} seconds ago`
-        : `${Math.max(1, Math.round(totalSec / 60))} minutes ago`;
+        ? `${totalSec}s`
+        : `${Math.max(1, Math.round(totalSec / 60))}m`;
     }
   }
-  if (rightTimeEl) rightTimeEl.textContent = 'now';
+  if (rightTimeEl) rightTimeEl.textContent = panelI18n.chartNow;
 
   const maxRx = panelChartRatesRx.length ? Math.max(...panelChartRatesRx, 0) : 0;
   const maxTx = panelChartRatesTx.length ? Math.max(...panelChartRatesTx, 0) : 0;
@@ -754,6 +777,7 @@ function renderPanel() {
 }
 
 function setPanel(payload) {
+  applyPanelI18n(payload && payload.labels ? payload.labels : null);
   const incomingItems = Array.isArray(payload && payload.items) ? payload.items : [];
   const nextItems = incomingItems.length ? incomingItems : [
     { type: 'panel-chart' },
@@ -818,12 +842,22 @@ if (window.clashfox && typeof window.clashfox.onSystemThemeChange === 'function'
 if (window.clashfox && typeof window.clashfox.onSettingsUpdated === 'function') {
   window.clashfox.onSettingsUpdated((settings = {}) => {
     const appearance = settings && typeof settings.appearance === 'object' ? settings.appearance : {};
-    const nextSignature = String(
+    const nextTheme = String(
       settings.theme
       || appearance.theme
       || appearance.colorMode
       || 'auto',
     ).trim().toLowerCase();
+    const nextLang = String(
+      settings.lang
+      || appearance.lang
+      || settings.language
+      || settings.locale
+      || appearance.language
+      || appearance.locale
+      || 'auto',
+    ).trim().toLowerCase();
+    const nextSignature = `${nextTheme}|${nextLang}`;
     if (nextSignature === lastSettingsSignature) {
       return;
     }
@@ -832,6 +866,17 @@ if (window.clashfox && typeof window.clashfox.onSettingsUpdated === 'function') 
       return;
     }
     applyTrayTheme().catch(() => {});
+    if (window.clashfox && typeof window.clashfox.trayMenuGetData === 'function') {
+      window.clashfox.trayMenuGetData()
+        .then((data) => {
+          if (!data || typeof data !== 'object') {
+            return;
+          }
+          applyPanelI18n(data.panelLabels || null);
+          renderPanel();
+        })
+        .catch(() => {});
+    }
   });
 }
 
