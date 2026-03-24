@@ -199,7 +199,7 @@ function buildConfig({ includeHelper = true, forceX64Suffix = false } = {}) {
   if (forceX64Suffix) {
     config.mac = {
       ...(config.mac || {}),
-      defaultArch: 'arm64',
+      defaultArch: 'x64',
     };
   }
   return config;
