@@ -301,6 +301,35 @@ body[data-theme="night"] .submenu-root {
   padding: 0;
 }
 
+.menu-chart-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 11px;
+  color: rgba(96, 114, 136, 0.94);
+  background: linear-gradient(180deg, rgba(248, 251, 255, 0.88), rgba(244, 248, 253, 0.82));
+  pointer-events: none;
+}
+
+.menu-chart-loading::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  border-radius: 50%;
+  border: 2px solid rgba(140, 160, 186, 0.38);
+  border-top-color: rgba(79, 120, 199, 0.86);
+  animation: panelChartSpin 0.8s linear infinite;
+}
+
+.menu-chart-loading.is-hidden {
+  display: none;
+}
+
 .menu-chart-svg {
   width: 100%;
   height: 78px;
@@ -360,6 +389,9 @@ body[data-theme="night"] .submenu-root {
   padding: 1px 5px;
   box-shadow: 0 1px 4px rgba(31, 46, 60, 0.08);
   backdrop-filter: none;
+  min-width: 52px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .menu-chart-label.top {
@@ -382,6 +414,16 @@ body[data-theme="night"] .menu-chart-label {
   background: rgba(16, 24, 36, 0.9);
   border-color: rgba(132, 157, 188, 0.2);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22);
+}
+
+body[data-theme="night"] .menu-chart-loading {
+  color: rgba(198, 214, 236, 0.92);
+  background: linear-gradient(180deg, rgba(17, 25, 37, 0.88), rgba(14, 21, 33, 0.84));
+}
+
+body[data-theme="night"] .menu-chart-loading::before {
+  border-color: rgba(124, 150, 184, 0.42);
+  border-top-color: rgba(123, 182, 255, 0.9);
 }
 
 body[data-theme="night"] .menu-chart-label.top {
@@ -734,6 +776,15 @@ body[data-theme="day"] .provider-traffic-item-meta.secondary {
   overflow-y: auto;
 }
 
+.submenu-root.is-scrollable[data-submenu-key^="outbound-group:"] .menu-list {
+  scrollbar-width: none;
+}
+
+.submenu-root.is-scrollable[data-submenu-key^="outbound-group:"] .menu-list:hover,
+.submenu-root.is-scrollable[data-submenu-key^="outbound-group:"] .menu-list:focus-within {
+  scrollbar-width: thin;
+}
+
 .submenu-root[data-submenu-key="panel"] .menu-list {
   padding: 0;
   scrollbar-gutter: auto;
@@ -741,6 +792,15 @@ body[data-theme="day"] .provider-traffic-item-meta.secondary {
 }
 
 .submenu-root .menu-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.submenu-root.is-scrollable[data-submenu-key^="outbound-group:"] .menu-list::-webkit-scrollbar {
+  width: 0;
+}
+
+.submenu-root.is-scrollable[data-submenu-key^="outbound-group:"] .menu-list:hover::-webkit-scrollbar,
+.submenu-root.is-scrollable[data-submenu-key^="outbound-group:"] .menu-list:focus-within::-webkit-scrollbar {
   width: 8px;
 }
 
@@ -1275,6 +1335,10 @@ body[data-theme="day"] .menu-chart-label {
   box-shadow: 0 2px 6px rgba(31, 46, 60, 0.08);
 }
 
+body[data-theme="day"] .menu-chart-loading {
+  color: rgba(96, 114, 136, 0.94);
+}
+
 body[data-theme="day"] .menu-chart-label.top {
   color: #e2a73e;
 }
@@ -1343,4 +1407,9 @@ body[data-theme="day"] .menu-chart-label.bottom {
   .menu-chart-label.bottom {
     color: rgba(33, 110, 196, 0.95);
   }
+}
+
+@keyframes panelChartSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }

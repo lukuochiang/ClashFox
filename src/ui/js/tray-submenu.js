@@ -5,6 +5,7 @@ let submenuKey = '';
 let submenuItems = [];
 let submenuMeta = {};
 let connectivityRefreshTimer = null;
+let kernelUptimeTimer = null;
 let lastResizeWidth = 0;
 let lastResizeHeight = 0;
 let lastHoverSent = false;
@@ -34,6 +35,7 @@ const PANEL_TRAFFIC_HISTORY_LIMIT = 18;
 const PANEL_TRAFFIC_INTERVAL_MS = 1500;
 const PANEL_TRAFFIC_RECONNECT_BASE_MS = 1200;
 const PANEL_TRAFFIC_RECONNECT_MAX_MS = 10000;
+const MIHOMO_START_TIME_KEY = 'mihomo_start_time';
 let submenuRendererVisible = false;
 let resizeSubmenuFrame = null;
 let submenuMeasureGeneration = 0;
@@ -184,6 +186,7 @@ const ICON_SVGS = {
   modeGlobal: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>',
   modeRule: '<svg viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h14"/><circle cx="9" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="11" cy="18" r="1"/></svg>',
   modeDirect: '<svg viewBox="0 0 24 24"><path d="M4 12h14"/><path d="M14 8l4 4-4 4"/></svg>',
+  kernelManager: '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M3 10h2M3 14h2M19 10h2M19 14h2M10 3v2M14 3v2M10 19v2M14 19v2"/></svg>',
   kernelStart: '<svg viewBox="0 0 24 24"><path d="M8 6l10 6-10 6z"/></svg>',
   kernelStop: '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>',
   kernelRestart: '<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v6h-6"/></svg>',
@@ -191,6 +194,7 @@ const ICON_SVGS = {
   userDir: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0v1H5z"/></svg>',
   configDir: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5"/></svg>',
   workDir: '<svg viewBox="0 0 24 24"><path d="M4 9h16v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9z"/><path d="M8 9V7a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M4 12h16"/></svg>',
+  helperDir: '<svg viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="9" rx="2"/><path d="M7 10V7a5 5 0 0 1 10 0v3"/><circle cx="12" cy="14.5" r="1.1"/></svg>',
   logDir: '<svg viewBox="0 0 24 24"><path d="M6 4h9l3 3v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M9 11h6M9 15h6"/></svg>',
 };
 
@@ -293,6 +297,7 @@ function closePanelTrafficSocket() {
 
 function stopSubmenuLiveActivity() {
   stopConnectivityRefresh();
+  stopKernelUptimeRefresh();
   closePanelTrafficSocket();
 }
 
@@ -306,6 +311,9 @@ function startSubmenuLiveActivity() {
   if (submenuKey === 'panel') {
     openPanelTrafficSocket().catch(() => {});
     renderPanelTrafficChart();
+  }
+  if (submenuKey === 'kernel') {
+    ensureKernelUptimeRefresh();
   }
 }
 
@@ -385,8 +393,39 @@ function buildPanelChartMarkup() {
 function buildPanelProviderTrafficMarkup(payload = null) {
   const summary = payload && payload.summary && typeof payload.summary === 'object' ? payload.summary : null;
   const items = payload && Array.isArray(payload.items) ? payload.items : [];
-  if (!summary || !items.length) {
+  const errorText = payload && payload.error ? String(payload.error).trim() : '';
+  if (!summary) {
     return '';
+  }
+  if (!items.length) {
+    return `
+      <div class="menu-provider-traffic">
+        <div class="provider-traffic-summary">
+          <div class="provider-traffic-stat">
+            <span class="provider-traffic-stat-label">Providers</span>
+            <span class="provider-traffic-stat-value">${Number.parseInt(String(summary.providerCount || 0), 10) || 0}</span>
+          </div>
+          <div class="provider-traffic-stat">
+            <span class="provider-traffic-stat-label">Used</span>
+            <span class="provider-traffic-stat-value">${formatBytes(summary.usedBytes || 0)}</span>
+          </div>
+          <div class="provider-traffic-stat">
+            <span class="provider-traffic-stat-label">Remaining</span>
+            <span class="provider-traffic-stat-value">${formatBytes(summary.remainingBytes || 0)}</span>
+          </div>
+        </div>
+        <div class="provider-traffic-item">
+          <div class="provider-traffic-item-head">
+            <div class="provider-traffic-item-name">No provider data</div>
+            <div class="provider-traffic-item-percent">-</div>
+          </div>
+          <div class="provider-traffic-item-meta secondary">
+            <span>${errorText ? `No provider data (${errorText})` : 'Check provider subscription info'}</span>
+            <span>Expire -</span>
+          </div>
+        </div>
+      </div>
+    `;
   }
   const current = items[0];
   const usedPercent = Number.parseFloat(current.usedPercent || 0) || 0;
@@ -552,17 +591,156 @@ function stopConnectivityRefresh() {
   }
 }
 
+function formatKernelUptime(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return '-';
+  }
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  const base = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  return days > 0 ? `${days}d ${base}` : base;
+}
+
+function getMihomoStartTime() {
+  try {
+    const stored = localStorage.getItem(MIHOMO_START_TIME_KEY);
+    if (stored) {
+      const time = Number.parseInt(stored, 10);
+      if (Number.isFinite(time) && time > 0) {
+        return time;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function setMihomoStartTime(timestamp) {
+  try {
+    if (timestamp == null || timestamp <= 0) {
+      localStorage.removeItem(MIHOMO_START_TIME_KEY);
+    } else {
+      localStorage.setItem(MIHOMO_START_TIME_KEY, String(timestamp));
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function isKernelRunningFromSubmenuItems(items = []) {
+  const list = Array.isArray(items) ? items : [];
+  const startItem = list.find((item) => item && item.action === 'kernel-start');
+  const stopItem = list.find((item) => item && item.action === 'kernel-stop');
+  const restartItem = list.find((item) => item && item.action === 'kernel-restart');
+  const startEnabled = startItem ? startItem.enabled !== false : false;
+  const stopEnabled = stopItem ? stopItem.enabled !== false : false;
+  const restartEnabled = restartItem ? restartItem.enabled !== false : false;
+  if (stopEnabled || restartEnabled) {
+    return true;
+  }
+  if (startItem) {
+    return !startEnabled;
+  }
+  return false;
+}
+
+function stopKernelUptimeRefresh() {
+  if (kernelUptimeTimer) {
+    clearInterval(kernelUptimeTimer);
+    kernelUptimeTimer = null;
+  }
+}
+
+function applyKernelUptimeBadge() {
+  if (!submenuRendererVisible || submenuKey !== 'kernel' || !Array.isArray(submenuItems)) {
+    return;
+  }
+  const running = isKernelRunningFromSubmenuItems(submenuItems);
+  if (!running) {
+    setMihomoStartTime(null);
+  }
+  let nextText = '-';
+  let nextTone = 'neutral';
+  if (running) {
+    let startTime = getMihomoStartTime();
+    if (!startTime) {
+      startTime = Date.now();
+      setMihomoStartTime(startTime);
+    }
+    const elapsedSec = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
+    nextText = formatKernelUptime(elapsedSec);
+    nextTone = 'good';
+  }
+  let changed = false;
+  submenuItems = submenuItems.map((item) => {
+    if (!item || item.type === 'separator') {
+      return item;
+    }
+    if (item.iconKey === 'kernelManager' && !item.action) {
+      const badge = item.rightBadge && typeof item.rightBadge === 'object' ? item.rightBadge : {};
+      if (String(badge.text || '') === nextText && String(badge.tone || '') === nextTone) {
+        return item;
+      }
+      changed = true;
+      return {
+        ...item,
+        rightBadge: {
+          text: nextText,
+          tone: nextTone,
+        },
+      };
+    }
+    return item;
+  });
+  if (!changed) {
+    return;
+  }
+  const badgeEl = submenuListEl
+    ? submenuListEl.querySelector('.menu-row[data-icon-key="kernelManager"] .menu-badge')
+    : null;
+  if (badgeEl) {
+    badgeEl.className = `menu-badge tone-${nextTone}`;
+    badgeEl.textContent = nextText;
+    return;
+  }
+  renderSubmenu();
+}
+
+function ensureKernelUptimeRefresh() {
+  stopKernelUptimeRefresh();
+  if (!submenuRendererVisible || submenuKey !== 'kernel') {
+    return;
+  }
+  applyKernelUptimeBadge();
+  kernelUptimeTimer = setInterval(() => {
+    applyKernelUptimeBadge();
+  }, 1000);
+}
+
 function applyConnectivitySnapshot(snapshot) {
   if (!snapshot || !Array.isArray(submenuItems)) {
     return;
   }
   const text = snapshot.text ? String(snapshot.text) : '-';
   const tone = snapshot.tone ? String(snapshot.tone) : 'neutral';
+  let changed = false;
   submenuItems = submenuItems.map((item) => {
     if (!item || item.type === 'separator') {
       return item;
     }
     if (item.iconKey === 'connectivityQuality') {
+      const currentBadge = item.rightBadge && typeof item.rightBadge === 'object'
+        ? item.rightBadge
+        : {};
+      const currentText = String(currentBadge.text || '');
+      const currentTone = String(currentBadge.tone || '');
+      if (currentText === text && currentTone === tone) {
+        return item;
+      }
+      changed = true;
       return {
         ...item,
         rightBadge: {
@@ -573,7 +751,9 @@ function applyConnectivitySnapshot(snapshot) {
     }
     return item;
   });
-  renderSubmenu();
+  if (changed) {
+    renderSubmenu();
+  }
 }
 
 async function refreshConnectivityBadge(force = false) {
@@ -589,17 +769,11 @@ async function refreshConnectivityBadge(force = false) {
 }
 
 function ensureConnectivityRefresh() {
+  stopConnectivityRefresh();
   if (!submenuRendererVisible || submenuKey !== 'network') {
-    stopConnectivityRefresh();
     return;
   }
   refreshConnectivityBadge(true);
-  if (connectivityRefreshTimer) {
-    return;
-  }
-  connectivityRefreshTimer = setInterval(() => {
-    refreshConnectivityBadge(false);
-  }, CONNECTIVITY_REFRESH_MS);
 }
 
 function makeLeading(item, isLoading = false) {
@@ -678,6 +852,20 @@ async function runActionForItem(item) {
       renderSubmenu();
     }
   }
+  if (actionName === 'kernel-start' || actionName === 'kernel-stop' || actionName === 'kernel-restart') {
+    const runningFromResponse = response && Object.prototype.hasOwnProperty.call(response, 'kernelRunning')
+      ? Boolean(response.kernelRunning)
+      : null;
+    if (runningFromResponse === true) {
+      if (actionName === 'kernel-restart') {
+        setMihomoStartTime(Date.now());
+      } else if (!getMihomoStartTime()) {
+        setMihomoStartTime(Date.now());
+      }
+    } else if (runningFromResponse === false) {
+      setMihomoStartTime(null);
+    }
+  }
   if (response && response.submenu) {
     try {
       const data = response && response.data ? response.data : await window.clashfox.trayMenuGetData();
@@ -698,6 +886,9 @@ async function runActionForItem(item) {
           items: latestItems,
           meta: latestMeta,
         });
+        if (response.submenu === 'kernel') {
+          applyKernelUptimeBadge();
+        }
       }
     } catch {
       // ignore sync failure
@@ -1086,6 +1277,7 @@ function setSubmenu(payload) {
   ensureSubmenuResizeObserver();
   renderSubmenu();
   ensureConnectivityRefresh();
+  ensureKernelUptimeRefresh();
   if (submenuKey === 'panel') {
     openPanelTrafficSocket().catch(() => {});
     requestAnimationFrame(() => {

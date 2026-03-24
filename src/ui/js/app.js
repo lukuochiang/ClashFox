@@ -2119,6 +2119,7 @@ let settingsTrayMenuProviderTraffic = document.getElementById('settingsTrayMenuP
 let settingsTrayMenuTrackers = document.getElementById('settingsTrayMenuTrackers');
 let settingsTrayMenuFoxboard = document.getElementById('settingsTrayMenuFoxboard');
 let settingsTrayMenuPanel = document.getElementById('settingsTrayMenuPanel');
+let settingsTrayMenuDashboard = document.getElementById('settingsTrayMenuDashboard');
 let settingsTrayMenuKernelManager = document.getElementById('settingsTrayMenuKernelManager');
 let settingsTrayMenuDirectoryLocations = document.getElementById('settingsTrayMenuDirectoryLocations');
 let settingsTrayMenuCopyShellExport = document.getElementById('settingsTrayMenuCopyShellExport');
@@ -2199,6 +2200,7 @@ const state = {
   rulesOverviewPayload: null,
   ruleProvidersOverviewPayload: null,
   overviewTimer: null,
+  foxRankTimer: null,
   overviewTickTimer: null,
   overviewLoading: false,
   overviewLiteTimer: null,
@@ -3134,6 +3136,7 @@ function normalizeSettingsForUi(settings) {
   normalized.trackersEnabled = readTrayMenuBool('trackersEnabled', readTrayMenuBool('trayMenuTrackersEnabled', true));
   normalized.foxboardEnabled = readTrayMenuBool('foxboardEnabled', readTrayMenuBool('trayMenuFoxboardEnabled', true));
   normalized.panelEnabled = readTrayMenuBool('panelEnabled', readTrayMenuBool('trayMenuPanelEnabled', false));
+  normalized.dashboardEnabled = readTrayMenuBool('dashboardEnabled', readTrayMenuBool('trayMenuDashboardEnabled', true));
   normalized.kernelManagerEnabled = readTrayMenuBool('kernelManagerEnabled', readTrayMenuBool('trayMenuKernelManagerEnabled', true));
   normalized.directoryLocationsEnabled = readTrayMenuBool('directoryLocationsEnabled', readTrayMenuBool('trayMenuDirectoryLocationsEnabled', true));
   normalized.copyShellExportCommandEnabled = readTrayMenuBool('copyShellExportCommandEnabled', readTrayMenuBool('trayMenuCopyShellExportCommandEnabled', true));
@@ -3171,6 +3174,7 @@ function normalizeSettingsForUi(settings) {
     trackersEnabled: normalized.trackersEnabled,
     foxboardEnabled: normalized.foxboardEnabled,
     panelEnabled: normalized.panelEnabled,
+    dashboardEnabled: normalized.dashboardEnabled,
     kernelManagerEnabled: normalized.kernelManagerEnabled,
     directoryLocationsEnabled: normalized.directoryLocationsEnabled,
     copyShellExportCommandEnabled: normalized.copyShellExportCommandEnabled,
@@ -3402,6 +3406,15 @@ function mapSettingsForFile(settings) {
           : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuPanelEnabled')
             ? Boolean(existingTrayMenu.trayMenuPanelEnabled)
             : Boolean(existingAppearance.panelEnabled ?? existingAppearance.trayMenuPanelEnabled)))),
+    dashboardEnabled: Object.prototype.hasOwnProperty.call(mapped, 'dashboardEnabled')
+      ? Boolean(mapped.dashboardEnabled)
+      : (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuDashboardEnabled')
+        ? Boolean(mapped.trayMenuDashboardEnabled)
+        : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'dashboardEnabled')
+          ? Boolean(existingTrayMenu.dashboardEnabled)
+          : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuDashboardEnabled')
+            ? Boolean(existingTrayMenu.trayMenuDashboardEnabled)
+            : Boolean(existingAppearance.dashboardEnabled ?? existingAppearance.trayMenuDashboardEnabled)))),
     kernelManagerEnabled: Object.prototype.hasOwnProperty.call(mapped, 'kernelManagerEnabled')
       ? Boolean(mapped.kernelManagerEnabled)
       : (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuKernelManagerEnabled')
@@ -3575,6 +3588,9 @@ function mapSettingsForFile(settings) {
   if (Object.prototype.hasOwnProperty.call(mapped, 'kernelManagerEnabled')) {
     delete mapped.kernelManagerEnabled;
   }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'dashboardEnabled')) {
+    delete mapped.dashboardEnabled;
+  }
   if (Object.prototype.hasOwnProperty.call(mapped, 'directoryLocationsEnabled')) {
     delete mapped.directoryLocationsEnabled;
   }
@@ -3592,6 +3608,9 @@ function mapSettingsForFile(settings) {
   }
   if (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuKernelManagerEnabled')) {
     delete mapped.trayMenuKernelManagerEnabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuDashboardEnabled')) {
+    delete mapped.trayMenuDashboardEnabled;
   }
   if (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuDirectoryLocationsEnabled')) {
     delete mapped.trayMenuDirectoryLocationsEnabled;
@@ -3835,6 +3854,7 @@ function saveSettings(patch, options = {}) {
     'trayMenuTrackersEnabled',
     'trayMenuFoxboardEnabled',
     'trayMenuPanelEnabled',
+    'trayMenuDashboardEnabled',
     'trayMenuKernelManagerEnabled',
     'trayMenuDirectoryLocationsEnabled',
     'trayMenuCopyShellExportCommandEnabled',
@@ -3843,6 +3863,7 @@ function saveSettings(patch, options = {}) {
     'trackersEnabled',
     'foxboardEnabled',
     'panelEnabled',
+    'dashboardEnabled',
     'kernelManagerEnabled',
     'directoryLocationsEnabled',
     'copyShellExportCommandEnabled',
@@ -4295,6 +4316,9 @@ function applySettings(settings) {
   if (settingsTrayMenuPanel) {
     settingsTrayMenuPanel.checked = state.settings.panelEnabled === true;
   }
+  if (settingsTrayMenuDashboard) {
+    settingsTrayMenuDashboard.checked = state.settings.dashboardEnabled !== false;
+  }
   if (settingsTrayMenuKernelManager) {
     settingsTrayMenuKernelManager.checked = state.settings.kernelManagerEnabled !== false;
   }
@@ -4466,6 +4490,19 @@ if (window.clashfox && typeof window.clashfox.onMainCoreAction === 'function') {
         installStatus.textContent = payload.message;
       }
       return;
+    }
+    const action = String(payload.action || '').trim().toLowerCase();
+    const phase = String(payload.phase || '').trim().toLowerCase();
+    if (action === 'start' && phase === 'start') {
+      startMihomoUptimeTracking();
+    } else if (action === 'restart' && (phase === 'transition' || phase === 'start')) {
+      resetMihomoUptimeTracking();
+      startMihomoUptimeTracking();
+    } else if (action === 'stop' && phase === 'start') {
+      resetMihomoUptimeTracking();
+      if (overviewUptime) {
+        setNodeTextIfChanged(overviewUptime, '-');
+      }
     }
     // Always sync from real kernel state; avoid synthetic transition states.
     loadStatusSilently();
@@ -6058,6 +6095,9 @@ function applyKernelRunningState(running, source = 'status') {
   const next = Boolean(running);
   const now = Date.now();
   if (next) {
+    if (!state.mihomoStartTime && !getMihomoStartTime()) {
+      startMihomoUptimeTracking();
+    }
     state.coreRunning = true;
     state.coreRunningFalseStreak = 0;
     state.coreRunningUpdatedAt = now;
@@ -6105,10 +6145,9 @@ function syncRunningIndicators(running) {
   }
   const dashboardNav = document.getElementById('navDashboard');
   if (dashboardNav) {
-    const disabled = !running;
-    dashboardNav.disabled = disabled;
-    dashboardNav.classList.toggle('is-disabled', disabled);
-    dashboardNav.setAttribute('aria-disabled', String(disabled));
+    dashboardNav.disabled = false;
+    dashboardNav.classList.remove('is-disabled');
+    dashboardNav.setAttribute('aria-disabled', 'false');
   }
 }
 
@@ -6471,12 +6510,7 @@ function buildProviderSubscriptionOverviewData(rawData = {}) {
   const now = Date.now();
   const records = normalizeProxyProviderRecords(rawData);
   const items = records
-    .filter((record) => {
-      if (record.vehicleType === 'FILE') {
-        return false;
-      }
-      return record.total > 0 || record.upload > 0 || record.download > 0 || record.expire > 0;
-    })
+    .filter((record) => Boolean(record && record.name) && String(record.vehicleType || '').toUpperCase() === 'HTTP')
     .map((record) => {
       const used = Math.max(0, record.upload + record.download);
       const total = Math.max(0, record.total);
@@ -8413,7 +8447,11 @@ function updateFoxRankFromOverviewSnapshot(data) {
     return;
   }
   const running = Boolean(data.running);
-  const uptime = Number.parseFloat(data.uptimeSec);
+  const overviewUptime = Number.parseFloat(data.uptimeSec);
+  const jsTrackedUptime = calculateMihomoUptime();
+  const uptime = Number.isFinite(overviewUptime) && overviewUptime >= 0
+    ? overviewUptime
+    : (Number.isFinite(jsTrackedUptime) && jsTrackedUptime >= 0 ? jsTrackedUptime : NaN);
   const nowMs = Date.now();
   const nowSec = nowMs / 1000;
   if (running && Number.isFinite(uptime) && uptime >= 0) {
@@ -8792,14 +8830,19 @@ async function loadProviderSubscriptionOverview() {
   }
   state.providerSubscriptionLoading = true;
   try {
-    const response = await fetchMihomoProvidersProxies(getMihomoApiSource());
-    if (!response || !response.ok || !response.data) {
+    const response = await fetchProviderSubscriptionOverview(window.clashfox);
+    if (response && response.ok && response.data) {
+      renderProviderSubscriptionOverview(response.data);
+      return;
+    }
+    const fallbackResponse = await fetchMihomoProvidersProxies(getMihomoApiSource());
+    if (!fallbackResponse || !fallbackResponse.ok || !fallbackResponse.data) {
       if (!state.providerSubscriptionRenderSignature) {
         renderProviderSubscriptionOverview({ items: [], summary: { providerCount: 0 } });
       }
       return;
     }
-    const overviewData = buildProviderSubscriptionOverviewData(response.data);
+    const overviewData = buildProviderSubscriptionOverviewData(fallbackResponse.data);
     renderProviderSubscriptionOverview(overviewData);
   } catch {
     if (!state.providerSubscriptionRenderSignature) {
@@ -10233,6 +10276,7 @@ function refreshPageRefs() {
   settingsTrayMenuTrackers = document.getElementById('settingsTrayMenuTrackers');
   settingsTrayMenuFoxboard = document.getElementById('settingsTrayMenuFoxboard');
   settingsTrayMenuPanel = document.getElementById('settingsTrayMenuPanel');
+  settingsTrayMenuDashboard = document.getElementById('settingsTrayMenuDashboard');
   settingsTrayMenuKernelManager = document.getElementById('settingsTrayMenuKernelManager');
   settingsTrayMenuDirectoryLocations = document.getElementById('settingsTrayMenuDirectoryLocations');
   settingsTrayMenuCopyShellExport = document.getElementById('settingsTrayMenuCopyShellExport');
@@ -10529,9 +10573,86 @@ function stopOverviewActivity() {
   stopTopologyTicker();
 }
 
+function stopFoxRankActivity() {
+  if (state.foxRankTimer) {
+    clearInterval(state.foxRankTimer);
+    state.foxRankTimer = null;
+  }
+}
+
+function startFoxRankActivity() {
+  if (!isMainWindowVisible()) {
+    stopFoxRankActivity();
+    return;
+  }
+  if (currentPage === 'overview') {
+    stopFoxRankActivity();
+    return;
+  }
+  if (state.foxRankTimer) {
+    return;
+  }
+  state.foxRankTimer = setInterval(() => {
+    if (!isMainWindowVisible() || currentPage === 'overview') {
+      return;
+    }
+    refreshFoxRankSnapshotSilently().catch(() => {});
+  }, 4000);
+  refreshFoxRankSnapshotSilently().catch(() => {});
+}
+
+async function refreshFoxRankSnapshotSilently() {
+  if (!isMainWindowVisible() || !state.foxRank || currentPage === 'overview') {
+    return;
+  }
+  const configPath = getCurrentConfigPath();
+  const args = ['--cache-ttl', '1'];
+  if (configPath) {
+    args.push('--config', configPath);
+  }
+  args.push(...getControllerArgs());
+  const [statusResp, overviewResp, networkSnapshot] = await Promise.all([
+    loadStatusSilently(),
+    runCommand('overview', args),
+    window.clashfox && typeof window.clashfox.getOverviewNetworkSnapshot === 'function'
+      ? window.clashfox.getOverviewNetworkSnapshot()
+      : Promise.resolve({ ok: false }),
+  ]);
+  if (!(statusResp && statusResp.ok)) {
+    return;
+  }
+  const statusRunning = Boolean(statusResp && statusResp.data && statusResp.data.running);
+  if (statusRunning && !state.mihomoStartTime && !getMihomoStartTime()) {
+    startMihomoUptimeTracking();
+  }
+  if (!(overviewResp && overviewResp.ok && overviewResp.data)) {
+    // Fallback: keep Fox Rank usage moving even when overview snapshots are temporarily unavailable.
+    updateFoxRankFromOverviewSnapshot({
+      running: statusRunning,
+      uptimeSec: calculateMihomoUptime(),
+      internetMs: parseInt(String(state.overviewLatencySnapshot.internet || '').replace(/[^\d.-]/g, ''), 10),
+      dnsMs: parseInt(String(state.overviewLatencySnapshot.dns || '').replace(/[^\d.-]/g, ''), 10),
+      routerMs: parseInt(String(state.overviewLatencySnapshot.router || '').replace(/[^\d.-]/g, ''), 10),
+    });
+    return;
+  }
+  const mergedOverviewData = networkSnapshot && networkSnapshot.ok && networkSnapshot.data
+    ? { ...(overviewResp.data || {}), ...networkSnapshot.data }
+    : overviewResp.data;
+  if (!Object.prototype.hasOwnProperty.call(mergedOverviewData || {}, 'running')) {
+    mergedOverviewData.running = statusRunning;
+  }
+  const overviewUptime = Number.parseFloat(mergedOverviewData.uptimeSec);
+  if (!Number.isFinite(overviewUptime) || overviewUptime < 0) {
+    mergedOverviewData.uptimeSec = calculateMihomoUptime();
+  }
+  updateFoxRankFromOverviewSnapshot(mergedOverviewData);
+}
+
 async function syncMainWindowActivity() {
   if (!isMainWindowVisible()) {
     stopOverviewActivity();
+    stopFoxRankActivity();
     closeMihomoPageLogsSocket();
     if (dashboardLocalModule && typeof dashboardLocalModule.teardownDashboardPanel === 'function' && currentPage === 'dashboard') {
       dashboardLocalModule.teardownDashboardPanel();
@@ -10546,6 +10667,7 @@ async function syncMainWindowActivity() {
     state.dashboardLoaded = false;
   }
   if (currentPage === 'overview') {
+    stopFoxRankActivity();
     startOverviewTimer();
     connectMihomoConnectionsStream();
     connectMihomoTrafficStream();
@@ -10560,6 +10682,7 @@ async function syncMainWindowActivity() {
     ]).catch(() => {});
   } else {
     stopOverviewActivity();
+    startFoxRankActivity();
   }
   if (currentPage === 'logs') {
     loadLogs();
@@ -10646,6 +10769,7 @@ window.addEventListener('beforeunload', () => {
     dashboardLocalModule.teardownDashboardPanel();
   }
   stopOverviewActivity();
+  stopFoxRankActivity();
   closeMihomoConnectionsSocket();
   closeMihomoTrafficSocket();
   closeMihomoMemorySocket();
@@ -11053,6 +11177,13 @@ function bindPageEvents() {
     settingsTrayMenuPanel.addEventListener('change', (event) => {
       const enabled = Boolean(event.target.checked);
       saveSettings({panelEnabled: enabled});
+    });
+  }
+
+  if (settingsTrayMenuDashboard) {
+    settingsTrayMenuDashboard.addEventListener('change', (event) => {
+      const enabled = Boolean(event.target.checked);
+      saveSettings({dashboardEnabled: enabled});
     });
   }
 
@@ -13220,6 +13351,7 @@ if (document.readyState === 'loading') {
 
 // Common entry: load tray i18n first, then main i18n map
 import {
+  fetchProviderSubscriptionOverview,
   fetchMihomoProvidersProxies,
   fetchMihomoProvidersRules,
   fetchMihomoRules,

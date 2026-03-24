@@ -39,6 +39,7 @@ function nextTick() {
 const TRAFFIC_HISTORY_POINTS = 520;
 const TRAFFIC_INTERVAL_MS = 1000;
 const OVERVIEW_INTERVAL_MS = 5000;
+const PROVIDER_TRAFFIC_ROTATE_MS = 2500;
 const SETTINGS_CACHE_MS = 10000;
 const TRAFFIC_CACHE_KEY = 'clashfox.trayMenuTrafficCache.v1';
 const TRAFFIC_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
@@ -70,6 +71,7 @@ const trafficState = {
 };
 const providerTrafficState = {
   rotateTimer: null,
+  rotateTotalItems: 0,
   index: 0,
   paused: false,
   signature: '',
@@ -256,6 +258,31 @@ function buildMainListRenderSignature(value = null) {
   }
 }
 
+function buildSubmenuRenderSignature(submenuKey = '', items = []) {
+  const key = String(submenuKey || '').trim();
+  const source = Array.isArray(items) ? items : [];
+  const normalized = key === 'network'
+    ? source.map((item) => {
+      if (!item || typeof item !== 'object') {
+        return item;
+      }
+      if (item.iconKey !== 'connectivityQuality') {
+        return item;
+      }
+      const nextItem = { ...item, rightText: '' };
+      if (nextItem.rightBadge && typeof nextItem.rightBadge === 'object') {
+        nextItem.rightBadge = {
+          ...nextItem.rightBadge,
+          text: '',
+          tone: '',
+        };
+      }
+      return nextItem;
+    })
+    : source;
+  return buildMenuRenderSignature(normalized);
+}
+
 function trayLog(scope, message, payload = null, level = 'log') {
   return;
 }
@@ -399,6 +426,7 @@ const ICON_SVGS = {
   userDir: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0v1H5z"/></svg>',
   configDir: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5"/></svg>',
   workDir: '<svg viewBox="0 0 24 24"><path d="M4 9h16v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9z"/><path d="M8 9V7a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M4 12h16"/></svg>',
+  helperDir: '<svg viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="9" rx="2"/><path d="M7 10V7a5 5 0 0 1 10 0v3"/><circle cx="12" cy="14.5" r="1.1"/></svg>',
   logDir: '<svg viewBox="0 0 24 24"><path d="M6 4h9l3 3v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M9 11h6M9 15h6"/></svg>',
 };
 
@@ -476,13 +504,19 @@ function stopProviderTrafficRotation() {
     clearInterval(providerTrafficState.rotateTimer);
     providerTrafficState.rotateTimer = null;
   }
+  providerTrafficState.rotateTotalItems = 0;
 }
 
 function startProviderTrafficRotation(totalItems) {
-  stopProviderTrafficRotation();
   if (!Number.isFinite(totalItems) || totalItems <= 1) {
+    stopProviderTrafficRotation();
     return;
   }
+  if (providerTrafficState.rotateTimer && providerTrafficState.rotateTotalItems === totalItems) {
+    return;
+  }
+  stopProviderTrafficRotation();
+  providerTrafficState.rotateTotalItems = totalItems;
   trayLog('provider-traffic', 'rotation started', { totalItems });
   providerTrafficState.rotateTimer = setInterval(() => {
     if (providerTrafficState.paused) {
@@ -491,7 +525,7 @@ function startProviderTrafficRotation(totalItems) {
     providerTrafficState.index = (providerTrafficState.index + 1) % totalItems;
     trayLog('provider-traffic', 'rotation tick', { index: providerTrafficState.index });
     renderProviderTraffic();
-  }, 2500);
+  }, PROVIDER_TRAFFIC_ROTATE_MS);
 }
 
 function renderProviderTraffic(force = false) {
@@ -501,11 +535,12 @@ function renderProviderTraffic(force = false) {
   const payload = menuData && menuData.providerTraffic && typeof menuData.providerTraffic === 'object'
     ? menuData.providerTraffic
     : null;
+  const errorText = payload && payload.error ? String(payload.error).trim() : '';
   const summary = payload && payload.summary && typeof payload.summary === 'object'
     ? payload.summary
     : null;
   const items = payload && Array.isArray(payload.items) ? payload.items : [];
-  if (!payload || !summary || items.length === 0) {
+  if (!payload || !summary) {
     if (!providerTrafficEl.classList.contains('is-hidden') || providerTrafficEl.innerHTML) {
       providerTrafficEl.innerHTML = '';
       providerTrafficEl.classList.add('is-hidden');
@@ -516,6 +551,49 @@ function renderProviderTraffic(force = false) {
     return;
   }
   providerTrafficEl.classList.remove('is-hidden');
+  if (items.length === 0) {
+    const renderKey = [
+      'empty',
+      summary.providerCount || 0,
+      summary.usedBytes || 0,
+      summary.remainingBytes || 0,
+    ].join('|');
+    if (!force && providerTrafficState.renderKey === renderKey) {
+      return;
+    }
+    providerTrafficState.renderKey = renderKey;
+    providerTrafficState.signature = '';
+    providerTrafficState.index = 0;
+    stopProviderTrafficRotation();
+    providerTrafficEl.innerHTML = `
+      <div class="provider-traffic-summary">
+        <div class="provider-traffic-stat">
+          <span class="provider-traffic-stat-label">Providers</span>
+          <span class="provider-traffic-stat-value">${Number.parseInt(String(summary.providerCount || 0), 10) || 0}</span>
+        </div>
+        <div class="provider-traffic-stat">
+          <span class="provider-traffic-stat-label">Used</span>
+          <span class="provider-traffic-stat-value">${formatBytes(summary.usedBytes || 0)}</span>
+        </div>
+        <div class="provider-traffic-stat">
+          <span class="provider-traffic-stat-label">Remaining</span>
+          <span class="provider-traffic-stat-value">${formatBytes(summary.remainingBytes || 0)}</span>
+        </div>
+      </div>
+      <div class="provider-traffic-item">
+        <div class="provider-traffic-item-head">
+          <div class="provider-traffic-item-name">No provider data</div>
+          <div class="provider-traffic-item-percent">-</div>
+        </div>
+        <div class="provider-traffic-item-meta secondary">
+          <span>${errorText ? `No provider data (${errorText})` : 'Check provider subscription info'}</span>
+          <span>Expire -</span>
+        </div>
+      </div>
+    `;
+    providerTrafficEl.dataset.hasMultiple = 'false';
+    return;
+  }
   const totalItems = items.length;
   const safeIndex = ((providerTrafficState.index % totalItems) + totalItems) % totalItems;
   const current = items[safeIndex];
@@ -1742,6 +1820,18 @@ async function init() {
         && Array.isArray(payload.submenus[keepSubmenuKey])
         ? buildMenuRenderSignature(payload.submenus[keepSubmenuKey])
         : '';
+      const prevSubmenuStableSignature = keepSubmenuKey
+        && menuData
+        && menuData.submenus
+        && Array.isArray(menuData.submenus[keepSubmenuKey])
+        ? buildSubmenuRenderSignature(keepSubmenuKey, menuData.submenus[keepSubmenuKey])
+        : '';
+      const nextSubmenuStableSignature = keepSubmenuKey
+        && payload
+        && payload.submenus
+        && Array.isArray(payload.submenus[keepSubmenuKey])
+        ? buildSubmenuRenderSignature(keepSubmenuKey, payload.submenus[keepSubmenuKey])
+        : '';
       menuData = payload;
       lastMenuRenderSignature = nextSignature;
       renderHeader();
@@ -1758,7 +1848,14 @@ async function init() {
           activeSubmenuKey = keepSubmenuKey;
           activeSubmenuAnchor = nextAnchor;
           nextAnchor.classList.add('expanded');
-          if (prevSubmenuSignature === nextSubmenuSignature) {
+          if (keepSubmenuKey === 'panel') {
+            syncWindowGeometry();
+            return;
+          }
+          if (
+            prevSubmenuSignature === nextSubmenuSignature
+            || prevSubmenuStableSignature === nextSubmenuStableSignature
+          ) {
             syncWindowGeometry();
             return;
           }

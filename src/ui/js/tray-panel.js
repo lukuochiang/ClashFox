@@ -6,6 +6,7 @@ let lastResizeWidth = 0;
 let lastResizeHeight = 0;
 let lastHoverSent = false;
 let panelItemsSignature = '';
+let panelRenderedItemsSignature = '';
 
 let panelChartSocket = null;
 let panelChartReconnectTimer = null;
@@ -14,7 +15,10 @@ let panelChartRatesRx = [];
 let panelChartRatesTx = [];
 let panelChartTotalRx = null;
 let panelChartTotalTx = null;
+let panelChartHasSample = false;
 let panelProviderPayloadSignature = '';
+let panelProviderCarouselIndex = 0;
+let panelProviderCarouselTimer = null;
 let lastSettingsSignature = '';
 
 const PANEL_TRAFFIC_HISTORY_LIMIT = 520;
@@ -23,6 +27,7 @@ const PANEL_TRAFFIC_RECONNECT_BASE_MS = 1200;
 const PANEL_TRAFFIC_RECONNECT_MAX_MS = 10000;
 const PANEL_WIDTH_FIXED = 260;
 const PANEL_PROVIDER_REFRESH_MS = 2500;
+const PANEL_PROVIDER_CAROUSEL_MS = 3200;
 let panelProviderRefreshTimer = null;
 const PANEL_MIN_HEIGHT = 286;
 const PANEL_RESIZE_DIFF_THRESHOLD = 4;
@@ -151,6 +156,7 @@ function closePanelTrafficSocket() {
 
 function stopPanelLiveActivity() {
   stopProviderFallbackRefresh();
+  stopProviderCarousel();
   closePanelTrafficSocket();
 }
 
@@ -162,6 +168,7 @@ function startPanelLiveActivity() {
     renderPanel();
   }
   startProviderFallbackRefresh();
+  startProviderCarousel();
   openPanelTrafficSocket();
 }
 
@@ -195,13 +202,14 @@ function buildPanelChartMarkup() {
     <div class="menu-chart">
       <div class="panel-card-title">Traffic Chart</div>
       <div class="menu-chart-body">
+        <div id="panelChartLoading" class="menu-chart-loading">Loading traffic...</div>
         <div class="menu-chart-overlay">
-          <div id="panelChartTopLabel" class="menu-chart-label top">-</div>
-          <div id="panelChartBottomLabel" class="menu-chart-label bottom">-</div>
+          <div id="panelChartTopLabel" class="menu-chart-label top">--</div>
+          <div id="panelChartBottomLabel" class="menu-chart-label bottom">--</div>
         </div>
         <div class="menu-chart-overlay right">
-          <div id="panelChartTopTotal" class="menu-chart-label top total">-</div>
-          <div id="panelChartBottomTotal" class="menu-chart-label bottom total">-</div>
+          <div id="panelChartTopTotal" class="menu-chart-label top total">--</div>
+          <div id="panelChartBottomTotal" class="menu-chart-label bottom total">--</div>
         </div>
         <svg class="menu-chart-svg" viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true">
           <defs>
@@ -246,9 +254,6 @@ function buildPanelItemsSignature(items = []) {
   return items.map((item) => {
     if (!item || typeof item !== 'object') {
       return 'invalid';
-    }
-    if (item.type === 'panel-provider-traffic') {
-      return `panel-provider-traffic:${buildProviderPayloadSignature(item.payload || null)}`;
     }
     return String(item.type || 'unknown');
   }).join('|');
@@ -295,7 +300,8 @@ function buildPanelProviderTrafficMarkup(payload = null) {
       </div>
     `;
   }
-  const current = items[0];
+  const safeIndex = Math.max(0, Math.min(items.length - 1, panelProviderCarouselIndex || 0));
+  const current = items[safeIndex];
   const usedPercent = Number.parseFloat(current.usedPercent || 0) || 0;
   return `
     <div class="menu-provider-traffic">
@@ -347,13 +353,19 @@ function renderPanelTrafficChart() {
   const bottomTotalEl = document.getElementById('panelChartBottomTotal');
   const leftTimeEl = document.getElementById('panelChartLeftTime');
   const rightTimeEl = document.getElementById('panelChartRightTime');
+  const loadingEl = document.getElementById('panelChartLoading');
   const points = Math.max(panelChartRatesRx.length, panelChartRatesTx.length, 0);
   const currentRx = panelChartRatesRx.length ? panelChartRatesRx[panelChartRatesRx.length - 1] : null;
   const currentTx = panelChartRatesTx.length ? panelChartRatesTx[panelChartRatesTx.length - 1] : null;
-  if (topLabelEl) topLabelEl.textContent = Number.isFinite(currentTx) ? `${formatBytes(currentTx)}/s` : '-';
-  if (bottomLabelEl) bottomLabelEl.textContent = Number.isFinite(currentRx) ? `${formatBytes(currentRx)}/s` : '-';
-  if (topTotalEl) topTotalEl.textContent = Number.isFinite(panelChartTotalTx) ? formatBytes(panelChartTotalTx) : 'U';
-  if (bottomTotalEl) bottomTotalEl.textContent = Number.isFinite(panelChartTotalRx) ? formatBytes(panelChartTotalRx) : 'D';
+  const hasSample = Number.isFinite(currentRx) || Number.isFinite(currentTx);
+  panelChartHasSample = panelChartHasSample || hasSample;
+  if (loadingEl) {
+    loadingEl.classList.toggle('is-hidden', panelChartHasSample);
+  }
+  if (topLabelEl) topLabelEl.textContent = Number.isFinite(currentTx) ? `${formatBytes(currentTx)}/s` : '--';
+  if (bottomLabelEl) bottomLabelEl.textContent = Number.isFinite(currentRx) ? `${formatBytes(currentRx)}/s` : '--';
+  if (topTotalEl) topTotalEl.textContent = Number.isFinite(panelChartTotalTx) ? formatBytes(panelChartTotalTx) : '--';
+  if (bottomTotalEl) bottomTotalEl.textContent = Number.isFinite(panelChartTotalRx) ? formatBytes(panelChartTotalRx) : '--';
   if (leftTimeEl) {
     if (points <= 1) {
       leftTimeEl.textContent = '-';
@@ -462,6 +474,7 @@ function applyPanelTrafficSnapshot(payload = {}) {
   if (!Number.isFinite(down) || !Number.isFinite(up) || down < 0 || up < 0) {
     return;
   }
+  panelChartHasSample = true;
   panelChartRatesRx.push(down);
   panelChartRatesTx.push(up);
   if (panelChartRatesRx.length > PANEL_TRAFFIC_HISTORY_LIMIT) panelChartRatesRx = panelChartRatesRx.slice(-PANEL_TRAFFIC_HISTORY_LIMIT);
@@ -564,11 +577,61 @@ function hasProviderData(payload = null) {
   return Boolean(summary && items.length);
 }
 
+function normalizeProviderCarouselIndex(payload = null) {
+  const items = payload && Array.isArray(payload.items) ? payload.items : [];
+  if (!items.length) {
+    panelProviderCarouselIndex = 0;
+    return;
+  }
+  const next = Number.parseInt(String(panelProviderCarouselIndex || 0), 10);
+  panelProviderCarouselIndex = Number.isFinite(next) && next >= 0
+    ? (next % items.length)
+    : 0;
+}
+
+function stopProviderCarousel() {
+  if (!panelProviderCarouselTimer) {
+    return;
+  }
+  clearInterval(panelProviderCarouselTimer);
+  panelProviderCarouselTimer = null;
+}
+
+function startProviderCarousel() {
+  if (!panelRendererVisible) {
+    stopProviderCarousel();
+    return;
+  }
+  const { item } = getPanelProviderItem();
+  const payload = item && item.payload ? item.payload : null;
+  const items = payload && Array.isArray(payload.items) ? payload.items : [];
+  normalizeProviderCarouselIndex(payload);
+  if (items.length <= 1) {
+    stopProviderCarousel();
+    return;
+  }
+  if (panelProviderCarouselTimer) {
+    return;
+  }
+  panelProviderCarouselTimer = setInterval(() => {
+    const latest = getPanelProviderItem();
+    const latestPayload = latest.item && latest.item.payload ? latest.item.payload : null;
+    const latestItems = latestPayload && Array.isArray(latestPayload.items) ? latestPayload.items : [];
+    if (!panelRendererVisible || latestItems.length <= 1) {
+      stopProviderCarousel();
+      return;
+    }
+    panelProviderCarouselIndex = (panelProviderCarouselIndex + 1) % latestItems.length;
+    updateProviderCardInPlace(latestPayload);
+  }, PANEL_PROVIDER_CAROUSEL_MS);
+}
+
 function applyProviderPayload(payload = null) {
   const { index, item } = getPanelProviderItem();
   if (index < 0 || !item) {
     return false;
   }
+  normalizeProviderCarouselIndex(payload);
   panelItems[index] = { ...item, payload };
   return true;
 }
@@ -614,6 +677,7 @@ async function refreshProviderTrafficFallback(force = false) {
     if (!updateProviderCardInPlace(response.data)) {
       renderPanel();
     }
+    startProviderCarousel();
   } catch {
     // ignore fallback refresh failures
   }
@@ -663,10 +727,28 @@ function renderPanel() {
   if (!panelRendererVisible || !panelListEl) {
     return;
   }
+  const canReuseDom = (
+    panelRenderedItemsSignature
+    && panelItemsSignature
+    && panelRenderedItemsSignature === panelItemsSignature
+    && panelListEl.childElementCount > 0
+  );
+  if (canReuseDom) {
+    if (!panelChartHasSample) {
+      renderPanelTrafficChart();
+    }
+    resizePanelToContent();
+    openPanelTrafficSocket().catch(() => {});
+    return;
+  }
   panelListEl.innerHTML = '';
   panelItems.forEach((item) => {
     panelListEl.appendChild(makeRow(item));
   });
+  panelRenderedItemsSignature = panelItemsSignature;
+  if (!panelChartHasSample) {
+    renderPanelTrafficChart();
+  }
   resizePanelToContent();
   openPanelTrafficSocket().catch(() => {});
 }
@@ -679,12 +761,28 @@ function setPanel(payload) {
   ];
   const nextItemsSignature = buildPanelItemsSignature(nextItems);
   if (nextItemsSignature && nextItemsSignature === panelItemsSignature) {
+    const nextProvider = nextItems.find((item) => item && item.type === 'panel-provider-traffic');
+    const nextPayload = nextProvider && nextProvider.payload ? nextProvider.payload : null;
+    const nextPayloadSignature = buildProviderPayloadSignature(nextPayload);
+    if (nextPayloadSignature && nextPayloadSignature !== panelProviderPayloadSignature) {
+      if (applyProviderPayload(nextPayload)) {
+        panelProviderPayloadSignature = nextPayloadSignature;
+        if (panelRendererVisible) {
+          updateProviderCardInPlace(nextPayload);
+          startProviderCarousel();
+        }
+      }
+    }
     refreshProviderTrafficFallback(false).catch(() => {});
     startProviderFallbackRefresh();
     return;
   }
   panelItems = nextItems;
   panelItemsSignature = nextItemsSignature;
+  panelProviderCarouselIndex = 0;
+  if (panelItemsSignature !== panelRenderedItemsSignature) {
+    panelRenderedItemsSignature = '';
+  }
   const { item } = getPanelProviderItem();
   panelProviderPayloadSignature = buildProviderPayloadSignature(item && item.payload ? item.payload : null);
   if (!panelRendererVisible) {
@@ -693,6 +791,7 @@ function setPanel(payload) {
   renderPanel();
   refreshProviderTrafficFallback(false).catch(() => {});
   startProviderFallbackRefresh();
+  startProviderCarousel();
 }
 
 applyTrayTheme().catch(() => {});

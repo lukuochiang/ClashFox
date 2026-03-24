@@ -23,6 +23,7 @@ const state = {
     dns: 'cards',
     devices: 'cards',
   },
+  summaryMode: '',
 };
 
 const refs = {};
@@ -138,6 +139,16 @@ function escapeHtml(value) {
 function compactText(value, fallback = '-') {
   const text = String(value || '').trim();
   return text || fallback;
+}
+
+function setTextIfChanged(node, value) {
+  if (!node) {
+    return;
+  }
+  const text = String(value ?? '');
+  if (node.textContent !== text) {
+    node.textContent = text;
+  }
 }
 
 function pluralize(count, singular, plural = `${singular}s`) {
@@ -368,12 +379,94 @@ function renderSidebar(rows) {
     counts.set(key, (counts.get(key) || 0) + 1);
   }
   const items = Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  refs.filterList.innerHTML = [
+  const markup = [
     `<button class="dashboard-filter-item${state.selectedFilter ? '' : ' active'}" data-filter="">${state.groupBy === 'host' ? t('allHosts', 'All Hosts') : t('allClients', 'All Clients')}<span>${rows.length}</span></button>`,
     ...items.slice(0, 40).map(([label, count]) => (
       `<button class="dashboard-filter-item${state.selectedFilter === label ? ' active' : ''}" data-filter="${escapeHtml(label)}">${escapeHtml(label)}<span>${count}</span></button>`
     )),
   ].join('');
+  if (refs.filterList.dataset.renderSig !== markup) {
+    refs.filterList.innerHTML = markup;
+    refs.filterList.dataset.renderSig = markup;
+  }
+}
+
+function ensureLoadingOverlay() {
+  if (!state.root) {
+    return null;
+  }
+  if (refs.loadingOverlay && refs.loadingOverlay.parentElement === state.root) {
+    return refs.loadingOverlay;
+  }
+  const overlay = document.createElement('div');
+  overlay.className = 'dashboard-loading-overlay';
+  overlay.hidden = true;
+  overlay.innerHTML = `
+    <div class="dashboard-loading-card" role="status" aria-live="polite">
+      <span class="dashboard-loading-spinner" aria-hidden="true"></span>
+      <span class="dashboard-loading-text"></span>
+    </div>
+  `;
+  state.root.appendChild(overlay);
+  refs.loadingOverlay = overlay;
+  refs.loadingText = overlay.querySelector('.dashboard-loading-text');
+  return overlay;
+}
+
+function renderLoadingOverlay() {
+  const overlay = ensureLoadingOverlay();
+  if (!overlay) {
+    return;
+  }
+  const shouldShow = state.loading && !state.snapshot;
+  overlay.hidden = !shouldShow;
+  overlay.classList.toggle('is-visible', shouldShow);
+  setTextIfChanged(refs.loadingText, t('loadingSnapshot', 'Loading live snapshot...'));
+}
+
+function renderSummarySkeleton(mode = 'empty') {
+  if (!refs.summaryGrid) {
+    return;
+  }
+  if (state.summaryMode === mode && refs.summaryGrid.querySelector('[data-summary-slot]')) {
+    return;
+  }
+  state.summaryMode = mode;
+  const slots = mode === 'live'
+    ? ['active', 'recent', 'devices', 'upload', 'download', 'balance']
+    : ['status', 'active', 'recent', 'devices', 'upload', 'download'];
+  refs.summaryGrid.innerHTML = slots.map((slot) => (
+    `<div class="dashboard-stat" data-stat-key="${slot}" data-summary-slot="${slot}">
+      <span data-summary-label></span>
+      <strong data-summary-value></strong>
+      <small data-summary-sub></small>
+    </div>`
+  )).join('');
+  refs.summarySlots = {};
+  refs.summaryGrid.querySelectorAll('[data-summary-slot]').forEach((card) => {
+    const key = String(card.getAttribute('data-summary-slot') || '').trim();
+    if (!key) {
+      return;
+    }
+    refs.summarySlots[key] = {
+      label: card.querySelector('[data-summary-label]'),
+      value: card.querySelector('[data-summary-value]'),
+      sub: card.querySelector('[data-summary-sub]'),
+    };
+  });
+}
+
+function updateSummarySlot(slotKey, label, value, sub) {
+  const slots = refs.summarySlots && typeof refs.summarySlots === 'object'
+    ? refs.summarySlots
+    : {};
+  const slot = slots[slotKey];
+  if (!slot) {
+    return;
+  }
+  setTextIfChanged(slot.label, label);
+  setTextIfChanged(slot.value, value);
+  setTextIfChanged(slot.sub, sub);
 }
 
 function setPanelTitle() {
@@ -730,16 +823,34 @@ function renderSummary() {
     return;
   }
   if (!state.snapshot) {
-    refs.summaryGrid.innerHTML = `
-      <div class="dashboard-stat" data-stat-key="status"><span>${escapeHtml(t('summaryStatus', 'Status'))}</span><strong>${escapeHtml(state.lastError ? t('degraded', 'Degraded') : t('booting', 'Booting'))}</strong><small>${escapeHtml(state.lastError ? t('bridgeNotReady', 'Bridge snapshot not ready.') : t('waitingTrafficSamples', 'Waiting for traffic and connection samples.'))}</small></div>
-      <div class="dashboard-stat" data-stat-key="active"><span>${escapeHtml(t('summaryActiveConnections', 'Active Connections'))}</span><strong>0</strong><small>${escapeHtml(t('awaitFirstPoll', 'Awaiting first poll'))}</small></div>
-      <div class="dashboard-stat" data-stat-key="recent"><span>${escapeHtml(t('summaryRecentRequests', 'Recent Requests'))}</span><strong>0</strong><small>${escapeHtml(t('sessionCacheEmpty', 'Session cache empty'))}</small></div>
-      <div class="dashboard-stat" data-stat-key="devices"><span>${escapeHtml(t('summaryObservedDevices', 'Observed Devices'))}</span><strong>0</strong><small>${escapeHtml(t('noSourceEndpoints', 'No source endpoints yet'))}</small></div>
-      <div class="dashboard-stat" data-stat-key="upload"><span>${escapeHtml(t('summaryUploadRate', 'Upload Rate'))}</span><strong>0 B/s</strong><small>${escapeHtml(t('liveFeedInactive', 'Live feed inactive'))}</small></div>
-      <div class="dashboard-stat" data-stat-key="download"><span>${escapeHtml(t('summaryDownloadRate', 'Download Rate'))}</span><strong>0 B/s</strong><small>${escapeHtml(t('liveFeedInactive', 'Live feed inactive'))}</small></div>
-    `;
+    renderSummarySkeleton('empty');
+    updateSummarySlot('status',
+      t('summaryStatus', 'Status'),
+      state.lastError ? t('degraded', 'Degraded') : t('booting', 'Booting'),
+      state.lastError ? t('bridgeNotReady', 'Bridge snapshot not ready.') : t('waitingTrafficSamples', 'Waiting for traffic and connection samples.'));
+    updateSummarySlot('active',
+      t('summaryActiveConnections', 'Active Connections'),
+      '0',
+      t('awaitFirstPoll', 'Awaiting first poll'));
+    updateSummarySlot('recent',
+      t('summaryRecentRequests', 'Recent Requests'),
+      '0',
+      t('sessionCacheEmpty', 'Session cache empty'));
+    updateSummarySlot('devices',
+      t('summaryObservedDevices', 'Observed Devices'),
+      '0',
+      t('noSourceEndpoints', 'No source endpoints yet'));
+    updateSummarySlot('upload',
+      t('summaryUploadRate', 'Upload Rate'),
+      '0 B/s',
+      t('liveFeedInactive', 'Live feed inactive'));
+    updateSummarySlot('download',
+      t('summaryDownloadRate', 'Download Rate'),
+      '0 B/s',
+      t('liveFeedInactive', 'Live feed inactive'));
     return;
   }
+  renderSummarySkeleton('live');
   const summary = state.snapshot.summary || {};
   const activeConnections = Array.isArray(state.snapshot.activeConnections) ? state.snapshot.activeConnections : [];
   const dnsRecords = Array.isArray(state.snapshot.dnsRecords) ? state.snapshot.dnsRecords : [];
@@ -751,38 +862,30 @@ function renderSummary() {
       return acc;
     }, {});
   const topPolicy = Object.entries(busiestPolicy).sort((a, b) => b[1] - a[1])[0];
-  refs.summaryGrid.innerHTML = `
-    <div class="dashboard-stat" data-stat-key="active">
-      <span>${escapeHtml(t('summaryActiveConnections', 'Active Connections'))}</span>
-      <strong>${escapeHtml(String(summary.activeConnections || 0))}</strong>
-      <small>${escapeHtml(pluralize(activeConnections.filter((row) => row.process).length, t('process', 'process')))}</small>
-    </div>
-    <div class="dashboard-stat" data-stat-key="recent">
-      <span>${escapeHtml(t('summaryRecentRequests', 'Recent Requests'))}</span>
-      <strong>${escapeHtml(String(summary.recentRequests || 0))}</strong>
-      <small>${escapeHtml(pluralize(dnsRecords.length, t('dnsHost', 'DNS host')))}</small>
-    </div>
-    <div class="dashboard-stat" data-stat-key="devices">
-      <span>${escapeHtml(t('summaryObservedDevices', 'Observed Devices'))}</span>
-      <strong>${escapeHtml(String(devices.length || 0))}</strong>
-      <small>${escapeHtml(topPolicy ? `${topPolicy[0]} ${t('busiest', 'busiest')}` : t('awaitingPolicyData', 'Awaiting policy data'))}</small>
-    </div>
-    <div class="dashboard-stat" data-stat-key="upload">
-      <span>${escapeHtml(t('summaryUploadRate', 'Upload Rate'))}</span>
-      <strong>${escapeHtml(formatRate(summary.uploadRate || 0))}</strong>
-      <small>${escapeHtml(formatBytes(summary.totalUploadBytes || 0))} ${escapeHtml(t('total', 'total'))}</small>
-    </div>
-    <div class="dashboard-stat" data-stat-key="download">
-      <span>${escapeHtml(t('summaryDownloadRate', 'Download Rate'))}</span>
-      <strong>${escapeHtml(formatRate(summary.downloadRate || 0))}</strong>
-      <small>${escapeHtml(formatBytes(summary.totalDownloadBytes || 0))} ${escapeHtml(t('total', 'total'))}</small>
-    </div>
-    <div class="dashboard-stat" data-stat-key="balance">
-      <span>${escapeHtml(t('summaryTrafficBalance', 'Traffic Balance'))}</span>
-      <strong>${escapeHtml(`${formatBytes(summary.totalDownloadBytes || 0)} / ${formatBytes(summary.totalUploadBytes || 0)}`)}</strong>
-      <small>${escapeHtml(`${t('liveDown', 'Live')} ${formatRate(summary.downloadRate || 0)} down`)}</small>
-    </div>
-  `;
+  updateSummarySlot('active',
+    t('summaryActiveConnections', 'Active Connections'),
+    String(summary.activeConnections || 0),
+    pluralize(activeConnections.filter((row) => row.process).length, t('process', 'process')));
+  updateSummarySlot('recent',
+    t('summaryRecentRequests', 'Recent Requests'),
+    String(summary.recentRequests || 0),
+    pluralize(dnsRecords.length, t('dnsHost', 'DNS host')));
+  updateSummarySlot('devices',
+    t('summaryObservedDevices', 'Observed Devices'),
+    String(devices.length || 0),
+    topPolicy ? `${topPolicy[0]} ${t('busiest', 'busiest')}` : t('awaitingPolicyData', 'Awaiting policy data'));
+  updateSummarySlot('upload',
+    t('summaryUploadRate', 'Upload Rate'),
+    formatRate(summary.uploadRate || 0),
+    `${formatBytes(summary.totalUploadBytes || 0)} ${t('total', 'total')}`);
+  updateSummarySlot('download',
+    t('summaryDownloadRate', 'Download Rate'),
+    formatRate(summary.downloadRate || 0),
+    `${formatBytes(summary.totalDownloadBytes || 0)} ${t('total', 'total')}`);
+  updateSummarySlot('balance',
+    t('summaryTrafficBalance', 'Traffic Balance'),
+    `${formatBytes(summary.totalDownloadBytes || 0)} / ${formatBytes(summary.totalUploadBytes || 0)}`,
+    `${t('liveDown', 'Live')} ${formatRate(summary.downloadRate || 0)} down`);
 }
 
 function renderTabs() {
@@ -798,6 +901,7 @@ function renderTabs() {
 }
 
 function renderAll() {
+  renderLoadingOverlay();
   renderTabs();
   setPanelTitle();
   renderSummary();
@@ -1002,6 +1106,10 @@ export async function initDashboardPanel() {
     bindEvents();
     state.initialized = true;
   }
+  if (!state.snapshot) {
+    state.loading = true;
+  }
+  ensureLoadingOverlay();
   renderAll();
   startPolling();
   dashboardLog('lifecycle', 'init completed', {

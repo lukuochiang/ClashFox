@@ -30,6 +30,7 @@
     "trackersEnabled": false,
     "foxboardEnabled": false,
     "panelEnabled": false,
+    "dashboardEnabled": false,
     "kernelManagerEnabled": false,
     "directoryLocationsEnabled": false,
     "copyShellExportCommandEnabled": false

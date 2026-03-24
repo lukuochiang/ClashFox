@@ -94,6 +94,7 @@ let trayPanelWindow = null;
 let trayPanelVisible = false;
 let trayPanelReady = false;
 let trayPanelHovering = false;
+let trayPanelHoverLeaveTimer = null;
 let trayPanelAnchor = { top: 0, height: 0, rootHeight: 0 };
 let trayPanelLastSize = { width: 0, height: 0 };
 let trayPanelPendingPayload = null;
@@ -193,9 +194,19 @@ function scheduleTraySubmenuClose() {
 }
 
 function scheduleTrayPanelClose() {
+  if (trayPanelHoverLeaveTimer) {
+    clearTimeout(trayPanelHoverLeaveTimer);
+    trayPanelHoverLeaveTimer = null;
+  }
   clearTrayMenuCloseTimer();
   trayMenuClosing = false;
-  hideTrayPanelWindow();
+  trayPanelHoverLeaveTimer = setTimeout(() => {
+    trayPanelHoverLeaveTimer = null;
+    if (trayPanelHovering) {
+      return;
+    }
+    hideTrayPanelWindow();
+  }, 120);
 }
 
 function sendTrayWindowVisibility(windowName, visible) {
@@ -528,7 +539,7 @@ function refreshTrayMenuLabelsOnly() {
         return item;
       }
       if (item.action === 'toggle-system-proxy') {
-        return { ...item, label: labels.networkTakeover || 'Network Takeover' };
+        return { ...item, label: labels.systemProxy || 'System Proxy' };
       }
       if (item.action === 'toggle-tun') {
         return { ...item, label: labels.tun || 'TUN' };
@@ -572,6 +583,9 @@ function refreshTrayMenuLabelsOnly() {
       if (!item || item.type === 'separator') {
         return item;
       }
+      if (item.iconKey === 'kernelManager' && !item.action) {
+        return { ...item, label: labels.kernelUptime || 'Running Time' };
+      }
       if (item.action === 'kernel-start') {
         return { ...item, label: labels.startKernel };
       }
@@ -598,6 +612,9 @@ function refreshTrayMenuLabelsOnly() {
       }
       if (item.action === 'open-work-directory') {
         return { ...item, label: labels.workDirectory || 'Work Directory' };
+      }
+      if (item.action === 'open-helper-directory') {
+        return { ...item, label: labels.helperDirectory || 'Helper Directory' };
       }
       if (item.action === 'open-log-directory') {
         return { ...item, label: labels.logDirectory || 'Log Directory' };
@@ -633,6 +650,7 @@ function buildTrayLabelsSignature(settings = {}) {
 function buildTrayStructureSignature(settings = {}) {
   return JSON.stringify(pickSettingsSubset(settings, [
     'proxy',
+    'dashboardEnabled',
     'providerTrafficEnabled',
     'panelEnabled',
     'kernelManagerEnabled',
@@ -1080,6 +1098,7 @@ function mergeAppearanceAliases(settings = {}) {
     trackersEnabled: readTrayBoolean('trackersEnabled', readTrayBoolean('trayMenuTrackersEnabled', true)),
     foxboardEnabled: readTrayBoolean('foxboardEnabled', readTrayBoolean('trayMenuFoxboardEnabled', true)),
     panelEnabled: readTrayBoolean('panelEnabled', readTrayBoolean('trayMenuPanelEnabled', false)),
+    dashboardEnabled: readTrayBoolean('dashboardEnabled', readTrayBoolean('trayMenuDashboardEnabled', true)),
     kernelManagerEnabled: readTrayBoolean('kernelManagerEnabled', readTrayBoolean('trayMenuKernelManagerEnabled', true)),
     directoryLocationsEnabled: readTrayBoolean('directoryLocationsEnabled', readTrayBoolean('trayMenuDirectoryLocationsEnabled', true)),
     copyShellExportCommandEnabled: readTrayBoolean('copyShellExportCommandEnabled', readTrayBoolean('trayMenuCopyShellExportCommandEnabled', true)),
@@ -1299,6 +1318,14 @@ function normalizeSettingsForStorage(input = {}) {
           : trayMenuConfig.panelEnabled ?? trayMenuConfig.trayMenuPanelEnabled),
       false,
     ),
+    dashboardEnabled: normalizeBool(
+      Object.prototype.hasOwnProperty.call(parsed, 'dashboardEnabled')
+        ? parsed.dashboardEnabled
+        : (Object.prototype.hasOwnProperty.call(parsed, 'trayMenuDashboardEnabled')
+          ? parsed.trayMenuDashboardEnabled
+          : trayMenuConfig.dashboardEnabled ?? trayMenuConfig.trayMenuDashboardEnabled),
+      true,
+    ),
     kernelManagerEnabled: normalizeBool(
       Object.prototype.hasOwnProperty.call(parsed, 'kernelManagerEnabled')
         ? parsed.kernelManagerEnabled
@@ -1334,6 +1361,7 @@ function normalizeSettingsForStorage(input = {}) {
   delete parsed.trackersEnabled;
   delete parsed.foxboardEnabled;
   delete parsed.panelEnabled;
+  delete parsed.dashboardEnabled;
   delete parsed.kernelManagerEnabled;
   delete parsed.directoryLocationsEnabled;
   delete parsed.copyShellExportCommandEnabled;
@@ -1342,6 +1370,7 @@ function normalizeSettingsForStorage(input = {}) {
   delete parsed.trayMenuTrackersEnabled;
   delete parsed.trayMenuFoxboardEnabled;
   delete parsed.trayMenuPanelEnabled;
+  delete parsed.trayMenuDashboardEnabled;
   delete parsed.trayMenuKernelManagerEnabled;
   delete parsed.trayMenuDirectoryLocationsEnabled;
   delete parsed.trayMenuCopyShellExportCommandEnabled;
@@ -5580,6 +5609,7 @@ function resolveConnectivityToneByLatency(rawLatency) {
   return 'bad';
 }
 
+
 function pickOverviewInternetLatencyValue(data = {}) {
   if (!data || typeof data !== 'object') {
     return '';
@@ -5713,18 +5743,12 @@ async function refreshTrayMenuLiveState() {
   }
   const configPath = getConfigPathFromSettings();
   const snapshot = await getConnectivityQualitySnapshot(configPath, true);
-  const changed = patchTrayMenuConnectivityBadge(snapshot);
-  if (!changed) {
+  const connectivityChanged = patchTrayMenuConnectivityBadge(snapshot);
+  if (!connectivityChanged) {
     return;
   }
   if (trayMenuRendererReady && trayMenuWindow && !trayMenuWindow.isDestroyed()) {
     trayMenuWindow.webContents.send('clashfox:trayMenu:update', trayMenuData);
-  }
-  if (traySubmenuVisible && traySubmenuPendingPayload && traySubmenuPendingPayload.key === 'network') {
-    sendTraySubmenuUpdate({
-      key: 'network',
-      items: trayMenuData.submenus.network,
-    });
   }
 }
 
@@ -6715,6 +6739,26 @@ async function waitForKernelRunningFromTray(sudoPass = '', timeoutMs = 12000, in
   return false;
 }
 
+async function waitForKernelStateFromTray(expectedRunning, sudoPass = '', timeoutMs = 12000, intervalMs = 350) {
+  const expected = Boolean(expectedRunning);
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() <= deadline) {
+    const running = await getKernelRunningSilently(sudoPass);
+    if (running === null) {
+      return null;
+    }
+    if (Boolean(running) === expected) {
+      return expected;
+    }
+    await sleep(intervalMs);
+  }
+  const finalState = await getKernelRunningSilently(sudoPass);
+  if (finalState === null) {
+    return null;
+  }
+  return Boolean(finalState);
+}
+
 async function readSystemProxyEnabledSnapshot(configPath = '') {
   const settings = readAppSettings();
   const expectedPort = String(
@@ -7074,9 +7118,146 @@ function openMainPage(page) {
   sendNavigate();
 }
 
-function openDashboardPanel() {
+function resolveDashboardOverlayThemeMode(settings = null) {
+  const appearance = settings && settings.appearance && typeof settings.appearance === 'object'
+    ? settings.appearance
+    : {};
+  const preference = String(
+    (settings && settings.theme)
+    || appearance.theme
+    || appearance.colorMode
+    || '',
+  ).trim().toLowerCase();
+  if (preference === 'day' || preference === 'light') {
+    return 'day';
+  }
+  if (preference === 'night' || preference === 'dark') {
+    return 'night';
+  }
+  return 'auto';
+}
+
+function buildDashboardStoppedOverlayDataUrl(labels = TRAY_I18N.en, themeMode = 'auto') {
+  const escapeHtml = (value = '') => String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+  const title = escapeHtml(String(labels.dashboard || 'Dashboard').trim() || 'Dashboard');
+  const message = escapeHtml(String(labels.notRunning || 'Kernel is not running.').trim() || 'Kernel is not running.');
+  const normalizedMode = ['day', 'night', 'auto'].includes(String(themeMode || '').trim().toLowerCase())
+    ? String(themeMode || '').trim().toLowerCase()
+    : 'auto';
+  const forcedNight = normalizedMode === 'night';
+  const forcedDay = normalizedMode === 'day';
+  const colorScheme = forcedNight ? 'dark' : (forcedDay ? 'light' : 'dark light');
+  const initialIsDark = forcedNight || (!forcedDay && Boolean(nativeTheme && nativeTheme.shouldUseDarkColors));
+  const pageBackground = initialIsDark ? '#0f1216' : '#f5f8fc';
+  const textColor = initialIsDark ? '#e5e7eb' : '#1e293b';
+  const maskBackground = initialIsDark ? 'rgba(9, 14, 22, 0.36)' : 'rgba(226, 234, 244, 0.34)';
+  const cardBackground = initialIsDark ? 'rgba(22, 30, 42, 0.88)' : 'rgba(255, 255, 255, 0.9)';
+  const cardBorder = initialIsDark ? 'rgba(127, 145, 168, 0.28)' : 'rgba(148, 163, 184, 0.30)';
+  const cardShadow = initialIsDark ? '0 18px 36px rgba(2, 6, 23, 0.22)' : '0 12px 28px rgba(15, 23, 42, 0.12)';
+  const titleColor = initialIsDark ? '#f8fafc' : '#0f172a';
+  const messageColor = initialIsDark ? '#cbd5e1' : '#475569';
+  const autoThemeCss = normalizedMode === 'auto'
+    ? `
+  @media (prefers-color-scheme: dark) {
+    html, body { background: #0f1216; color: #e5e7eb; }
+    .mask { background: rgba(9, 14, 22, 0.36); }
+    .card {
+      background: rgba(22, 30, 42, 0.88);
+      border-color: rgba(127, 145, 168, 0.28);
+      box-shadow: 0 18px 36px rgba(2, 6, 23, 0.22);
+    }
+    .title { color: #f8fafc; }
+    .message { color: #cbd5e1; }
+  }
+  @media (prefers-color-scheme: light) {
+    html, body { background: #f5f8fc; color: #1e293b; }
+    .mask { background: rgba(226, 234, 244, 0.34); }
+    .card {
+      background: rgba(255, 255, 255, 0.9);
+      border-color: rgba(148, 163, 184, 0.30);
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+    }
+    .title { color: #0f172a; }
+    .message { color: #475569; }
+  }`
+    : '';
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${title}</title>
+<style>
+  :root {
+    color-scheme: ${colorScheme};
+  }
+  html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    background: ${pageBackground};
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    color: ${textColor};
+  }
+  .mask {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: ${maskBackground};
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .card {
+    min-width: 320px;
+    max-width: min(560px, calc(100vw - 48px));
+    padding: 18px 20px;
+    border-radius: 10px;
+    background: ${cardBackground};
+    border: 1px solid ${cardBorder};
+    box-shadow: ${cardShadow};
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+  }
+  .title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.4;
+    color: ${titleColor};
+  }
+  .message {
+    margin: 8px 0 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: ${messageColor};
+  }
+${autoThemeCss}
+</style>
+</head>
+<body>
+  <div class="mask">
+    <div class="card" role="status" aria-live="polite">
+      <h1 class="title">${title}</h1>
+      <p class="message">${message}</p>
+    </div>
+  </div>
+</body>
+</html>`;
+  return `data:text/html;charset=UTF-8,${encodeURIComponent(html)}`;
+}
+
+async function openDashboardPanel() {
   try {
     const settings = readAppSettings();
+    const labels = getTrayLabels();
+    const overlayThemeMode = resolveDashboardOverlayThemeMode(settings);
     const panelManager = settings && typeof settings.panelManager === 'object'
       ? settings.panelManager
       : {};
@@ -7097,7 +7278,11 @@ function openDashboardPanel() {
       dashboardUrl.searchParams.set('secret', secret);
     }
     dashboardUrl.searchParams.set('_ts', String(Date.now()));
-    const url = dashboardUrl.toString();
+    const runningStatus = await runBridgeWithAutoAuth('status');
+    const kernelRunning = Boolean(runningStatus && runningStatus.ok && runningStatus.data && runningStatus.data.running);
+    const url = kernelRunning
+      ? dashboardUrl.toString()
+      : buildDashboardStoppedOverlayDataUrl(labels, overlayThemeMode);
     if (dashboardWindow && !dashboardWindow.isDestroyed()) {
       dashboardWindow.show();
       dashboardWindow.focus();
@@ -8148,12 +8333,7 @@ function buildProviderSubscriptionOverviewData(rawData = {}) {
   const now = Date.now();
   const records = normalizeProxyProviderRecords(rawData);
   const items = records
-    .filter((record) => {
-      if (record.vehicleType === 'FILE') {
-        return false;
-      }
-      return record.total > 0 || record.upload > 0 || record.download > 0 || record.expire > 0;
-    })
+    .filter((record) => Boolean(record && record.name) && String(record.vehicleType || '').toUpperCase() === 'HTTP')
     .map((record) => {
       const used = Math.max(0, record.upload + record.download);
       const total = Math.max(0, record.total);
@@ -8590,32 +8770,34 @@ function buildTrayProxyGroupTreeData(rawData = {}) {
       submenuKey,
     });
     submenus[submenuKey] = proxies.length
-      ? proxies.flatMap((proxy, index) => {
+        ? proxies.flatMap((proxy, index) => {
           const delayValue = Number(proxy.delay);
-          const hasDelay = Number.isFinite(delayValue) && delayValue >= 0;
+          const hasDelay = Number.isFinite(delayValue) && delayValue > 0;
           const delayStatus = resolveTrayProxyStatus(proxy.delay, proxy.alive, false);
-          const delayTone = delayStatus === 'fast'
-            ? 'good'
-            : (delayStatus === 'medium'
-              ? 'warn'
-              : (delayStatus === 'slow'
-                ? 'slow'
-                : (delayStatus === 'dead'
-                  ? 'bad'
-                  : 'neutral')));
           const nextItem = {
             type: 'child',
             label: proxy.name || '-',
-            rightBadge: {
-              text: hasDelay ? `${Math.round(delayValue)} ms` : '-',
-              tone: delayTone,
-            },
             status: delayStatus,
             checked: Boolean(proxy.isCurrent),
             action: 'proxy-select',
             value: proxy.name || '',
             groupName,
             submenuKey,
+          };
+          const delayTone = hasDelay
+            ? (delayStatus === 'fast'
+              ? 'good'
+              : (delayStatus === 'medium'
+                ? 'warn'
+                : (delayStatus === 'slow'
+                  ? 'slow'
+                  : (delayStatus === 'dead'
+                    ? 'bad'
+                    : 'neutral'))))
+            : 'bad';
+          nextItem.rightBadge = {
+            text: hasDelay ? `${Math.round(delayValue)} ms` : '失败',
+            tone: delayTone,
           };
           return index >= proxies.length - 1 ? [nextItem] : [nextItem, { type: 'separator' }];
         })
@@ -8637,6 +8819,47 @@ function buildTrayProxyGroupTreeData(rawData = {}) {
 }
 
 async function loadProvidersProxiesRaw() {
+  const countProviderEntries = (payload = null) => {
+    if (!payload || typeof payload !== 'object') {
+      return 0;
+    }
+    const providers = payload.providers && typeof payload.providers === 'object'
+      ? payload.providers
+      : null;
+    if (providers) {
+      return Object.keys(providers).length;
+    }
+    return 0;
+  };
+  const loadViaController = async () => {
+    try {
+      const { baseUrl, secret } = resolveControllerAccessFromSettings('', '');
+      if (!baseUrl) {
+        return { ok: false, error: 'controller_missing' };
+      }
+      const headers = {};
+      if (secret) {
+        headers.Authorization = `Bearer ${secret}`;
+      }
+      const response = await fetch(`${baseUrl}/providers/proxies`, {
+        method: 'GET',
+        headers,
+      });
+      if (!response.ok) {
+        const details = (await response.text().catch(() => '')) || `http_status=${response.status}`;
+        return { ok: false, error: 'request_failed', details };
+      }
+      const data = await response.json();
+      const payload = data && typeof data === 'object' ? data : {};
+      return { ok: true, data: payload, source: 'controller' };
+    } catch (error) {
+      return {
+        ok: false,
+        error: 'request_failed',
+        details: String((error && error.message) || error || ''),
+      };
+    }
+  };
   const configPath = getConfigPathFromSettings();
   const args = [];
   if (configPath) {
@@ -8645,10 +8868,29 @@ async function loadProvidersProxiesRaw() {
   args.push(...getControllerArgsFromSettings());
   const response = await runBridgeWithAutoAuth('providers-proxies', args);
   if (!response || !response.ok) {
-    return response || { ok: false, error: 'providers_proxies_failed' };
+    const fallback = await loadViaController();
+    if (fallback && fallback.ok) {
+      return fallback;
+    }
+    return {
+      ...(response || { ok: false, error: 'providers_proxies_failed' }),
+      fallback: fallback || null,
+    };
   }
   const payload = response.data && typeof response.data === 'object' ? response.data : {};
-  return { ok: true, data: payload };
+  if (countProviderEntries(payload) <= 0) {
+    const fallback = await loadViaController();
+    if (fallback && fallback.ok && countProviderEntries(fallback.data) > 0) {
+      return fallback;
+    }
+    return {
+      ok: true,
+      data: payload,
+      source: 'bridge',
+      fallback: fallback && !fallback.ok ? fallback : null,
+    };
+  }
+  return { ok: true, data: payload, source: 'bridge' };
 }
 
 function parseRuleTimestamp(value) {
@@ -9225,7 +9467,12 @@ function patchTrayMenuNetworkState({ systemProxyEnabled, tunEnabled } = {}) {
     }
     return item;
   });
-  if (traySubmenuWindow && traySubmenuVisible) {
+  if (
+    traySubmenuWindow
+    && traySubmenuVisible
+    && traySubmenuPendingPayload
+    && traySubmenuPendingPayload.key === 'network'
+  ) {
     sendTraySubmenuUpdate({
       key: 'network',
       items: trayMenuData.submenus.network,
@@ -9256,19 +9503,69 @@ function patchTrayMenuNetworkState({ systemProxyEnabled, tunEnabled } = {}) {
 function buildTrayProviderPayload({ providerTrafficResult, showProviderTraffic }) {
   let providerTraffic = null;
   let outboundProxyTree = null;
+  let providerTrafficError = '';
+  const emptyProviderTraffic = {
+    generatedAt: Date.now(),
+    summary: {
+      providerCount: 0,
+      totalBytes: 0,
+      usedBytes: 0,
+      remainingBytes: 0,
+      usedPercent: 0,
+    },
+    items: [],
+    error: '',
+  };
   try {
     const rawProviders = providerTrafficResult && providerTrafficResult.status === 'fulfilled'
       ? providerTrafficResult.value
       : null;
+    if (showProviderTraffic) {
+      providerTraffic = emptyProviderTraffic;
+    }
     if (rawProviders && rawProviders.ok) {
       if (showProviderTraffic) {
         providerTraffic = buildProviderSubscriptionOverviewData(rawProviders.data || {});
+        if (!providerTraffic.items.length && rawProviders.fallback && rawProviders.fallback.error) {
+          providerTrafficError = String(rawProviders.fallback.error || '').trim();
+        }
       }
       outboundProxyTree = buildProviderProxyTreeData(rawProviders.data || {});
+    } else if (rawProviders && !rawProviders.ok) {
+      providerTrafficError = String(rawProviders.error || '').trim()
+        || String(rawProviders.details || '').trim()
+        || 'providers_proxies_failed';
+      if (!providerTrafficError && rawProviders.fallback && rawProviders.fallback.error) {
+        providerTrafficError = String(rawProviders.fallback.error || '').trim();
+      }
+    } else if (providerTrafficResult && providerTrafficResult.status === 'rejected') {
+      providerTrafficError = String(
+        (providerTrafficResult.reason && providerTrafficResult.reason.message)
+        || providerTrafficResult.reason
+        || 'providers_proxies_failed',
+      ).trim();
     }
   } catch {
-    providerTraffic = null;
+    if (showProviderTraffic) {
+      providerTraffic = {
+        generatedAt: Date.now(),
+        summary: {
+          providerCount: 0,
+          totalBytes: 0,
+          usedBytes: 0,
+          remainingBytes: 0,
+          usedPercent: 0,
+        },
+        items: [],
+      };
+    } else {
+      providerTraffic = null;
+    }
+    providerTrafficError = 'providers_proxies_failed';
     outboundProxyTree = null;
+  }
+  if (providerTraffic && typeof providerTraffic === 'object') {
+    providerTraffic.error = providerTrafficError;
   }
   return { providerTraffic, outboundProxyTree };
 }
@@ -9293,6 +9590,7 @@ function buildTrayMenuShell() {
       }
     : { text: '-', tone: 'neutral' };
   const trayFeatureFlags = {
+    showDashboard: traySettings ? traySettings.dashboardEnabled !== false : true,
     showKernelManager: traySettings ? traySettings.kernelManagerEnabled !== false : true,
     showDirectoryLocations: traySettings ? traySettings.directoryLocationsEnabled !== false : true,
     showTrackers: traySettings ? traySettings.trackersEnabled !== false : true,
@@ -9338,7 +9636,6 @@ function buildTrayMenuShell() {
     items: buildTrayMainMenuItems({
       labels,
       currentOutboundBadge,
-      dashboardEnabled,
       trayFeatureFlags,
     }),
     submenus: buildTraySubmenuData({
@@ -9386,7 +9683,6 @@ function buildTrayOutboundModeItems({ labels, currentOutboundMode }) {
 function buildTrayMainMenuItems({
   labels,
   currentOutboundBadge,
-  dashboardEnabled,
   trayFeatureFlags,
 }) {
   const items = [
@@ -9395,9 +9691,11 @@ function buildTrayMainMenuItems({
     { type: 'action', label: labels.networkTakeover || 'Network Takeover', submenu: 'network', iconKey: 'networkTakeover' },
     { type: 'separator' },
     { type: 'action', label: labels.outboundMode || 'Outbound Mode', rightText: `[${currentOutboundBadge}]`, submenu: 'outbound', iconKey: 'outboundMode' },
-    { type: 'separator' },
-    { type: 'action', label: labels.dashboard, action: 'open-dashboard', enabled: dashboardEnabled, rightText: '⌘ 2', shortcut: 'Cmd+2', iconKey: 'dashboard' },
   ];
+  if (trayFeatureFlags.showDashboard) {
+    items.push({ type: 'separator' });
+    items.push({ type: 'action', label: labels.dashboard, action: 'open-dashboard', enabled: true, rightText: '⌘ 2', shortcut: 'Cmd+2', iconKey: 'dashboard' });
+  }
   if (trayFeatureFlags.showPanel) {
     items.splice(5, 0, { type: 'separator' }, { type: 'action', label: labels.panel || 'Panel', submenu: 'panel', iconKey: 'panel' });
   }
@@ -9445,7 +9743,7 @@ function buildTraySubmenuData({
     network: [
       {
         type: 'action',
-        label: labels.networkTakeover || 'Network Takeover',
+        label: labels.systemProxy || 'System Proxy',
         action: 'toggle-system-proxy',
         checked: networkTakeoverEnabled,
         enabled: true,
@@ -9501,11 +9799,22 @@ function buildTraySubmenuData({
       { type: 'separator' },
       { type: 'action', label: labels.userConfigDirectory || 'Config Directory', action: 'open-config-directory', iconKey: 'configDir' },
       { type: 'separator' },
-      { type: 'action', label: labels.workDirectory || 'Work Directory', action: 'open-work-directory', iconKey: 'workDir' },
+      { type: 'action', label: labels.helperDirectory || 'Helper Directory', action: 'open-helper-directory', iconKey: 'helperDir' },
       { type: 'separator' },
       { type: 'action', label: labels.logDirectory || 'Log Directory', action: 'open-log-directory', iconKey: 'logDir' },
     ],
     kernel: [
+      {
+        type: 'action',
+        label: labels.kernelUptime || 'Running Time',
+        enabled: false,
+        rightBadge: {
+          text: dashboardEnabled ? '00:00:00' : '-',
+          tone: dashboardEnabled ? 'good' : 'neutral',
+        },
+        iconKey: 'kernelManager',
+      },
+      { type: 'separator' },
       { type: 'action', label: labels.startKernel, action: 'kernel-start', enabled: !dashboardEnabled, iconKey: 'kernelStart' },
       { type: 'separator' },
       { type: 'action', label: labels.stopKernel, action: 'kernel-stop', enabled: dashboardEnabled, iconKey: 'kernelStop' },
@@ -9680,6 +9989,7 @@ async function buildTrayMenuOnce() {
   const trayStatusLabel = dashboardEnabled ? runningLabel : stoppedLabel;
 
   const trayFeatureFlags = {
+    showDashboard: traySettings ? traySettings.dashboardEnabled !== false : true,
     showKernelManager: traySettings ? traySettings.kernelManagerEnabled !== false : true,
     showDirectoryLocations: traySettings ? traySettings.directoryLocationsEnabled !== false : true,
     showTrackers: traySettings ? traySettings.trackersEnabled !== false : true,
@@ -9698,7 +10008,6 @@ async function buildTrayMenuOnce() {
   const items = buildTrayMainMenuItems({
     labels,
     currentOutboundBadge,
-    dashboardEnabled,
     trayFeatureFlags,
   });
   let outboundProxyCard = null;
@@ -9895,6 +10204,10 @@ function hideTraySubmenuWindow() {
 }
 
 function hideTrayPanelWindow() {
+  if (trayPanelHoverLeaveTimer) {
+    clearTimeout(trayPanelHoverLeaveTimer);
+    trayPanelHoverLeaveTimer = null;
+  }
   trayPanelVisible = false;
   trayPanelHovering = false;
   trayPanelPayloadSignature = '';
@@ -10241,7 +10554,7 @@ async function openTrayPanelWindow(payload = {}) {
     key: 'panel',
     items,
   });
-  if (!popup.isVisible()) {
+  if (trayPanelReady && !popup.isVisible()) {
     popup.show();
   }
   sendTrayWindowVisibility('panel', true);
@@ -10648,52 +10961,67 @@ async function handleTrayMenuAction(action, payload = {}) {
       return { ok: false, submenu, error: response && response.error ? response.error : 'proxy_select_failed' };
     }
     case 'kernel-start': {
+      let kernelRunning = null;
       try {
         const status = await getKernelRunning(labels);
         if (!status) {
           return { ok: false, submenu: 'kernel' };
         }
         if (status.running) {
+          kernelRunning = true;
           emitMainToast(uiLabels.alreadyRunning || 'Kernel is already running.', 'info');
-          return { ok: true, submenu: 'kernel' };
+          return { ok: true, submenu: 'kernel', kernelRunning };
         }
         emitMainCoreAction({ action: 'start', phase: 'start' });
         const commandStartedAt = Date.now();
         const started = await runTrayCommand('start', ['--config', configPath], labels, status.sudoPass);
         if (started.ok) {
           const running = await waitForKernelRunningFromTray(started.sudoPass || status.sudoPass || '');
+          kernelRunning = Boolean(running);
           if (running) {
             updateTrayCoreStartupEstimate(Date.now() - commandStartedAt);
             emitMainToast(uiLabels.startSuccess || 'Kernel started.', 'info');
           } else {
             emitMainToast(uiLabels.startFailed || 'Start failed.', 'error');
           }
+        } else {
+          kernelRunning = await getKernelRunningSilently(status.sudoPass || '');
         }
       } finally {
         emitTrayRefresh();
       }
-      return { ok: true, submenu: 'kernel' };
+      return { ok: true, submenu: 'kernel', kernelRunning: kernelRunning === null ? false : Boolean(kernelRunning) };
     }
     case 'kernel-stop': {
+      let kernelRunning = null;
       try {
         const status = await getKernelRunning(labels);
         if (!status) {
           return { ok: false, submenu: 'kernel' };
         }
         if (!status.running) {
+          kernelRunning = false;
           emitMainToast(uiLabels.alreadyStopped || 'Kernel is already stopped.', 'info');
-          return { ok: true, submenu: 'kernel' };
+          return { ok: true, submenu: 'kernel', kernelRunning };
         }
+        emitMainCoreAction({ action: 'stop', phase: 'start' });
         const stopped = await runTrayCommand('stop', [], labels, status.sudoPass);
         if (stopped.ok) {
-          emitMainToast(uiLabels.stopSuccess || uiLabels.stopped || 'Kernel stopped.', 'info');
+          const stoppedState = await waitForKernelStateFromTray(false, stopped.sudoPass || status.sudoPass || '', 10000, 300);
+          kernelRunning = stoppedState === null ? true : Boolean(stoppedState);
+          if (!kernelRunning) {
+            emitMainToast(uiLabels.stopSuccess || uiLabels.stopped || 'Kernel stopped.', 'info');
+          }
+        } else {
+          kernelRunning = await getKernelRunningSilently(status.sudoPass || '');
         }
       } finally {
         emitTrayRefresh();
       }
-      return { ok: true, submenu: 'kernel' };
+      return { ok: true, submenu: 'kernel', kernelRunning: kernelRunning === null ? true : Boolean(kernelRunning) };
     }
     case 'kernel-restart': {
+      let kernelRunning = null;
       try {
         const status = await getKernelRunning(labels);
         if (!status) {
@@ -10706,14 +11034,17 @@ async function handleTrayMenuAction(action, payload = {}) {
           const started = await runTrayCommand('start', ['--config', configPath], labels, status.sudoPass);
           if (started.ok) {
             const running = await waitForKernelRunningFromTray(started.sudoPass || status.sudoPass || '');
+            kernelRunning = Boolean(running);
             if (running) {
               updateTrayCoreStartupEstimate(Date.now() - commandStartedAt);
               emitMainToast(uiLabels.startSuccess || 'Kernel started.', 'info');
             } else {
               emitMainToast(uiLabels.startFailed || 'Start failed.', 'error');
             }
+          } else {
+            kernelRunning = await getKernelRunningSilently(status.sudoPass || '');
           }
-          return { ok: true, submenu: 'kernel' };
+          return { ok: true, submenu: 'kernel', kernelRunning: kernelRunning === null ? false : Boolean(kernelRunning) };
         }
         const transitionDelayMs = getTrayRestartTransitionDelayMs();
         emitMainCoreAction({ action: 'restart', phase: 'transition', delayMs: transitionDelayMs });
@@ -10722,17 +11053,20 @@ async function handleTrayMenuAction(action, payload = {}) {
         const restarted = await runTrayCommand('restart', ['--config', configPath], labels, status.sudoPass);
         if (restarted.ok) {
           const running = await waitForKernelRunningFromTray(restarted.sudoPass || status.sudoPass || '');
+          kernelRunning = Boolean(running);
           if (running) {
             updateTrayCoreStartupEstimate(Date.now() - commandStartedAt);
             emitMainToast(uiLabels.restartSuccess || 'Kernel restarted.', 'info');
           } else {
             emitMainToast(uiLabels.startFailed || 'Start failed.', 'error');
           }
+        } else {
+          kernelRunning = await getKernelRunningSilently(status.sudoPass || '');
         }
       } finally {
         emitTrayRefresh();
       }
-      return { ok: true, submenu: 'kernel' };
+      return { ok: true, submenu: 'kernel', kernelRunning: kernelRunning === null ? false : Boolean(kernelRunning) };
     }
     case 'open-user-directory': {
       const opened = await openDirectoryInFinder(APP_DATA_DIR);
@@ -10743,11 +11077,36 @@ async function handleTrayMenuAction(action, payload = {}) {
       return { ok: opened, hide: false, submenu: 'directory' };
     }
     case 'open-work-directory': {
+      try {
+        fs.mkdirSync(WORK_DIR, { recursive: true });
+      } catch {
+        // ignore
+      }
       const opened = await openDirectoryInFinder(WORK_DIR);
       return { ok: opened, hide: false, submenu: 'directory' };
     }
+    case 'open-helper-directory': {
+      const helperDir = process.platform === 'darwin'
+        ? path.resolve(os.homedir(), 'Library', 'Application Support', 'ClashFox', 'helper')
+        : HELPER_USER_DIR;
+      try {
+        fs.mkdirSync(helperDir, { recursive: true });
+      } catch {
+        // ignore
+      }
+      const opened = await openDirectoryInFinder(helperDir);
+      return { ok: opened, hide: false, submenu: 'directory' };
+    }
     case 'open-log-directory': {
-      const opened = await openDirectoryInFinder(path.join(APP_DATA_DIR, 'logs'));
+      const logDir = process.platform === 'darwin'
+        ? path.resolve(os.homedir(), 'Library', 'Application Support', 'ClashFox', 'logs')
+        : path.join(APP_DATA_DIR, 'logs');
+      try {
+        fs.mkdirSync(logDir, { recursive: true });
+      } catch {
+        // ignore
+      }
+      const opened = await openDirectoryInFinder(logDir);
       return { ok: opened, hide: false, submenu: 'directory' };
     }
     default:
@@ -11879,6 +12238,7 @@ app.whenReady().then(() => {
           trayMenuTrackersEnabled: 'trackersEnabled',
           trayMenuFoxboardEnabled: 'foxboardEnabled',
           trayMenuPanelEnabled: 'panelEnabled',
+          trayMenuDashboardEnabled: 'dashboardEnabled',
           trayMenuKernelManagerEnabled: 'kernelManagerEnabled',
           trayMenuDirectoryLocationsEnabled: 'directoryLocationsEnabled',
           trayMenuCopyShellExportCommandEnabled: 'copyShellExportCommandEnabled',
@@ -11909,6 +12269,7 @@ app.whenReady().then(() => {
       ensureTrayFlag('trackersEnabled');
       ensureTrayFlag('foxboardEnabled');
       ensureTrayFlag('panelEnabled');
+      ensureTrayFlag('dashboardEnabled');
       ensureTrayFlag('kernelManagerEnabled');
       ensureTrayFlag('directoryLocationsEnabled');
       ensureTrayFlag('copyShellExportCommandEnabled');
@@ -11917,6 +12278,7 @@ app.whenReady().then(() => {
       ensureTrayFlag('trayMenuTrackersEnabled');
       ensureTrayFlag('trayMenuFoxboardEnabled');
       ensureTrayFlag('trayMenuPanelEnabled');
+      ensureTrayFlag('trayMenuDashboardEnabled');
       ensureTrayFlag('trayMenuKernelManagerEnabled');
       ensureTrayFlag('trayMenuDirectoryLocationsEnabled');
       ensureTrayFlag('trayMenuCopyShellExportCommandEnabled');
@@ -11926,6 +12288,7 @@ app.whenReady().then(() => {
         'trackersEnabled',
         'foxboardEnabled',
         'panelEnabled',
+        'dashboardEnabled',
         'kernelManagerEnabled',
         'directoryLocationsEnabled',
         'copyShellExportCommandEnabled',
@@ -11934,6 +12297,7 @@ app.whenReady().then(() => {
         'trayMenuTrackersEnabled',
         'trayMenuFoxboardEnabled',
         'trayMenuPanelEnabled',
+        'trayMenuDashboardEnabled',
         'trayMenuKernelManagerEnabled',
         'trayMenuDirectoryLocationsEnabled',
         'trayMenuCopyShellExportCommandEnabled',
