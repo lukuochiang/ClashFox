@@ -165,7 +165,9 @@ let foxRankTabPanelSkins = document.getElementById('foxRankTabPanelSkins');
 let foxRankLogList = document.getElementById('foxRankLogList');
 let foxRankBadgeList = document.getElementById('foxRankBadgeList');
 let foxRankSkinList = document.getElementById('foxRankSkinList');
+let foxRankShareSection = document.getElementById('foxRankShareSection');
 let foxRankSharePreview = document.getElementById('foxRankSharePreview');
+let foxRankPreviewPngBtn = document.getElementById('foxRankPreviewPngBtn');
 let foxRankCopySummaryBtn = document.getElementById('foxRankCopySummaryBtn');
 let foxRankExportPngBtn = document.getElementById('foxRankExportPngBtn');
 let foxRankBriefModal = document.getElementById('foxRankBriefModal');
@@ -178,6 +180,7 @@ let foxRankBriefOpenDetail = document.getElementById('foxRankBriefOpenDetail');
 let sidebarFoxDivider = null;
 let noticePopTimer = null;
 let topNavOverflowRaf = null;
+let foxRankShareDrawerTimer = null;
 let foxRankActiveTab = 'log';
 let foxRankImpactToastAt = 0;
 let foxRankPanelExpanded = false;
@@ -2543,8 +2546,11 @@ function applyFoxRankLocalizedUi() {
   if (foxRankCopySummaryBtn && !foxRankCopySummaryBtn.disabled) {
     foxRankCopySummaryBtn.textContent = foxRankText('copySummary', 'Copy Summary');
   }
+  if (foxRankPreviewPngBtn && !foxRankPreviewPngBtn.disabled) {
+    foxRankPreviewPngBtn.textContent = foxRankText('previewPng', 'Preview Share Card');
+  }
   if (foxRankExportPngBtn && !foxRankExportPngBtn.disabled) {
-    foxRankExportPngBtn.textContent = foxRankText('exportPng', 'Export PNG');
+    foxRankExportPngBtn.textContent = foxRankText('exportPng', 'Export Share Card');
   }
   if (foxRankBriefClose) {
     foxRankBriefClose.textContent = foxRankText('later', 'Later');
@@ -5764,6 +5770,18 @@ function setNodeTextIfChanged(node, value) {
   node.textContent = next;
 }
 
+function setNodeHtmlIfChanged(node, html) {
+  if (!node) {
+    return false;
+  }
+  const next = String(html ?? '');
+  if (node.innerHTML === next) {
+    return false;
+  }
+  node.innerHTML = next;
+  return true;
+}
+
 function syncOverflowTooltip(node, options = {}) {
   if (!node) {
     return;
@@ -5810,17 +5828,6 @@ function syncStaticTooltip(node, value, options = {}) {
     delete node.dataset.position;
     node.removeAttribute('aria-label');
   }
-}
-
-function setNodeHtmlIfChanged(node, value) {
-  if (!node) {
-    return;
-  }
-  const next = String(value ?? '');
-  if (node.innerHTML === next) {
-    return;
-  }
-  node.innerHTML = next;
 }
 
 function resolveSidebarFoxDividerState() {
@@ -8824,15 +8831,14 @@ async function copyFoxRankSummary(snapshot = null) {
   }
 }
 
-function exportFoxRankCardPng(snapshot = null) {
+function buildFoxRankExportCanvas(snapshot = null) {
   const data = snapshot || getFoxRankSnapshot();
   const canvas = document.createElement('canvas');
   canvas.width = 980;
   canvas.height = 580;
   const ctx = canvas.getContext('2d');
   if (!ctx) {
-    showToast(foxRankText('exportFailed', 'Export failed'), 'error');
-    return;
+    return null;
   }
 
   const isLightTheme = state.theme === 'day';
@@ -9006,12 +9012,66 @@ function exportFoxRankCardPng(snapshot = null) {
   ctx.fillText('Powered by ClashFox', 916, footerY + 32);
   ctx.textAlign = 'left';
 
-  // 导出
+  return canvas;
+}
+
+function exportFoxRankCardPng(snapshot = null) {
+  const canvas = buildFoxRankExportCanvas(snapshot);
+  if (!canvas) {
+    showToast(foxRankText('exportFailed', 'Export failed'), 'error');
+    return;
+  }
   const anchor = document.createElement('a');
   anchor.href = canvas.toDataURL('image/png');
+  const data = snapshot || getFoxRankSnapshot();
   anchor.download = `clashfox-fox-rank-lv${data.tier.index + 1}-${Date.now()}.png`;
   anchor.click();
   showToast(foxRankText('pngExported', 'Fox Rank PNG exported'), 'info');
+}
+
+function openFoxRankShareSection() {
+  if (!foxRankShareSection) {
+    return;
+  }
+  if (foxRankShareDrawerTimer) {
+    clearTimeout(foxRankShareDrawerTimer);
+    foxRankShareDrawerTimer = null;
+  }
+  if (foxRankShareSection.hidden) {
+    foxRankShareSection.hidden = false;
+    requestAnimationFrame(() => {
+      if (foxRankShareSection && !foxRankShareSection.hidden) {
+        foxRankShareSection.classList.add('is-visible');
+      }
+    });
+    return;
+  }
+  closeFoxRankShareSection();
+}
+
+function closeFoxRankShareSection(immediate = false) {
+  if (!foxRankShareSection) {
+    return;
+  }
+  if (foxRankShareDrawerTimer) {
+    clearTimeout(foxRankShareDrawerTimer);
+    foxRankShareDrawerTimer = null;
+  }
+  if (foxRankShareSection.hidden) {
+    foxRankShareSection.classList.remove('is-visible');
+    return;
+  }
+  foxRankShareSection.classList.remove('is-visible');
+  if (immediate) {
+    foxRankShareSection.hidden = true;
+    return;
+  }
+  foxRankShareDrawerTimer = setTimeout(() => {
+    if (foxRankShareSection && !foxRankShareSection.classList.contains('is-visible')) {
+      foxRankShareSection.hidden = true;
+    }
+    foxRankShareDrawerTimer = null;
+  }, 240);
 }
 
 // 辅助函数：绘制圆角矩形
@@ -9210,25 +9270,25 @@ function renderFoxRankDetailPanel(snapshot = null) {
     setNodeTextIfChanged(foxRankDetailBoost, data.boost.label);
   }
   if (foxRankWeeklyCard) {
-    foxRankWeeklyCard.innerHTML = [
+    setNodeHtmlIfChanged(foxRankWeeklyCard, [
       `<div class="fox-rank-weekly-metric"><span>${escapeLogCell(foxRankText('xpGained', 'XP gained'))}</span><strong>+${weekly.xpGain}</strong></div>`,
       `<div class="fox-rank-weekly-metric"><span>${escapeLogCell(foxRankText('weeklyStable', 'Stable days'))}</span><strong>+${weekly.stableGain}</strong></div>`,
       `<div class="fox-rank-weekly-metric"><span>${escapeLogCell(foxRankText('weeklyExplore', 'Explore hops'))}</span><strong>+${weekly.exploreGain}</strong></div>`,
       `<div class="fox-rank-weekly-metric"><span>${escapeLogCell(foxRankText('weeklyPeak', 'Peak quality'))}</span><strong>${Math.round(weekly.qualityPeak * 100)}%</strong></div>`,
       `<div class="fox-rank-weekly-note">${escapeLogCell(formatFoxRankText('unlockedThisWeek', { count: weekly.unlockedThisWeek, skin: data.activeSkin.name }, `This week unlocked ${weekly.unlockedThisWeek} badges and pushed ${data.activeSkin.name} forward.`))}</div>`,
-    ].join('');
+    ].join(''));
   }
   if (foxRankLogList) {
-    foxRankLogList.innerHTML = getFoxRankLogItems(data)
+    setNodeHtmlIfChanged(foxRankLogList, getFoxRankLogItems(data)
       .map((item, index) => `<div class="fox-rank-log-item" style="animation-delay:${index * 60}ms"><span class="fox-rank-log-index">${index + 1}</span><div class="fox-rank-log-main"><strong>${escapeLogCell(item.label)}</strong><span>${escapeLogCell(item.value)}</span></div></div>`)
-      .join('');
+      .join(''));
   }
   if (foxRankBadgeList) {
     const freshSet = new Set(state.foxRank && Array.isArray(state.foxRank.freshUnlockedBadges)
       ? state.foxRank.freshUnlockedBadges
       : []);
     const showcasedId = String(state.foxRank && state.foxRank.showcasedBadgeId ? state.foxRank.showcasedBadgeId : '');
-    foxRankBadgeList.innerHTML = getFoxRankBadgeItems(data)
+    setNodeHtmlIfChanged(foxRankBadgeList, getFoxRankBadgeItems(data)
       .map((item, index) => {
         const isShowcased = item.unlocked && showcasedId === item.id;
         const status = isShowcased
@@ -9241,12 +9301,12 @@ function renderFoxRankDetailPanel(snapshot = null) {
         const statusHtml = status
           ? `<em class="fox-rank-badge-status">${escapeLogCell(status)}</em>`
           : '';
-        return `<div class="${classNames}" style="animation-delay:${index * 70}ms"><div class="fox-rank-badge-main"><strong>${escapeLogCell(item.name)}</strong><span>${escapeLogCell(item.desc)}</span></div><div class="fox-rank-badge-side">${statusHtml}${action}</div></div>`;
+        return `<div class="${classNames}" data-fox-rank-badge="${escapeLogCell(item.id)}" style="animation-delay:${index * 70}ms"><div class="fox-rank-badge-main"><div class="fox-rank-badge-title">${renderFoxRankBadgeIcon(item.id, 'fox-rank-badge-icon')}<strong>${escapeLogCell(item.name)}</strong></div><span>${escapeLogCell(item.desc)}</span></div><div class="fox-rank-badge-side">${statusHtml}${action}</div></div>`;
       })
-      .join('');
+      .join(''));
   }
   if (foxRankSkinList) {
-    foxRankSkinList.innerHTML = getFoxRankSkinItems(data)
+    setNodeHtmlIfChanged(foxRankSkinList, getFoxRankSkinItems(data)
       .map((item, index) => {
         const status = item.active
           ? foxRankText('equipped', 'Equipped')
@@ -9256,16 +9316,16 @@ function renderFoxRankDetailPanel(snapshot = null) {
               ? item.pendingLabel
             : formatFoxRankText('levelPrefix', { level: item.unlockTier + 1 }, `Lv. ${item.unlockTier + 1}`);
         const className = `fox-rank-skin-item ${item.unlocked ? 'is-unlocked' : 'is-locked'}${item.active ? ' is-active' : ''}`;
-        return `<div class="${className}" style="animation-delay:${index * 50}ms"><strong>${escapeLogCell(item.name)}</strong><span>${escapeLogCell(item.desc)}</span><em>${escapeLogCell(status)}</em></div>`;
+        return `<div class="${className}" data-fox-rank-skin="${escapeLogCell(item.id)}" style="animation-delay:${index * 50}ms"><strong>${escapeLogCell(item.name)}</strong><span>${escapeLogCell(item.desc)}</span><em>${escapeLogCell(status)}</em></div>`;
       })
-      .join('');
+      .join(''));
   }
   if (foxRankSharePreview) {
     // foxRankSharePreview.innerHTML = `<div class="fox-rank-share-head"><strong>${escapeLogCell(data.tier.name)}</strong><span>${escapeLogCell(formatFoxRankText('levelPrefix', { level: data.tier.index + 1 }, `Lv. ${data.tier.index + 1}`))}</span></div><div class="fox-rank-share-lines"><span>${escapeLogCell(data.boost.label)}</span><span>${escapeLogCell(formatFoxRankText('qualityShare', { label: data.qualityLabel, value: Math.round(data.qualityScore * 100) }, `${data.qualityLabel} • ${Math.round(data.qualityScore * 100)}% quality`))}</span><span>${escapeLogCell(formatFoxRankText('exploreSkinShare', { explore: formatFoxRankText('routeHops', { count: data.explorationCount }, `${data.explorationCount} explorations`), skin: data.activeSkin.name }, `${data.explorationCount} explorations • ${data.activeSkin.name}`))}</span></div>`;
     const weeklyReview = getFoxRankWeeklyReview(data);
     const tierColor = getFoxRankTierColor(data.tier.index);
 
-    foxRankSharePreview.innerHTML = `
+    setNodeHtmlIfChanged(foxRankSharePreview, `
       <div class="fox-rank-share-head">
         <strong style="color: ${tierColor}">${escapeLogCell(getFoxRankTierDualText(data.tier))}</strong>
         <span>${escapeLogCell(getFoxRankTierLevelText(data.tier))}</span>
@@ -9279,21 +9339,21 @@ function renderFoxRankDetailPanel(snapshot = null) {
       </div>
       <div class="fox-rank-share-lines">
         <span class="metric-item">
-          <i>⏱️</i>
+          ${renderFoxRankShareMetricIcon('usage')}
           ${escapeLogCell(data.usageText)}
           ${renderTrendBadge(data.usageSec, data.previousUsageSec)}
         </span>
         <span class="metric-item">
-          <i>🛡️</i>
+          ${renderFoxRankShareMetricIcon('stability')}
           ${escapeLogCell(formatFoxRankText('stableDays', { count: data.stabilityDays || 0 }, `${data.stabilityDays || 0} stable days`))}
           ${renderTrendBadge(data.stabilityDays, data.previousStabilityDays)}
         </span>
         <span class="metric-item">
-          <i>⭐</i>
+          ${renderFoxRankShareMetricIcon('quality')}
           ${escapeLogCell(data.qualityLabel)} • ${Math.round(data.qualityScore * 100)}%
         </span>
         <span class="metric-item">
-          <i>🧭</i>
+          ${renderFoxRankShareMetricIcon('explore')}
           ${escapeLogCell(formatFoxRankText('routeHops', { count: data.explorationCount || 0 }, `${data.explorationCount || 0} route hops`))}
           ${renderTrendBadge(data.explorationCount, data.previousExplorationCount)}
         </span>
@@ -9303,7 +9363,7 @@ function renderFoxRankDetailPanel(snapshot = null) {
         <span class="boost-badge">${data.boost.label}</span>
       </div>
       ${renderShareBadges(data)}
-    `;
+    `);
   }
   setFoxRankDetailTab(foxRankActiveTab);
   renderFoxRankBriefModal(data);
@@ -9341,30 +9401,52 @@ function renderTrendBadge(current, previous) {
   return `<span class="trend ${className}" title="较上周 ${diff > 0 ? '+' : ''}${diff}">${icon} ${Math.abs(diff)}</span>`;
 }
 
+function renderFoxRankShareMetricIcon(type = 'usage') {
+  const iconMap = {
+    usage: '<path d="M12 4a8 8 0 1 1 0 16a8 8 0 0 1 0-16z"/><path d="M12 8v4l3 2"/>',
+    stability: '<path d="M12 3l7 3v5c0 4.6-3.1 8.7-7 10-3.9-1.3-7-5.4-7-10V6l7-3z"/><path d="M9.3 12.2l1.8 1.8l3.6-3.6"/>',
+    quality: '<path d="M2 12s3.6-6 10-6s10 6 10 6s-3.6 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.4"/>',
+    explore: '<path d="M12 2l3.3 6.7L22 12l-6.7 3.3L12 22l-3.3-6.7L2 12l6.7-3.3L12 2z"/><path d="M12 7l2 5l-2 5l-2-5l2-5z"/>',
+  };
+  const key = String(type || 'usage');
+  const glyph = iconMap[key] || iconMap.usage;
+  return `<svg class="metric-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${glyph}</svg>`;
+}
+
+function getFoxRankBadgeIconSvg(badgeId = '') {
+  const id = String(badgeId || '').trim();
+  const icons = {
+    'connection-keeper': '<path d="M12 3l7 3v5c0 4.6-3.1 8.7-7 10-3.9-1.3-7-5.4-7-10V6l7-3z"/><path d="M9 11h6M12 8v6"/>',
+    'long-run': '<path d="M12 4a8 8 0 1 1 0 16a8 8 0 0 1 0-16z"/><path d="M12 8v4l3 2"/><path d="M7 4l2 2M17 4l-2 2"/>',
+    'quality-eye': '<path d="M2 12s3.6-6 10-6s10 6 10 6s-3.6 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/><path d="M12 3v2M4.8 6.2l1.4 1.4M19.2 6.2l-1.4 1.4"/>',
+    'tier-climber': '<path d="M4 18h4v-4h4v-4h4V6h4"/><path d="M18 6h4v4"/><path d="M3 21h18"/>',
+    'route-scout': '<path d="M12 2l3.3 6.7L22 12l-6.7 3.3L12 22l-3.3-6.7L2 12l6.7-3.3L12 2z"/><path d="M12 7l2 5l-2 5l-2-5l2-5z"/>',
+    'sky-bridge': '<path d="M3 15c2.6 0 2.6-6 5.2-6s2.6 6 5.2 6s2.6-6 5.2-6s2.6 6 5.2 6"/><path d="M3 19h18"/><path d="M7 9V6M17 9V6"/>',
+    'pristine-loop': '<path d="M12 3l6 3.5v7L12 20l-6-6.5v-7L12 3z"/><path d="M9 12l2 2l4-4"/>',
+    'skin-awakened': '<path d="M5 14l2-6l5-4l5 4l2 6"/><path d="M9 14l1.5-2h3L15 14"/><path d="M8 6l-1-2M16 6l1-2"/><path d="M12 2v2"/>',
+  };
+  return icons[id] || '<circle cx="12" cy="12" r="8"/>';
+}
+
+function renderFoxRankBadgeIcon(badgeId = '', className = '') {
+  const cls = String(className || '').trim();
+  const classAttr = cls ? ` class="${cls}"` : '';
+  return `<svg${classAttr} viewBox="0 0 24 24" aria-hidden="true" focusable="false">${getFoxRankBadgeIconSvg(badgeId)}</svg>`;
+}
+
 // 辅助函数：渲染徽章
 function renderShareBadges(data) {
   const all = getFoxRankBadgeItems(data).filter((item) => item.unlocked);
   const showcasedId = String(state.foxRank && state.foxRank.showcasedBadgeId ? state.foxRank.showcasedBadgeId : '');
   const showcased = all.find((item) => item.id === showcasedId) || null;
-  const recent = (showcased ? [showcased, ...all.filter((item) => item.id !== showcased.id)] : all).slice(0, 4);
+  const recent = showcased ? [showcased, ...all.filter((item) => item.id !== showcased.id)] : all;
   if (!recent.length) return '';
-
-  const badgeIcons = {
-    'connection-keeper': '🛡️',
-    'long-run': '⏱️',
-    'quality-eye': '⭐',
-    'tier-climber': '📈',
-    'route-scout': '🧭',
-    'sky-bridge': '🌉',
-    'pristine-loop': '💠',
-    'skin-awakened': '🦊',
-  };
 
   return `
     <div class="fox-rank-share-badges">
       ${recent.map((b) => `
-        <div class="badge-mini${showcased && showcased.id === b.id ? ' is-showcased' : ''}" title="${escapeLogCell(b.name)}">
-          <span>${badgeIcons[b.id] || '🏆'}</span>
+        <div class="badge-mini${showcased && showcased.id === b.id ? ' is-showcased' : ''}" data-fox-rank-badge="${escapeLogCell(b.id)}" title="${escapeLogCell(b.name)}">
+          ${renderFoxRankBadgeIcon(b.id, 'badge-mini-icon')}
         </div>
       `).join('')}
     </div>
@@ -9375,6 +9457,7 @@ function openFoxRankDetailModal() {
   if (!foxRankDetailModal) {
     return;
   }
+  closeFoxRankShareSection(true);
   renderFoxRankDetailPanel();
   foxRankDetailModal.hidden = false;
   document.body.classList.add('fox-rank-detail-open');
@@ -9394,6 +9477,7 @@ function closeFoxRankDetailModal() {
   if (!foxRankDetailModal) {
     return;
   }
+  closeFoxRankShareSection(true);
   foxRankDetailModal.hidden = true;
   document.body.classList.remove('fox-rank-detail-open');
 }
@@ -9662,7 +9746,9 @@ function renderFoxRankPanel(snapshot = null, options = {}) {
   }
   applyFoxRankSkinPalette(data);
   syncFoxRankSkinThemeSetting(data);
-  renderFoxRankDetailPanel(data);
+  if (foxRankDetailModal && !foxRankDetailModal.hidden) {
+    renderFoxRankDetailPanel(data);
+  }
   if (!suppressBrief) {
     maybeOpenFoxRankBrief(data);
   }
@@ -10955,7 +11041,9 @@ function refreshLayoutRefs() {
   foxRankLogList = document.getElementById('foxRankLogList');
   foxRankBadgeList = document.getElementById('foxRankBadgeList');
   foxRankSkinList = document.getElementById('foxRankSkinList');
+  foxRankShareSection = document.getElementById('foxRankShareSection');
   foxRankSharePreview = document.getElementById('foxRankSharePreview');
+  foxRankPreviewPngBtn = document.getElementById('foxRankPreviewPngBtn');
   foxRankCopySummaryBtn = document.getElementById('foxRankCopySummaryBtn');
   foxRankExportPngBtn = document.getElementById('foxRankExportPngBtn');
   foxRankBriefTitle = document.getElementById('foxRankBriefTitle');
@@ -12111,12 +12199,16 @@ function bindPageEvents() {
       );
     });
   }
+  if (foxRankPreviewPngBtn && foxRankPreviewPngBtn.dataset.bound !== 'true') {
+    foxRankPreviewPngBtn.dataset.bound = 'true';
+    foxRankPreviewPngBtn.addEventListener('click', openFoxRankShareSection);
+  }
   if (foxRankExportPngBtn && foxRankExportPngBtn.dataset.bound !== 'true') {
     foxRankExportPngBtn.dataset.bound = 'true';
     foxRankExportPngBtn.addEventListener('click', () => {
       runFoxRankActionWithButton(
           foxRankExportPngBtn,
-          foxRankText('exportPng', 'Export PNG'),
+          foxRankText('exportPng', 'Export Share Card'),
           foxRankText('exporting', 'Exporting...'),
           () => exportFoxRankCardPng(),
       );

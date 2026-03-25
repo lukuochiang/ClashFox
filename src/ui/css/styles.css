@@ -886,6 +886,10 @@ body[data-theme="day"] .fox-rank-metric-value {
 .fox-rank-detail-card {
   position: relative;
   isolation: isolate;
+  --fox-rank-drawer-side: 14px;
+  --fox-rank-actions-height: 36px;
+  --fox-rank-actions-gap: 10px;
+  --fox-rank-card-bottom: 12px;
   --fox-rank-aura-start: #8dc2fa;
   --fox-rank-aura-end: #6ea7ea;
   width: min(680px, calc(100vw - 28px));
@@ -1120,8 +1124,15 @@ body.fox-rank-brief-open {
   gap: 10px;
   min-height: 0;
   overflow: auto;
-  padding-right: 4px;
+  padding-right: 0;
   overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.fox-rank-detail-body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .fox-rank-detail-section h4 {
@@ -1327,6 +1338,10 @@ body[data-theme="day"] .fox-rank-section-tabs button.active {
   line-height: 1.24;
 }
 
+.fox-rank-badge-item strong {
+  color: color-mix(in srgb, var(--fox-rank-badge-color) 84%, #fff);
+}
+
 .fox-rank-log-index {
   width: 16px;
   height: 16px;
@@ -1360,10 +1375,17 @@ body[data-theme="day"] .fox-rank-log-index {
 }
 
 .fox-rank-skin-item {
+  --fox-rank-skin-color: var(--fox-rank-aura-start);
   display: grid;
   gap: 6px;
   opacity: 0;
   animation: fox-rank-stagger-in 0.35s ease forwards;
+  border-color: color-mix(in srgb, var(--fox-rank-skin-color) 34%, var(--border));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--fox-rank-skin-color) 16%, rgba(148, 171, 197, 0.12)),
+    color-mix(in srgb, var(--fox-rank-skin-color) 8%, rgba(148, 171, 197, 0.07))
+  );
 }
 
 .fox-rank-skin-item em {
@@ -1372,22 +1394,60 @@ body[data-theme="day"] .fox-rank-log-index {
   font-style: normal;
   padding: 1px 6px;
   border-radius: 999px;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--fox-rank-skin-color) 34%, var(--border));
+  color: color-mix(in srgb, var(--fox-rank-skin-color) 72%, #fff);
+  background: color-mix(in srgb, var(--fox-rank-skin-color) 12%, transparent);
 }
 
 .fox-rank-skin-item.is-active {
-  border-color: rgba(116, 202, 163, 0.46);
-  box-shadow: 0 10px 24px rgba(56, 102, 96, 0.12);
+  border-color: color-mix(in srgb, var(--fox-rank-skin-color) 54%, transparent);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--fox-rank-skin-color) 20%, transparent);
 }
 
 .fox-rank-skin-item.is-active em {
-  color: #59c491;
-  border-color: rgba(89, 196, 145, 0.36);
-  background: rgba(89, 196, 145, 0.12);
+  color: color-mix(in srgb, var(--fox-rank-skin-color) 84%, #fff);
+  border-color: color-mix(in srgb, var(--fox-rank-skin-color) 50%, transparent);
+  background: color-mix(in srgb, var(--fox-rank-skin-color) 18%, transparent);
 }
 
 .fox-rank-skin-item.is-locked em {
-  color: var(--muted);
+  color: color-mix(in srgb, var(--fox-rank-skin-color) 55%, var(--muted));
+  border-color: color-mix(in srgb, var(--fox-rank-skin-color) 26%, var(--border));
+  background: color-mix(in srgb, var(--fox-rank-skin-color) 8%, transparent);
+}
+
+.fox-rank-skin-item.is-locked {
+  border-color: color-mix(in srgb, var(--fox-rank-skin-color) 18%, var(--border));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--fox-rank-skin-color) 7%, rgba(148, 171, 197, 0.09)),
+    color-mix(in srgb, var(--fox-rank-skin-color) 3%, rgba(148, 171, 197, 0.05))
+  );
+  box-shadow: inset 0 1px 0 rgba(235, 242, 252, 0.03);
+}
+
+.fox-rank-skin-item.is-locked strong {
+  color: color-mix(in srgb, var(--fox-rank-skin-color) 48%, var(--muted));
+}
+
+.fox-rank-skin-item strong {
+  color: color-mix(in srgb, var(--fox-rank-skin-color) 82%, #fff);
+}
+
+.fox-rank-skin-item[data-fox-rank-skin="campfire"] { --fox-rank-skin-color: #ffb86c; }
+.fox-rank-skin-item[data-fox-rank-skin="aurora"] { --fox-rank-skin-color: #4bc6ff; }
+.fox-rank-skin-item[data-fox-rank-skin="starlight"] { --fox-rank-skin-color: #9f80ff; }
+.fox-rank-skin-item[data-fox-rank-skin="solar-crown"] { --fox-rank-skin-color: #f6d365; }
+.fox-rank-skin-item[data-fox-rank-skin="nebula-flare"] { --fox-rank-skin-color: #ff8bd8; }
+.fox-rank-skin-item[data-fox-rank-skin="void-aurora"] { --fox-rank-skin-color: #8ef0ff; }
+
+body[data-theme="day"] .fox-rank-skin-item[data-fox-rank-skin] {
+  border-color: color-mix(in srgb, var(--fox-rank-skin-color) 44%, rgba(180, 201, 224, 0.48));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--fox-rank-skin-color) 18%, rgba(255, 255, 255, 0.92)),
+    color-mix(in srgb, var(--fox-rank-skin-color) 10%, rgba(243, 248, 253, 0.9))
+  );
 }
 
 .fox-rank-share-preview {
@@ -1497,9 +1557,20 @@ body[data-theme="day"] .fox-rank-log-index {
   background: rgba(138, 193, 255, 0.08);
 }
 
-.metric-item i {
-  font-size: 1rem;
-  opacity: 0.7;
+.metric-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  display: inline-block;
+  vertical-align: middle;
+  transform: translateY(-0.5px);
+  stroke: currentColor;
+  stroke-width: 1.9;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: #9fc6ff;
+  opacity: 0.88;
 }
 
 /* 底部区域 */
@@ -1561,24 +1632,48 @@ body[data-theme="day"] .fox-rank-log-index {
 /* 徽章墙 */
 .fox-rank-share-badges {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
 }
 
 .badge-mini {
+  --fox-rank-badge-color: #c8a7ff;
   width: 32px;
   height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  background: linear-gradient(135deg, rgba(198, 133, 255, 0.2), rgba(141, 109, 255, 0.2));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--fox-rank-badge-color) 26%, transparent), color-mix(in srgb, var(--fox-rank-badge-color) 14%, transparent));
   font-size: 1.2rem;
-  cursor: help;
+  cursor: pointer;
+}
+
+.badge-mini,
+.badge-mini * {
+  cursor: pointer;
+}
+
+.badge-mini-icon {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--fox-rank-badge-color);
 }
 
 .badge-mini.is-showcased {
-  box-shadow: 0 0 0 1px rgba(255, 184, 108, 0.45), 0 8px 16px rgba(255, 184, 108, 0.18);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--fox-rank-badge-color) 52%, transparent),
+    0 8px 16px color-mix(in srgb, var(--fox-rank-badge-color) 28%, transparent);
+}
+
+.badge-mini.is-showcased .badge-mini-icon {
+  color: color-mix(in srgb, var(--fox-rank-badge-color) 78%, #fff);
 }
 
 /* 日间模式适配 */
@@ -1627,6 +1722,69 @@ body[data-theme="day"] .fox-rank-share-preview {
 .fox-rank-badge-item {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
+  border-color: color-mix(in srgb, var(--fox-rank-badge-color, var(--border)) 32%, var(--border));
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--fox-rank-badge-color, #8ac1ff) 12%, rgba(255, 255, 255, 0.03)),
+      color-mix(in srgb, var(--fox-rank-badge-color, #8ac1ff) 6%, rgba(255, 255, 255, 0.01)));
+}
+
+.fox-rank-badge-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fox-rank-badge-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--fox-rank-badge-color, color-mix(in srgb, var(--fox-rank-aura-start) 72%, #fff));
+}
+
+.badge-mini[data-fox-rank-badge="connection-keeper"],
+.fox-rank-badge-item[data-fox-rank-badge="connection-keeper"] {
+  --fox-rank-badge-color: #6cd8ff;
+}
+
+.badge-mini[data-fox-rank-badge="long-run"],
+.fox-rank-badge-item[data-fox-rank-badge="long-run"] {
+  --fox-rank-badge-color: #9ab0ff;
+}
+
+.badge-mini[data-fox-rank-badge="quality-eye"],
+.fox-rank-badge-item[data-fox-rank-badge="quality-eye"] {
+  --fox-rank-badge-color: #ffd166;
+}
+
+.badge-mini[data-fox-rank-badge="tier-climber"],
+.fox-rank-badge-item[data-fox-rank-badge="tier-climber"] {
+  --fox-rank-badge-color: #ff8f70;
+}
+
+.badge-mini[data-fox-rank-badge="route-scout"],
+.fox-rank-badge-item[data-fox-rank-badge="route-scout"] {
+  --fox-rank-badge-color: #5be3c3;
+}
+
+.badge-mini[data-fox-rank-badge="sky-bridge"],
+.fox-rank-badge-item[data-fox-rank-badge="sky-bridge"] {
+  --fox-rank-badge-color: #7ec8ff;
+}
+
+.badge-mini[data-fox-rank-badge="pristine-loop"],
+.fox-rank-badge-item[data-fox-rank-badge="pristine-loop"] {
+  --fox-rank-badge-color: #e4a3ff;
+}
+
+.badge-mini[data-fox-rank-badge="skin-awakened"],
+.fox-rank-badge-item[data-fox-rank-badge="skin-awakened"] {
+  --fox-rank-badge-color: #ffb86c;
 }
 
 .fox-rank-badge-status {
@@ -1648,9 +1806,9 @@ body[data-theme="day"] .fox-rank-share-preview {
 }
 
 .fox-rank-badge-action {
-  border: 1px solid color-mix(in srgb, var(--fox-rank-aura-start) 32%, var(--border));
-  background: color-mix(in srgb, var(--fox-rank-aura-start) 16%, transparent);
-  color: inherit;
+  border: 1px solid color-mix(in srgb, var(--fox-rank-badge-color) 50%, var(--border));
+  background: color-mix(in srgb, var(--fox-rank-badge-color) 14%, transparent);
+  color: color-mix(in srgb, var(--fox-rank-badge-color) 82%, #fff);
   border-radius: 999px;
   padding: 3px 8px;
   font-size: 0.56rem;
@@ -1658,24 +1816,31 @@ body[data-theme="day"] .fox-rank-share-preview {
 }
 
 .fox-rank-badge-action:hover {
-  filter: brightness(1.06);
+  border-color: color-mix(in srgb, var(--fox-rank-badge-color) 70%, transparent);
+  background: color-mix(in srgb, var(--fox-rank-badge-color) 22%, transparent);
 }
 
 .fox-rank-badge-item.is-unlocked .fox-rank-badge-status {
-  color: #57cf95;
-  border-color: rgba(87, 207, 149, 0.45);
-  background: rgba(87, 207, 149, 0.12);
+  color: color-mix(in srgb, var(--fox-rank-badge-color) 76%, #fff);
+  border-color: color-mix(in srgb, var(--fox-rank-badge-color) 46%, transparent);
+  background: color-mix(in srgb, var(--fox-rank-badge-color) 16%, transparent);
 }
 
 .fox-rank-badge-item.is-showcased .fox-rank-badge-status {
-  color: #ffb86c;
-  border-color: rgba(255, 184, 108, 0.45);
-  background: rgba(255, 184, 108, 0.14);
+  color: color-mix(in srgb, var(--fox-rank-badge-color) 78%, #fff);
+  border-color: color-mix(in srgb, var(--fox-rank-badge-color) 54%, transparent);
+  background: color-mix(in srgb, var(--fox-rank-badge-color) 20%, transparent);
+}
+
+.fox-rank-badge-item.is-locked .fox-rank-badge-icon {
+  color: var(--fox-rank-badge-color);
+  opacity: 0.86;
 }
 
 .fox-rank-badge-item.is-locked .fox-rank-badge-status {
-  color: var(--muted);
-  background: rgba(148, 171, 197, 0.08);
+  color: color-mix(in srgb, var(--fox-rank-badge-color) 55%, var(--muted));
+  border-color: color-mix(in srgb, var(--fox-rank-badge-color) 30%, var(--border));
+  background: color-mix(in srgb, var(--fox-rank-badge-color) 10%, rgba(148, 171, 197, 0.08));
 }
 
 body[data-theme="day"] .fox-rank-detail-hero {
@@ -1696,6 +1861,14 @@ body[data-theme="day"] .fox-rank-skin-item {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.88),
     0 8px 18px rgba(164, 184, 208, 0.08);
+}
+
+body[data-theme="day"] .fox-rank-badge-item[data-fox-rank-badge] {
+  border-color: color-mix(in srgb, var(--fox-rank-badge-color) 42%, rgba(180, 201, 224, 0.48));
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--fox-rank-badge-color) 18%, rgba(255, 255, 255, 0.92)),
+      color-mix(in srgb, var(--fox-rank-badge-color) 10%, rgba(243, 248, 253, 0.9)));
 }
 
 body[data-theme="day"] .fox-rank-detail-section {
@@ -1936,6 +2109,7 @@ body[data-theme="day"] .fox-rank-brief-boost {
   display: flex;
   gap: 10px;
   padding-top: 2px;
+  min-height: var(--fox-rank-actions-height);
   align-self: end;
 }
 
@@ -1943,9 +2117,25 @@ body[data-theme="day"] .fox-rank-brief-boost {
   flex: 1;
 }
 
-.fox-rank-detail-actions .btn:disabled {
-  opacity: 0.7;
-  cursor: wait;
+.fox-rank-share-drawer {
+  position: absolute;
+  left: var(--fox-rank-drawer-side);
+  right: var(--fox-rank-drawer-side);
+  bottom: calc(var(--fox-rank-card-bottom) + var(--fox-rank-actions-height) + var(--fox-rank-actions-gap));
+  z-index: 3;
+  margin: 0;
+  max-height: min(46vh, 360px);
+  overflow: auto;
+  opacity: 0;
+  transform: translateY(14px);
+  pointer-events: none;
+  transition: opacity 180ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.fox-rank-share-drawer.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
 }
 
 body[data-theme="day"] .sidebar {
@@ -10675,6 +10865,8 @@ body[data-theme="day"] .update-guide-card {
     max-height: calc(100vh - 14px);
     border-radius: 12px;
     padding: 10px;
+    --fox-rank-drawer-side: 10px;
+    --fox-rank-card-bottom: 10px;
   }
 
   .fox-rank-detail-grid {

@@ -172,15 +172,17 @@
         </div>
       </section>
 
-      <section class="fox-rank-detail-section fox-rank-detail-section-share">
-        <h4 data-fox-rank-ui="shareCard">Share Card</h4>
-        <div class="fox-rank-share-preview" id="foxRankSharePreview"></div>
-      </section>
     </div>
 
     <section class="fox-rank-detail-actions">
       <button class="btn" id="foxRankCopySummaryBtn" type="button" data-fox-rank-ui="copySummary">Copy Summary</button>
-      <button class="btn primary" id="foxRankExportPngBtn" type="button" data-fox-rank-ui="exportPng">Export PNG</button>
+      <button class="btn" id="foxRankPreviewPngBtn" type="button" data-fox-rank-ui="previewPng">Preview Share Card</button>
+      <button class="btn primary" id="foxRankExportPngBtn" type="button" data-fox-rank-ui="exportPng">Export Share Card</button>
+    </section>
+
+    <section class="fox-rank-detail-section fox-rank-detail-section-share fox-rank-share-drawer" id="foxRankShareSection" hidden>
+      <h4 data-fox-rank-ui="shareCard">Share Card</h4>
+      <div class="fox-rank-share-preview" id="foxRankSharePreview"></div>
     </section>
   </div>
 </div>
