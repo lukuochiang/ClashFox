@@ -676,9 +676,15 @@ body[data-theme="day"] .fox-rank-progress-text {
 }
 
 .fox-rank-warning {
+  color: rgba(233, 240, 249, 0.88);
+  background: rgba(128, 178, 236, 0.12);
+  border: 1px solid rgba(131, 176, 228, 0.24);
+}
+
+.fox-rank-warning.is-alert {
   color: #fff0ca;
-  background: rgba(255, 183, 71, 0.18);
-  border: 1px solid rgba(255, 190, 92, 0.34);
+  background: rgba(255, 183, 71, 0.2);
+  border-color: rgba(255, 190, 92, 0.38);
   animation: fox-rank-warning-chip 1.2s ease-in-out infinite;
 }
 
@@ -701,6 +707,12 @@ body[data-theme="day"] .fox-rank-footer-pill {
 }
 
 body[data-theme="day"] .fox-rank-warning {
+  color: #52667d;
+  background: rgba(121, 167, 220, 0.1);
+  border-color: rgba(121, 167, 220, 0.2);
+}
+
+body[data-theme="day"] .fox-rank-warning.is-alert {
   color: #8d5b12;
   background: rgba(255, 196, 92, 0.18);
   border-color: rgba(221, 164, 57, 0.34);
@@ -1191,7 +1203,16 @@ body[data-theme="day"] .fox-rank-section-tabs button.active {
   padding-top: 4px;
 }
 
-.fox-rank-log-list,
+.fox-rank-log-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-height: 0;
+  overflow: visible;
+  align-content: start;
+  padding-right: 0;
+}
+
 .fox-rank-badge-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1484,6 +1505,10 @@ body[data-theme="day"] .fox-rank-log-index {
   cursor: help;
 }
 
+.badge-mini.is-showcased {
+  box-shadow: 0 0 0 1px rgba(255, 184, 108, 0.45), 0 8px 16px rgba(255, 184, 108, 0.18);
+}
+
 /* 日间模式适配 */
 body[data-theme="day"] .fox-rank-share-preview::before {
   background: radial-gradient(circle, rgba(127, 172, 242, 0.15) 0%, transparent 70%);
@@ -1528,12 +1553,13 @@ body[data-theme="day"] .fox-rank-share-preview {
 }
 
 .fox-rank-badge-item {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
 }
 
 .fox-rank-badge-status {
   margin-left: 0;
-  justify-self: start;
+  justify-self: end;
   font-size: 0.54rem;
   font-style: normal;
   padding: 1px 5px;
@@ -1543,10 +1569,36 @@ body[data-theme="day"] .fox-rank-share-preview {
   margin-top: 1px;
 }
 
+.fox-rank-badge-side {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+}
+
+.fox-rank-badge-action {
+  border: 1px solid color-mix(in srgb, var(--fox-rank-aura-start) 32%, var(--border));
+  background: color-mix(in srgb, var(--fox-rank-aura-start) 16%, transparent);
+  color: inherit;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 0.56rem;
+  cursor: pointer;
+}
+
+.fox-rank-badge-action:hover {
+  filter: brightness(1.06);
+}
+
 .fox-rank-badge-item.is-unlocked .fox-rank-badge-status {
   color: #57cf95;
   border-color: rgba(87, 207, 149, 0.45);
   background: rgba(87, 207, 149, 0.12);
+}
+
+.fox-rank-badge-item.is-showcased .fox-rank-badge-status {
+  color: #ffb86c;
+  border-color: rgba(255, 184, 108, 0.45);
+  background: rgba(255, 184, 108, 0.14);
 }
 
 .fox-rank-badge-item.is-locked .fox-rank-badge-status {
