@@ -77,6 +77,12 @@ const providerTrafficState = {
   signature: '',
   renderKey: '',
 };
+const FOX_RANK_SKIN_PALETTES = {
+  campfire: { start: '#ffb86c', end: '#ff8f57' },
+  aurora: { start: '#7df3d2', end: '#4bc6ff' },
+  starlight: { start: '#c685ff', end: '#8d6dff' },
+  'solar-crown': { start: '#f6d365', end: '#fda085' },
+};
 
 function hasTrafficChartData() {
   return Math.max(trafficState.historyRx.length, trafficState.historyTx.length, 0) > 0;
@@ -287,12 +293,45 @@ function trayLog(scope, message, payload = null, level = 'log') {
   return;
 }
 
+function resolveFoxRankSkinPaletteFromSettings(settings = null) {
+  const source = settings && typeof settings === 'object' ? settings : {};
+  const appearance = source && typeof source.appearance === 'object' ? source.appearance : {};
+  const skinId = String(
+    source.foxRankSkin
+    || appearance.foxRankSkin
+    || '',
+  ).trim().toLowerCase();
+  const palette = FOX_RANK_SKIN_PALETTES[skinId] || null;
+  return {
+    skinId,
+    start: String(palette && palette.start ? palette.start : '#8dc2fa'),
+    end: String(palette && palette.end ? palette.end : '#6ea7ea'),
+  };
+}
+
+function applyFoxRankThemeCssVarsFromSettings(settings = null) {
+  const palette = resolveFoxRankSkinPaletteFromSettings(settings);
+  const targets = [document.documentElement, document.body].filter(Boolean);
+  targets.forEach((node) => {
+    node.style.setProperty('--fox-rank-skin-start', palette.start);
+    node.style.setProperty('--fox-rank-skin-end', palette.end);
+    node.style.setProperty('--fox-rank-aura-start', palette.start);
+    node.style.setProperty('--fox-rank-aura-end', palette.end);
+    if (palette.skinId) {
+      node.dataset.foxRankSkin = palette.skinId;
+    } else if (node.dataset && Object.prototype.hasOwnProperty.call(node.dataset, 'foxRankSkin')) {
+      delete node.dataset.foxRankSkin;
+    }
+  });
+}
+
 async function applyTrayTheme(preloadedSettings = null) {
   try {
     if (!document.body) {
       return;
     }
     let preference = '';
+    let resolvedSettings = null;
     const nextSettings = preloadedSettings && typeof preloadedSettings === 'object'
       ? preloadedSettings
       : null;
@@ -305,6 +344,7 @@ async function applyTrayTheme(preloadedSettings = null) {
     const settings = trayThemeSettingsSnapshot && typeof trayThemeSettingsSnapshot === 'object'
       ? trayThemeSettingsSnapshot
       : nextSettings;
+    resolvedSettings = settings;
     if (settings) {
       const appearance = settings && typeof settings.appearance === 'object' ? settings.appearance : {};
       preference = String(
@@ -320,6 +360,7 @@ async function applyTrayTheme(preloadedSettings = null) {
       if (settings) {
         trayThemeSettingsSnapshot = settings;
       }
+      resolvedSettings = settings;
       preference = String(
         (settings && settings.theme)
         || (settings && settings.appearance && settings.appearance.theme)
@@ -338,6 +379,7 @@ async function applyTrayTheme(preloadedSettings = null) {
     }
     document.body.dataset.theme = theme;
     document.documentElement.setAttribute('data-theme', theme);
+    applyFoxRankThemeCssVarsFromSettings(resolvedSettings);
   } catch {
     const fallback = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
       ? 'night'
@@ -345,6 +387,7 @@ async function applyTrayTheme(preloadedSettings = null) {
     if (document.body) {
       document.body.dataset.theme = fallback;
       document.documentElement.setAttribute('data-theme', fallback);
+      applyFoxRankThemeCssVarsFromSettings(null);
     }
   }
 }
@@ -1905,6 +1948,7 @@ async function init() {
       const nextSignature = JSON.stringify({
         theme: String(settings.theme || appearance.theme || 'auto').trim().toLowerCase(),
         lang: String(settings.lang || settings.language || settings.locale || appearance.lang || appearance.language || appearance.locale || 'auto').trim().toLowerCase(),
+        foxRankSkin: String(settings.foxRankSkin || appearance.foxRankSkin || '').trim().toLowerCase(),
         chartEnabled: Object.prototype.hasOwnProperty.call(settings || {}, 'chartEnabled')
           ? Boolean(settings.chartEnabled)
           : Object.prototype.hasOwnProperty.call(settings || {}, 'trayMenuChartEnabled')

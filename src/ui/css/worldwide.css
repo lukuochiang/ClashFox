@@ -1,5 +1,7 @@
 :root {
   color-scheme: dark;
+  --fox-rank-skin-start: #8dc2fa;
+  --fox-rank-skin-end: #6ea7ea;
 }
 
 html[data-theme="day"] {
@@ -18,8 +20,8 @@ body {
   font-family: "Trebuchet MS", "Verdana", sans-serif;
   color: #e9eef3;
   background:
-    radial-gradient(circle at 18% 20%, rgba(53, 142, 255, 0.24), transparent 45%),
-    radial-gradient(circle at 85% 75%, rgba(72, 210, 150, 0.18), transparent 42%),
+    radial-gradient(circle at 18% 20%, color-mix(in srgb, var(--fox-rank-skin-start) 26%, transparent), transparent 45%),
+    radial-gradient(circle at 85% 75%, color-mix(in srgb, var(--fox-rank-skin-end) 20%, transparent), transparent 42%),
     linear-gradient(140deg, #0f141c, #151f2a);
 }
 
@@ -113,8 +115,8 @@ body {
 
 .worldwide-map.tiles-unavailable {
   background:
-    radial-gradient(circle at 20% 20%, rgba(88, 143, 189, 0.3), transparent 42%),
-    radial-gradient(circle at 75% 70%, rgba(78, 180, 145, 0.22), transparent 40%),
+    radial-gradient(circle at 20% 20%, color-mix(in srgb, var(--fox-rank-skin-start) 34%, transparent), transparent 42%),
+    radial-gradient(circle at 75% 70%, color-mix(in srgb, var(--fox-rank-skin-end) 26%, transparent), transparent 40%),
     linear-gradient(145deg, #183049, #0f2336 55%, #1a3b55);
 }
 
@@ -317,8 +319,8 @@ body {
 html[data-theme="day"] body {
   color: #1f3447;
   background:
-    radial-gradient(circle at 18% 20%, rgba(75, 139, 208, 0.2), transparent 45%),
-    radial-gradient(circle at 85% 75%, rgba(84, 170, 141, 0.16), transparent 42%),
+    radial-gradient(circle at 18% 20%, color-mix(in srgb, var(--fox-rank-skin-start) 22%, transparent), transparent 45%),
+    radial-gradient(circle at 85% 75%, color-mix(in srgb, var(--fox-rank-skin-end) 18%, transparent), transparent 42%),
     linear-gradient(140deg, #edf3f8, #dce8f2);
 }
 

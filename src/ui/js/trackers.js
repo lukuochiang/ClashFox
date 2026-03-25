@@ -32,6 +32,7 @@ let languagePreference = 'auto';
 let activeLanguage = 'en';
 let systemLocaleFromMain = '';
 let themePreference = 'auto';
+let trackersThemeSettingsSnapshot = null;
 let lastSystemDark = window.matchMedia
   ? window.matchMedia('(prefers-color-scheme: dark)').matches
   : true;
@@ -50,6 +51,12 @@ let currentLinks = [];
 let currentMarkers = new Map(); // key: lat,lon -> marker
 let currentPolylines = new Map(); // key: fromLat,fromLon-toLat,toLon -> polyline
 let currentLabels = new Map(); // key: labelKey -> label marker
+const FOX_RANK_SKIN_PALETTES = {
+  campfire: { start: '#ffb86c', end: '#ff8f57' },
+  aurora: { start: '#7df3d2', end: '#4bc6ff' },
+  starlight: { start: '#c685ff', end: '#8d6dff' },
+  'solar-crown': { start: '#f6d365', end: '#fda085' },
+};
 
 const statsEl = document.getElementById('worldwideStats');
 const detailBodyEl = document.getElementById('worldwideDetailBody');
@@ -203,6 +210,7 @@ function applyThemeMode(preference) {
   if (document.body) {
     document.body.dataset.theme = theme;
   }
+  applyFoxRankThemeCssVarsFromSettings(trackersThemeSettingsSnapshot);
   lastAppliedTheme = theme;
   try {
     localStorage.setItem('lastTheme', theme);
@@ -210,6 +218,38 @@ function applyThemeMode(preference) {
     // ignore storage failures
   }
   return theme;
+}
+
+function resolveFoxRankSkinPaletteFromSettings(settings = null) {
+  const source = settings && typeof settings === 'object' ? settings : {};
+  const appearance = source && typeof source.appearance === 'object' ? source.appearance : {};
+  const skinId = String(
+    source.foxRankSkin
+    || appearance.foxRankSkin
+    || '',
+  ).trim().toLowerCase();
+  const palette = FOX_RANK_SKIN_PALETTES[skinId] || null;
+  return {
+    skinId,
+    start: String(palette && palette.start ? palette.start : '#8dc2fa'),
+    end: String(palette && palette.end ? palette.end : '#6ea7ea'),
+  };
+}
+
+function applyFoxRankThemeCssVarsFromSettings(settings = null) {
+  const palette = resolveFoxRankSkinPaletteFromSettings(settings);
+  const targets = [document.documentElement, document.body].filter(Boolean);
+  targets.forEach((node) => {
+    node.style.setProperty('--fox-rank-skin-start', palette.start);
+    node.style.setProperty('--fox-rank-skin-end', palette.end);
+    node.style.setProperty('--fox-rank-aura-start', palette.start);
+    node.style.setProperty('--fox-rank-aura-end', palette.end);
+    if (palette.skinId) {
+      node.dataset.foxRankSkin = palette.skinId;
+    } else if (node.dataset && Object.prototype.hasOwnProperty.call(node.dataset, 'foxRankSkin')) {
+      delete node.dataset.foxRankSkin;
+    }
+  });
 }
 
 async function refreshSystemLocaleFromMain() {
@@ -271,6 +311,7 @@ async function syncPreferencesFromSettings() {
     const settings = response && response.ok && response.data && typeof response.data === 'object'
       ? response.data
       : {};
+    trackersThemeSettingsSnapshot = settings;
     if (settings && Object.keys(settings).length) {
       languagePreference = readLanguagePreferenceFromSettings(settings);
       themePreference = resolveThemePreference(settings);
@@ -284,6 +325,11 @@ async function syncPreferencesFromSettings() {
   lastSettingsSignature = JSON.stringify({
     lang: languagePreference,
     theme: themePreference,
+    foxRankSkin: String(
+      (trackersThemeSettingsSnapshot && trackersThemeSettingsSnapshot.foxRankSkin)
+      || (trackersThemeSettingsSnapshot && trackersThemeSettingsSnapshot.appearance && trackersThemeSettingsSnapshot.appearance.foxRankSkin)
+      || '',
+    ).trim().toLowerCase(),
   });
 }
 
@@ -293,6 +339,7 @@ function applySettingsPayload(settings = {}) {
   const nextSignature = JSON.stringify({
     lang: nextLanguagePreference,
     theme: nextThemePreference,
+    foxRankSkin: String(settings.foxRankSkin || (settings.appearance && settings.appearance.foxRankSkin) || '').trim().toLowerCase(),
   });
   if (nextSignature === lastSettingsSignature) {
     return;
@@ -300,6 +347,7 @@ function applySettingsPayload(settings = {}) {
   lastSettingsSignature = nextSignature;
   languagePreference = nextLanguagePreference;
   themePreference = nextThemePreference;
+  trackersThemeSettingsSnapshot = settings;
   const applyNow = () => {
     syncLanguageFromPreference();
     applyThemeMode(themePreference);

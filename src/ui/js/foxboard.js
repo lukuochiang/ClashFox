@@ -9,6 +9,12 @@ const resolveLocaleFromSettings = typeof foxboardLocaleUtils.resolveLocaleFromSe
 let foxboardDebugMode = false;
 let systemLocaleFromMain = '';
 let foxboardThemeSettingsSnapshot = null;
+const FOX_RANK_SKIN_PALETTES = {
+  campfire: { start: '#ffb86c', end: '#ff8f57' },
+  aurora: { start: '#7df3d2', end: '#4bc6ff' },
+  starlight: { start: '#c685ff', end: '#8d6dff' },
+  'solar-crown': { start: '#f6d365', end: '#fda085' },
+};
 
 function foxboardLog(scope, message, payload = null, level = 'log') {
   return;
@@ -35,11 +41,44 @@ function applyTheme(theme = 'auto', dark = false) {
   if (document.body) {
     document.body.dataset.theme = resolved;
   }
+  applyFoxRankThemeCssVarsFromSettings(foxboardThemeSettingsSnapshot);
   try {
     localStorage.setItem('lastTheme', resolved);
   } catch {
     // ignore storage failures
   }
+}
+
+function resolveFoxRankSkinPaletteFromSettings(settings = null) {
+  const source = settings && typeof settings === 'object' ? settings : {};
+  const appearance = source && typeof source.appearance === 'object' ? source.appearance : {};
+  const skinId = String(
+    source.foxRankSkin
+    || appearance.foxRankSkin
+    || '',
+  ).trim().toLowerCase();
+  const palette = FOX_RANK_SKIN_PALETTES[skinId] || null;
+  return {
+    skinId,
+    start: String(palette && palette.start ? palette.start : '#8dc2fa'),
+    end: String(palette && palette.end ? palette.end : '#6ea7ea'),
+  };
+}
+
+function applyFoxRankThemeCssVarsFromSettings(settings = null) {
+  const palette = resolveFoxRankSkinPaletteFromSettings(settings);
+  const targets = [document.documentElement, document.body].filter(Boolean);
+  targets.forEach((node) => {
+    node.style.setProperty('--fox-rank-skin-start', palette.start);
+    node.style.setProperty('--fox-rank-skin-end', palette.end);
+    node.style.setProperty('--fox-rank-aura-start', palette.start);
+    node.style.setProperty('--fox-rank-aura-end', palette.end);
+    if (palette.skinId) {
+      node.dataset.foxRankSkin = palette.skinId;
+    } else if (node.dataset && Object.prototype.hasOwnProperty.call(node.dataset, 'foxRankSkin')) {
+      delete node.dataset.foxRankSkin;
+    }
+  });
 }
 
 function applyMergedThemeSnapshot(preloadedSettings = null) {
@@ -153,6 +192,7 @@ async function syncSettings() {
       theme: currentTheme,
       locale,
       debug: foxboardDebugMode,
+      foxRankSkin: String(settings.foxRankSkin || appearance.foxRankSkin || '').trim().toLowerCase(),
     });
   } catch {
     foxboardLog('settings', 'sync failed', null, 'warn');
@@ -179,6 +219,7 @@ async function bootFoxboard() {
           theme: String(mergedSettings.theme || (mergedSettings.appearance && mergedSettings.appearance.theme) || 'auto').trim().toLowerCase(),
           locale: resolveLocaleWithSystem(mergedSettings),
           debug: Boolean(mergedSettings && mergedSettings.debugMode),
+          foxRankSkin: String(mergedSettings.foxRankSkin || (mergedSettings.appearance && mergedSettings.appearance.foxRankSkin) || '').trim().toLowerCase(),
         });
         if (nextSignature === lastSettingsSignature) {
           return;

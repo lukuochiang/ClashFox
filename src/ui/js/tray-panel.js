@@ -33,6 +33,12 @@ const PANEL_MIN_HEIGHT = 286;
 const PANEL_RESIZE_DIFF_THRESHOLD = 4;
 let panelResizeScheduled = false;
 let panelRendererVisible = false;
+const FOX_RANK_SKIN_PALETTES = {
+  campfire: { start: '#ffb86c', end: '#ff8f57' },
+  aurora: { start: '#7df3d2', end: '#4bc6ff' },
+  starlight: { start: '#c685ff', end: '#8d6dff' },
+  'solar-crown': { start: '#f6d365', end: '#fda085' },
+};
 let panelI18n = {
   chartTitle: 'Network Rate',
   chartLoading: 'Loading...',
@@ -57,21 +63,25 @@ function applyPanelI18n(nextLabels = null) {
   };
 }
 
-async function applyTrayTheme() {
+async function applyTrayTheme(preloadedSettings = null) {
   try {
     if (!document.body) return;
     let preference = '';
-    if (window.clashfox && typeof window.clashfox.readSettings === 'function') {
+    let resolvedSettings = preloadedSettings && typeof preloadedSettings === 'object'
+      ? preloadedSettings
+      : null;
+    if (!resolvedSettings && window.clashfox && typeof window.clashfox.readSettings === 'function') {
       const response = await window.clashfox.readSettings();
       const settings = response && response.ok && response.data && typeof response.data === 'object'
         ? response.data
         : null;
-      preference = String(
-        (settings && settings.theme)
-        || (settings && settings.appearance && settings.appearance.theme)
-        || '',
-      ).trim().toLowerCase();
+      resolvedSettings = settings;
     }
+    preference = String(
+      (resolvedSettings && resolvedSettings.theme)
+      || (resolvedSettings && resolvedSettings.appearance && resolvedSettings.appearance.theme)
+      || '',
+    ).trim().toLowerCase();
     let theme = '';
     if (preference === 'day' || preference === 'light') {
       theme = 'day';
@@ -84,6 +94,7 @@ async function applyTrayTheme() {
     }
     document.body.dataset.theme = theme;
     document.documentElement.setAttribute('data-theme', theme);
+    applyFoxRankThemeCssVarsFromSettings(resolvedSettings);
   } catch {
     const fallback = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
       ? 'night'
@@ -91,8 +102,41 @@ async function applyTrayTheme() {
     if (document.body) {
       document.body.dataset.theme = fallback;
       document.documentElement.setAttribute('data-theme', fallback);
+      applyFoxRankThemeCssVarsFromSettings(null);
     }
   }
+}
+
+function resolveFoxRankSkinPaletteFromSettings(settings = null) {
+  const source = settings && typeof settings === 'object' ? settings : {};
+  const appearance = source && typeof source.appearance === 'object' ? source.appearance : {};
+  const skinId = String(
+    source.foxRankSkin
+    || appearance.foxRankSkin
+    || '',
+  ).trim().toLowerCase();
+  const palette = FOX_RANK_SKIN_PALETTES[skinId] || null;
+  return {
+    skinId,
+    start: String(palette && palette.start ? palette.start : '#8dc2fa'),
+    end: String(palette && palette.end ? palette.end : '#6ea7ea'),
+  };
+}
+
+function applyFoxRankThemeCssVarsFromSettings(settings = null) {
+  const palette = resolveFoxRankSkinPaletteFromSettings(settings);
+  const targets = [document.documentElement, document.body].filter(Boolean);
+  targets.forEach((node) => {
+    node.style.setProperty('--fox-rank-skin-start', palette.start);
+    node.style.setProperty('--fox-rank-skin-end', palette.end);
+    node.style.setProperty('--fox-rank-aura-start', palette.start);
+    node.style.setProperty('--fox-rank-aura-end', palette.end);
+    if (palette.skinId) {
+      node.dataset.foxRankSkin = palette.skinId;
+    } else if (node.dataset && Object.prototype.hasOwnProperty.call(node.dataset, 'foxRankSkin')) {
+      delete node.dataset.foxRankSkin;
+    }
+  });
 }
 
 function formatBytes(value) {
@@ -857,7 +901,8 @@ if (window.clashfox && typeof window.clashfox.onSettingsUpdated === 'function') 
       || appearance.locale
       || 'auto',
     ).trim().toLowerCase();
-    const nextSignature = `${nextTheme}|${nextLang}`;
+    const nextSkin = String(settings.foxRankSkin || appearance.foxRankSkin || '').trim().toLowerCase();
+    const nextSignature = `${nextTheme}|${nextLang}|${nextSkin}`;
     if (nextSignature === lastSettingsSignature) {
       return;
     }
@@ -865,7 +910,7 @@ if (window.clashfox && typeof window.clashfox.onSettingsUpdated === 'function') 
     if (!panelRendererVisible) {
       return;
     }
-    applyTrayTheme().catch(() => {});
+    applyTrayTheme(settings).catch(() => {});
     if (window.clashfox && typeof window.clashfox.trayMenuGetData === 'function') {
       window.clashfox.trayMenuGetData()
         .then((data) => {

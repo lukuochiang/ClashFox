@@ -1138,6 +1138,7 @@ function mergeAppearanceAliases(settings = {}) {
     ...source,
     lang: readString('lang', 'auto'),
     theme: readString('theme', 'auto'),
+    foxRankSkin: readString('foxRankSkin', ''),
     debugMode: readBoolean('debugMode', false),
     acceptBeta: readBoolean('acceptBeta', false),
     chartEnabled: readTrayBoolean('chartEnabled', readTrayBoolean('trayMenuChartEnabled', true)),
@@ -1372,6 +1373,7 @@ function normalizeSettingsForStorage(input = {}) {
   parsed.appearance = {
     lang: normalizeTextValue(parsed.lang) || 'auto',
     theme: normalizeTextValue(parsed.theme) || 'auto',
+    foxRankSkin: normalizeTextValue(parsed.foxRankSkin) || '',
     debugMode: Boolean(parsed.debugMode),
     acceptBeta: Boolean(parsed.acceptBeta),
     windowWidth: Number.parseInt(String(parsed.windowWidth ?? ''), 10) || DEFAULT_MAIN_WINDOW_WIDTH,
@@ -1456,6 +1458,7 @@ function normalizeSettingsForStorage(input = {}) {
   };
   delete parsed.lang;
   delete parsed.theme;
+  delete parsed.foxRankSkin;
   delete parsed.debugMode;
   delete parsed.acceptBeta;
   delete parsed.githubUser;

@@ -87,6 +87,12 @@ const FOX_RANK_SKINS = [
   { id: 'starlight', name: 'Starlight Grid', unlockTier: 4, desc: 'Nebula shimmer for long streaks.' },
   { id: 'solar-crown', name: 'Solar Crown', unlockTier: 5, desc: 'Golden crest reserved for Apex Fox.' },
 ];
+const FOX_RANK_SKIN_PALETTES = {
+  campfire: { start: '#ffb86c', end: '#ff8f57' },
+  aurora: { start: '#7df3d2', end: '#4bc6ff' },
+  starlight: { start: '#c685ff', end: '#8d6dff' },
+  'solar-crown': { start: '#f6d365', end: '#fda085' },
+};
 
 let foxRankPanel = document.getElementById('foxRankPanel');
 let foxRankCard = document.getElementById('foxRankCard');
@@ -3154,6 +3160,7 @@ function normalizeSettingsForUi(settings) {
   };
   normalized.lang = readAppearanceString('lang', 'auto');
   normalized.theme = readAppearanceString('theme', 'auto');
+  normalized.foxRankSkin = readAppearanceString('foxRankSkin', '');
   normalized.debugMode = readAppearanceBool('debugMode', false);
   normalized.acceptBeta = readAppearanceBool('acceptBeta', false);
   const kernelGithubUser = String(kernelSettings.githubUser || '').trim();
@@ -3195,6 +3202,7 @@ function normalizeSettingsForUi(settings) {
     ...appearanceRest,
     lang: normalized.lang,
     theme: normalized.theme,
+    foxRankSkin: normalized.foxRankSkin,
     debugMode: normalized.debugMode,
     acceptBeta: normalized.acceptBeta,
     windowWidth: normalized.windowWidth,
@@ -3385,6 +3393,11 @@ function mapSettingsForFile(settings) {
     ...existingAppearanceSansLogs,
     lang: String(mapped.lang || existingAppearance.lang || 'auto'),
     theme: String(mapped.theme || existingAppearance.theme || 'auto'),
+    foxRankSkin: String(
+      mapped.foxRankSkin
+      || existingAppearance.foxRankSkin
+      || ''
+    ).trim().toLowerCase(),
     debugMode: Object.prototype.hasOwnProperty.call(mapped, 'debugMode')
       ? Boolean(mapped.debugMode)
       : Boolean(existingAppearance.debugMode),
@@ -3622,6 +3635,9 @@ function mapSettingsForFile(settings) {
   }
   if (Object.prototype.hasOwnProperty.call(mapped, 'theme')) {
     delete mapped.theme;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'foxRankSkin')) {
+    delete mapped.foxRankSkin;
   }
   if (Object.prototype.hasOwnProperty.call(mapped, 'debugMode')) {
     delete mapped.debugMode;
@@ -3866,6 +3882,7 @@ function saveSettings(patch, options = {}) {
   const appearanceKeys = [
     'lang',
     'theme',
+    'foxRankSkin',
     'debugMode',
     'acceptBeta',
     'windowWidth',
@@ -4286,6 +4303,7 @@ function applyTheme(theme) {
   state.theme = theme;
   document.documentElement.setAttribute('data-theme', theme);
   document.body.dataset.theme = theme;
+  applyFoxRankThemeCssVars(null, state.settings || null);
   try {
     localStorage.setItem('lastTheme', theme);
   } catch {}
@@ -4372,6 +4390,7 @@ function applySettings(settings) {
   // temporarily suppress transitions while applying initial theme
   document.body.classList.add('no-theme-transition');
   applyThemePreference(state.settings.theme, false);
+  applyFoxRankThemeCssVars(null, state.settings);
   document.body.classList.remove('no-theme-transition');
   setLanguage(state.settings.lang, false, false);
   syncDebugMode(state.settings.debugMode);
@@ -8144,6 +8163,121 @@ function getFoxRankSkinText(skinId, field = 'name', fallback = '') {
   return foxRankText(entry[field] || '', fallback);
 }
 
+function resolveFoxRankSkinPaletteFromSettings(settings = null) {
+  const source = settings && typeof settings === 'object'
+    ? settings
+    : (state.settings && typeof state.settings === 'object' ? state.settings : {});
+  const appearance = source && typeof source.appearance === 'object' ? source.appearance : {};
+  const skinId = String(
+    source.foxRankSkin
+    || appearance.foxRankSkin
+    || '',
+  ).trim().toLowerCase();
+  const palette = FOX_RANK_SKIN_PALETTES[skinId] || null;
+  if (!palette) {
+    return {
+      skinId: '',
+      start: '#8dc2fa',
+      end: '#6ea7ea',
+    };
+  }
+  return {
+    skinId,
+    start: String(palette.start),
+    end: String(palette.end),
+  };
+}
+
+function applyFoxRankThemeCssVars(palette = null, settings = null) {
+  if (!document || !document.documentElement) {
+    return;
+  }
+  const resolved = palette && typeof palette === 'object'
+    ? {
+      skinId: String(palette.skinId || '').trim().toLowerCase(),
+      start: String(palette.start || '#8dc2fa'),
+      end: String(palette.end || '#6ea7ea'),
+    }
+    : resolveFoxRankSkinPaletteFromSettings(settings);
+  const targets = [document.documentElement, document.body].filter(Boolean);
+  targets.forEach((node) => {
+    node.style.setProperty('--fox-rank-skin-start', resolved.start);
+    node.style.setProperty('--fox-rank-skin-end', resolved.end);
+    node.style.setProperty('--fox-rank-aura-start', resolved.start);
+    node.style.setProperty('--fox-rank-aura-end', resolved.end);
+    if (resolved.skinId) {
+      node.dataset.foxRankSkin = resolved.skinId;
+    } else if (node.dataset && Object.prototype.hasOwnProperty.call(node.dataset, 'foxRankSkin')) {
+      delete node.dataset.foxRankSkin;
+    }
+  });
+}
+
+function resolveFoxRankSkinPalette(snapshot = null) {
+  const data = snapshot || getFoxRankSnapshot();
+  const tier = data && data.tier && Number.isFinite(Number(data.tier.index))
+    ? (FOX_RANK_TIERS[Number(data.tier.index)] || FOX_RANK_TIERS[0])
+    : FOX_RANK_TIERS[0];
+  const skinId = String(data && data.activeSkin && data.activeSkin.id ? data.activeSkin.id : '').trim();
+  const fallbackStart = String(tier && tier.colorStart ? tier.colorStart : '#8dc2fa');
+  const fallbackEnd = String(tier && tier.colorEnd ? tier.colorEnd : '#6ea7ea');
+  const skinPalette = FOX_RANK_SKIN_PALETTES[skinId] || null;
+  return {
+    skinId,
+    start: String(skinPalette && skinPalette.start ? skinPalette.start : fallbackStart),
+    end: String(skinPalette && skinPalette.end ? skinPalette.end : fallbackEnd),
+  };
+}
+
+function applyFoxRankSkinPalette(snapshot = null) {
+  const palette = resolveFoxRankSkinPalette(snapshot);
+  applyFoxRankThemeCssVars(palette);
+  const targets = [
+    foxRankPanel,
+    foxRankCard,
+    foxRankDetailCard,
+    foxRankBriefModal && foxRankBriefModal.querySelector
+      ? foxRankBriefModal.querySelector('.fox-rank-brief-card')
+      : null,
+  ];
+  targets.forEach((node) => {
+    if (!node || !node.style) {
+      return;
+    }
+    node.style.setProperty('--fox-rank-aura-start', palette.start);
+    node.style.setProperty('--fox-rank-aura-end', palette.end);
+    if (palette.skinId) {
+      node.dataset.foxRankSkin = palette.skinId;
+    } else if (node.dataset && Object.prototype.hasOwnProperty.call(node.dataset, 'foxRankSkin')) {
+      delete node.dataset.foxRankSkin;
+    }
+  });
+}
+
+function syncFoxRankSkinThemeSetting(snapshot = null) {
+  const data = snapshot || getFoxRankSnapshot();
+  const nextSkin = String(data && data.activeSkin && data.activeSkin.id ? data.activeSkin.id : '').trim().toLowerCase();
+  if (!nextSkin) {
+    return;
+  }
+  const currentAppearance = state.settings && state.settings.appearance && typeof state.settings.appearance === 'object'
+    ? state.settings.appearance
+    : {};
+  const currentSkin = String(
+    (state.settings && state.settings.foxRankSkin)
+    || currentAppearance.foxRankSkin
+    || '',
+  ).trim().toLowerCase();
+  if (currentSkin === nextSkin) {
+    return;
+  }
+  saveSettings({
+    appearance: {
+      foxRankSkin: nextSkin,
+    },
+  });
+}
+
 function getFoxRankSkinItems(snapshot) {
   const data = snapshot || getFoxRankSnapshot();
   return FOX_RANK_SKINS.map((skin) => ({
@@ -9006,13 +9140,9 @@ function renderFoxRankPanel(snapshot = null, options = {}) {
   }
   if (foxRankCard) {
     foxRankCard.classList.toggle('is-ascend-near', data.progress >= 0.8);
-    foxRankCard.style.setProperty('--fox-rank-aura-start', tier.colorStart);
-    foxRankCard.style.setProperty('--fox-rank-aura-end', tier.colorEnd);
   }
-  if (foxRankDetailCard) {
-    foxRankDetailCard.style.setProperty('--fox-rank-aura-start', tier.colorStart);
-    foxRankDetailCard.style.setProperty('--fox-rank-aura-end', tier.colorEnd);
-  }
+  applyFoxRankSkinPalette(data);
+  syncFoxRankSkinThemeSetting(data);
   renderFoxRankDetailPanel(data);
   if (!suppressBrief) {
     maybeOpenFoxRankBrief(data);

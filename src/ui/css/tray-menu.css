@@ -6,6 +6,10 @@
   --panel-soft: #192638;
   --accent: #63b7ff;
   --accent-strong: #2f85e8;
+  --fox-rank-skin-start: #8dc2fa;
+  --fox-rank-skin-end: #6ea7ea;
+  --fox-rank-aura-start: var(--fox-rank-skin-start);
+  --fox-rank-aura-end: var(--fox-rank-skin-end);
   --mint: #67d6bd;
   --ink: #e8f0f8;
   --muted: #92a7bd;
@@ -43,6 +47,10 @@ body[data-theme="night"] {
   --panel-soft: #192638;
   --accent: #63b7ff;
   --accent-strong: #2f85e8;
+  --fox-rank-skin-start: #8dc2fa;
+  --fox-rank-skin-end: #6ea7ea;
+  --fox-rank-aura-start: var(--fox-rank-skin-start);
+  --fox-rank-aura-end: var(--fox-rank-skin-end);
   --mint: #67d6bd;
   --ink: #e8f0f8;
   --muted: #92a7bd;
@@ -85,16 +93,16 @@ body {
 body.submenu-window {
   min-height: 100%;
   background:
-    radial-gradient(circle at top right, rgba(42, 96, 153, 0.12), transparent 38%),
-    radial-gradient(circle at bottom left, rgba(39, 128, 118, 0.08), transparent 34%),
+    radial-gradient(circle at top right, color-mix(in srgb, var(--fox-rank-skin-start) 16%, transparent), transparent 38%),
+    radial-gradient(circle at bottom left, color-mix(in srgb, var(--fox-rank-skin-end) 12%, transparent), transparent 34%),
     linear-gradient(150deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 252, 0.94));
   overflow: hidden;
 }
 
 body[data-theme="night"].submenu-window {
   background:
-    radial-gradient(circle at top right, rgba(76, 139, 209, 0.18), transparent 38%),
-    radial-gradient(circle at bottom left, rgba(57, 174, 153, 0.1), transparent 34%),
+    radial-gradient(circle at top right, color-mix(in srgb, var(--fox-rank-skin-start) 22%, transparent), transparent 38%),
+    radial-gradient(circle at bottom left, color-mix(in srgb, var(--fox-rank-skin-end) 14%, transparent), transparent 34%),
     linear-gradient(150deg, rgba(10, 18, 29, 0.98), rgba(19, 31, 46, 0.96));
 }
 
@@ -109,8 +117,8 @@ body[data-theme="night"].submenu-window {
 .submenu-root {
   border-radius: 12px;
   background:
-    radial-gradient(circle at top right, rgba(42, 96, 153, 0.12), transparent 38%),
-    radial-gradient(circle at bottom left, rgba(39, 128, 118, 0.08), transparent 34%),
+    radial-gradient(circle at top right, color-mix(in srgb, var(--fox-rank-skin-start) 16%, transparent), transparent 38%),
+    radial-gradient(circle at bottom left, color-mix(in srgb, var(--fox-rank-skin-end) 12%, transparent), transparent 34%),
     linear-gradient(150deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 252, 0.94));
   border: 1px solid var(--border);
   box-shadow: none;
@@ -122,8 +130,8 @@ body[data-theme="night"].submenu-window {
 body[data-theme="night"] .menu-root,
 body[data-theme="night"] .submenu-root {
   background:
-    radial-gradient(circle at top right, rgba(76, 139, 209, 0.18), transparent 38%),
-    radial-gradient(circle at bottom left, rgba(57, 174, 153, 0.1), transparent 34%),
+    radial-gradient(circle at top right, color-mix(in srgb, var(--fox-rank-skin-start) 22%, transparent), transparent 38%),
+    radial-gradient(circle at bottom left, color-mix(in srgb, var(--fox-rank-skin-end) 14%, transparent), transparent 34%),
     linear-gradient(150deg, rgba(10, 18, 29, 0.98), rgba(19, 31, 46, 0.96));
   border-color: rgba(132, 157, 188, 0.22);
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.42);
