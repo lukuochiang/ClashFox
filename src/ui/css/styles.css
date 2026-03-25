@@ -402,11 +402,74 @@ html[data-theme="day"] body::after {
   --fox-rank-aura-start: #8dc2fa;
   --fox-rank-aura-end: #6ea7ea;
   width: 100%;
-  display: flex;
-  justify-content: flex-start;
+  position: relative;
+  display: grid;
+  gap: 6px;
+  justify-items: start;
   margin-top: auto;
   padding: 20px 0px 0px;
   flex: 0 0 auto;
+}
+
+.fox-rank-pill {
+  width: 100%;
+  max-width: 272px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--fox-rank-aura-start) 42%, rgba(109, 141, 180, 0.36));
+  background:
+    radial-gradient(130% 100% at 100% 0%, color-mix(in srgb, var(--fox-rank-aura-start) 26%, transparent) 0%, transparent 58%),
+    radial-gradient(120% 90% at 0% 100%, color-mix(in srgb, var(--fox-rank-aura-end) 22%, transparent) 0%, transparent 54%),
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--fox-rank-aura-start) 10%, rgba(26, 36, 52, 0.82)),
+      color-mix(in srgb, var(--fox-rank-aura-end) 9%, rgba(18, 25, 37, 0.86))
+    );
+  color: #e8f0fb;
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.fox-rank-pill-title {
+  opacity: 0.9;
+}
+
+.fox-rank-pill-tier {
+  opacity: 0.86;
+}
+
+.fox-rank-pill-boost {
+  justify-self: end;
+  color: #9fd1ff;
+}
+
+.fox-rank-pill-caret {
+  opacity: 0.76;
+  transition: transform 120ms ease;
+}
+
+.fox-rank-panel.is-expanded .fox-rank-pill-caret {
+  transform: rotate(180deg);
+}
+
+body[data-theme="day"] .fox-rank-pill {
+  color: #4e6279;
+  border-color: color-mix(in srgb, var(--fox-rank-aura-start) 38%, rgba(129, 161, 194, 0.48));
+  background:
+    radial-gradient(130% 100% at 100% 0%, color-mix(in srgb, var(--fox-rank-aura-start) 20%, transparent) 0%, transparent 58%),
+    radial-gradient(120% 90% at 0% 100%, color-mix(in srgb, var(--fox-rank-aura-end) 16%, transparent) 0%, transparent 54%),
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--fox-rank-aura-start) 8%, rgba(248, 252, 255, 0.98)),
+      color-mix(in srgb, var(--fox-rank-aura-end) 7%, rgba(239, 246, 252, 0.98))
+    );
 }
 
 .fox-rank-card {
@@ -425,7 +488,7 @@ html[data-theme="day"] body::after {
   backdrop-filter: none;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 1.5px;
   min-height: 0;
   color: #f1f6fe;
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
@@ -433,6 +496,15 @@ html[data-theme="day"] body::after {
   cursor: pointer;
   appearance: none;
   font-family: inherit;
+  display: none;
+  position: absolute;
+  top: calc(100% + 1px);
+  left: 0;
+  z-index: 36;
+}
+
+.fox-rank-panel.is-expanded .fox-rank-card {
+  display: flex;
 }
 
 body[data-theme="day"] .fox-rank-card {
@@ -2091,7 +2163,7 @@ body[data-theme="day"] .sidebar-theme-toggle:hover {
 .nav {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .nav-scroll {
@@ -2272,7 +2344,7 @@ body[data-theme="day"] .sidebar-theme-toggle:hover {
   padding-top: 0;
   border-top: 0;
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .sidebar.is-collapsed .nav-bottom {
@@ -2288,16 +2360,30 @@ body[data-theme="day"] .sidebar-theme-toggle:hover {
   background: transparent;
   border: 1px solid transparent;
   color: var(--muted);
-  padding: 8px 14px;
-  height: 32px;
+  padding: 7px 12px;
+  height: 30px;
   text-align: left;
   border-radius: 10px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   transition: background-color 80ms ease, border-color 80ms ease, color 80ms ease, box-shadow 80ms ease;
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.nav-tools-group {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(148, 171, 197, 0.24);
+}
+
+.nav-tools-list {
+  display: grid;
+  gap: 6px;
+  padding-left: 0;
 }
 
 .sidebar.is-collapsed .nav-btn {
@@ -2311,6 +2397,11 @@ body[data-theme="day"] .sidebar-theme-toggle:hover {
   font-size: 0;
   color: transparent;
   overflow: visible;
+}
+
+.sidebar.is-collapsed .nav-tools-list {
+  display: grid;
+  padding-left: 0;
 }
 
 .sidebar.is-collapsed .nav-btn[data-tray-action]::after {
@@ -2497,7 +2588,7 @@ body:not([data-theme="day"]) #helperLogsOpenBtn:hover {
   width: 13px;
   height: 13px;
   margin-left: auto;
-  opacity: 0.8;
+  opacity: 0;
   background: var(--nav-icon-fill, var(--icon-fill-default));
   mask-image: var(--icon-external-link);
   mask-size: 13px 13px;
@@ -2508,6 +2599,16 @@ body:not([data-theme="day"]) #helperLogsOpenBtn:hover {
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
   flex: 0 0 13px;
+  transition: opacity 80ms ease;
+}
+
+.nav-btn[data-tray-action="open-foxboard"]:hover::after,
+.nav-btn[data-tray-action="open-dashboard"]:hover::after,
+.nav-btn[data-tray-action="open-worldwide"]:hover::after,
+.nav-btn[data-tray-action="open-foxboard"]:focus-visible::after,
+.nav-btn[data-tray-action="open-dashboard"]:focus-visible::after,
+.nav-btn[data-tray-action="open-worldwide"]:focus-visible::after {
+  opacity: 0.82;
 }
 
 .nav-btn.active,
@@ -5279,7 +5380,7 @@ body:not([data-theme="day"]) #helperUninstallBtn:hover {
   color: var(--ink);
   word-break: break-all;
   font-family: monospace;
-  min-width: 280px;
+  min-width: 0;
   border-radius: 12px;
 }
 
@@ -7231,10 +7332,6 @@ body[data-page="settings"] .settings-reveal-icon-btn svg {
 }
 
 @media (max-width: 980px) {
-  .paths-row-grid .paths-item {
-    flex-direction: column;
-    align-items: stretch;
-  }
   .paths-label {
     margin-bottom: 6px;
   }
@@ -10561,6 +10658,10 @@ body[data-theme="day"] .update-guide-card {
     gap: 8px;
   }
 
+  .nav-tools-group {
+    display: none;
+  }
+
   .nav-bottom {
     display: none;
   }
@@ -10659,6 +10760,7 @@ body[data-theme="day"] .update-guide-card {
 
   #topNavMoreMenu .nav-btn[data-tray-action]::after {
     margin-left: auto;
+    opacity: 0.82;
   }
 
   body[data-theme="day"] .top-nav-more-menu {

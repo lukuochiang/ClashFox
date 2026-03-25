@@ -32,12 +32,22 @@
     <button class="nav-btn" data-page="kernel" data-i18n="nav.kernel">Kernel</button>
     <button class="nav-btn" data-page="config" data-i18n="nav.config">Config</button>
     <button class="nav-btn" data-page="logs" data-i18n="nav.logs">Logs</button>
-    <button class="nav-btn" id="navDashboard" data-tray-action="open-dashboard" data-i18n="nav.dashboard">Dashboard</button>
-    <button class="nav-btn" id="navTrackers" data-tray-action="open-worldwide" data-i18n="nav.trackers">Trackers</button>
-    <button class="nav-btn" id="navFoxboard" data-tray-action="open-foxboard" data-i18n="nav.foxboard">Foxboard</button>
+    <div class="nav-tools-group" id="navToolsGroup">
+      <div class="nav-tools-list" id="navToolsList">
+        <button class="nav-btn" id="navDashboard" data-tray-action="open-dashboard" data-i18n="nav.dashboard">Dashboard</button>
+        <button class="nav-btn" id="navTrackers" data-tray-action="open-worldwide" data-i18n="nav.trackers">Trackers</button>
+        <button class="nav-btn" id="navFoxboard" data-tray-action="open-foxboard" data-i18n="nav.foxboard">Foxboard</button>
+      </div>
+    </div>
   </nav>
 
   <section class="fox-rank-panel" id="foxRankPanel">
+    <button class="fox-rank-pill" id="foxRankPill" type="button" aria-expanded="false">
+      <span class="fox-rank-pill-title" data-fox-rank-ui="title">Fox Rank</span>
+      <span class="fox-rank-pill-tier" id="foxRankPillTier">S1 · 1/5</span>
+      <span class="fox-rank-pill-boost" id="foxRankPillBoost">+0%</span>
+      <span class="fox-rank-pill-caret" aria-hidden="true">▾</span>
+    </button>
     <button class="fox-rank-card" id="foxRankCard" type="button" aria-label="Open Fox Rank details">
       <div class="fox-rank-ambient" aria-hidden="true">
         <span class="fox-rank-halo fox-rank-halo-a"></span>

@@ -53,6 +53,8 @@ let topNavMoreBtn = document.getElementById('topNavMoreBtn');
 let topNavMoreMenu = document.getElementById('topNavMoreMenu');
 let navScroll = document.getElementById('navScroll');
 let primaryNav = document.getElementById('primaryNav');
+let navToolsGroup = document.getElementById('navToolsGroup');
+let navToolsList = document.getElementById('navToolsList');
 let appShell = document.querySelector('.app');
 let menuContainer = document.getElementById('menuContainer');
 let sidebarFoxDividerHost = document.getElementById('sidebarFoxDividerHost');
@@ -67,6 +69,7 @@ let currentPage = document.body ? document.body.dataset.page : '';
 let appWindowVisible = !document.hidden;
 const VALID_PAGES = new Set(['overview', 'kernel', 'config', 'logs', 'settings', 'help', 'dashboard']);
 const FOX_RANK_STORAGE_KEY = 'clashfox-fox-rank-state';
+const FOX_RANK_PANEL_EXPANDED_KEY = 'clashfox-fox-rank-panel-expanded';
 const FOX_RANK_USAGE_RESET_VERSION = '2026-03-16-reset-usage-v1';
 const FOX_RANK_EXPLORATION_COOLDOWN_MS = 45000;
 const FOX_RANK_STAGE_SUB_LEVELS = 5;
@@ -111,15 +114,22 @@ const FOX_RANK_SKINS = [
   { id: 'aurora', name: 'Aurora Veil', unlockTier: 5, desc: 'Blue-green ribbons for steady links.' },
   { id: 'starlight', name: 'Starlight Grid', unlockTier: 10, desc: 'Nebula shimmer for long streaks.' },
   { id: 'solar-crown', name: 'Solar Crown', unlockTier: 15, desc: 'Golden crest reserved for Apex Fox.' },
+  { id: 'nebula-flare', name: 'Nebula Flare', unlockTier: 17, desc: 'Meteor pulse for high-frequency route explorers.' },
+  { id: 'void-aurora', name: 'Void Aurora', unlockTier: 19, desc: 'Final aurora layer for top-tier quality guardians.' },
 ];
 const FOX_RANK_SKIN_PALETTES = {
   campfire: { start: '#ffb86c', end: '#ff8f57' },
   aurora: { start: '#7df3d2', end: '#4bc6ff' },
   starlight: { start: '#c685ff', end: '#8d6dff' },
   'solar-crown': { start: '#f6d365', end: '#fda085' },
+  'nebula-flare': { start: '#ff8bd8', end: '#8f7cff' },
+  'void-aurora': { start: '#8ef0ff', end: '#6ea0ff' },
 };
 
 let foxRankPanel = document.getElementById('foxRankPanel');
+let foxRankPill = document.getElementById('foxRankPill');
+let foxRankPillTier = document.getElementById('foxRankPillTier');
+let foxRankPillBoost = document.getElementById('foxRankPillBoost');
 let foxRankCard = document.getElementById('foxRankCard');
 let foxRankTierName = document.getElementById('foxRankTierName');
 let foxRankLevelText = document.getElementById('foxRankLevelText');
@@ -170,6 +180,8 @@ let noticePopTimer = null;
 let topNavOverflowRaf = null;
 let foxRankActiveTab = 'log';
 let foxRankImpactToastAt = 0;
+let foxRankPanelExpanded = false;
+foxRankPanelExpanded = readBooleanFromStorage(FOX_RANK_PANEL_EXPANDED_KEY, false);
 
 let statusRunning = document.getElementById('statusRunning');
 let statusVersion = document.getElementById('statusVersion');
@@ -2441,6 +2453,38 @@ function formatFoxRankText(key, vars = {}, fallback = '') {
     const value = vars[token];
     return value === undefined || value === null ? '' : String(value);
   });
+}
+
+function readBooleanFromStorage(key, fallback = false) {
+  try {
+    const raw = localStorage.getItem(String(key || ''));
+    if (raw === 'true') return true;
+    if (raw === 'false') return false;
+  } catch {
+    // ignore localStorage failures
+  }
+  return Boolean(fallback);
+}
+
+function writeBooleanToStorage(key, value) {
+  try {
+    localStorage.setItem(String(key || ''), value ? 'true' : 'false');
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
+function applyFoxRankPanelExpandedState(expanded = false, persist = false) {
+  foxRankPanelExpanded = Boolean(expanded);
+  if (foxRankPanel) {
+    foxRankPanel.classList.toggle('is-expanded', foxRankPanelExpanded);
+  }
+  if (foxRankPill) {
+    foxRankPill.setAttribute('aria-expanded', foxRankPanelExpanded ? 'true' : 'false');
+  }
+  if (persist) {
+    writeBooleanToStorage(FOX_RANK_PANEL_EXPANDED_KEY, foxRankPanelExpanded);
+  }
 }
 
 function normalizeVersionForDisplay(raw = '') {
@@ -7916,6 +7960,7 @@ function loadFoxRankFromStorage() {
     lastUsageTickSec: 0,
     usageResetVersion: FOX_RANK_USAGE_RESET_VERSION,
     qualityScore: 0,
+    maxQualityScore: 0,
     avgLatencyMs: 0,
     avgLossRate: 0,
     avgDownRate: 0,
@@ -7952,6 +7997,7 @@ function loadFoxRankFromStorage() {
     lastUsageTickSec: Number(value.lastUsageTickSec) || 0,
     usageResetVersion: String(value.usageResetVersion || FOX_RANK_USAGE_RESET_VERSION),
     qualityScore: Number(value.qualityScore) || 0,
+    maxQualityScore: Math.max(0, Number(value.maxQualityScore) || Number(value.qualityScore) || 0),
     avgLatencyMs: Number(value.avgLatencyMs) || 0,
     avgLossRate: Number(value.avgLossRate) || 0,
     avgDownRate: Number(value.avgDownRate) || 0,
@@ -8051,6 +8097,7 @@ function saveFoxRankToStorage() {
       lastUsageTickSec: Number(state.foxRank.lastUsageTickSec) || 0,
       usageResetVersion: String(state.foxRank.usageResetVersion || FOX_RANK_USAGE_RESET_VERSION),
       qualityScore: Number(state.foxRank.qualityScore) || 0,
+      maxQualityScore: Math.max(0, Number(state.foxRank.maxQualityScore) || Number(state.foxRank.qualityScore) || 0),
       avgLatencyMs: Number(state.foxRank.avgLatencyMs) || 0,
       avgLossRate: Number(state.foxRank.avgLossRate) || 0,
       avgDownRate: Number(state.foxRank.avgDownRate) || 0,
@@ -8337,9 +8384,39 @@ function getFoxRankSkinText(skinId, field = 'name', fallback = '') {
     aurora: { name: 'skinAurora', desc: 'skinAuroraDesc' },
     starlight: { name: 'skinStarlight', desc: 'skinStarlightDesc' },
     'solar-crown': { name: 'skinSolar', desc: 'skinSolarDesc' },
+    'nebula-flare': { name: 'skinNebulaFlare', desc: 'skinNebulaFlareDesc' },
+    'void-aurora': { name: 'skinVoidAurora', desc: 'skinVoidAuroraDesc' },
   };
   const entry = map[skinId] || {};
   return foxRankText(entry[field] || '', fallback);
+}
+
+function getFoxRankSkinUnlockCondition(skin, snapshot) {
+  const data = snapshot || getFoxRankSnapshot();
+  const skinId = String(skin && skin.id ? skin.id : '');
+  if (skinId === 'nebula-flare') {
+    const required = 8;
+    const current = Math.max(0, Number(data.explorationCount) || 0);
+    return {
+      met: current >= required,
+      pendingLabel: formatFoxRankText('skinNeedExplore', { count: required }, `Need ${required} explorations`),
+    };
+  }
+  if (skinId === 'void-aurora') {
+    const required = 90;
+    const peak = Math.round(Math.max(
+      Number(data.qualityScore) || 0,
+      Number(state.foxRank && state.foxRank.maxQualityScore) || 0,
+    ) * 100);
+    return {
+      met: peak >= required,
+      pendingLabel: formatFoxRankText('skinNeedPeakQuality', { value: required }, `Peak quality ${required}% required`),
+    };
+  }
+  return {
+    met: true,
+    pendingLabel: '',
+  };
 }
 
 function resolveFoxRankSkinPaletteFromSettings(settings = null) {
@@ -8459,13 +8536,22 @@ function syncFoxRankSkinThemeSetting(snapshot = null) {
 
 function getFoxRankSkinItems(snapshot) {
   const data = snapshot || getFoxRankSnapshot();
-  return FOX_RANK_SKINS.map((skin) => ({
-    ...skin,
-    name: getFoxRankSkinText(skin.id, 'name', skin.name),
-    desc: getFoxRankSkinText(skin.id, 'desc', skin.desc),
-    unlocked: data.tier.index >= skin.unlockTier,
-    active: data.tier.index >= skin.unlockTier
-      && skin.unlockTier === Math.max(...FOX_RANK_SKINS.filter((item) => data.tier.index >= item.unlockTier).map((item) => item.unlockTier)),
+  const items = FOX_RANK_SKINS.map((skin) => {
+    const levelUnlocked = data.tier.index >= skin.unlockTier;
+    const condition = getFoxRankSkinUnlockCondition(skin, data);
+    return {
+      ...skin,
+      name: getFoxRankSkinText(skin.id, 'name', skin.name),
+      desc: getFoxRankSkinText(skin.id, 'desc', skin.desc),
+      unlocked: levelUnlocked && condition.met,
+      pendingLabel: levelUnlocked && !condition.met ? condition.pendingLabel : '',
+    };
+  });
+  const unlockedItems = items.filter((item) => item.unlocked);
+  const activeUnlockTier = unlockedItems.length ? Math.max(...unlockedItems.map((item) => item.unlockTier)) : 0;
+  return items.map((item) => ({
+    ...item,
+    active: item.unlocked && item.unlockTier === activeUnlockTier,
   }));
 }
 
@@ -9147,12 +9233,15 @@ function renderFoxRankDetailPanel(snapshot = null) {
         const isShowcased = item.unlocked && showcasedId === item.id;
         const status = isShowcased
           ? foxRankText('showcased', 'Showcased')
-          : (item.unlocked ? foxRankText('unlocked', 'Unlocked') : foxRankText('locked', 'Locked'));
+          : (item.unlocked ? '' : foxRankText('locked', 'Locked'));
         const classNames = `fox-rank-badge-item ${item.unlocked ? 'is-unlocked' : 'is-locked'}${freshSet.has(item.id) ? ' unlocked-fresh' : ''}${isShowcased ? ' is-showcased' : ''}`;
         const action = item.unlocked && !isShowcased
-          ? `<button class="fox-rank-badge-action" type="button" data-fox-rank-showcase="${escapeLogCell(item.id)}">${escapeLogCell(foxRankText('setShowcase', 'Set Showcase'))}</button>`
+          ? `<button class="fox-rank-badge-action" type="button" data-fox-rank-showcase="${escapeLogCell(item.id)}">${escapeLogCell(foxRankText('setShowcase', 'Set Primary'))}</button>`
           : '';
-        return `<div class="${classNames}" style="animation-delay:${index * 70}ms"><div class="fox-rank-badge-main"><strong>${escapeLogCell(item.name)}</strong><span>${escapeLogCell(item.desc)}</span></div><div class="fox-rank-badge-side"><em class="fox-rank-badge-status">${escapeLogCell(status)}</em>${action}</div></div>`;
+        const statusHtml = status
+          ? `<em class="fox-rank-badge-status">${escapeLogCell(status)}</em>`
+          : '';
+        return `<div class="${classNames}" style="animation-delay:${index * 70}ms"><div class="fox-rank-badge-main"><strong>${escapeLogCell(item.name)}</strong><span>${escapeLogCell(item.desc)}</span></div><div class="fox-rank-badge-side">${statusHtml}${action}</div></div>`;
       })
       .join('');
   }
@@ -9163,6 +9252,8 @@ function renderFoxRankDetailPanel(snapshot = null) {
           ? foxRankText('equipped', 'Equipped')
           : item.unlocked
             ? foxRankText('unlocked', 'Unlocked')
+            : item.pendingLabel
+              ? item.pendingLabel
             : formatFoxRankText('levelPrefix', { level: item.unlockTier + 1 }, `Lv. ${item.unlockTier + 1}`);
         const className = `fox-rank-skin-item ${item.unlocked ? 'is-unlocked' : 'is-locked'}${item.active ? ' is-active' : ''}`;
         return `<div class="${className}" style="animation-delay:${index * 50}ms"><strong>${escapeLogCell(item.name)}</strong><span>${escapeLogCell(item.desc)}</span><em>${escapeLogCell(status)}</em></div>`;
@@ -9494,6 +9585,10 @@ function updateFoxRankFromOverviewSnapshot(data) {
     reconnectCount: Number(state.foxRank.reconnectCount) || 0,
     reconnectDelayMsTotal: Number(state.foxRank.reconnectDelayMsTotal) || 0,
   });
+  state.foxRank.maxQualityScore = Math.max(
+    Number(state.foxRank.maxQualityScore) || 0,
+    Number(state.foxRank.qualityScore) || 0,
+  );
   const snapshot = getFoxRankSnapshot();
   syncFoxRankUnlockedBadges(snapshot);
   recordFoxRankHistory(snapshot);
@@ -9514,6 +9609,9 @@ function renderFoxRankPanel(snapshot = null, options = {}) {
   }
   if (foxRankLevelText) {
     setNodeTextIfChanged(foxRankLevelText, getFoxRankTierLevelText(tier));
+  }
+  if (foxRankPillTier) {
+    setNodeTextIfChanged(foxRankPillTier, getFoxRankTierLevelText(tier));
   }
   if (foxRankProgressText) {
     setNodeTextIfChanged(foxRankProgressText, `${delta} / ${span} XP`);
@@ -9538,6 +9636,9 @@ function renderFoxRankPanel(snapshot = null, options = {}) {
   }
   if (foxRankBoostHint) {
     setNodeTextIfChanged(foxRankBoostHint, data.boost.label);
+  }
+  if (foxRankPillBoost) {
+    setNodeTextIfChanged(foxRankPillBoost, `+${Number(data.boost.total) || 0}%`);
   }
   if (foxRankWarningChip) {
     const shouldWarn = data.progress >= 0.8 && data.progress < 1;
@@ -10803,6 +10904,8 @@ function refreshLayoutRefs() {
   topNavMoreMenu = document.getElementById('topNavMoreMenu');
   navScroll = document.getElementById('navScroll');
   primaryNav = document.getElementById('primaryNav');
+  navToolsGroup = document.getElementById('navToolsGroup');
+  navToolsList = document.getElementById('navToolsList');
   appShell = document.querySelector('.app');
   menuContainer = document.getElementById('menuContainer');
   sidebarFoxDividerHost = document.getElementById('sidebarFoxDividerHost');
@@ -10813,6 +10916,9 @@ function refreshLayoutRefs() {
   refreshStatusBtn = document.getElementById('refreshStatus');
   statusPill = document.getElementById('statusPill');
   foxRankPanel = document.getElementById('foxRankPanel');
+  foxRankPill = document.getElementById('foxRankPill');
+  foxRankPillTier = document.getElementById('foxRankPillTier');
+  foxRankPillBoost = document.getElementById('foxRankPillBoost');
   foxRankCard = document.getElementById('foxRankCard');
   foxRankTierName = document.getElementById('foxRankTierName');
   foxRankLevelText = document.getElementById('foxRankLevelText');
@@ -10859,6 +10965,7 @@ function refreshLayoutRefs() {
   foxRankBriefClose = document.getElementById('foxRankBriefClose');
   foxRankBriefOpenDetail = document.getElementById('foxRankBriefOpenDetail');
   ensureSidebarFoxDivider();
+  applyFoxRankPanelExpandedState(foxRankPanelExpanded, false);
 }
 
 function setTopNavOverflowItemVisible(action = '', visible = false) {
@@ -10893,6 +11000,8 @@ function syncTopNavMenuLayout() {
   }
   const bottomNav = document.querySelector('.nav.nav-bottom');
   const logsBtn = primaryNav.querySelector('.nav-btn[data-page="logs"]');
+  const toolsGroup = document.getElementById('navToolsGroup');
+  const toolsList = document.getElementById('navToolsList');
   const settingsMainBtn = document.getElementById('navSettingsMain');
   const helpMainBtn = document.getElementById('navHelpMain');
   const settingsOverflowBtn = document.getElementById('navSettingsOverflow');
@@ -10904,6 +11013,9 @@ function syncTopNavMenuLayout() {
   ].filter(Boolean);
 
   if (isTopNavMode()) {
+    if (toolsGroup) {
+      toolsGroup.style.display = 'none';
+    }
     const trayAnchor = trayButtons.find((btn) => btn.parentElement === primaryNav) || null;
     if (settingsMainBtn && settingsMainBtn.parentElement !== primaryNav) {
       if (trayAnchor) primaryNav.insertBefore(settingsMainBtn, trayAnchor);
@@ -10932,23 +11044,26 @@ function syncTopNavMenuLayout() {
       bottomNav.appendChild(helpMainBtn);
     }
   }
-  let insertRef = logsBtn;
+  if (toolsGroup) {
+    toolsGroup.style.display = '';
+  }
   trayButtons.forEach((btn) => {
-    if (!insertRef || !primaryNav.contains(insertRef)) {
+    if (toolsList) {
+      if (btn.parentElement !== toolsList) {
+        toolsList.appendChild(btn);
+      }
+    } else if (!logsBtn || !primaryNav.contains(logsBtn)) {
       if (btn.parentElement !== primaryNav) {
         primaryNav.appendChild(btn);
       }
-    } else if (btn.parentElement !== primaryNav || btn.previousElementSibling !== insertRef) {
+    } else if (btn.parentElement !== primaryNav || btn.previousElementSibling !== logsBtn) {
       if (btn.parentElement !== primaryNav) {
-        insertAfterNode(insertRef, btn);
+        insertAfterNode(logsBtn, btn);
       } else {
-        primaryNav.insertBefore(btn, insertRef.nextSibling);
+        primaryNav.insertBefore(btn, logsBtn.nextSibling);
       }
     }
     btn.classList.remove('top-nav-more-item');
-    if (primaryNav.contains(btn)) {
-      insertRef = btn;
-    }
   });
   if (settingsOverflowBtn) settingsOverflowBtn.style.display = '';
   if (helpOverflowBtn) helpOverflowBtn.style.display = '';
@@ -11927,6 +12042,12 @@ async function loadLayoutParts() {
 
 function bindPageEvents() {
   bindKernelInstallControls();
+  if (foxRankPill && foxRankPill.dataset.bound !== 'true') {
+    foxRankPill.dataset.bound = 'true';
+    foxRankPill.addEventListener('click', () => {
+      applyFoxRankPanelExpandedState(!foxRankPanelExpanded, true);
+    });
+  }
   if (noticePopClose && noticePopClose.dataset.bound !== 'true') {
     noticePopClose.dataset.bound = 'true';
     noticePopClose.addEventListener('click', hideNoticePop);
