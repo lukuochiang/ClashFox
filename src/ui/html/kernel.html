@@ -30,18 +30,16 @@
         <div id="contentRoot" class="content-root">
           <section id="kernel" class="panel active">
             <div class="card install-card">
-              <div class="install-header">
-                <div>
-                  <h3 data-i18n="install.title">Install / Update Mihomo</h3>
-                  <div class="install-sub" data-i18n="install.hint">
-                    Downloads the latest kernel for your architecture and backs up the previous one.
-                  </div>
-                </div>
+              <div class="card-header-row">
+                <h3 data-i18n="install.title">Install / Update Mihomo</h3>
                 <div class="install-header-meta">
                   <div class="install-status" id="installStatus" data-i18n="install.ready">Ready to install.</div>
                 </div>
               </div>
-              <div class="install-form">
+              <div class="card-body install-form">
+                <div class="install-header" data-i18n="install.hint">
+                  Downloads the latest kernel for your architecture and backs up the previous one.
+                </div>
                 <div class="form-row source-row">
                   <label data-i18n="install.github">Release Source</label>
                   <div class="kernel-source-picker" id="kernelSourcePicker" role="radiogroup">
@@ -122,21 +120,23 @@
                   </button>
                 </div>
               </div>
-              <div class="table" id="kernelTable"></div>
-              <div class="pagination">
-                <div class="page-controls">
-                  <button class="btn ghost" id="kernelPrev" data-i18n="pagination.prev">Prev</button>
-                  <div class="page-info" id="kernelPageInfo">1 / 1</div>
-                  <button class="btn ghost" id="kernelNext" data-i18n="pagination.next">Next</button>
-                </div>
-                <div class="page-size">
-                  <span data-i18n="pagination.size">Per page</span>
-                  <select id="kernelPageSize">
-                    <option value="5">5</option>
-                    <option value="10" selected>10</option>
-                    <option value="20">20</option>
-                    <option value="50">50</option>
-                  </select>
+              <div class="card-body">
+                <div class="table" id="kernelTable"></div>
+                <div class="pagination">
+                  <div class="page-controls">
+                    <button class="btn ghost" id="kernelPrev" data-i18n="pagination.prev">Prev</button>
+                    <div class="page-info" id="kernelPageInfo">1 / 1</div>
+                    <button class="btn ghost" id="kernelNext" data-i18n="pagination.next">Next</button>
+                  </div>
+                  <div class="page-size">
+                    <span data-i18n="pagination.size">Per page</span>
+                    <select id="kernelPageSize">
+                      <option value="5">5</option>
+                      <option value="10" selected>10</option>
+                      <option value="20">20</option>
+                      <option value="50">50</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>

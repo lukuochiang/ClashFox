@@ -34,55 +34,59 @@
               <div class="card-header-row">
                 <h3 data-i18n="logs.title">Kernel Logs</h3>
               </div>
-              <div class="form-row logs-toolbar">
-                <div class="field-inline logs-level-filter">
-                  <label for="logLevelFilter" data-i18n="logs.levelLabel">Level</label>
-                  <select id="logLevelFilter">
-                    <option value="debug">debug</option>
-                    <option value="info" selected>info</option>
-                    <option value="warn">warn</option>
-                    <option value="error">error</option>
-                    <option value="fatal">fatal</option>
-                    <option value="trace">trace</option>
-                  </select>
+              <div class="card-body">
+                <div class="form-row logs-toolbar">
+                  <div class="field-inline logs-level-filter">
+                    <label for="logLevelFilter" data-i18n="logs.levelLabel">Level</label>
+                    <select id="logLevelFilter">
+                      <option value="debug">debug</option>
+                      <option value="info" selected>info</option>
+                      <option value="warn">warn</option>
+                      <option value="error">error</option>
+                      <option value="fatal">fatal</option>
+                      <option value="trace">trace</option>
+                    </select>
+                  </div>
+                  <div class="field-inline logs-msg-filter">
+                    <label for="logMessageFilter" data-i18n="logs.msgLabel">MSG</label>
+                    <label class="search-field-wrap">
+                      <input id="logMessageFilter" class="search-field" type="search" data-i18n-placeholder="logs.searchPlaceholder" placeholder="Search message..." />
+                    </label>
+                  </div>
                 </div>
-                <div class="field-inline logs-msg-filter">
-                  <label for="logMessageFilter" data-i18n="logs.msgLabel">MSG</label>
-                  <label class="search-field-wrap">
-                    <input id="logMessageFilter" class="search-field" type="search" data-i18n-placeholder="logs.searchPlaceholder" placeholder="Search message..." />
-                  </label>
+                <div class="log-table-wrap">
+                  <table class="log-table" id="logTable">
+                    <thead>
+                      <tr>
+                        <th data-i18n="logs.tableDate">Date</th>
+                        <th data-i18n="logs.tableLevel">Level</th>
+                        <th data-i18n="logs.tableMessage">MSG</th>
+                      </tr>
+                    </thead>
+                    <tbody id="logTableBody"></tbody>
+                  </table>
                 </div>
-              </div>
-              <div class="log-table-wrap">
-                <table class="log-table" id="logTable">
-                  <thead>
-                    <tr>
-                      <th data-i18n="logs.tableDate">Date</th>
-                      <th data-i18n="logs.tableLevel">Level</th>
-                      <th data-i18n="logs.tableMessage">MSG</th>
-                    </tr>
-                  </thead>
-                  <tbody id="logTableBody"></tbody>
-                </table>
               </div>
             </div>
             <div class="card card-full">
               <div class="card-header-row">
                 <h3 data-i18n="clean.title">Clean Logs</h3>
               </div>
-              <div class="form-row logs-toolbar logs-clean-toolbar">
-                <div class="field-inline logs-level-filter">
-                  <label for="cleanModeSelect" data-i18n="clean.modeLabel">Mode</label>
-                  <select id="cleanModeSelect">
-                    <option value="all" data-i18n="clean.all">Delete all backups</option>
-                    <option value="7d" data-i18n="clean.7d">Keep last 7 days</option>
-                    <option value="30d" data-i18n="clean.30d">Keep last 30 days</option>
-                  </select>
+              <div class="card-body">
+                <div class="form-row logs-toolbar logs-clean-toolbar">
+                  <div class="field-inline logs-level-filter">
+                    <label for="cleanModeSelect" data-i18n="clean.modeLabel">Mode</label>
+                    <select id="cleanModeSelect">
+                      <option value="all" data-i18n="clean.all">Delete all backups</option>
+                      <option value="7d" data-i18n="clean.7d">Keep last 7 days</option>
+                      <option value="30d" data-i18n="clean.30d">Keep last 30 days</option>
+                    </select>
+                  </div>
                 </div>
-              </div>
-              <div class="action-row logs-clean-action">
-                <button class="btn" id="openAppLogBtn" type="button">Open App Log</button>
-                <button class="btn danger" id="cleanBtn" data-i18n="clean.action">Clean Logs</button>
+                <div class="action-row logs-clean-action">
+                  <button class="btn" id="openAppLogBtn" type="button">Open App Log</button>
+                  <button class="btn danger" id="cleanBtn" data-i18n="clean.action">Clean Logs</button>
+                </div>
               </div>
             </div>
           </div>

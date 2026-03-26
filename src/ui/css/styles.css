@@ -20,6 +20,10 @@
   --ink: #e8f0f8;
   --muted: #91a5bb;
   --border: rgba(132, 157, 188, 0.22);
+  --card-title-ink: color-mix(in srgb, var(--ink) 92%, #ffffff 8%);
+  --card-divider: color-mix(in srgb, var(--border) 84%, rgba(255, 255, 255, 0.04));
+  --card-divider-soft: color-mix(in srgb, var(--border) 62%, transparent);
+  --card-header-accent: linear-gradient(90deg, color-mix(in srgb, var(--accent) 72%, #ffffff 28%), color-mix(in srgb, var(--accent-strong) 64%, #ffffff 36%));
   --shadow: rgba(0, 0, 0, 0.35);
   --font-display: "Georgia", "Times New Roman", serif;
   --font-body: "Trebuchet MS", "Verdana", sans-serif;
@@ -127,6 +131,10 @@ body[data-theme="day"], html[data-theme="day"] body {
   --ink: #1f2d3d;
   --muted: #5d6f82;
   --border: rgba(128, 149, 173, 0.26);
+  --card-title-ink: color-mix(in srgb, var(--ink) 90%, #0f1d2c 10%);
+  --card-divider: color-mix(in srgb, var(--border) 88%, rgba(118, 152, 189, 0.12));
+  --card-divider-soft: color-mix(in srgb, var(--border) 68%, transparent);
+  --card-header-accent: linear-gradient(90deg, color-mix(in srgb, var(--accent) 82%, #8cc6ff 18%), color-mix(in srgb, var(--accent-strong) 78%, #78b6f7 22%));
   --shadow: rgba(50, 68, 92, 0.12);
   background:
     radial-gradient(circle at 14% 16%, rgba(125, 176, 230, 0.2), transparent 30%),
@@ -3593,7 +3601,7 @@ body[data-page="settings"] .panel-grid {
 }
 
 body[data-page="settings"] .card h3 {
-  margin: 2px 0 12px;
+  /*margin: 2px 0 12px;*/
 }
 
 body[data-page="settings"] .settings-top-columns {
@@ -3650,7 +3658,7 @@ body[data-page="settings"] .settings-top-column-right::before {
   top: 0;
   bottom: 0;
   width: 1px;
-  background: var(--border);
+  background: linear-gradient(180deg, transparent 0%, var(--card-divider-soft) 9%, var(--card-divider) 52%, var(--card-divider-soft) 91%, transparent 100%);
 }
 
 body[data-page="settings"] .settings-log-columns {
@@ -3669,7 +3677,7 @@ body[data-page="settings"] .settings-log-column .form-row {
 }
 
 body[data-page="settings"] .settings-log-column-right {
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--card-divider);
   padding-left: 20px;
   /*margin-left: -10px;*/
 }
@@ -4584,6 +4592,7 @@ body[data-theme="day"] .overview-card[data-module="running"] .card-icon.running[
 .card h3 {
   margin: 0 0 16px;
   font-size: 18px;
+  color: var(--card-title-ink);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -4608,7 +4617,7 @@ body[data-theme="day"] .overview-card[data-module="running"] .card-icon.running[
 
 .card-split {
   height: 1px;
-  background: var(--border);
+  background: var(--card-divider);
   margin: 18px 0 14px;
 }
 
@@ -4618,6 +4627,15 @@ body[data-theme="day"] .overview-card[data-module="running"] .card-icon.running[
   justify-content: space-between;
   min-height: 30px;
   gap: 12px;
+  padding: 0 0 8px;
+  border-radius: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 4%, transparent),
+    transparent
+  );
+  border: 0;
+  border-bottom: 1px solid var(--card-divider);
   margin-bottom: 12px;
   overflow: visible;
 }
@@ -5332,7 +5350,7 @@ body[data-page="settings"] .user-paths-card .paths-row-grid {
 }
 
 .helper-card-desc {
-  margin: -2px 0 0;
+  margin: 10px 0 0;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.45;
@@ -6422,7 +6440,7 @@ body[data-theme="day"] .conn-live-chart {
 .outbound-options {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 8px;
+  gap: 2px;
   border: none;
   background: transparent;
 }
@@ -6432,7 +6450,7 @@ body[data-theme="day"] .conn-live-chart {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 14px 10px 34px;
+  padding: 10px 14px 4px 34px;
   border: 1px solid rgba(146, 172, 203, 0.26);
   border-radius: 12px;
   background: linear-gradient(180deg, rgba(28, 39, 55, 0.54), rgba(21, 31, 44, 0.5));
@@ -6639,7 +6657,7 @@ body[data-theme="day"] .radio-pill:has(input[type="radio"]:checked)::after {
 
 .install-card {
   display: grid;
-  gap: 16px;
+  /*gap: 16px;*/
   margin-bottom: 10px;
 }
 
@@ -6657,7 +6675,7 @@ body[data-page="kernel"] #kernel.panel .card {
 
 body[data-page="kernel"] #kernel.panel .install-card {
   margin-bottom: 0;
-  gap: 12px;
+  /*gap: 12px;*/
 }
 
 body[data-page="kernel"] #kernel.panel .card > h3 {
@@ -6676,6 +6694,8 @@ body[data-page="kernel"] #kernel.panel .pagination {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  font-size: 12px;
+  margin: 0px 0px 12px 0px;
   gap: 16px;
 }
 
@@ -6684,13 +6704,6 @@ body[data-page="kernel"] #kernel.panel .pagination {
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
-}
-
-.install-sub {
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--muted);
-  max-width: 520px;
 }
 
 .install-status {
@@ -6954,6 +6967,7 @@ body[data-theme="day"] .kernel-source-tag.is-try {
 
 .kernel-version-picker > .version-refresh-btn {
   flex: 0 0 auto;
+  min-width: 72px;
   white-space: nowrap;
 }
 
@@ -7370,7 +7384,8 @@ select:focus-visible {
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35);
-  z-index: 60;
+  z-index: 4000;
+  pointer-events: auto;
   padding: 4px;
 }
 
@@ -7540,7 +7555,7 @@ body[data-page="settings"] .proxy-config-columns::before {
   /* Match the same visual divider position as .settings-log-column-right (20px grid gap). */
   left: calc(50% + 10px - 0.5px);
   width: 1px;
-  background: var(--border);
+  background: linear-gradient(180deg, transparent 0%, var(--card-divider-soft) 9%, var(--card-divider) 52%, var(--card-divider-soft) 91%, transparent 100%);
 }
 
 body[data-page="settings"] .proxy-config-columns .settings-log-column-right {
@@ -8754,13 +8769,20 @@ body[data-theme="night"] .help-ack-card:hover {
   height: 100%;
 }
 
+.help-doc-card .card-header-row {
+  height: 46px;
+  min-height: 46px;
+  align-items: center;
+  padding-top: 0;
+}
+
 .help-doc-title {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 30px;
+  min-height: 0;
   margin-bottom: 0;
-  line-height: 1.2;
+  line-height: 1.1;
 }
 
 .help-doc-title::before {
@@ -8780,7 +8802,8 @@ body[data-theme="night"] .help-ack-card:hover {
   align-items: center;
   justify-content: center;
   color: color-mix(in srgb, var(--accent) 62%, #4f7bb8 38%);
-  margin-top: 1px;
+  margin-top: 0;
+  transform: none;
 }
 
 .help-doc-title-icon svg {
@@ -8852,10 +8875,6 @@ body[data-theme="night"] .help-ack-card:hover {
 
 .help-doc-card-license {
   border-color: color-mix(in srgb, #4e8fd2 22%, var(--line) 78%);
-}
-
-.help-doc-card-license .help-doc-title {
-  margin-top: -10px;
 }
 
 .help-doc-card-license .help-doc-list {

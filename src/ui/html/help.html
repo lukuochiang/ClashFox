@@ -78,7 +78,7 @@
 <!--                </button>-->
               </div>
             </div>
-            <div class="help-about-layout">
+            <div class="card-body help-about-layout">
               <div class="help-about-primary">
                 <div class="help-about-team-block">
                   <div class="help-about-team-head">
@@ -167,9 +167,12 @@
             </div>
           </div>
           <div class="card">
+            <div class="card-header-row">
             <h3 data-i18n="help.ackTitle" data-card-icon="defaults">Acknowledgements</h3>
-            <p class="help-ack-intro" data-i18n="help.ackDesc">Special thanks to the following projects and developers:</p>
-            <ul class="help-list help-ack-list">
+            </div>
+            <div class="card-body">
+              <p class="help-ack-intro" data-i18n="help.ackDesc">Special thanks to the following projects and developers:</p>
+              <ul class="help-list help-ack-list">
               <li class="help-ack-item">
                 <a class="help-link help-ack-card" href="https://github.com/MetaCubeX/mihomo" data-open-external="true">
                   MetaCubeX/mihomo
@@ -199,49 +202,63 @@
             <p class="help-ack-footer">
               感谢项目作者的开源贡献！如果这些项目对你有帮助，也请给他们点个 ⭐ Star 支持一下！
             </p>
+            </div>
           </div>
           <div class="help-doc-grid">
             <div class="card help-doc-card help-doc-card-privacy">
-              <h3 class="help-doc-title">
-                <span class="help-doc-title-icon help-doc-title-icon-privacy" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M12 3 5.5 6v5.3c0 4.4 2.8 8.4 6.5 10.6 3.7-2.2 6.5-6.2 6.5-10.6V6L12 3Z"/><path d="M9.4 12.1 11 13.7l3.7-3.7"/></svg>
-                </span>
-                <span>安全隐私</span>
-              </h3>
-              <p class="help-doc-copy">ClashFox 尊重你的隐私，尽量不收集个人身份信息。设置、状态和本地缓存主要保存在本机，只有在需要时才会访问更新检查、日志和控制器相关信息。</p>
-              <ul class="help-doc-list">
-                <li>本地配置与缓存可随时清理。</li>
-                <li>常规使用不会主动上传个人数据。</li>
-                <li>更新检查仅请求版本与发布信息。</li>
-              </ul>
+
+              <div class="card-header-row">
+                <h3 class="help-doc-title">
+                  <span class="help-doc-title-icon help-doc-title-icon-privacy" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M12 3 5.5 6v5.3c0 4.4 2.8 8.4 6.5 10.6 3.7-2.2 6.5-6.2 6.5-10.6V6L12 3Z"/><path d="M9.4 12.1 11 13.7l3.7-3.7"/></svg>
+                  </span>
+                  <span data-i18n="help.docPrivacyTitle">Security & Privacy</span>
+                </h3>
+              </div>
+              <div class="card-body">
+                <p class="help-doc-copy" data-i18n="help.docPrivacyIntro">ClashFox respects your privacy and avoids collecting personally identifiable information whenever possible. Settings, status data, and local caches are primarily stored on your device. Network access is only used when needed for update checks, logs, and controller-related information.</p>
+                <ul class="help-doc-list">
+                  <li data-i18n="help.docPrivacyItem1">Local configurations and caches can be cleared at any time.</li>
+                  <li data-i18n="help.docPrivacyItem2">Regular usage does not proactively upload personal data.</li>
+                  <li data-i18n="help.docPrivacyItem3">Update checks only request version and release metadata.</li>
+                </ul>
+              </div>
             </div>
             <div class="card help-doc-card help-doc-card-license">
-              <h3 class="help-doc-title">
-                <span class="help-doc-title-icon help-doc-title-icon-license" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M7 4.5h10a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z"/><path d="M9 8h6"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
-                </span>
-                <span>许可证</span>
-              </h3>
-              <p class="help-doc-copy">本项目基于 GNU GPL v3 发布。你可以自由使用、修改和分发，但需要遵守 GPLv3 相关条款。</p>
-              <ul class="help-doc-list">
-                <li>完整许可文本请查看仓库根目录的 <span class="help-doc-inline-code">LICENSE</span> 文件。</li>
-                <li><a class="help-doc-license-link" href="https://github.com/lukuochiang/ClashFox/blob/main/LICENSE" data-open-external="true">LICENSE</a></li>
-              </ul>
+              <div class="card-header-row">
+                <h3 class="help-doc-title">
+                  <span class="help-doc-title-icon help-doc-title-icon-license" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M7 4.5h10a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z"/><path d="M9 8h6"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
+                  </span>
+                  <span data-i18n="help.docLicenseTitle">License</span>
+                </h3>
+              </div>
+              <div class="card-body help-doc-body">
+                <p class="help-doc-copy" data-i18n="help.docLicenseIntro">This project is distributed under GNU GPL v3. You may use, modify, and redistribute it freely under the GPLv3 terms.</p>
+                <ul class="help-doc-list">
+                  <li data-i18n="help.docLicenseItem1">For the full license text, see the LICENSE file in the repository root.</li>
+                  <li><a class="help-doc-license-link" href="https://github.com/lukuochiang/ClashFox/blob/main/LICENSE" data-open-external="true">LICENSE</a></li>
+                </ul>
+              </div>
             </div>
             <div class="card help-doc-card help-doc-card-disclaimer">
-              <h3 class="help-doc-title">
-                <span class="help-doc-title-icon help-doc-title-icon-disclaimer" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M12 3.8 3.8 18a1.8 1.8 0 0 0 1.56 2.7h13.3a1.8 1.8 0 0 0 1.56-2.7L12 3.8Z"/><path d="M12 9v4.5"/><path d="M12 16.8h.01"/></svg>
-                </span>
-                <span>免责声明</span>
-              </h3>
-              <p class="help-doc-copy">本项目仅供个人学习和研究使用。使用本项目即表示您同意：</p>
-              <ul class="help-doc-list">
-                <li>不将本项目用于任何商业用途。</li>
-                <li>承担使用本项目的所有风险和责任。</li>
-                <li>遵守相关服务条款和法律法规。</li>
-              </ul>
-              <p class="help-doc-copy">项目作者对因使用本项目而产生的任何直接或间接损失不承担责任。</p>
+              <div class="card-header-row">
+                <h3 class="help-doc-title">
+                  <span class="help-doc-title-icon help-doc-title-icon-disclaimer" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M12 3.8 3.8 18a1.8 1.8 0 0 0 1.56 2.7h13.3a1.8 1.8 0 0 0 1.56-2.7L12 3.8Z"/><path d="M12 9v4.5"/><path d="M12 16.8h.01"/></svg>
+                  </span>
+                  <span data-i18n="help.docDisclaimerTitle">Disclaimer</span>
+                </h3>
+              </div>
+              <div class="card-body">
+                <p class="help-doc-copy" data-i18n="help.docDisclaimerIntro">This project is intended for personal learning and research only. By using it, you agree that:</p>
+                <ul class="help-doc-list">
+                  <li data-i18n="help.docDisclaimerItem1">You will not use this project for commercial purposes.</li>
+                  <li data-i18n="help.docDisclaimerItem2">You assume all risks and responsibilities arising from use.</li>
+                  <li data-i18n="help.docDisclaimerItem3">You comply with applicable service terms and laws.</li>
+                </ul>
+                <p class="help-doc-copy" data-i18n="help.docDisclaimerOutro">The project authors are not liable for any direct or indirect losses caused by using this project.</p>
+              </div>
             </div>
           </div>
         </section>

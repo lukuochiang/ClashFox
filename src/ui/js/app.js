@@ -2188,10 +2188,10 @@ const I18N = window.CLASHFOX_I18N || {};
 const SETTINGS_KEY = 'clashfox-settings';
 const METACUBEX_CATALOG_CACHE_KEY = 'clashfox-metacubex-version-catalog-v1';
 const METACUBEX_CATALOG_CACHE_MAX_AGE_MS = 30 * 60 * 1000;
-const MAIN_WINDOW_DEFAULT_WIDTH = 980;
-const MAIN_WINDOW_DEFAULT_HEIGHT = 640;
+const MAIN_WINDOW_DEFAULT_WIDTH = 1004;
+const MAIN_WINDOW_DEFAULT_HEIGHT = 675;
 const MAIN_WINDOW_MIN_WIDTH = 980;
-const MAIN_WINDOW_MIN_HEIGHT = 640;
+const MAIN_WINDOW_MIN_HEIGHT = 675;
 const MAIN_WINDOW_MAX_WIDTH = 4096;
 const MAIN_WINDOW_MAX_HEIGHT = 2160;
 const APP_RELEASES_URL = 'https://github.com/lukuochiang/ClashFox/releases';
@@ -2713,7 +2713,7 @@ function positionCustomSelectMenu(entry) {
   menu.style.maxHeight = `${Math.round(maxHeight)}px`;
   menu.style.visibility = '';
   if (wrapper) {
-    wrapper.style.zIndex = '61';
+    wrapper.style.zIndex = '4001';
   }
 }
 
@@ -6731,7 +6731,10 @@ function updateInstallVersionVisibility() {
   installVersion.classList.toggle('is-hidden', installMode !== 'manual');
   if (installVersionRefreshBtn) {
     installVersionRefreshBtn.disabled = isLoading || !isMetaCubeX;
-    installVersionRefreshBtn.classList.toggle('is-hidden', !isMetaCubeX || !state.metaCubeXCatalogLastLoadFailed);
+    installVersionRefreshBtn.classList.toggle('is-hidden', !isMetaCubeX);
+    if (!String(installVersionRefreshBtn.textContent || '').trim()) {
+      installVersionRefreshBtn.textContent = ti('install.versionRefresh', 'Refresh');
+    }
   }
   updateInstallVersionModeOptionText();
   syncInstallVersionPickerUi();
