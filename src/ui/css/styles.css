@@ -23,6 +23,12 @@
   --card-title-ink: color-mix(in srgb, var(--ink) 92%, #ffffff 8%);
   --card-divider: color-mix(in srgb, var(--border) 84%, rgba(255, 255, 255, 0.04));
   --card-divider-soft: color-mix(in srgb, var(--border) 62%, transparent);
+  --card-header-bg: linear-gradient(
+    180deg,
+    rgba(58, 78, 106, 0.72),
+    rgba(48, 66, 92, 0.68)
+  );
+  --card-header-divider: color-mix(in srgb, rgba(120, 148, 186, 0.36) 76%, transparent);
   --card-header-accent: linear-gradient(90deg, color-mix(in srgb, var(--accent) 72%, #ffffff 28%), color-mix(in srgb, var(--accent-strong) 64%, #ffffff 36%));
   --shadow: rgba(0, 0, 0, 0.35);
   --font-display: "Georgia", "Times New Roman", serif;
@@ -177,6 +183,12 @@ body[data-theme="day"], html[data-theme="day"] body {
   --card-title-ink: color-mix(in srgb, var(--ink) 90%, #0f1d2c 10%);
   --card-divider: color-mix(in srgb, var(--border) 88%, rgba(118, 152, 189, 0.12));
   --card-divider-soft: color-mix(in srgb, var(--border) 68%, transparent);
+  --card-header-bg: linear-gradient(
+    180deg,
+    rgb(244 248 248 / 0.92),
+    rgb(239 241 244 / 0.9)
+  );
+  --card-header-divider: color-mix(in srgb, rgba(133, 161, 196, 0.44) 78%, transparent);
   --card-header-accent: linear-gradient(90deg, color-mix(in srgb, var(--accent) 82%, #8cc6ff 18%), color-mix(in srgb, var(--accent-strong) 78%, #78b6f7 22%));
   --shadow: rgba(50, 68, 92, 0.12);
   background:
@@ -561,10 +573,21 @@ body[data-theme="day"] .fox-rank-pill {
 body[data-theme="day"] .fox-rank-card {
   color: #3a4d63;
   background:
-    radial-gradient(130% 100% at 100% 0%, color-mix(in srgb, var(--fox-rank-aura-start) 30%, transparent) 0%, transparent 58%),
-    linear-gradient(145deg, rgba(248, 252, 255, 0.98) 0%, rgba(239, 246, 252, 0.98) 100%);
-  border: 1px solid rgba(129, 161, 194, 0.48);
+    radial-gradient(130% 100% at 100% 0%, color-mix(in srgb, var(--accent) 18%, transparent) 0%, transparent 58%),
+    radial-gradient(120% 90% at 0% 100%, color-mix(in srgb, #84b8ee 12%, transparent) 0%, transparent 54%),
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--panel) 94%, #f7fbff 6%) 0%,
+      color-mix(in srgb, var(--panel-soft) 92%, #edf5fd 8%) 100%
+    );
+  border: 1px solid color-mix(in srgb, var(--card-divider) 78%, rgba(126, 158, 196, 0.42));
+  border-bottom-color: color-mix(in srgb, var(--card-divider) 92%, rgba(116, 147, 186, 0.5));
   box-shadow: 0 6px 12px rgba(63, 90, 120, 0.08);
+}
+
+body[data-theme="day"] .fox-rank-footer {
+  padding-top: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--card-divider) 82%, rgba(137, 168, 204, 0.34));
 }
 
 .fox-rank-card:hover {
@@ -773,23 +796,40 @@ body[data-theme="day"] .fox-rank-progress-text {
 .fox-rank-footer {
   position: relative;
   z-index: 1;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
+}
+
+.fox-rank-status-row > :first-child,
+.fox-rank-footer > :first-child {
+  justify-self: start;
+  min-width: 0;
+}
+
+.fox-rank-status-row > :last-child,
+.fox-rank-footer > :last-child {
+  justify-self: end;
+  min-width: 0;
 }
 
 .fox-rank-boost,
 .fox-rank-warning,
 .fox-rank-footer-pill {
-  display: inline-flex;
+  display: none;
   align-items: center;
-  min-height: 20px;
-  padding: 2px 8px;
+  height: 22px;
+  min-height: 22px;
+  padding: 0 8px;
   border-radius: 999px;
   font-size: 9px;
   font-weight: 700;
+  line-height: 1;
   letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .fox-rank-boost {
@@ -3765,7 +3805,12 @@ body[data-page="settings"] .settings-top-column .form-row .toggle {
 }
 
 body[data-page="settings"] .menu-items-card .card-header-row {
-  margin-bottom: 6px;
+  margin-bottom: 12px;
+}
+
+body[data-page="settings"] .card-header-row {
+  margin: -16px -18px 12px;
+  padding: 12px 16px;
 }
 
 body[data-page="settings"] .menu-items-card {
@@ -4691,31 +4736,47 @@ body[data-theme="day"] .overview-card[data-module="running"] .card-icon.running[
 
 .card-header-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  min-height: 30px;
+  height: 50px;
+  min-height: 50px;
   gap: 12px;
-  padding: 0 0 10px;
-  border-radius: 0;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--accent) 4%, transparent),
-    transparent
-  );
+  padding: 12px 14px;
+  margin: -12px -12px 12px;
+  border-radius: 18px 18px 0 0;
+  background: var(--card-header-bg);
+  box-shadow:
+    inset 0 1px 0 rgba(236, 246, 255, 0.12),
+    inset 0 -1px 0 rgba(19, 29, 43, 0.04);
   border: 0;
-  border-bottom: 1px solid var(--card-divider);
-  margin-bottom: 12px;
+  border-bottom: 1px solid var(--card-header-divider);
   overflow: visible;
 }
 
 .card-header-row > h3 {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
   margin: 0;
-  min-height: 0;
+  min-height: 24px;
   line-height: 1.22;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-header-row.helper-card-header {
+  height: auto;
+  min-height: 50px;
+}
+
+.card-header-row.helper-card-header > h3 {
+  flex-wrap: wrap;
   white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
   overflow-wrap: anywhere;
 }
 
@@ -4755,18 +4816,18 @@ body[data-page="config"] .control-card .control-actions .icon-btn svg {
   --card-icon-fill: var(--icon-fill-dashboard);
 }
 
-.outbound-icon::before {
-  mask-size: 15px 15px;
-  transform: none;
-}
-
-body[data-page="overview"] .outbound-card .card-header-row > h3 {
-  transform: none;
-}
-
 .quick-actions-icon {
   --card-icon-mask: var(--icon-sliders);
   --card-icon-fill: var(--icon-fill-config);
+}
+
+.quick-actions-icon::before,
+.outbound-icon::before {
+  width: 16px;
+  height: 16px;
+  mask-size: 16px 16px;
+  -webkit-mask-size: 16px 16px;
+  transform: none;
 }
 
 .current-kernel-icon {
@@ -5701,17 +5762,22 @@ body[data-theme="day"] .paths-input::placeholder {
 
 .quick-actions-card > .card-header-row,
 .outbound-card > .card-header-row {
-  height: 34px;
-  min-height: 34px;
-  margin-bottom: 10px;
+  height: 50px;
+  min-height: 50px;
+  align-items: center;
+  margin-bottom: 12px;
 }
 
 .quick-actions-card > .card-header-row > h3,
 .outbound-card > .card-header-row > h3 {
-  height: 34px;
-  min-height: 34px;
-  line-height: 1;
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  min-height: 24px;
+  line-height: 1.22;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .quick-actions-card > .card-header-row > .overview-drag-handle,
@@ -5723,7 +5789,7 @@ body[data-theme="day"] .paths-input::placeholder {
   position: relative;
   border: 1px solid rgba(148, 171, 197, 0.2);
   border-radius: 12px;
-  padding: 18px 10px 10px;
+  padding: 27px 10px 20px;
   background: linear-gradient(180deg, rgba(27, 39, 56, 0.72), rgba(20, 31, 45, 0.78));
   box-shadow: inset 0 1px 0 rgba(216, 234, 255, 0.05), 0 12px 26px rgba(3, 9, 18, 0.18);
 }
@@ -5874,24 +5940,29 @@ body[data-theme="day"] .quick-group {
 }
 
 .quick-stack-row {
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .quick-stack-row .mode-label {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.14em;
-  margin-right: auto;
+  margin-right: 0;
   flex: 0 0 auto;
   line-height: 1;
+  white-space: nowrap;
 }
 
 .quick-stack-row select {
-  flex: 0 0 116px;
-  width: 116px;
-  min-width: 116px;
-  margin-left: auto;
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  margin-left: 0;
   font-size: 13px;
   font-weight: 600;
   border-radius: 12px;
@@ -5901,13 +5972,15 @@ body[data-theme="day"] .quick-group {
 }
 
 .quick-stack-row .cf-select {
-  flex: 0 0 106px;
-  width: 106px;
-  min-width: 106px;
-  margin-left: auto;
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  margin-left: 0;
 }
 
 .quick-stack-row .cf-select-trigger {
+  width: 100%;
   font-size: 13px;
   font-weight: 600;
   border-radius: 12px;
@@ -5917,9 +5990,16 @@ body[data-theme="day"] .quick-group {
 }
 
 .quick-stack-row .cf-select-menu {
-  left: auto;
+  left: 0;
   right: 0;
-  min-width: 136px;
+  min-width: 0;
+}
+
+@media (max-width: 860px) {
+  .quick-stack-row .mode-label {
+    flex: 0 0 42px;
+    letter-spacing: 0.1em;
+  }
 }
 
 @media (max-width: 1080px) {
@@ -5982,20 +6062,15 @@ body[data-theme="day"] .mode-row {
 
 .provider-subscription-card > .card-header-row,
 .rules-overview-card > .card-header-row {
-  height: 34px;
-  min-height: 34px;
-  margin-bottom: 10px;
-  align-items: center;
+  min-height: 50px;
+  margin-bottom: 12px;
 }
 
 .provider-subscription-card > .card-header-row > h3,
 .rules-overview-card > .card-header-row > h3 {
-  height: 34px;
-  min-height: 34px;
-  line-height: 1;
+  min-height: 24px;
+  line-height: 1.22;
   padding: 0;
-  display: inline-flex;
-  align-items: center;
 }
 
 .provider-subscription-summary {
@@ -7656,7 +7731,7 @@ body[data-page="settings"] .proxy-config-columns .form-row > label:first-child {
 
 body[data-page="settings"] .proxy-config-header-actions {
   flex: 0 0 auto;
-  margin-top: -13px;
+  /*margin-top: -13px;*/
 }
 
 body[data-page="settings"] .panel-manager-header-actions {
@@ -8857,11 +8932,10 @@ body[data-theme="night"] .help-ack-card:hover {
 }
 
 .help-doc-card .card-header-row {
-  min-height: 46px;
-  height: 46px;
+  min-height: 50px;
+  height: 50px;
   align-items: center;
-  padding: 0 0 10px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .help-doc-title {
@@ -8869,10 +8943,17 @@ body[data-theme="night"] .help-ack-card:hover {
   align-items: center;
   flex-wrap: nowrap;
   gap: 10px;
+  min-width: 0;
   min-height: 24px;
   margin-bottom: 0;
   line-height: 1.15;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.help-doc-title > span:last-child {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
