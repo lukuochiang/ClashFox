@@ -2422,7 +2422,10 @@ function updateCoreStartupEstimate(measuredMs) {
 }
 
 function t(path) {
-  const lang = state.lang === 'auto' ? getAutoLanguage() : state.lang;
+  const lang = normalizeUiLanguage(state.lang === 'auto' ? getAutoLanguage() : state.lang, {
+    allowAuto: false,
+    fallback: 'en',
+  });
 
   const parts = path.split('.');
   let current = I18N[lang];
@@ -2438,8 +2441,43 @@ function ti(path, fallback = '') {
   return value && String(value).trim() !== '' ? value : fallback;
 }
 
+function normalizeUiLanguage(value, options = {}) {
+  const allowAuto = options.allowAuto !== false;
+  const fallback = String(options.fallback || (allowAuto ? 'auto' : 'en')).trim() || (allowAuto ? 'auto' : 'en');
+  const supported = ['en', 'zh', 'ja', 'ko', 'fr', 'de', 'ru'];
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) {
+    return fallback;
+  }
+  if (allowAuto && raw === 'auto') {
+    return 'auto';
+  }
+  if (supported.includes(raw)) {
+    return raw;
+  }
+  const base = raw.split(/[-_]/)[0];
+  if (supported.includes(base)) {
+    return base;
+  }
+  return fallback;
+}
+
+function getActiveUiLanguage() {
+  const candidate = state.lang === 'auto' ? getAutoLanguage() : state.lang;
+  return normalizeUiLanguage(candidate, { allowAuto: false, fallback: 'en' });
+}
+
+function syncDocumentLanguage() {
+  const lang = getActiveUiLanguage();
+  document.documentElement.setAttribute('lang', lang);
+  document.documentElement.dataset.uiLang = lang;
+}
+
 function getFoxRankLocale() {
-  const lang = state.lang === 'auto' ? getAutoLanguage() : state.lang;
+  const lang = normalizeUiLanguage(state.lang === 'auto' ? getAutoLanguage() : state.lang, {
+    allowAuto: false,
+    fallback: 'en',
+  });
   return FOX_RANK_I18N[lang] ? lang : 'en';
 }
 
@@ -2614,6 +2652,7 @@ function refreshLocalizedVisibleContent() {
 }
 
 function applyI18n() {
+  syncDocumentLanguage();
   document.querySelectorAll('[data-i18n]').forEach((el) => {
     const key = el.dataset.i18n;
     const tip = t(key);
@@ -2672,6 +2711,7 @@ function closeActiveCustomSelect() {
   menu.style.width = '';
   menu.style.maxHeight = '';
   menu.style.visibility = '';
+  menu.style.pointerEvents = 'none';
   activeCustomSelectEntry.wrapper.classList.remove('is-open');
   menu.hidden = true;
   trigger.setAttribute('aria-expanded', 'false');
@@ -2684,11 +2724,30 @@ function positionCustomSelectMenu(entry) {
   }
   const overlayRoot = document.getElementById('overlayRoot') || document.body;
   const { wrapper, trigger, menu } = entry;
+  const inlineMode = Boolean(document.body && document.body.dataset.page === 'settings');
+  if (inlineMode) {
+    if (menu.parentNode !== wrapper) {
+      wrapper.appendChild(menu);
+    }
+    menu.classList.remove('is-floating');
+    menu.removeAttribute('data-placement');
+    menu.style.top = '';
+    menu.style.left = '';
+    menu.style.width = '';
+    menu.style.maxHeight = '';
+    menu.style.visibility = '';
+    menu.style.pointerEvents = 'auto';
+    if (wrapper) {
+      wrapper.style.zIndex = '4001';
+    }
+    return;
+  }
   if (overlayRoot && menu.parentNode !== overlayRoot) {
     overlayRoot.appendChild(menu);
   }
   menu.classList.add('is-floating');
   menu.style.visibility = 'hidden';
+  menu.style.pointerEvents = 'none';
   const triggerRect = trigger.getBoundingClientRect();
   const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
@@ -2712,6 +2771,7 @@ function positionCustomSelectMenu(entry) {
   menu.style.width = `${width}px`;
   menu.style.maxHeight = `${Math.round(maxHeight)}px`;
   menu.style.visibility = '';
+  menu.style.pointerEvents = 'auto';
   if (wrapper) {
     wrapper.style.zIndex = '4001';
   }
@@ -2780,6 +2840,39 @@ function refreshCustomSelects(root = document) {
   });
 }
 
+function teardownCustomSelects(root = document) {
+  const container = root && typeof root.querySelectorAll === 'function' ? root : document;
+  const selects = Array.from(container.querySelectorAll('select[data-custom-select="true"]'));
+  selects.forEach((select) => {
+    const entry = customSelectRegistry.get(select);
+    if (!entry) {
+      select.removeAttribute('data-custom-select');
+      select.classList.remove('cf-native-select');
+      select.removeAttribute('tabindex');
+      return;
+    }
+    if (activeCustomSelectEntry && activeCustomSelectEntry.select === select) {
+      closeActiveCustomSelect();
+    }
+    if (entry.observer && typeof entry.observer.disconnect === 'function') {
+      entry.observer.disconnect();
+    }
+    const wrapper = entry.wrapper;
+    const menu = entry.menu;
+    if (menu && menu.parentNode && menu.parentNode !== wrapper) {
+      menu.parentNode.removeChild(menu);
+    }
+    if (wrapper && wrapper.parentNode) {
+      wrapper.parentNode.insertBefore(select, wrapper);
+      wrapper.parentNode.removeChild(wrapper);
+    }
+    select.removeAttribute('data-custom-select');
+    select.classList.remove('cf-native-select');
+    select.removeAttribute('tabindex');
+    customSelectRegistry.delete(select);
+  });
+}
+
 function initCustomSelects(root = document) {
   const container = root && typeof root.querySelectorAll === 'function' ? root : document;
   const selects = Array.from(container.querySelectorAll('select'))
@@ -2820,8 +2913,16 @@ function initCustomSelects(root = document) {
       const existingEntry = customSelectRegistry.get(select);
       if (existingEntry) {
         refreshCustomSelectEntry(existingEntry);
+        return;
       }
-      return;
+      select.removeAttribute('data-custom-select');
+      select.classList.remove('cf-native-select');
+      select.removeAttribute('tabindex');
+      const staleWrapper = select.closest('.cf-select');
+      if (staleWrapper && staleWrapper.parentNode) {
+        staleWrapper.parentNode.insertBefore(select, staleWrapper);
+        staleWrapper.parentNode.removeChild(staleWrapper);
+      }
     }
     const wrapper = document.createElement('div');
     wrapper.className = 'cf-select';
@@ -3153,15 +3254,17 @@ function applyCardIcons() {
 }
 
 function setLanguage(lang, persist = true, refreshStatus = true) {
-  state.lang = lang;
+  closeActiveCustomSelect();
+  const nextLang = normalizeUiLanguage(lang, { allowAuto: true, fallback: 'auto' });
+  state.lang = nextLang;
   langButtons.forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.lang === lang);
+    btn.classList.toggle('active', btn.dataset.lang === nextLang);
   });
   if (settingsLang) {
-    settingsLang.value = lang;
+    settingsLang.value = nextLang;
   }
   if (persist) {
-    saveSettings({ lang });
+    saveSettings({ lang: nextLang });
   }
   applyI18n();
   if (lang === 'auto') {
@@ -3223,7 +3326,10 @@ function normalizeSettingsForUi(settings) {
     const parsed = Number.parseInt(String(candidate ?? ''), 10);
     return Number.isFinite(parsed) ? parsed : fallback;
   };
-  normalized.lang = readAppearanceString('lang', 'auto');
+  normalized.lang = normalizeUiLanguage(readAppearanceString('lang', 'auto'), {
+    allowAuto: true,
+    fallback: 'auto',
+  });
   normalized.theme = readAppearanceString('theme', 'auto');
   normalized.foxRankSkin = readAppearanceString('foxRankSkin', '');
   normalized.debugMode = readAppearanceBool('debugMode', false);
@@ -3456,7 +3562,10 @@ function mapSettingsForFile(settings) {
   } = existingAppearance;
   mapped.appearance = {
     ...existingAppearanceSansLogs,
-    lang: String(mapped.lang || existingAppearance.lang || 'auto'),
+    lang: normalizeUiLanguage(String(mapped.lang || existingAppearance.lang || 'auto'), {
+      allowAuto: true,
+      fallback: 'auto',
+    }),
     theme: String(mapped.theme || existingAppearance.theme || 'auto'),
     foxRankSkin: String(
       mapped.foxRankSkin
@@ -4312,6 +4421,53 @@ function bindOverviewDrag() {
     });
 
     grid.addEventListener('mouseup', clearDragging);
+  });
+}
+
+function bindOverviewRulesSwitch() {
+  const switchEl = document.getElementById('overviewRulesSwitch');
+  if (!switchEl) {
+    return;
+  }
+  switchEl.querySelectorAll('[data-rules-view]').forEach((button) => {
+    button.draggable = false;
+  });
+  if (switchEl.dataset.bound === 'true') {
+    return;
+  }
+  switchEl.dataset.bound = 'true';
+  switchEl.addEventListener('pointerdown', (event) => {
+    const target = event.target instanceof Element
+      ? event.target.closest('[data-rules-view]')
+      : null;
+    if (!target) {
+      return;
+    }
+    event.stopPropagation();
+  });
+  switchEl.addEventListener('dragstart', (event) => {
+    const target = event.target instanceof Element
+      ? event.target.closest('[data-rules-view]')
+      : null;
+    if (!target) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  switchEl.addEventListener('click', (event) => {
+    const button = event.target instanceof Element
+      ? event.target.closest('[data-rules-view]')
+      : null;
+    if (!button) {
+      return;
+    }
+    const view = String(button.dataset.rulesView || '').trim();
+    if (view !== 'rules' && view !== 'providers') {
+      return;
+    }
+    state.rulesOverviewView = view;
+    renderRulesOverviewCard();
   });
 }
 
@@ -11658,6 +11814,36 @@ function extractPageSectionHtml(pageHtml = '') {
   return section ? section.outerHTML : '';
 }
 
+function sanitizeRuntimeSectionState(section) {
+  if (!section || typeof section.querySelectorAll !== 'function') {
+    return;
+  }
+  // Runtime-bound flags must not be persisted/reused across remounts.
+  section.querySelectorAll('[data-bound]').forEach((node) => {
+    node.removeAttribute('data-bound');
+  });
+  section.querySelectorAll('[data-tip-bound]').forEach((node) => {
+    node.removeAttribute('data-tip-bound');
+  });
+  // Rehydrate custom selects from native <select> nodes instead of stale wrappers.
+  section.querySelectorAll('.cf-select').forEach((wrapper) => {
+    const select = wrapper.querySelector('select');
+    if (!select || !wrapper.parentNode) {
+      return;
+    }
+    select.removeAttribute('data-custom-select');
+    select.classList.remove('cf-native-select');
+    select.removeAttribute('tabindex');
+    wrapper.parentNode.insertBefore(select, wrapper);
+    wrapper.parentNode.removeChild(wrapper);
+  });
+  section.querySelectorAll('select[data-custom-select]').forEach((select) => {
+    select.removeAttribute('data-custom-select');
+    select.classList.remove('cf-native-select');
+    select.removeAttribute('tabindex');
+  });
+}
+
 const pageTemplateCache = new Map();
 const pageTemplatePendingMap = new Map();
 
@@ -11930,6 +12116,7 @@ async function syncMainWindowActivity() {
 }
 
 async function navigatePage(targetPage, pushState = true) {
+  closeActiveCustomSelect();
   const normalized = String(targetPage || '').trim();
   if (!VALID_PAGES.has(normalized)) {
     return;
@@ -11969,6 +12156,7 @@ async function navigatePage(targetPage, pushState = true) {
     window.location.href = `${targetPage}.html`;
     return;
   }
+  sanitizeRuntimeSectionState(newSection);
   newSection.classList.add('page-section');
   contentRoot.innerHTML = '';
   contentRoot.appendChild(newSection);
@@ -12132,6 +12320,7 @@ async function loadLayoutParts() {
 }
 
 function bindPageEvents() {
+  bindOverviewRulesSwitch();
   bindKernelInstallControls();
   if (foxRankPill && foxRankPill.dataset.bound !== 'true') {
     foxRankPill.dataset.bound = 'true';
@@ -14252,35 +14441,6 @@ if (overviewNetworkRefresh) {
     setTimeout(() => overviewNetworkRefresh.classList.remove('is-loading'), 400);
   });
 }
-if (overviewRulesSwitch && overviewRulesSwitch.dataset.bound !== 'true') {
-  overviewRulesSwitch.dataset.bound = 'true';
-  overviewRulesSwitch.querySelectorAll('button').forEach((button) => {
-    button.addEventListener('pointerdown', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-    });
-    button.addEventListener('mousedown', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-    });
-    button.addEventListener('dragstart', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-    });
-  });
-  overviewRulesSwitch.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-rules-view]');
-    if (!button) {
-      return;
-    }
-    const view = String(button.dataset.rulesView || '').trim();
-    if (view !== 'rules' && view !== 'providers') {
-      return;
-    }
-    state.rulesOverviewView = view;
-    renderRulesOverviewCard();
-  });
-}
 }
 
 function startOverviewTimer() {
@@ -14607,7 +14767,9 @@ async function initApp() {
   if (contentRoot && contentRoot.firstElementChild) {
     contentRoot.firstElementChild.classList.add('page-section');
     if (currentPage) {
-      savePageTemplateCache(currentPage, contentRoot.firstElementChild.outerHTML || '');
+      const sectionClone = contentRoot.firstElementChild.cloneNode(true);
+      sanitizeRuntimeSectionState(sectionClone);
+      savePageTemplateCache(currentPage, sectionClone.outerHTML || '');
     }
   }
   setActiveNav(currentPage);

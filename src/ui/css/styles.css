@@ -49,6 +49,12 @@
   --toggle-width: 38px;
   --toggle-height: 22px;
   --toggle-knob-size: 16px;
+  --ui-font-scale: 1;
+  --ui-label-scale: 1;
+  --ui-letter-spacing-scale: 1;
+  --ui-heading-scale: 1;
+  --ui-body-scale: 1;
+  --ui-form-label-width: 120px;
   /* Icon masks encoded as SVG paths; visual color comes from semantic fills below. */
   --icon-overview: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3' y='3' width='6' height='6' rx='1.3' fill='%23000'/%3E%3Crect x='11' y='3' width='6' height='4' rx='1.3' fill='%23000'/%3E%3Crect x='11' y='9' width='6' height='8' rx='1.3' fill='%23000'/%3E%3Crect x='3' y='11' width='6' height='6' rx='1.3' fill='%23000'/%3E%3C/svg%3E");
   --icon-download: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 3.5v9.2l2.8-2.8a1 1 0 0 1 1.4 1.4l-4.6 4.6a1 1 0 0 1-1.4 0L3.6 11.3a1 1 0 1 1 1.4-1.4L7.8 12.8V3.5a1 1 0 1 1 2 0Z' fill='%23000'/%3E%3Cpath d='M4 16.5h12a1 1 0 1 1 0 2H4a1 1 0 1 1 0-2Z' fill='%23000'/%3E%3C/svg%3E");
@@ -108,6 +114,43 @@
 
 body[data-theme="night"], html[data-theme="night"] body {
   color-scheme: dark;
+}
+
+html[data-ui-lang^="zh"],
+html[data-ui-lang^="ja"],
+html[data-ui-lang^="ko"] {
+  --ui-font-scale: 0.97;
+  --ui-label-scale: 0.96;
+  --ui-letter-spacing-scale: 0.45;
+  --ui-heading-scale: 0.97;
+  --ui-body-scale: 0.98;
+  --ui-form-label-width: 108px;
+}
+
+html[data-ui-lang^="de"],
+html[data-ui-lang^="fr"],
+html[data-ui-lang^="ru"] {
+  --ui-font-scale: 0.95;
+  --ui-label-scale: 0.93;
+  --ui-letter-spacing-scale: 0.72;
+  --ui-heading-scale: 0.94;
+  --ui-body-scale: 0.96;
+  --ui-form-label-width: 138px;
+}
+
+html[data-ui-lang^="zh"] .overview-summary-label,
+html[data-ui-lang^="ja"] .overview-summary-label,
+html[data-ui-lang^="ko"] .overview-summary-label,
+html[data-ui-lang^="zh"] .metric-label,
+html[data-ui-lang^="ja"] .metric-label,
+html[data-ui-lang^="ko"] .metric-label,
+html[data-ui-lang^="zh"] .history-label,
+html[data-ui-lang^="ja"] .history-label,
+html[data-ui-lang^="ko"] .history-label,
+html[data-ui-lang^="zh"] .conn-live-label,
+html[data-ui-lang^="ja"] .conn-live-label,
+html[data-ui-lang^="ko"] .conn-live-label {
+  text-transform: none;
 }
 
 body[data-theme="day"], html[data-theme="day"] body {
@@ -1192,6 +1235,7 @@ body.fox-rank-brief-open {
 .fox-rank-section-tabs {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 4px;
   border-radius: 12px;
@@ -1204,13 +1248,16 @@ body.fox-rank-brief-open {
 .fox-rank-section-tabs button {
   border: 0;
   min-height: 30px;
-  padding: 0 12px;
+  padding: 4px 12px;
   border-radius: 9px;
   background: rgba(255, 255, 255, 0);
   color: var(--muted);
   font: inherit;
-  font-size: 0.72rem;
+  font-size: calc(0.72rem * var(--ui-font-scale));
   font-weight: 700;
+  line-height: 1.2;
+  white-space: normal;
+  overflow-wrap: anywhere;
   cursor: pointer;
   transition: background 0.08s ease, color 0.08s ease, box-shadow 0.08s ease;
 }
@@ -3184,16 +3231,19 @@ body[data-page="overview"] .panel-grid {
 
 .overview-summary-label {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   gap: 6px;
-  font-size: 11px;
-  line-height: 1.2;
+  font-size: calc(11px * var(--ui-label-scale));
+  line-height: 1.25;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: calc(0.08em * var(--ui-letter-spacing-scale));
+  min-height: calc(1.25em * 2);
   color: rgba(201, 211, 224, 0.72);
   text-transform: uppercase;
   text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .overview-summary-value {
@@ -3332,10 +3382,14 @@ body[data-theme="day"] .overview-summary-value {
 }
 
 .metric-label {
-  font-size: 12px;
+  font-size: calc(12px * var(--ui-label-scale));
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: calc(0.08em * var(--ui-letter-spacing-scale));
+  line-height: 1.25;
+  min-height: calc(1.25em * 2);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .metric-value {
@@ -3617,15 +3671,22 @@ body[data-page="settings"] .settings-top-column {
 
 body[data-page="settings"] .settings-top-column .form-row {
   display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
-  align-items: center;
+  grid-template-columns: minmax(92px, var(--ui-form-label-width)) minmax(0, 1fr);
+  align-items: start;
+  column-gap: 10px;
+  row-gap: 6px;
   /*gap: 12px;*/
   min-height: 40px;
   margin-bottom: 14px;
 }
 
-body[data-page="settings"] .settings-top-column .form-row > label {
+body[data-page="settings"] .settings-top-column .form-row > label,
+body[data-page="settings"] .settings-log-column .form-row > label {
   min-width: 0;
+  line-height: 1.35;
+  align-self: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 body[data-page="settings"] .settings-top-column .form-row > input,
@@ -3672,6 +3733,11 @@ body[data-page="settings"] .settings-log-column {
 }
 
 body[data-page="settings"] .settings-log-column .form-row {
+  display: grid;
+  grid-template-columns: minmax(92px, var(--ui-form-label-width)) minmax(0, 1fr);
+  align-items: start;
+  column-gap: 10px;
+  row-gap: 6px;
   min-height: 40px;
   margin-bottom: 14px;
 }
@@ -4591,10 +4657,12 @@ body[data-theme="day"] .overview-card[data-module="running"] .card-icon.running[
 
 .card h3 {
   margin: 0 0 16px;
-  font-size: 18px;
+  font-size: calc(18px * var(--ui-heading-scale));
+  line-height: 1.24;
   color: var(--card-title-ink);
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -4623,11 +4691,11 @@ body[data-theme="day"] .overview-card[data-module="running"] .card-icon.running[
 
 .card-header-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   min-height: 30px;
   gap: 12px;
-  padding: 0 0 8px;
+  padding: 0 0 10px;
   border-radius: 0;
   background: linear-gradient(
     180deg,
@@ -4643,9 +4711,12 @@ body[data-theme="day"] .overview-card[data-module="running"] .card-icon.running[
 .card-header-row > h3 {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   margin: 0;
-  min-height: 30px;
-  line-height: 1;
+  min-height: 0;
+  line-height: 1.22;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .control-actions {
@@ -4718,9 +4789,12 @@ body[data-page="kernel"] h3.current-kernel-icon {
 }
 
 .card-hint {
-  font-size: 12px;
+  font-size: calc(12px * var(--ui-body-scale));
+  line-height: 1.35;
   color: var(--muted);
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .subhead {
@@ -4773,10 +4847,14 @@ body[data-theme="day"] .history-panel {
 }
 
 .history-label {
-  font-size: 13px;
+  font-size: calc(13px * var(--ui-label-scale));
   font-weight: 700;
-  letter-spacing: 0.12em;
+  line-height: 1.25;
+  min-height: calc(1.25em * 2);
+  letter-spacing: calc(0.12em * var(--ui-letter-spacing-scale));
   text-transform: uppercase;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .history-panel.upload .history-label {
@@ -6052,6 +6130,7 @@ body[data-theme="day"] .mode-row {
 .rules-overview-switch {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 4px;
   padding: 3px;
   border-radius: 10px;
@@ -6071,16 +6150,17 @@ body[data-theme="day"] .mode-row {
   min-height: 26px;
   box-sizing: border-box;
   font-family: inherit;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   flex-shrink: 0;
   /*border: 1px solid rgba(148, 171, 197, 0.2);*/
   background: rgba(148, 171, 197, 0.08);
   color: var(--muted);
   border-radius: 8px;
-  padding: 0 10px;
-  font-size: 11px;
+  padding: 4px 10px;
+  font-size: calc(11px * var(--ui-font-scale));
   font-weight: 600;
-  line-height: 1;
+  line-height: 1.2;
   box-shadow: none;
   transform: none;
   transition: background-color 80ms ease, border-color 80ms ease, color 80ms ease;
@@ -6375,10 +6455,14 @@ body[data-theme="day"] .rules-overview-switch button.active {
 }
 
 .conn-live-label {
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-label-scale));
+  line-height: 1.25;
+  min-height: calc(1.25em * 2);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: calc(0.1em * var(--ui-letter-spacing-scale));
   color: var(--muted);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .conn-live-value {
@@ -6518,9 +6602,12 @@ body[data-theme="night"] .radio-pill:not(:has(input[type="radio"]:checked)):hove
 }
 
 .radio-hint {
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-font-scale));
   line-height: 1.25;
+  min-height: calc(1.25em * 2);
   color: rgba(162, 182, 207, 0.82);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 body[data-theme="day"] .radio-pill {
@@ -8770,19 +8857,20 @@ body[data-theme="night"] .help-ack-card:hover {
 }
 
 .help-doc-card .card-header-row {
-  height: 46px;
   min-height: 46px;
-  align-items: center;
+  align-items: flex-start;
   padding-top: 0;
 }
 
 .help-doc-title {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   min-height: 0;
   margin-bottom: 0;
-  line-height: 1.1;
+  line-height: 1.28;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .help-doc-title::before {
@@ -8802,7 +8890,7 @@ body[data-theme="night"] .help-ack-card:hover {
   align-items: center;
   justify-content: center;
   color: color-mix(in srgb, var(--accent) 62%, #4f7bb8 38%);
-  margin-top: 0;
+  margin-top: 1px;
   transform: none;
 }
 
@@ -8831,8 +8919,9 @@ body[data-theme="night"] .help-ack-card:hover {
 .help-doc-copy {
   margin: 0;
   color: color-mix(in srgb, var(--muted) 76%, var(--ink) 24%);
-  font-size: 13px;
+  font-size: calc(13px * var(--ui-body-scale));
   line-height: 1.68;
+  overflow-wrap: anywhere;
 }
 
 .help-doc-list {
@@ -8841,8 +8930,9 @@ body[data-theme="night"] .help-ack-card:hover {
   display: grid;
   gap: 6px;
   color: color-mix(in srgb, var(--muted) 78%, var(--ink) 22%);
-  font-size: 13px;
+  font-size: calc(13px * var(--ui-body-scale));
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .help-doc-inline-code {
