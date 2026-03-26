@@ -8858,19 +8858,23 @@ body[data-theme="night"] .help-ack-card:hover {
 
 .help-doc-card .card-header-row {
   min-height: 46px;
-  align-items: flex-start;
-  padding-top: 0;
+  height: 46px;
+  align-items: center;
+  padding: 0 0 10px;
+  margin-bottom: 10px;
 }
 
 .help-doc-title {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  flex-wrap: nowrap;
   gap: 10px;
-  min-height: 0;
+  min-height: 24px;
   margin-bottom: 0;
-  line-height: 1.28;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .help-doc-title::before {
@@ -8890,11 +8894,12 @@ body[data-theme="night"] .help-ack-card:hover {
   align-items: center;
   justify-content: center;
   color: color-mix(in srgb, var(--accent) 62%, #4f7bb8 38%);
-  margin-top: 1px;
+  margin-top: 0;
   transform: none;
 }
 
 .help-doc-title-icon svg {
+  display: block;
   width: 18px;
   height: 18px;
   fill: none;
