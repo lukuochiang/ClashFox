@@ -545,7 +545,7 @@ body[data-theme="day"] .fox-rank-pill {
     radial-gradient(120% 90% at 0% 100%, color-mix(in srgb, var(--fox-rank-aura-end) 22%, transparent) 0%, transparent 54%),
     linear-gradient(145deg, rgba(26, 36, 52, 0.94), rgba(18, 25, 37, 0.96));
   border-radius: 12px;
-  padding: 10px 10px 9px;
+  padding: 6px 10px 4px;
   border: 1px solid rgba(109, 141, 180, 0.36);
   box-shadow: 0 6px 12px rgba(6, 10, 18, 0.18);
   backdrop-filter: none;
@@ -817,7 +817,7 @@ body[data-theme="day"] .fox-rank-progress-text {
 .fox-rank-boost,
 .fox-rank-warning,
 .fox-rank-footer-pill {
-  display: none;
+  display: inline-flex;
   align-items: center;
   height: 22px;
   min-height: 22px;
@@ -828,6 +828,24 @@ body[data-theme="day"] .fox-rank-progress-text {
   line-height: 1;
   letter-spacing: 0.01em;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fox-rank-footer .fox-rank-footer-pill:first-child {
+  overflow: visible;
+  text-overflow: clip;
+}
+
+#foxRankExploreCount {
+  display: inline-block;
+  min-width: 1.5ch;
+  text-align: right;
+  margin-left: 4px;
+  flex: 0 0 auto;
+}
+
+#foxRankSkinHint {
   overflow: hidden;
   text-overflow: ellipsis;
 }

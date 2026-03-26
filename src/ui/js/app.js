@@ -8876,15 +8876,21 @@ function getFoxRankSnapshot() {
 }
 
 function getFoxRankBadgeItems(snapshot) {
+  const persistedUnlocked = new Set(
+    state.foxRank && Array.isArray(state.foxRank.unlockedBadges)
+      ? state.foxRank.unlockedBadges.map((item) => String(item || ''))
+      : [],
+  );
+  const isUnlocked = (id, conditionMet) => Boolean(conditionMet || persistedUnlocked.has(String(id || '')));
   return [
-    { id: 'connection-keeper', name: foxRankText('badgeConnectionKeeper', 'Connection Keeper'), desc: formatFoxRankStableDays(snapshot.stabilityDays), unlocked: snapshot.stabilityDays >= 1 },
-    { id: 'long-run', name: foxRankText('badgeLongRun', 'Long Run'), desc: snapshot.usageText, unlocked: snapshot.xp >= 200 },
-    { id: 'quality-eye', name: foxRankText('badgeQualityEye', 'Quality Eye'), desc: formatFoxRankText('qualityPctShort', { value: Math.round(snapshot.qualityScore * 100) }, `${Math.round(snapshot.qualityScore * 100)}% quality`), unlocked: snapshot.qualityScore >= 0.6 },
-    { id: 'tier-climber', name: foxRankText('badgeTierClimber', 'Tier Climber'), desc: formatFoxRankText('reachedTier', { tier: getFoxRankTierDualText(snapshot.tier) }, `${getFoxRankTierDualText(snapshot.tier)} reached`), unlocked: snapshot.tier.index >= 5 },
-    { id: 'route-scout', name: foxRankText('badgeRouteScout', 'Route Scout'), desc: formatFoxRankText('routeHops', { count: snapshot.explorationCount }, `${snapshot.explorationCount} route hops`), unlocked: snapshot.explorationCount >= 3 },
-    { id: 'sky-bridge', name: foxRankText('badgeSkyBridge', 'Sky Bridge'), desc: foxRankText('badgeSkyBridgeDesc', '5 explorations this week'), unlocked: getFoxRankWeeklyReview(snapshot).exploreGain >= 5 },
-    { id: 'pristine-loop', name: foxRankText('badgePristineLoop', 'Pristine Loop'), desc: foxRankText('badgePristineLoopDesc', 'Quality held above 85%'), unlocked: snapshot.qualityScore >= 0.85 },
-    { id: 'skin-awakened', name: foxRankText('badgeSkinAwakened', 'Skin Awakened'), desc: formatFoxRankText('badgeSkinAwakenedDesc', { skin: snapshot.activeSkin.name }, `${snapshot.activeSkin.name} online`), unlocked: snapshot.tier.index >= 10 },
+    { id: 'connection-keeper', name: foxRankText('badgeConnectionKeeper', 'Connection Keeper'), desc: formatFoxRankStableDays(snapshot.stabilityDays), unlocked: isUnlocked('connection-keeper', snapshot.stabilityDays >= 1) },
+    { id: 'long-run', name: foxRankText('badgeLongRun', 'Long Run'), desc: snapshot.usageText, unlocked: isUnlocked('long-run', snapshot.xp >= 200) },
+    { id: 'quality-eye', name: foxRankText('badgeQualityEye', 'Quality Eye'), desc: formatFoxRankText('qualityPctShort', { value: Math.round(snapshot.qualityScore * 100) }, `${Math.round(snapshot.qualityScore * 100)}% quality`), unlocked: isUnlocked('quality-eye', snapshot.qualityScore >= 0.6) },
+    { id: 'tier-climber', name: foxRankText('badgeTierClimber', 'Tier Climber'), desc: formatFoxRankText('reachedTier', { tier: getFoxRankTierDualText(snapshot.tier) }, `${getFoxRankTierDualText(snapshot.tier)} reached`), unlocked: isUnlocked('tier-climber', snapshot.tier.index >= 5) },
+    { id: 'route-scout', name: foxRankText('badgeRouteScout', 'Route Scout'), desc: formatFoxRankText('routeHops', { count: snapshot.explorationCount }, `${snapshot.explorationCount} route hops`), unlocked: isUnlocked('route-scout', snapshot.explorationCount >= 3) },
+    { id: 'sky-bridge', name: foxRankText('badgeSkyBridge', 'Sky Bridge'), desc: foxRankText('badgeSkyBridgeDesc', '5 explorations this week'), unlocked: isUnlocked('sky-bridge', getFoxRankWeeklyReview(snapshot).exploreGain >= 5) },
+    { id: 'pristine-loop', name: foxRankText('badgePristineLoop', 'Pristine Loop'), desc: foxRankText('badgePristineLoopDesc', 'Quality held above 85%'), unlocked: isUnlocked('pristine-loop', snapshot.qualityScore >= 0.85) },
+    { id: 'skin-awakened', name: foxRankText('badgeSkinAwakened', 'Skin Awakened'), desc: formatFoxRankText('badgeSkinAwakenedDesc', { skin: snapshot.activeSkin.name }, `${snapshot.activeSkin.name} online`), unlocked: isUnlocked('skin-awakened', snapshot.tier.index >= 10) },
   ];
 }
 
@@ -9802,7 +9808,13 @@ function updateFoxRankFromOverviewSnapshot(data) {
     state.foxRank.lastUsageBaseSec = 0;
     state.foxRank.lastUsageTickSec = 0;
   }
-  const proxyFingerprint = String(data.proxyIp || data.internetIp4 || data.internetIp || '').trim();
+  const latestTopologyEvent = Array.isArray(state.topologyEvents) && state.topologyEvents.length
+    ? state.topologyEvents[0]
+    : null;
+  const topologyFingerprint = latestTopologyEvent
+    ? `${String(latestTopologyEvent.outboundId || latestTopologyEvent.outboundMain || '').trim()}|${String(latestTopologyEvent.ruleId || latestTopologyEvent.ruleLabel || '').trim()}`
+    : '';
+  const proxyFingerprint = String(data.proxyIp || data.internetIp4 || data.internetIp || topologyFingerprint || '').trim();
   if (running && proxyFingerprint) {
     if (!state.foxRank.lastExplorationFingerprint) {
       state.foxRank.lastExplorationFingerprint = proxyFingerprint;
