@@ -97,6 +97,8 @@
   --icon-external-link: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M14 5h5v5' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M10 14L19 5' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M19 13v5a1 1 0 0 1-1 1h-12a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
   --icon-outbound: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 7h8V4l6 5-6 5v-3H4V7Zm16 10H12v3l-6-5 6-5v3h8v4Z' fill='%23000'/%3E%3C/svg%3E");
   --icon-connections: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='7' cy='12' r='3' fill='%23000'/%3E%3Ccircle cx='17' cy='7' r='3' fill='%23000'/%3E%3Ccircle cx='17' cy='17' r='3' fill='%23000'/%3E%3Cpath d='M9.8 10.8l4.4-2.6M9.8 13.2l4.4 2.6' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --icon-proxy: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5.2 12h6.8' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Cpath d='M11.2 12 15.4 8.7M11.2 12 15.4 15.3' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Cpath d='M14.8 8.7h3M14.8 15.3h3' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Ccircle cx='5' cy='12' r='1.35' fill='%23000'/%3E%3C/svg%3E");
+  --icon-memory: var(--icon-kernel);
   --icon-topology: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3.5' y='10.2' width='4' height='3.6' rx='1.4' fill='%23000'/%3E%3Crect x='10' y='4.2' width='4' height='3.6' rx='1.4' fill='%23000'/%3E%3Crect x='10' y='16.2' width='4' height='3.6' rx='1.4' fill='%23000'/%3E%3Crect x='16.5' y='10.2' width='4' height='3.6' rx='1.4' fill='%23000'/%3E%3Cpath d='M7.5 12h2.5M14 6h2.5v6M14 18h2.5v-6' stroke='%23000' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --icon-fill-default: linear-gradient(135deg, #ffbf47 0%, #ff8f57 100%);
   --icon-fill-overview: linear-gradient(135deg, #6fd3ff 0%, #4f86ff 100%);
@@ -113,6 +115,7 @@
   --icon-fill-list: linear-gradient(135deg, #73c4ff 0%, #56d98d 100%);
   --icon-fill-current: linear-gradient(135deg, #52e59b 0%, #34d3c7 100%);
   --icon-fill-connections: linear-gradient(135deg, #5fd5ff 0%, #8b8cff 100%);
+  --icon-fill-proxy: linear-gradient(135deg, #ffb14d 0%, #ff8b3d 100%);
   --icon-fill-clock: linear-gradient(135deg, #ffbf54 0%, #ff8cab 100%);
   --icon-fill-shield: linear-gradient(135deg, #ffd05c 0%, #ff9858 100%);
   --icon-fill-topology: linear-gradient(135deg, #7fe0ff 0%, #6f8cff 52%, #90f0c1 100%);
@@ -4867,6 +4870,25 @@ body[data-page="kernel"] h3.current-kernel-icon {
   --card-icon-fill: var(--icon-fill-clock);
 }
 
+.top-proxy-icon {
+  --card-icon-mask: var(--icon-proxy);
+  --card-icon-fill: var(--icon-fill-proxy);
+}
+
+.memory-trend-icon {
+  --card-icon-mask: var(--icon-memory);
+  --card-icon-fill: var(--icon-fill-connections);
+}
+
+.top-proxy-icon::before,
+.memory-trend-icon::before {
+  width: 16px;
+  height: 16px;
+  flex-basis: 16px;
+  mask-size: 16px 16px;
+  -webkit-mask-size: 16px 16px;
+}
+
 .card-hint {
   font-size: calc(12px * var(--ui-body-scale));
   line-height: 1.35;
@@ -6532,6 +6554,262 @@ body[data-theme="day"] .rules-overview-switch button.active {
   gap: 12px;
 }
 
+.top-proxy-card {
+  display: grid;
+  gap: 8px;
+  --overview-analytics-chart-height: 176px;
+  --overview-chart-footer-height: 44px;
+  --top-proxy-name-col: 28%;
+  --top-proxy-axis-height: var(--overview-chart-footer-height);
+}
+
+.top-proxy-summary {
+  display: none;
+}
+
+.top-proxy-list {
+  display: block;
+}
+
+.top-proxy-chart {
+  display: grid;
+  height: calc(var(--overview-analytics-chart-height) + var(--top-proxy-axis-height));
+  grid-template-rows: minmax(0, 1fr) var(--top-proxy-axis-height);
+  gap: 0;
+}
+
+.top-proxy-rows {
+  display: grid;
+  grid-auto-rows: minmax(26px, 1fr);
+  gap: 10px;
+  padding: 2px 0 2px;
+  min-height: 0;
+  align-content: stretch;
+}
+
+.top-proxy-row {
+  display: grid;
+  grid-template-columns: minmax(0, var(--top-proxy-name-col)) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 0;
+}
+
+.top-proxy-name {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink);
+  /*font-weight: 600;*/
+  font-size: 12px;
+}
+
+.top-proxy-track {
+  position: relative;
+  height: 100%;
+  min-height: 18px;
+  border-radius: 4px;
+  background: rgba(120, 142, 168, 0.10);
+  overflow: visible;
+}
+
+.top-proxy-track::before {
+  content: none;
+}
+
+.top-proxy-track > i {
+  position: absolute;
+  left: 0;
+  top: 3px;
+  bottom: 3px;
+  display: block;
+  border-radius: 3px;
+  background: rgba(173, 132, 169, 0.86);
+  z-index: 1;
+}
+
+.top-proxy-track::after {
+  content: none;
+}
+
+.top-proxy-empty {
+  padding: 6px 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.top-proxy-axis {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  color: var(--muted);
+  height: var(--top-proxy-axis-height);
+  min-height: var(--top-proxy-axis-height);
+  max-height: var(--top-proxy-axis-height);
+  padding: 4px 0 0 var(--top-proxy-name-col);
+  overflow: visible;
+}
+
+.top-proxy-axis > span {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  text-align: center;
+  transform: none;
+  transform-origin: center;
+  line-height: 1;
+  height: calc(var(--top-proxy-axis-height) - 10px);
+}
+
+.top-proxy-axis > span:first-child {
+  text-align: left;
+}
+
+.top-proxy-axis > span:last-child {
+  text-align: right;
+}
+
+.memory-trend-card {
+  display: grid;
+  gap: 8px;
+  --overview-analytics-chart-height: 176px;
+  --overview-chart-footer-height: 44px;
+}
+
+.memory-trend-shell {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 8px;
+  align-items: stretch;
+}
+
+.memory-trend-axis {
+  display: grid;
+  grid-template-rows: repeat(5, 1fr);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.memory-trend-axis > span {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 4px;
+}
+
+.memory-trend-chart {
+  position: relative;
+  height: var(--overview-analytics-chart-height);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 171, 197, 0.2);
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(148, 171, 197, 0.2) 0,
+      rgba(148, 171, 197, 0.2) 1px,
+      transparent 1px,
+      transparent calc(25% - 1px)
+    ),
+    rgba(18, 24, 34, 0.72);
+}
+
+.memory-trend-chart::before {
+  content: '';
+  position: absolute;
+  left: 7%;
+  top: 0;
+  bottom: 0;
+  border-left: 1px dashed rgba(166, 180, 202, 0.35);
+  pointer-events: none;
+}
+
+body[data-theme="day"] .memory-trend-chart {
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(148, 171, 197, 0.24) 0,
+      rgba(148, 171, 197, 0.24) 1px,
+      transparent 1px,
+      transparent calc(25% - 1px)
+    ),
+    rgba(246, 248, 253, 0.96);
+}
+
+.memory-trend-hint {
+  position: absolute;
+  left: 12%;
+  bottom: 58px;
+  max-width: min(84%, 270px);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: rgba(235, 241, 250, 0.95);
+  border: 1px solid rgba(167, 189, 214, 0.28);
+  background: rgba(28, 36, 51, 0.74);
+  backdrop-filter: blur(4px);
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: opacity 160ms ease, transform 160ms ease, visibility 160ms ease;
+  pointer-events: none;
+}
+
+.memory-trend-hint::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: -1px;
+  background: rgba(171, 161, 255, 0.9);
+}
+
+body[data-theme="day"] .memory-trend-hint {
+  color: #23354b;
+  border-color: rgba(164, 180, 203, 0.4);
+  background: rgba(253, 254, 255, 0.88);
+}
+
+.memory-trend-chart.is-hovering .memory-trend-hint {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.memory-trend-legend {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  min-height: var(--overview-chart-footer-height);
+  height: var(--overview-chart-footer-height);
+  line-height: 1;
+}
+
+.memory-trend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(171, 161, 255, 0.9);
+  box-shadow: 0 0 0 1px rgba(171, 161, 255, 0.38);
+}
+
+.history-area.memory {
+  fill: rgba(171, 161, 255, 0.36);
+}
+
+.history-line.memory {
+  stroke: #b6aaff;
+  stroke-width: 1.7;
+}
+
 .conn-live-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -6782,6 +7060,26 @@ body[data-theme="day"] .radio-pill:has(input[type="radio"]:checked)::after {
 
   .conn-live-grid {
     grid-template-columns: 1fr;
+  }
+
+  .memory-trend-shell {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .top-proxy-card,
+  .memory-trend-card {
+    --overview-analytics-chart-height: 148px;
+  }
+
+  .top-proxy-card,
+  .memory-trend-card {
+    --overview-chart-footer-height: 40px;
+  }
+
+  .memory-trend-hint {
+    left: 10%;
+    bottom: 44px;
+    max-width: min(86%, 220px);
   }
 
   .quick-actions-buttons {

@@ -217,6 +217,22 @@ let overviewConnAvg = document.getElementById('overviewConnAvg');
 let overviewConnTrend = document.getElementById('overviewConnTrend');
 let overviewConnLine = document.getElementById('overviewConnLine');
 let overviewConnArea = document.getElementById('overviewConnArea');
+let overviewTopProxyTotal = document.getElementById('overviewTopProxyTotal');
+let overviewTopProxyList = document.getElementById('overviewTopProxyList');
+let overviewMemoryCurrent = document.getElementById('overviewMemoryCurrent');
+let overviewMemoryPeak = document.getElementById('overviewMemoryPeak');
+let overviewMemoryAvg = document.getElementById('overviewMemoryAvg');
+let overviewMemoryDelta = document.getElementById('overviewMemoryDelta');
+let overviewMemoryLine = document.getElementById('overviewMemoryLine');
+let overviewMemoryArea = document.getElementById('overviewMemoryArea');
+let overviewMemoryChart = document.getElementById('overviewMemoryChart');
+let overviewMemoryAxisTop = document.getElementById('overviewMemoryAxisTop');
+let overviewMemoryAxisHigh = document.getElementById('overviewMemoryAxisHigh');
+let overviewMemoryAxisMid = document.getElementById('overviewMemoryAxisMid');
+let overviewMemoryAxisLow = document.getElementById('overviewMemoryAxisLow');
+let overviewMemoryAxisZero = document.getElementById('overviewMemoryAxisZero');
+let overviewMemoryHint = document.getElementById('overviewMemoryHint');
+let overviewMemoryLegendValue = document.getElementById('overviewMemoryLegendValue');
 let overviewProviderSubscriptionSummary = document.getElementById('overviewProviderSubscriptionSummary');
 let overviewProviderSubscriptionList = document.getElementById('overviewProviderSubscriptionList');
 let overviewRulesSwitch = document.getElementById('overviewRulesSwitch');
@@ -413,6 +429,14 @@ function updateOverviewMemoryValue(inUseBytes) {
   }
   if (overviewSummaryMemory) {
     setNodeTextIfChanged(overviewSummaryMemory, value);
+  }
+  if (Number.isFinite(inUse) && inUse > 0) {
+    updateMemoryTrend(inUse);
+  } else {
+    if (state.overviewRunning || state.coreRunning) {
+      return;
+    }
+    resetMemoryTrend();
   }
 }
 
@@ -1915,7 +1939,14 @@ function handleMihomoConnectionsPayload(payload = {}) {
   state.mihomoConnectionsReconnectAttempts = 0;
   state.lastMihomoConnectionsAt = Date.now();
   state.mihomoConnectionsSnapshot = connections;
+  ensureTopProxyProxyMap(false).then((updated) => {
+    if (!updated || currentPage !== 'overview') {
+      return;
+    }
+    renderTopProxyCard(state.mihomoConnectionsSnapshot);
+  }).catch(() => {});
   updateRealtimeConnections(connections.length);
+  renderTopProxyCard(connections);
   renderTopologyCard();
 }
 
@@ -2256,6 +2287,14 @@ const state = {
   rulesOverviewView: 'rules',
   rulesOverviewPayload: null,
   ruleProvidersOverviewPayload: null,
+  topProxyTimer: null,
+  topProxyLoading: false,
+  topProxyAt: 0,
+  topProxyNodeTotals: {},
+  topProxyProxyMap: {},
+  topProxyProxyMapAt: 0,
+  topProxyProxyMapLoading: false,
+  topProxyProxyMapPromise: null,
   overviewTimer: null,
   foxRankTimer: null,
   overviewTickTimer: null,
@@ -2290,6 +2329,9 @@ const state = {
   connSamples: [],
   connPeak: 0,
   connLast: null,
+  memorySamples: [],
+  memoryPeak: 0,
+  memoryLast: null,
   mihomoConnectionsSocket: null,
   mihomoConnectionsSocketUrl: '',
   mihomoConnectionsReconnectTimer: null,
@@ -3110,6 +3152,8 @@ function applyCardIcons() {
     if (key === 'status.quick') return 'var(--icon-sliders)';
     if (key === 'status.proxyMode') return 'var(--icon-outbound)';
     if (key === 'status.connLiveTitle') return 'var(--icon-connections)';
+    if (key === 'overview.topProxyTitle') return 'var(--icon-proxy)';
+    if (key === 'overview.memoryTrendTitle') return 'var(--icon-memory)';
     if (key === 'status.trafficTitle') return 'var(--icon-clock)';
     if (key === 'status.topologyTitle') return 'var(--icon-topology)';
     if (key === 'overview.runningTitle') return 'var(--icon-activity)';
@@ -3138,6 +3182,8 @@ function applyCardIcons() {
     if (key === 'status.quick') return 'var(--icon-fill-config)';
     if (key === 'status.proxyMode') return 'var(--icon-fill-dashboard)';
     if (key === 'status.connLiveTitle') return 'var(--icon-fill-connections)';
+    if (key === 'overview.topProxyTitle') return 'var(--icon-fill-connections)';
+    if (key === 'overview.memoryTrendTitle') return 'var(--icon-fill-connections)';
     if (key === 'status.trafficTitle') return 'var(--icon-fill-clock)';
     if (key === 'status.topologyTitle') return 'var(--icon-fill-topology)';
     if (key === 'overview.runningTitle') return 'var(--icon-fill-dashboard)';
@@ -3227,6 +3273,8 @@ function applyCardIcons() {
     if (
       h.classList.contains('outbound-icon')
       || h.classList.contains('conn-live-icon')
+      || h.classList.contains('top-proxy-icon')
+      || h.classList.contains('memory-trend-icon')
       || h.classList.contains('topology-icon')
       || h.classList.contains('quick-actions-icon')
       || h.classList.contains('provider-subscription-icon')
@@ -7622,6 +7670,10 @@ function renderRulesOverviewCard() {
 
 const TRAFFIC_HISTORY_POINTS = 26;
 const CONNECTION_HISTORY_MS = 30000;
+const MEMORY_HISTORY_MS = 60000;
+const TOP_PROXY_MAX_ITEMS = 5;
+const TOP_PROXY_PROXY_MAP_TTL_MS = 12000;
+const TOP_PROXY_GROUP_TYPES = new Set(['SELECT', 'URLTEST', 'FALLBACK', 'LOADBALANCE', 'RELAY', 'COMPATIBLE']);
 
 function niceMaxValue(value) {
   if (!Number.isFinite(value) || value <= 0) {
@@ -7916,6 +7968,496 @@ function renderConnectionHistoryChart(samples) {
   }
   overviewConnLine.setAttribute('d', buildSparkPath(values, maxValue));
   overviewConnArea.setAttribute('d', buildSparkArea(values, maxValue));
+}
+
+function renderTopProxyCard(connections = []) {
+  if (!overviewTopProxyTotal || !overviewTopProxyList) {
+    return;
+  }
+  const rows = Array.isArray(connections) ? connections : [];
+  if (!rows.length) {
+    state.topProxyAt = 0;
+    state.topProxyNodeTotals = {};
+    setNodeTextIfChanged(overviewTopProxyTotal, '0');
+    setNodeHtmlIfChanged(
+      overviewTopProxyList,
+      `<div class="top-proxy-empty">${escapeTopologyText(ti('overview.topProxyEmpty', 'No active proxy chains yet'))}</div>`,
+    );
+    return;
+  }
+  const nodeTotals = new Map();
+  const nodeCounts = new Map();
+  let hasTrafficValue = false;
+  rows.forEach((item) => {
+    const name = extractConnectionNodeName(item);
+    if (!name) {
+      return;
+    }
+    const upload = Number(item && item.upload);
+    const download = Number(item && item.download);
+    const traffic = Math.max(0, (Number.isFinite(upload) ? upload : 0) + (Number.isFinite(download) ? download : 0));
+    if (traffic > 0) {
+      hasTrafficValue = true;
+    }
+    nodeTotals.set(name, Number(nodeTotals.get(name) || 0) + traffic);
+    nodeCounts.set(name, Number(nodeCounts.get(name) || 0) + 1);
+  });
+  const totalConnections = Array.from(nodeCounts.values()).reduce((sum, count) => sum + Number(count || 0), 0);
+  setNodeTextIfChanged(overviewTopProxyTotal, String(totalConnections));
+  if (nodeTotals.size <= 0 || totalConnections <= 0) {
+    state.topProxyAt = 0;
+    state.topProxyNodeTotals = {};
+    setNodeHtmlIfChanged(
+      overviewTopProxyList,
+      `<div class="top-proxy-empty">${escapeTopologyText(ti('overview.topProxyEmpty', 'No active proxy chains yet'))}</div>`,
+    );
+    return;
+  }
+  const prevAt = Number(state.topProxyAt || 0);
+  const prevTotals = state.topProxyNodeTotals && typeof state.topProxyNodeTotals === 'object'
+    ? state.topProxyNodeTotals
+    : {};
+  const now = Date.now();
+  const deltaSec = prevAt > 0 ? Math.max(0.2, (now - prevAt) / 1000) : 0;
+  const top = Array.from(nodeTotals.entries())
+    .map(([name, totalBytes]) => {
+      const prevBytes = Number(prevTotals[name] || 0);
+      const deltaBytes = Math.max(0, totalBytes - prevBytes);
+      const connectionCount = Number(nodeCounts.get(name) || 0);
+      const measuredRate = hasTrafficValue && deltaSec > 0 ? (deltaBytes / deltaSec) : 0;
+      const fallbackRate = connectionCount * 1024;
+      return {
+        name,
+        rate: measuredRate > 0 ? measuredRate : fallbackRate,
+      };
+    })
+    .sort((a, b) => b.rate - a.rate || a.name.localeCompare(b.name))
+    .slice(0, TOP_PROXY_MAX_ITEMS);
+
+  const maxRate = Math.max(1, ...top.map((item) => Number(item.rate || 0)));
+  const axisMax = Math.max(1024, niceMaxValue(maxRate * 1.06));
+  const rowsMarkup = top.map((item) => {
+    const fillPercent = Math.max(0, Math.min(100, (Number(item.rate || 0) / axisMax) * 100));
+    return `<div class="top-proxy-row">
+      <span class="top-proxy-name" title="${escapeTopologyText(item.name || '-')}">${escapeTopologyText(item.name || '-')}</span>
+      <span class="top-proxy-track" data-node="${escapeTopologyText(item.name || '-')}" title="${escapeTopologyText(item.name || '-')}"><i style="width:${fillPercent}%;"></i></span>
+    </div>`;
+  }).join('');
+  const axisMarkup = [0, 1, 2, 3, 4]
+    .map((step) => `<span>${escapeTopologyText(formatTopProxyRateLabel(axisMax * (step / 4)))}</span>`)
+    .join('');
+  const markup = `<div class="top-proxy-chart">
+    <div class="top-proxy-rows">${rowsMarkup}</div>
+    <div class="top-proxy-axis">${axisMarkup}</div>
+  </div>`;
+
+  state.topProxyAt = now;
+  state.topProxyNodeTotals = Object.fromEntries(nodeTotals.entries());
+  setNodeHtmlIfChanged(overviewTopProxyList, markup);
+}
+
+function parseTopProxyChainText(value = '') {
+  return String(value || '')
+    .split(/(?:->|→|⟶|›|＞|\/|\|)/g)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function isLikelyProxyGroup(value = '') {
+  const text = String(value || '').trim();
+  if (!text) {
+    return true;
+  }
+  const lower = text.toLowerCase();
+  const reserved = ['direct', 'reject', 'global', 'proxy', 'pass'];
+  if (reserved.includes(lower)) {
+    return true;
+  }
+  const groupKeywords = [
+    'select', 'selector', 'auto', 'urltest', 'fallback', 'loadbalance', 'relay',
+    '负载均衡', '自动选择', '自动', '策略组', '节点选择', '代理组',
+    'グループ', 'グローバル', '선택', '자동', '그룹',
+  ];
+  return groupKeywords.some((keyword) => lower.includes(keyword.toLowerCase()));
+}
+
+function normalizeTopProxyGroupType(value = '') {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[\s_-]+/g, '');
+}
+
+function isTopProxyGroupType(value = '') {
+  const type = normalizeTopProxyGroupType(value);
+  if (!type) {
+    return false;
+  }
+  return TOP_PROXY_GROUP_TYPES.has(type);
+}
+
+function isTopProxyGroupNode(node = null) {
+  if (!node || typeof node !== 'object') {
+    return false;
+  }
+  if (isTopProxyGroupType(node.type || '')) {
+    return true;
+  }
+  const candidates = Array.isArray(node.all) ? node.all : (Array.isArray(node.proxies) ? node.proxies : []);
+  return candidates.length > 0 && Boolean(String(node.now || node.current || node.selected || '').trim());
+}
+
+function buildTopProxyLookupMap(proxyMap = {}) {
+  const lookup = new Map();
+  Object.entries(proxyMap || {}).forEach(([key, value]) => {
+    if (!key || !value || typeof value !== 'object') {
+      return;
+    }
+    const keyText = String(key || '').trim();
+    if (!keyText) {
+      return;
+    }
+    lookup.set(keyText, { key: keyText, node: value });
+    const nameText = String(value.name || '').trim();
+    if (nameText && !lookup.has(nameText)) {
+      lookup.set(nameText, { key: keyText, node: value });
+    }
+  });
+  return lookup;
+}
+
+function resolveTopProxyLeafNode(name = '', proxyMap = {}, lookup = new Map(), visited = new Set()) {
+  const key = String(name || '').trim();
+  if (!key) {
+    return '';
+  }
+  const resolved = lookup && typeof lookup.get === 'function' ? lookup.get(key) : null;
+  const resolvedKey = resolved && resolved.key ? String(resolved.key || '').trim() : key;
+  if (visited.has(resolvedKey)) {
+    return key;
+  }
+  const node = resolved && resolved.node
+    ? resolved.node
+    : (proxyMap && typeof proxyMap === 'object' ? proxyMap[resolvedKey] : null);
+  if (!node || typeof node !== 'object') {
+    return key;
+  }
+  if (!isTopProxyGroupNode(node)) {
+    return String(node.name || key).trim() || key;
+  }
+  const current = String(node.now || node.current || node.selected || '').trim();
+  if (!current) {
+    return String(node.name || key).trim() || key;
+  }
+  const nextVisited = new Set(visited);
+  nextVisited.add(resolvedKey);
+  return resolveTopProxyLeafNode(current, proxyMap, lookup, nextVisited);
+}
+
+function normalizeTopProxyMapPayload(payload = {}) {
+  const source = payload && typeof payload === 'object' ? payload : {};
+  if (source.proxies && typeof source.proxies === 'object') {
+    return source.proxies;
+  }
+  return source;
+}
+
+async function ensureTopProxyProxyMap(force = false) {
+  if (!window.clashfox || typeof window.clashfox.getMihomoProxies !== 'function') {
+    return false;
+  }
+  if (state.topProxyProxyMapLoading && state.topProxyProxyMapPromise) {
+    return state.topProxyProxyMapPromise;
+  }
+  const now = Date.now();
+  if (
+    !force
+    && state.topProxyProxyMap
+    && Object.keys(state.topProxyProxyMap).length
+    && (now - Number(state.topProxyProxyMapAt || 0) < TOP_PROXY_PROXY_MAP_TTL_MS)
+  ) {
+    return true;
+  }
+  state.topProxyProxyMapLoading = true;
+  const request = (async () => {
+    try {
+      const source = getMihomoApiSource();
+      const response = await window.clashfox.getMihomoProxies(source);
+      if (!response || !response.ok || !response.data) {
+        return false;
+      }
+      state.topProxyProxyMap = normalizeTopProxyMapPayload(response.data);
+      state.topProxyProxyMapAt = Date.now();
+      return true;
+    } catch {
+      return false;
+    } finally {
+      state.topProxyProxyMapLoading = false;
+      state.topProxyProxyMapPromise = null;
+    }
+  })();
+  state.topProxyProxyMapPromise = request;
+  return request;
+}
+
+function extractConnectionNodeName(item = {}) {
+  const entry = item && typeof item === 'object' ? item : {};
+  const metadata = entry.metadata && typeof entry.metadata === 'object' ? entry.metadata : {};
+  const proxyMap = state.topProxyProxyMap && typeof state.topProxyProxyMap === 'object'
+    ? state.topProxyProxyMap
+    : {};
+  const proxyLookup = buildTopProxyLookupMap(proxyMap);
+  let chains = Array.isArray(entry.chains)
+    ? entry.chains.map((value) => String(value || '').trim()).filter(Boolean)
+    : [];
+  if (!chains.length) {
+    chains = parseTopProxyChainText(entry.chain || metadata.chain || '');
+  }
+  if (!chains.length) {
+    chains = parseTopProxyChainText(entry.outbound || metadata.outbound || '');
+  }
+  const chainCandidates = chains.slice().reverse();
+  for (let index = 0; index < chainCandidates.length; index += 1) {
+    const candidate = String(chainCandidates[index] || '').trim();
+    if (!candidate) {
+      continue;
+    }
+    const leaf = resolveTopProxyLeafNode(candidate, proxyMap, proxyLookup);
+    if (leaf && !isLikelyProxyGroup(leaf)) {
+      return leaf;
+    }
+    if (!isLikelyProxyGroup(candidate)) {
+      return candidate;
+    }
+  }
+  const fallbackCandidates = [
+    ...parseTopProxyChainText(metadata.specialProxy || ''),
+    ...parseTopProxyChainText(entry.proxyName || ''),
+    ...parseTopProxyChainText(entry.proxy || ''),
+  ];
+  for (let index = fallbackCandidates.length - 1; index >= 0; index -= 1) {
+    const candidate = String(fallbackCandidates[index] || '').trim();
+    if (!candidate) {
+      continue;
+    }
+    const leaf = resolveTopProxyLeafNode(candidate, proxyMap, proxyLookup);
+    if (leaf && !isLikelyProxyGroup(leaf)) {
+      return leaf;
+    }
+    if (!isLikelyProxyGroup(candidate)) {
+      return candidate;
+    }
+  }
+  return '';
+}
+
+function formatTopProxyRateLabel(bytesPerSec = 0) {
+  const value = Math.max(0, Number(bytesPerSec) || 0);
+  if (value >= (1024 * 1024)) {
+    const mb = value / (1024 * 1024);
+    return `${mb >= 10 ? mb.toFixed(0) : mb.toFixed(1)} MB/s`;
+  }
+  if (value >= 1024) {
+    const kb = value / 1024;
+    return `${kb >= 10 ? kb.toFixed(0) : kb.toFixed(1)} kB/s`;
+  }
+  return `${Math.round(value)} B/s`;
+}
+
+function renderMemoryHistoryChart(values = []) {
+  if (!overviewMemoryLine || !overviewMemoryArea) {
+    return;
+  }
+  if (!Array.isArray(values) || !values.length) {
+    overviewMemoryLine.setAttribute('d', '');
+    overviewMemoryArea.setAttribute('d', '');
+    updateMemoryAxisLabels(0, 0);
+    return;
+  }
+  const samples = values
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  if (!samples.length) {
+    overviewMemoryLine.setAttribute('d', '');
+    overviewMemoryArea.setAttribute('d', '');
+    updateMemoryAxisLabels(0, 0);
+    return;
+  }
+  const rawMin = Math.min(...samples);
+  const rawMax = Math.max(...samples);
+  const spread = Math.max(1, rawMax - rawMin);
+  const padding = Math.max(256 * 1024, spread * 0.35);
+  const ratioFloor = rawMin > 0 ? (rawMin * 0.82) : 0;
+  const rangeMin = Math.max(0, Math.max(ratioFloor, rawMin - padding));
+  const rangeMax = Math.max(rangeMin + 1, rawMax + padding);
+  updateMemoryAxisLabels(rangeMax, rangeMin);
+  overviewMemoryLine.setAttribute('d', buildSparkPathInRange(samples, rangeMin, rangeMax));
+  overviewMemoryArea.setAttribute('d', buildSparkAreaInRange(samples, rangeMin, rangeMax));
+}
+
+function buildSparkPathInRange(values = [], minValue = 0, maxValue = 1) {
+  if (!Array.isArray(values) || !values.length) {
+    return '';
+  }
+  const plotValues = values.length === 1 ? [values[0], values[0]] : values;
+  const width = 100;
+  const height = 40;
+  const range = Math.max(1e-6, Number(maxValue) - Number(minValue));
+  const len = plotValues.length;
+  const points = plotValues.map((value, index) => {
+    const x = len === 1 ? 0 : (index / (len - 1)) * width;
+    const normalized = (Number(value) - minValue) / range;
+    const y = height - (Math.min(1, Math.max(0, normalized)) * height);
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  });
+  return `M ${points.join(' L ')}`;
+}
+
+function buildSparkAreaInRange(values = [], minValue = 0, maxValue = 1) {
+  const plotValues = Array.isArray(values) && values.length === 1 ? [values[0], values[0]] : values;
+  const line = buildSparkPathInRange(plotValues, minValue, maxValue);
+  if (!line) {
+    return '';
+  }
+  const height = 40;
+  const lastX = plotValues.length === 1 ? 0 : 100;
+  return `${line} L ${lastX},${height} L 0,${height} Z`;
+}
+
+function formatMemoryAxisLabel(valueBytes = 0) {
+  const value = Math.max(0, Number(valueBytes) || 0);
+  const mib = value / (1024 * 1024);
+  if (mib >= 1) {
+    return `${Math.round(mib)} MiB`;
+  }
+  if (value >= 1024) {
+    return `${Math.round(value / 1024)} KiB`;
+  }
+  return `${Math.round(value)} B`;
+}
+
+function updateMemoryAxisLabels(maxValue = 0, minValue = 0) {
+  const max = Math.max(0, Number(maxValue) || 0);
+  let min = Number(minValue) || 0;
+  if (max <= 0) {
+    if (overviewMemoryAxisTop) setNodeTextIfChanged(overviewMemoryAxisTop, '-');
+    if (overviewMemoryAxisHigh) setNodeTextIfChanged(overviewMemoryAxisHigh, '-');
+    if (overviewMemoryAxisMid) setNodeTextIfChanged(overviewMemoryAxisMid, '-');
+    if (overviewMemoryAxisLow) setNodeTextIfChanged(overviewMemoryAxisLow, '-');
+    if (overviewMemoryAxisZero) setNodeTextIfChanged(overviewMemoryAxisZero, '-');
+    return;
+  }
+  if (!Number.isFinite(min) || min <= 0) {
+    min = max * 0.72;
+  }
+  min = Math.max(0, Math.min(max, min));
+  const range = Math.max(1, max - min);
+  const labels = [
+    formatMemoryAxisLabel(max),
+    formatMemoryAxisLabel(min + (range * 0.75)),
+    formatMemoryAxisLabel(min + (range * 0.5)),
+    formatMemoryAxisLabel(min + (range * 0.25)),
+    formatMemoryAxisLabel(min),
+  ];
+  if (overviewMemoryAxisTop) setNodeTextIfChanged(overviewMemoryAxisTop, labels[0]);
+  if (overviewMemoryAxisHigh) setNodeTextIfChanged(overviewMemoryAxisHigh, labels[1]);
+  if (overviewMemoryAxisMid) setNodeTextIfChanged(overviewMemoryAxisMid, labels[2]);
+  if (overviewMemoryAxisLow) setNodeTextIfChanged(overviewMemoryAxisLow, labels[3]);
+  if (overviewMemoryAxisZero) setNodeTextIfChanged(overviewMemoryAxisZero, labels[4]);
+}
+
+function formatClockTime(date = new Date()) {
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  const ss = String(date.getSeconds()).padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
+}
+
+function hideMemoryHoverHint() {
+  if (!overviewMemoryChart) {
+    return;
+  }
+  overviewMemoryChart.classList.remove('is-hovering');
+}
+
+function updateMemoryHoverHintByRatio(ratio = 0) {
+  if (!overviewMemoryChart || !overviewMemoryHint) {
+    return;
+  }
+  const samples = Array.isArray(state.memorySamples) ? state.memorySamples : [];
+  if (!samples.length) {
+    hideMemoryHoverHint();
+    return;
+  }
+  const clamped = Math.max(0, Math.min(1, Number(ratio) || 0));
+  const index = Math.max(0, Math.min(samples.length - 1, Math.round(clamped * Math.max(0, samples.length - 1))));
+  const sample = samples[index];
+  const value = Number(sample && sample.value);
+  const at = Number(sample && sample.at);
+  if (!Number.isFinite(value) || value <= 0 || !Number.isFinite(at) || at <= 0) {
+    hideMemoryHoverHint();
+    return;
+  }
+  const memLabel = t('overview.memory');
+  setNodeTextIfChanged(overviewMemoryHint, `${memLabel} (${formatClockTime(new Date(at))}): ${formatMemoryAxisLabel(value)}`);
+  const hintLeft = Math.max(12, Math.min(88, 8 + (clamped * 84)));
+  overviewMemoryHint.style.left = `${hintLeft}%`;
+  overviewMemoryChart.classList.add('is-hovering');
+}
+
+function bindOverviewMemoryHoverHint() {
+  if (!overviewMemoryChart || overviewMemoryChart.dataset.hoverBound === 'true') {
+    return;
+  }
+  const handlePointerMove = (event) => {
+    const rect = overviewMemoryChart.getBoundingClientRect();
+    if (!rect || rect.width <= 0) {
+      return;
+    }
+    const ratio = (Number(event.clientX) - rect.left) / rect.width;
+    updateMemoryHoverHintByRatio(ratio);
+  };
+  overviewMemoryChart.addEventListener('pointerenter', handlePointerMove);
+  overviewMemoryChart.addEventListener('pointermove', handlePointerMove);
+  overviewMemoryChart.addEventListener('pointerleave', hideMemoryHoverHint);
+  overviewMemoryChart.dataset.hoverBound = 'true';
+}
+
+function resetMemoryTrend() {
+  state.memorySamples = [];
+  state.memoryPeak = 0;
+  state.memoryLast = null;
+  if (overviewMemoryLegendValue) setNodeTextIfChanged(overviewMemoryLegendValue, '-');
+  if (overviewMemoryHint) setNodeTextIfChanged(overviewMemoryHint, '-');
+  if (overviewMemoryHint) {
+    overviewMemoryHint.style.left = '12%';
+  }
+  hideMemoryHoverHint();
+  updateMemoryAxisLabels(0, 0);
+  renderMemoryHistoryChart([]);
+}
+
+function updateMemoryTrend(valueBytes) {
+  const value = Number.parseFloat(valueBytes);
+  if (!Number.isFinite(value) || value <= 0) {
+    if (state.overviewRunning || state.coreRunning) {
+      return;
+    }
+    resetMemoryTrend();
+    return;
+  }
+  const now = Date.now();
+  state.memorySamples.push({ at: now, value });
+  const threshold = now - MEMORY_HISTORY_MS;
+  state.memorySamples = state.memorySamples.filter((item) => item.at >= threshold);
+  state.memoryPeak = Math.max(Number(state.memoryPeak || 0), value);
+  state.memoryLast = value;
+  if (overviewMemoryLegendValue) setNodeTextIfChanged(overviewMemoryLegendValue, formatMemoryAxisLabel(value));
+  if (overviewMemoryHint) {
+    const memLabel = t('overview.memory');
+    setNodeTextIfChanged(overviewMemoryHint, `${memLabel} (${formatClockTime(new Date(now))}): ${formatMemoryAxisLabel(value)}`);
+  }
+  renderMemoryHistoryChart(state.memorySamples.map((item) => item.value));
 }
 
 function updateRealtimeConnections(value) {
@@ -10290,6 +10832,58 @@ async function loadOverviewMemory() {
   }
 }
 
+function pickTrackedConnectionsFromPayload(payload = {}) {
+  if (!payload) {
+    return [];
+  }
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+  if (Array.isArray(payload.connections)) {
+    return payload.connections;
+  }
+  if (Array.isArray(payload.items)) {
+    return payload.items;
+  }
+  if (Array.isArray(payload.data)) {
+    return payload.data;
+  }
+  return [];
+}
+
+async function loadTopProxyOverview() {
+  if (!overviewTopProxyTotal || !overviewTopProxyList) {
+    return false;
+  }
+  const now = Date.now();
+  const wsFresh = Boolean(state.lastMihomoConnectionsAt) && ((now - Number(state.lastMihomoConnectionsAt || 0)) < 10000);
+  if (state.mihomoConnectionsLive && wsFresh) {
+    return true;
+  }
+  if (state.topProxyLoading) {
+    return false;
+  }
+  state.topProxyLoading = true;
+  try {
+    await ensureTopProxyProxyMap(false);
+    const configPath = getCurrentConfigPath();
+    const args = configPath ? ['--config', configPath] : [];
+    args.push(...getControllerArgs());
+    const response = await runCommand('track-connections', args);
+    if (!response || !response.ok) {
+      return false;
+    }
+    const rows = pickTrackedConnectionsFromPayload(response.data);
+    state.mihomoConnectionsSnapshot = Array.isArray(rows) ? rows : [];
+    renderTopProxyCard(state.mihomoConnectionsSnapshot);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    state.topProxyLoading = false;
+  }
+}
+
 function paginate(items, page, pageSize) {
   const total = items.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -11458,6 +12052,23 @@ function refreshPageRefs() {
   overviewConnTrend = document.getElementById('overviewConnTrend');
   overviewConnLine = document.getElementById('overviewConnLine');
   overviewConnArea = document.getElementById('overviewConnArea');
+  overviewTopProxyTotal = document.getElementById('overviewTopProxyTotal');
+  overviewTopProxyList = document.getElementById('overviewTopProxyList');
+  overviewMemoryCurrent = document.getElementById('overviewMemoryCurrent');
+  overviewMemoryPeak = document.getElementById('overviewMemoryPeak');
+  overviewMemoryAvg = document.getElementById('overviewMemoryAvg');
+  overviewMemoryDelta = document.getElementById('overviewMemoryDelta');
+  overviewMemoryChart = document.getElementById('overviewMemoryChart');
+  overviewMemoryLine = document.getElementById('overviewMemoryLine');
+  overviewMemoryArea = document.getElementById('overviewMemoryArea');
+  overviewMemoryAxisTop = document.getElementById('overviewMemoryAxisTop');
+  overviewMemoryAxisHigh = document.getElementById('overviewMemoryAxisHigh');
+  overviewMemoryAxisMid = document.getElementById('overviewMemoryAxisMid');
+  overviewMemoryAxisLow = document.getElementById('overviewMemoryAxisLow');
+  overviewMemoryAxisZero = document.getElementById('overviewMemoryAxisZero');
+  overviewMemoryHint = document.getElementById('overviewMemoryHint');
+  overviewMemoryLegendValue = document.getElementById('overviewMemoryLegendValue');
+  bindOverviewMemoryHoverHint();
   overviewProviderSubscriptionSummary = document.getElementById('overviewProviderSubscriptionSummary');
   overviewProviderSubscriptionList = document.getElementById('overviewProviderSubscriptionList');
   overviewRulesSwitch = document.getElementById('overviewRulesSwitch');
@@ -11748,6 +12359,7 @@ function bindTopbarActions() {
         loadOverview(),
         loadProviderSubscriptionOverview(),
         loadRulesOverviewCard(),
+        loadTopProxyOverview(),
       ]);
       showToast(t('labels.statusRefreshed'));
     });
@@ -11773,6 +12385,16 @@ function refreshPageView() {
     loadBackups();
   }
   if (currentPage === 'overview') {
+    if (overviewTopProxyList && !String(overviewTopProxyList.innerHTML || '').trim()) {
+      renderTopProxyCard(state.mihomoConnectionsSnapshot || []);
+    }
+    if (overviewMemoryLine && overviewMemoryArea) {
+      if (Array.isArray(state.memorySamples) && state.memorySamples.length) {
+        renderMemoryHistoryChart(state.memorySamples.map((item) => Number(item && item.value) || 0));
+      } else {
+        resetMemoryTrend();
+      }
+    }
     if (!state.providerSubscriptionRenderSignature) {
       renderProviderSubscriptionOverview({ items: [], summary: { providerCount: 0 } });
     }
@@ -11970,6 +12592,10 @@ function stopOverviewActivity() {
     clearInterval(state.rulesOverviewTimer);
     state.rulesOverviewTimer = null;
   }
+  if (state.topProxyTimer) {
+    clearInterval(state.topProxyTimer);
+    state.topProxyTimer = null;
+  }
   if (state.trafficTimer) {
     clearInterval(state.trafficTimer);
     state.trafficTimer = null;
@@ -12115,6 +12741,7 @@ async function syncMainWindowActivity() {
       loadOverview(),
       loadProviderSubscriptionOverview(),
       loadRulesOverviewCard(),
+      loadTopProxyOverview(),
     ]).catch(() => {});
   } else {
     stopOverviewActivity();
@@ -14525,6 +15152,15 @@ function startOverviewTimer() {
       loadRulesOverviewCard();
     }
   }, 20000);
+
+  if (state.topProxyTimer) {
+    clearInterval(state.topProxyTimer);
+  }
+  state.topProxyTimer = setInterval(() => {
+    if (currentPage === 'overview') {
+      loadTopProxyOverview();
+    }
+  }, 12000);
 }
 
 function bridgeReady() {

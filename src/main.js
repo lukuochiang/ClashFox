@@ -11970,6 +11970,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:getMihomoConfigs', async (_event, source = {}) => getControllerConfigsMain(source));
   ipcMain.handle('clashfox:getMihomoVersion', async (_event, source = {}) => getControllerVersionMain(source));
+  ipcMain.handle('clashfox:getMihomoProxies', async (_event, source = {}) => loadControllerProxiesRaw(source));
 
   ipcMain.handle('clashfox:reloadMihomoConfig', async (_event, source = {}) => runControllerConfigRequestMain(source, [
     {

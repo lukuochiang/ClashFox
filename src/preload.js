@@ -73,6 +73,7 @@ contextBridge.exposeInMainWorld('clashfox', {
   installPanel: (preset) => ipcRenderer.invoke('clashfox:installPanel', preset),
   activatePanel: (panelName) => ipcRenderer.invoke('clashfox:activatePanel', panelName),
   getMihomoVersion: (source = {}) => ipcRenderer.invoke('clashfox:getMihomoVersion', source),
+  getMihomoProxies: (source = {}) => ipcRenderer.invoke('clashfox:getMihomoProxies', source),
   getMihomoConfigs: (source = {}) => ipcRenderer.invoke('clashfox:getMihomoConfigs', source),
   updateMihomoConfig: (patch = {}, source = {}) => ipcRenderer.invoke('clashfox:updateMihomoConfig', patch, source),
   updateMihomoAllowLan: (enabled, source = {}) => ipcRenderer.invoke('clashfox:updateMihomoAllowLan', Boolean(enabled), source),

@@ -157,6 +157,50 @@
                 </svg>
               </div>
             </div>
+            <div class="card quick-actions top-proxy-card" data-module="top-proxies" draggable="true">
+              <div class="card-header-row">
+                <h3 class="iconized top-proxy-icon" data-i18n="overview.topProxyTitle">Top Proxies</h3>
+                <button class="icon-btn ghost small overview-drag-handle" type="button">
+                  <span class="sr-only" data-i18n="labels.dragToReorder">Drag to reorder</span>
+                  <span class="drag-grip" aria-hidden="true"></span>
+                </button>
+              </div>
+              <div class="top-proxy-summary">
+                <span data-i18n="overview.topProxyTotal">Total</span>
+                <span id="overviewTopProxyTotal">-</span>
+              </div>
+              <div class="top-proxy-list" id="overviewTopProxyList"></div>
+            </div>
+            <div class="card quick-actions memory-trend-card" data-module="memory-trend" draggable="true">
+              <div class="card-header-row">
+                <h3 class="iconized memory-trend-icon" data-i18n="overview.memoryTrendTitle">Memory Trend</h3>
+                <button class="icon-btn ghost small overview-drag-handle" type="button">
+                  <span class="sr-only" data-i18n="labels.dragToReorder">Drag to reorder</span>
+                  <span class="drag-grip" aria-hidden="true"></span>
+                </button>
+              </div>
+              <div class="memory-trend-shell">
+                <div class="memory-trend-axis">
+                  <span id="overviewMemoryAxisTop">-</span>
+                  <span id="overviewMemoryAxisHigh">-</span>
+                  <span id="overviewMemoryAxisMid">-</span>
+                  <span id="overviewMemoryAxisLow">-</span>
+                  <span id="overviewMemoryAxisZero">-</span>
+                </div>
+                <div class="memory-trend-chart" id="overviewMemoryChart">
+                  <svg class="history-svg" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
+                    <path id="overviewMemoryArea" class="history-area memory" d=""></path>
+                    <path id="overviewMemoryLine" class="history-line memory" d=""></path>
+                  </svg>
+                  <div class="memory-trend-hint" id="overviewMemoryHint">-</div>
+                </div>
+              </div>
+              <div class="memory-trend-legend">
+                <span class="memory-trend-dot" aria-hidden="true"></span>
+                <span data-i18n="overview.memory">Memory</span>
+                <span id="overviewMemoryLegendValue">-</span>
+              </div>
+            </div>
             <div class="card quick-actions" data-module="network-history" draggable="true">
               <div class="card-header-row">
                 <h3 class="iconized history-icon" data-i18n="status.trafficTitle">Network Rate</h3>
