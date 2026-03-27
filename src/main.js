@@ -5063,16 +5063,32 @@ function resolvePanelPreset(preset = {}) {
 
 async function installPanelMain(preset = {}) {
   const resolvedPreset = resolvePanelPreset(preset);
-  const panelName = String((resolvedPreset && resolvedPreset.name) || '').trim();
+  const rawPanelName = String((resolvedPreset && resolvedPreset.name) || '').trim();
+  const panelName = rawPanelName.toLowerCase();
   const panelUrl = String((resolvedPreset && resolvedPreset.url) || '').trim();
   const forceInstall = Boolean(resolvedPreset && resolvedPreset.force);
 
   if (!panelName || !panelUrl) {
     return { ok: false, error: 'missing_panel_info' };
   }
+  if (!Object.prototype.hasOwnProperty.call(PANEL_PRESETS, panelName)) {
+    return { ok: false, error: 'invalid_panel_name' };
+  }
 
   const panelUiDir = getPanelUiDir();
   const panelDir = getPanelDir(panelName);
+  const panelUiDirResolved = path.resolve(panelUiDir);
+  const panelDirResolved = path.resolve(panelDir);
+  const panelUiDirPrefix = `${panelUiDirResolved}${path.sep}`;
+  if (
+    panelDirResolved !== panelUiDirResolved
+    && !panelDirResolved.startsWith(panelUiDirPrefix)
+  ) {
+    return { ok: false, error: 'invalid_panel_path' };
+  }
+  if (panelDirResolved === panelUiDirResolved) {
+    return { ok: false, error: 'invalid_panel_path' };
+  }
 
   // 检查面板是否已安装
   if (!forceInstall && fs.existsSync(panelDir)) {
@@ -5082,33 +5098,29 @@ async function installPanelMain(preset = {}) {
     }
   }
 
-  // 创建 UI 目录
-  if (forceInstall && fs.existsSync(panelDir)) {
-    try {
-      fs.rmSync(panelDir, { recursive: true, force: true });
-    } catch {
-      // ignore removal errors and retry via mkdir
-    }
-  }
   await fs.promises.mkdir(panelUiDir, { recursive: true });
-  await fs.promises.mkdir(panelDir, { recursive: true });
+
+  const stagingDir = path.join(panelUiDir, `.staging-${panelName}-${Date.now()}`);
+  let backupDir = '';
 
   // 下载压缩包到临时文件（复用内核下载逻辑以支持重定向）
   const tempFile = path.join(app.getPath('temp'), `panel-${Date.now()}.tmp`);
   try {
-    await downloadPanelFile(panelUrl, tempFile);
-  } catch (error) {
-    try { fs.unlinkSync(tempFile); } catch (e) { /* ignore */ }
-    return { ok: false, error: 'download_failed', details: String(error && error.message ? error.message : error || '') };
-  }
-
-  const isTarGz = panelUrl.endsWith('.tar.gz') || panelUrl.endsWith('.tgz');
-
-  try {
+    await fs.promises.mkdir(stagingDir, { recursive: true });
+    try {
+      await downloadPanelFile(panelUrl, tempFile);
+    } catch (error) {
+      return {
+        ok: false,
+        error: 'download_failed',
+        details: String(error && error.message ? error.message : error || ''),
+      };
+    }
+    const isTarGz = panelUrl.endsWith('.tar.gz') || panelUrl.endsWith('.tgz');
     if (isTarGz) {
       // 使用 tar 解压（需要检查系统是否支持）
       await new Promise((resolve, reject) => {
-        const child = spawn('tar', ['-xzf', tempFile, '-C', panelDir]);
+        const child = spawn('tar', ['-xzf', tempFile, '-C', stagingDir]);
         child.on('close', (code) => {
           if (code === 0) resolve();
           else reject(new Error(`tar exited with code ${code}`));
@@ -5118,7 +5130,7 @@ async function installPanelMain(preset = {}) {
     } else {
       // 使用 unzip 解压（需要检查系统是否支持）
       await new Promise((resolve, reject) => {
-        const child = spawn('unzip', ['-q', tempFile, '-d', panelDir]);
+        const child = spawn('unzip', ['-q', tempFile, '-d', stagingDir]);
         child.on('close', (code) => {
           if (code === 0) resolve();
           else reject(new Error(`unzip exited with code ${code}`));
@@ -5126,16 +5138,48 @@ async function installPanelMain(preset = {}) {
         child.on('error', reject);
       });
     }
+    normalizePanelRoot(stagingDir);
+
+    const stagedIndexPath = path.join(stagingDir, 'index.html');
+    if (!fs.existsSync(stagedIndexPath)) {
+      throw new Error('panel package missing index.html');
+    }
+
+    if (forceInstall && fs.existsSync(panelDir)) {
+      backupDir = path.join(panelUiDir, `.${panelName}.backup-${Date.now()}`);
+      fs.renameSync(panelDir, backupDir);
+    } else if (fs.existsSync(panelDir)) {
+      fs.rmSync(panelDir, { recursive: true, force: true });
+    }
+
+    fs.renameSync(stagingDir, panelDir);
+    if (backupDir && fs.existsSync(backupDir)) {
+      fs.rmSync(backupDir, { recursive: true, force: true });
+    }
+
+    return { ok: true, installed: true, path: panelDir };
   } catch (error) {
-    try { fs.unlinkSync(tempFile); } catch (e) { /* ignore */ }
-    return { ok: false, error: 'extract_failed', details: error.message };
+    if (backupDir && fs.existsSync(backupDir) && !fs.existsSync(panelDir)) {
+      try {
+        fs.renameSync(backupDir, panelDir);
+      } catch {
+        // ignore rollback failure
+      }
+    }
+    const message = String(error && error.message ? error.message : error || '');
+    if (message.includes('tar exited') || message.includes('unzip exited')) {
+      return { ok: false, error: 'extract_failed', details: message };
+    }
+    return { ok: false, error: 'panel_install_failed', details: message };
   } finally {
     try { fs.unlinkSync(tempFile); } catch (e) { /* ignore */ }
+    if (fs.existsSync(stagingDir)) {
+      try { fs.rmSync(stagingDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+    if (backupDir && fs.existsSync(backupDir)) {
+      try { fs.rmSync(backupDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
   }
-
-  normalizePanelRoot(panelDir);
-
-  return { ok: true, installed: true, path: panelDir };
 }
 
 async function activatePanelMain(panelName = '') {

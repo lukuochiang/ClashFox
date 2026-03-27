@@ -7752,11 +7752,6 @@ body[data-page="settings"] .proxy-config-header-actions {
   /*margin-top: -13px;*/
 }
 
-body[data-page="settings"] .panel-manager-header-actions {
-  flex: 0 0 auto;
-  margin-top: -13px;
-}
-
 body[data-page="settings"] .proxy-config-header-actions .icon-btn {
   width: 30px;
   height: 30px;
