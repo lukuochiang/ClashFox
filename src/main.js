@@ -405,7 +405,28 @@ let connectivityQualityCache = {
 let overviewPublicIpCache = {
   internet: '',
   proxy: '',
+  internetDetail: '',
+  proxyDetail: '',
   updatedAt: 0,
+};
+const OVERVIEW_SITE_LATENCY_TTL_MS = 15 * 1000;
+const OVERVIEW_NETWORK_INTEL_TTL_MS = 15 * 1000;
+const OVERVIEW_SITE_LATENCY_TARGETS = [
+  { id: 'baidu', label: 'Baidu', host: 'www.baidu.com' },
+  { id: 'google', label: 'Google', host: 'www.google.com' },
+  { id: 'cloudflare', label: 'Cloudflare', host: 'www.cloudflare.com' },
+  { id: 'github', label: 'GitHub', host: 'github.com' },
+  { id: 'youtube', label: 'YouTube', host: 'www.youtube.com' },
+];
+let overviewSiteLatencyCache = {
+  updatedAt: 0,
+  payload: null,
+  promise: null,
+};
+let overviewNetworkIntelCache = {
+  updatedAt: 0,
+  payload: null,
+  promise: null,
 };
 let connectivityQualityFetchPromise = null;
 const HELPER_UPDATE_CACHE_TTL_MS = 3 * 60 * 1000;
@@ -4975,7 +4996,191 @@ async function fetchPublicIpViaCurl(url, { proxyPort = '', useProxy = false } = 
   return extractIpFromPayload(output);
 }
 
+function parseNetworkDetailPayload(raw = '', endpoint = '') {
+  const text = String(raw || '').trim();
+  if (!text) {
+    return { ip: '', detail: '', source: endpoint };
+  }
+  const cleanNetworkText = (value = '') => String(value || '').replace(/^[,\s，]+|[,\s，]+$/g, '').trim();
+  const ip = extractIpFromPayload(text);
+  try {
+    const parsed = JSON.parse(text);
+    const city = cleanNetworkText(
+      (parsed && parsed.city)
+      || (parsed && parsed.location && parsed.location.city)
+      || (parsed && parsed.data && parsed.data.city)
+      || '',
+    );
+    const region = cleanNetworkText(
+      (parsed && parsed.region)
+      || (parsed && parsed.location && parsed.location.region)
+      || (parsed && parsed.data && parsed.data.region)
+      || '',
+    );
+    const country = cleanNetworkText(
+      (parsed && parsed.country)
+      || (parsed && parsed.location && parsed.location.country)
+      || (parsed && parsed.data && parsed.data.country)
+      || '',
+    );
+    const locationText = cleanNetworkText(
+      (parsed && typeof parsed.location === 'string' && parsed.location)
+      || (parsed && parsed.data && parsed.data.location)
+      || '',
+    );
+    const isp = cleanNetworkText(
+      (parsed && parsed.isp)
+      || (parsed && parsed.organization)
+      || (parsed && parsed.as)
+      || (parsed && parsed.asn && (parsed.asn.org || parsed.asn.name))
+      || (parsed && parsed.company && parsed.company.name)
+      || (parsed && parsed.data && (parsed.data.isp || parsed.data.org))
+      || '',
+    );
+    const locationParts = [country, region, city].filter(Boolean);
+    const summary = [locationParts.join(' ') || locationText, isp].filter(Boolean).join(' · ');
+    return {
+      ip,
+      detail: summary || '',
+      source: endpoint,
+    };
+  } catch {
+    return {
+      ip,
+      detail: '',
+      source: endpoint,
+    };
+  }
+}
+
+function parseIpapiMetaPayload(raw = '') {
+  const text = String(raw || '').trim();
+  if (!text) {
+    return {
+      originalIp: '',
+      nativeIp: null,
+      riskScore: null,
+      riskLevel: '',
+    };
+  }
+  try {
+    const parsed = JSON.parse(text);
+    const originalIp = String((parsed && parsed.ip) || '').trim();
+    const bogon = Boolean(parsed && parsed.is_bogon);
+    const datacenter = Boolean(parsed && parsed.is_datacenter);
+    const tor = Boolean(parsed && parsed.is_tor);
+    const proxy = Boolean(parsed && parsed.is_proxy);
+    const vpn = Boolean(parsed && parsed.is_vpn);
+    const abuser = Boolean(parsed && parsed.is_abuser);
+    const crawler = Boolean(parsed && parsed.is_crawler);
+    const mobile = Boolean(parsed && parsed.is_mobile);
+    const riskScore = Math.min(100, Math.max(0,
+      (bogon ? 40 : 0)
+      + (datacenter ? 25 : 0)
+      + (tor ? 20 : 0)
+      + (proxy ? 20 : 0)
+      + (vpn ? 20 : 0)
+      + (abuser ? 25 : 0)
+      + (crawler ? 10 : 0)
+      + (mobile ? 6 : 0)
+    ));
+    const riskLevel = riskScore >= 60 ? 'high' : (riskScore >= 30 ? 'medium' : 'low');
+    const nativeIp = !(bogon || datacenter || tor || proxy || vpn || abuser || crawler);
+    return {
+      originalIp,
+      nativeIp,
+      riskScore,
+      riskLevel,
+    };
+  } catch {
+    return {
+      originalIp: '',
+      nativeIp: null,
+      riskScore: null,
+      riskLevel: '',
+    };
+  }
+}
+
+async function fetchNetworkDetailWithFallback({ proxyPort = '', useProxy = false } = {}) {
+  const normalizedProxyPort = String(proxyPort || '').trim();
+  if (useProxy && !normalizedProxyPort) {
+    return { ip: '', detail: '', source: '' };
+  }
+  const endpoints = [
+    'https://api.ipapi.is/',
+    'https://myip.ipip.net/json',
+  ];
+  for (const endpoint of endpoints) {
+    const separator = endpoint.includes('?') ? '&' : '?';
+    const requestUrl = `${endpoint}${separator}t=${Date.now()}`;
+    const args = ['-sS', '--max-time', '7', '--connect-timeout', '3', requestUrl];
+    if (useProxy && normalizedProxyPort) {
+      args.unshift('--proxy', `http://127.0.0.1:${normalizedProxyPort}`, '--noproxy', '');
+    } else {
+      args.unshift('--proxy', '', '--noproxy', '*');
+    }
+    let output = '';
+    try {
+      output = await execFileText('/usr/bin/curl', args, 7600);
+    } catch {
+      output = '';
+    }
+    const parsed = parseNetworkDetailPayload(output, endpoint);
+    if (parsed.ip) {
+      return parsed;
+    }
+  }
+  return { ip: '', detail: '', source: '' };
+}
+
+async function fetchNetworkDetailByEndpoint(endpoint = '', { proxyPort = '', useProxy = false } = {}) {
+  const requestEndpoint = String(endpoint || '').trim();
+  const normalizedProxyPort = String(proxyPort || '').trim();
+  if (!requestEndpoint) {
+    return { ip: '', detail: '', source: '' };
+  }
+  if (useProxy && !normalizedProxyPort) {
+    return { ip: '', detail: '', source: '' };
+  }
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const separator = requestEndpoint.includes('?') ? '&' : '?';
+    const requestUrl = `${requestEndpoint}${separator}t=${Date.now()}`;
+    const args = ['-sS', '--max-time', '7', '--connect-timeout', '3', requestUrl];
+    if (useProxy && normalizedProxyPort) {
+      args.unshift('--proxy', `http://127.0.0.1:${normalizedProxyPort}`, '--noproxy', '');
+    } else {
+      args.unshift('--proxy', '', '--noproxy', '*');
+    }
+    try {
+      const output = await execFileText('/usr/bin/curl', args, 7600);
+      const parsed = parseNetworkDetailPayload(output, requestEndpoint);
+      const isIpapi = requestEndpoint.includes('api.ipapi.is');
+      if (parsed.ip) {
+        if (isIpapi) {
+          const meta = parseIpapiMetaPayload(output);
+          return {
+            ...parsed,
+            originalIp: String(meta.originalIp || parsed.ip || '').trim(),
+            nativeIp: meta.nativeIp,
+            riskScore: Number.isFinite(Number(meta.riskScore)) ? Number(meta.riskScore) : null,
+            riskLevel: String(meta.riskLevel || '').trim(),
+          };
+        }
+        return parsed;
+      }
+    } catch {
+      // retry
+    }
+  }
+  return { ip: '', detail: '', source: requestEndpoint };
+}
+
 async function fetchPublicIpWithFallback({ proxyPort = '', useProxy = false } = {}) {
+  const normalizedProxyPort = String(proxyPort || '').trim();
+  if (useProxy && !normalizedProxyPort) {
+    return '';
+  }
   const endpoints = useProxy
     ? [
         'https://api.ip.sb/jsonip',
@@ -4992,7 +5197,7 @@ async function fetchPublicIpWithFallback({ proxyPort = '', useProxy = false } = 
   for (const endpoint of endpoints) {
     const separator = endpoint.includes('?') ? '&' : '?';
     const requestUrl = `${endpoint}${separator}t=${Date.now()}`;
-    const ip = await fetchPublicIpViaCurl(requestUrl, { proxyPort, useProxy });
+    const ip = await fetchPublicIpViaCurl(requestUrl, { proxyPort: normalizedProxyPort, useProxy });
     if (ip) {
       return ip;
     }
@@ -5240,18 +5445,36 @@ async function buildOverviewNetworkSnapshot() {
     (settings && settings.proxy && (settings.proxy.mixedPort ?? settings.proxy.port))
       ?? '',
   ).trim();
-  const [routerMs, dnsMs, internetMs, internetIp, proxyIp] = await Promise.all([
+  const [routerMs, dnsMs, internetMs, internetIpRaw, proxyIpRaw, internetDetailSnapshot, proxyDetailSnapshot] = await Promise.all([
     measurePingLatency(routerTarget),
     measureDnsLatency(),
     measurePingLatency('1.1.1.1'),
     fetchPublicIpWithFallback({ useProxy: false }),
     fetchPublicIpWithFallback({ proxyPort: proxyPortCandidate, useProxy: true }),
+    fetchNetworkDetailWithFallback({ useProxy: false }),
+    fetchNetworkDetailWithFallback({ proxyPort: proxyPortCandidate, useProxy: true }),
   ]);
+  const internetIp = String(
+    internetIpRaw || (internetDetailSnapshot && internetDetailSnapshot.ip) || '',
+  ).trim();
+  const proxyIp = String(
+    proxyIpRaw || (proxyDetailSnapshot && proxyDetailSnapshot.ip) || '',
+  ).trim();
+  const internetDetail = String((internetDetailSnapshot && internetDetailSnapshot.detail) || '').trim();
+  const proxyDetail = String((proxyDetailSnapshot && proxyDetailSnapshot.detail) || '').trim();
+  const internetSource = String((internetDetailSnapshot && internetDetailSnapshot.source) || '').trim();
+  const proxySource = String((proxyDetailSnapshot && proxyDetailSnapshot.source) || '').trim();
   if (internetIp) {
     overviewPublicIpCache.internet = internetIp;
   }
   if (proxyIp) {
     overviewPublicIpCache.proxy = proxyIp;
+  }
+  if (internetDetail) {
+    overviewPublicIpCache.internetDetail = internetDetail;
+  }
+  if (proxyDetail) {
+    overviewPublicIpCache.proxyDetail = proxyDetail;
   }
   if (internetIp || proxyIp) {
     overviewPublicIpCache.updatedAt = Date.now();
@@ -5264,11 +5487,165 @@ async function buildOverviewNetworkSnapshot() {
       proxyIp: proxyIp || overviewPublicIpCache.proxy || '',
       internetIp: internetIp || overviewPublicIpCache.internet || '',
       internetIp4: internetIp || overviewPublicIpCache.internet || '',
+      internetDetail: internetDetail || overviewPublicIpCache.internetDetail || '',
+      proxyDetail: proxyDetail || overviewPublicIpCache.proxyDetail || '',
+      internetSource,
+      proxySource,
       internetMs: internetMs || '',
       dnsMs: dnsMs || '',
       routerMs: routerMs || '',
     },
   };
+}
+
+async function buildOverviewNetworkIntelSnapshot(options = {}) {
+  const force = Boolean(options && options.force);
+  const now = Date.now();
+  if (
+    !force
+    && overviewNetworkIntelCache.payload
+    && (now - Number(overviewNetworkIntelCache.updatedAt || 0) < OVERVIEW_NETWORK_INTEL_TTL_MS)
+  ) {
+    return {
+      ok: true,
+      data: overviewNetworkIntelCache.payload,
+      cached: true,
+    };
+  }
+  if (overviewNetworkIntelCache.promise) {
+    return overviewNetworkIntelCache.promise;
+  }
+  const request = (async () => {
+    try {
+      const [ipipResult, ipapiResult] = await Promise.all([
+        fetchNetworkDetailByEndpoint('https://myip.ipip.net/json', { useProxy: false }),
+        fetchNetworkDetailByEndpoint('https://api.ipapi.is/', { useProxy: false }),
+      ]);
+      const previous = overviewNetworkIntelCache.payload || {};
+      const ipipPayload = {
+        ip: String((ipipResult && ipipResult.ip) || (previous.ipip && previous.ipip.ip) || '').trim(),
+        detail: String((ipipResult && ipipResult.detail) || (previous.ipip && previous.ipip.detail) || '').trim(),
+        source: String((ipipResult && ipipResult.source) || (previous.ipip && previous.ipip.source) || '').trim(),
+      };
+      const ipapiIpFallback = String(
+        (ipapiResult && ipapiResult.ip)
+        || (previous.ipapi && previous.ipapi.ip)
+        || '',
+      ).trim();
+      const ipapiDetailFallback = String(
+        (ipapiResult && ipapiResult.detail)
+        || (previous.ipapi && previous.ipapi.detail)
+        || (ipapiIpFallback ? 'Unavailable' : '')
+        || '',
+      ).trim();
+      const ipapiPayload = {
+        ip: ipapiIpFallback,
+        detail: ipapiDetailFallback,
+        source: String(
+          (ipapiResult && ipapiResult.source)
+          || (previous.ipapi && previous.ipapi.source)
+          || 'api.ipapi.is',
+        ).trim(),
+        originalIp: String(
+          (ipapiResult && ipapiResult.originalIp)
+          || (previous.ipapi && previous.ipapi.originalIp)
+          || ipapiIpFallback,
+        ).trim(),
+        nativeIp: typeof (ipapiResult && ipapiResult.nativeIp) === 'boolean'
+          ? Boolean(ipapiResult.nativeIp)
+          : (typeof (previous.ipapi && previous.ipapi.nativeIp) === 'boolean' ? Boolean(previous.ipapi.nativeIp) : null),
+        riskScore: Number.isFinite(Number(ipapiResult && ipapiResult.riskScore))
+          ? Number(ipapiResult.riskScore)
+          : (Number.isFinite(Number(previous.ipapi && previous.ipapi.riskScore)) ? Number(previous.ipapi.riskScore) : null),
+        riskLevel: String((ipapiResult && ipapiResult.riskLevel) || (previous.ipapi && previous.ipapi.riskLevel) || '').trim(),
+      };
+      const payload = {
+        generatedAt: Date.now(),
+        ipip: ipipPayload,
+        ipapi: ipapiPayload,
+      };
+      overviewNetworkIntelCache.updatedAt = Date.now();
+      overviewNetworkIntelCache.payload = payload;
+      return {
+        ok: true,
+        data: payload,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: 'overview_network_intel_failed',
+        details: String(error && error.message ? error.message : error || ''),
+      };
+    } finally {
+      overviewNetworkIntelCache.promise = null;
+    }
+  })();
+  overviewNetworkIntelCache.promise = request;
+  return request;
+}
+
+function resolveOverviewLatencyTone(valueMs = NaN) {
+  const value = Number(valueMs);
+  if (!Number.isFinite(value) || value <= 0) {
+    return 'neutral';
+  }
+  if (value <= 180) {
+    return 'good';
+  }
+  if (value <= 480) {
+    return 'warn';
+  }
+  return 'bad';
+}
+
+async function buildOverviewSiteLatencySnapshot(options = {}) {
+  const force = Boolean(options && options.force);
+  const now = Date.now();
+  if (!force && overviewSiteLatencyCache.payload && (now - Number(overviewSiteLatencyCache.updatedAt || 0) < OVERVIEW_SITE_LATENCY_TTL_MS)) {
+    return {
+      ok: true,
+      data: overviewSiteLatencyCache.payload,
+      cached: true,
+    };
+  }
+  if (overviewSiteLatencyCache.promise) {
+    return overviewSiteLatencyCache.promise;
+  }
+  const request = (async () => {
+    try {
+      const rows = await Promise.all(OVERVIEW_SITE_LATENCY_TARGETS.map(async (item) => {
+        const latencyRaw = await measurePingLatency(item.host, 2200);
+        const latency = Number.parseFloat(String(latencyRaw || '').trim());
+        return {
+          id: item.id,
+          label: item.label,
+          host: item.host,
+          latencyMs: Number.isFinite(latency) && latency > 0 ? Math.round(latency) : 0,
+          tone: resolveOverviewLatencyTone(latency),
+        };
+      }));
+      const payload = {
+        generatedAt: Date.now(),
+        items: rows,
+      };
+      overviewSiteLatencyCache.updatedAt = Date.now();
+      overviewSiteLatencyCache.payload = payload;
+      return {
+        ok: true,
+        data: payload,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: 'overview_site_latency_failed',
+        details: String(error && error.message ? error.message : error || ''),
+      };
+    } finally {
+      overviewSiteLatencyCache.promise = null;
+    }
+  })();
+  overviewSiteLatencyCache.promise = request;
+  return request;
 }
 
 async function resolveUsableNetworkServiceName(preferred = '') {
@@ -11932,6 +12309,30 @@ app.whenReady().then(() => {
       return {
         ok: false,
         error: 'overview_network_snapshot_failed',
+        details: String(error && error.message ? error.message : error || ''),
+      };
+    }
+  });
+
+  ipcMain.handle('clashfox:getOverviewNetworkIntel', async (_event, options = {}) => {
+    try {
+      return await buildOverviewNetworkIntelSnapshot(options);
+    } catch (error) {
+      return {
+        ok: false,
+        error: 'overview_network_intel_failed',
+        details: String(error && error.message ? error.message : error || ''),
+      };
+    }
+  });
+
+  ipcMain.handle('clashfox:getOverviewSiteLatency', async (_event, options = {}) => {
+    try {
+      return await buildOverviewSiteLatencySnapshot(options);
+    } catch (error) {
+      return {
+        ok: false,
+        error: 'overview_site_latency_failed',
         details: String(error && error.message ? error.message : error || ''),
       };
     }

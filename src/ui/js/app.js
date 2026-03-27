@@ -231,8 +231,16 @@ let overviewMemoryAxisHigh = document.getElementById('overviewMemoryAxisHigh');
 let overviewMemoryAxisMid = document.getElementById('overviewMemoryAxisMid');
 let overviewMemoryAxisLow = document.getElementById('overviewMemoryAxisLow');
 let overviewMemoryAxisZero = document.getElementById('overviewMemoryAxisZero');
+let overviewMemoryAxis = document.getElementById('overviewMemoryAxis');
 let overviewMemoryHint = document.getElementById('overviewMemoryHint');
 let overviewMemoryLegendValue = document.getElementById('overviewMemoryLegendValue');
+let overviewNetInfoDirect = document.getElementById('overviewNetInfoDirect');
+let overviewNetInfoProxy = document.getElementById('overviewNetInfoProxy');
+let overviewNetInfoPrivacyBtn = document.getElementById('overviewNetInfoPrivacyBtn');
+let overviewNetInfoRefreshBtn = document.getElementById('overviewNetInfoRefreshBtn');
+let overviewSiteLatencyList = document.getElementById('overviewSiteLatencyList');
+let overviewSiteLatencyAvg = document.getElementById('overviewSiteLatencyAvg');
+let overviewSiteLatencyRefreshBtn = document.getElementById('overviewSiteLatencyRefreshBtn');
 let overviewProviderSubscriptionSummary = document.getElementById('overviewProviderSubscriptionSummary');
 let overviewProviderSubscriptionList = document.getElementById('overviewProviderSubscriptionList');
 let overviewRulesSwitch = document.getElementById('overviewRulesSwitch');
@@ -2263,6 +2271,7 @@ const state = {
   dashboardAlerted: false,
   dashboardLoaded: false,
   panelActionPending: false,
+  panelActionType: '',
   helperAuthFallbackHintShown: false,
   kernelUpdateInfo: null,
   kernelUpdateCache: null,
@@ -2291,10 +2300,21 @@ const state = {
   topProxyLoading: false,
   topProxyAt: 0,
   topProxyNodeTotals: {},
+  topProxyConnectionDownloads: {},
+  topProxyLastRates: {},
+  topProxyLastNonEmptyAt: 0,
   topProxyProxyMap: {},
   topProxyProxyMapAt: 0,
   topProxyProxyMapLoading: false,
   topProxyProxyMapPromise: null,
+  overviewNetworkIntelTimer: null,
+  overviewNetworkIntelLoading: false,
+  overviewNetworkIntelForcePending: false,
+  overviewNetworkIntelMasked: true,
+  overviewNetworkIntelData: null,
+  overviewSiteLatencyTimer: null,
+  overviewSiteLatencyLoading: false,
+  overviewSiteLatencyForcePending: false,
   overviewTimer: null,
   foxRankTimer: null,
   overviewTickTimer: null,
@@ -3275,6 +3295,7 @@ function applyCardIcons() {
       || h.classList.contains('conn-live-icon')
       || h.classList.contains('top-proxy-icon')
       || h.classList.contains('memory-trend-icon')
+      || h.classList.contains('network-intel-icon')
       || h.classList.contains('topology-icon')
       || h.classList.contains('quick-actions-icon')
       || h.classList.contains('provider-subscription-icon')
@@ -7974,10 +7995,63 @@ function renderTopProxyCard(connections = []) {
   if (!overviewTopProxyTotal || !overviewTopProxyList) {
     return;
   }
+  const now = Date.now();
+  const cachedRates = state.topProxyLastRates && typeof state.topProxyLastRates === 'object'
+    ? state.topProxyLastRates
+    : {};
+  const cachedEntries = Object.entries(cachedRates)
+    .map(([name, rate]) => ({ name: String(name || '').trim(), rate: Math.max(0, Number(rate || 0)) }))
+    .filter((item) => item.name);
+  const hasRecentCached = cachedEntries.length > 0
+    && (now - Number(state.topProxyLastNonEmptyAt || 0) < 30000);
+  const applyTopProxyRows = (items = [], totalConnections = 0, persist = true) => {
+    const topRows = (Array.isArray(items) ? items : [])
+      .map((item) => ({
+        name: String(item && item.name ? item.name : '').trim(),
+        rate: Math.max(0, Number(item && item.rate ? item.rate : 0)),
+      }))
+      .filter((item) => item.name)
+      .sort((a, b) => b.rate - a.rate || a.name.localeCompare(b.name))
+      .slice(0, TOP_PROXY_MAX_ITEMS);
+    if (!topRows.length) {
+      return false;
+    }
+    const maxRate = Math.max(1, ...topRows.map((item) => Number(item.rate || 0)));
+    const axisMax = Math.max(1024, niceMaxValue(maxRate * 1.06));
+    const rowsMarkup = topRows.map((item) => {
+      const fillPercent = Math.max(0, Math.min(100, (Number(item.rate || 0) / axisMax) * 100));
+      return `<div class="top-proxy-row">
+        <span class="top-proxy-name" title="${escapeTopologyText(item.name || '-')}">${escapeTopologyText(item.name || '-')}</span>
+        <span class="top-proxy-track" data-node="${escapeTopologyText(item.name || '-')}" title="${escapeTopologyText(item.name || '-')}"><i style="width:${fillPercent}%;"></i></span>
+      </div>`;
+    }).join('');
+    const axisMarkup = [0, 1, 2, 3, 4]
+      .map((step) => `<span>${escapeTopologyText(formatTopProxyRateLabel(axisMax * (step / 4)))}</span>`)
+      .join('');
+    const markup = `<div class="top-proxy-chart">
+      <div class="top-proxy-rows">${rowsMarkup}</div>
+      <div class="top-proxy-axis">${axisMarkup}</div>
+    </div>`;
+    if (Number.isFinite(totalConnections) && totalConnections > 0) {
+      setNodeTextIfChanged(overviewTopProxyTotal, String(totalConnections));
+    } else if (!String(overviewTopProxyTotal.textContent || '').trim()) {
+      setNodeTextIfChanged(overviewTopProxyTotal, '0');
+    }
+    setNodeHtmlIfChanged(overviewTopProxyList, markup);
+    if (persist) {
+      state.topProxyLastRates = Object.fromEntries(topRows.map((item) => [item.name, item.rate]));
+      state.topProxyLastNonEmptyAt = Date.now();
+    }
+    return true;
+  };
   const rows = Array.isArray(connections) ? connections : [];
   if (!rows.length) {
+    if (hasRecentCached && applyTopProxyRows(cachedEntries, Number(overviewTopProxyTotal.textContent || 0) || 0, false)) {
+      return;
+    }
     state.topProxyAt = 0;
     state.topProxyNodeTotals = {};
+    state.topProxyConnectionDownloads = {};
     setNodeTextIfChanged(overviewTopProxyTotal, '0');
     setNodeHtmlIfChanged(
       overviewTopProxyList,
@@ -7985,75 +8059,144 @@ function renderTopProxyCard(connections = []) {
     );
     return;
   }
-  const nodeTotals = new Map();
-  const nodeCounts = new Map();
-  let hasTrafficValue = false;
+  const proxyMap = state.topProxyProxyMap && typeof state.topProxyProxyMap === 'object'
+    ? state.topProxyProxyMap
+    : {};
+  const proxyLookup = buildTopProxyLookupMap(proxyMap);
+  const prevDownloads = state.topProxyConnectionDownloads && typeof state.topProxyConnectionDownloads === 'object'
+    ? state.topProxyConnectionDownloads
+    : {};
+  const nextDownloads = {};
+  const speedByNode = new Map();
+  const readNumeric = (...values) => {
+    for (let index = 0; index < values.length; index += 1) {
+      const value = Number(values[index]);
+      if (Number.isFinite(value)) {
+        return value;
+      }
+    }
+    return NaN;
+  };
   rows.forEach((item) => {
-    const name = extractConnectionNodeName(item);
-    if (!name) {
+    const entry = item && typeof item === 'object' ? item : {};
+    const metadata = entry.metadata && typeof entry.metadata === 'object' ? entry.metadata : {};
+    const connectionId = String(entry.id || metadata.id || '').trim();
+    const downloadBytes = readNumeric(
+      entry.download,
+      entry.downloadTotal,
+      entry.download_total,
+      entry.downTotal,
+      entry.down_total,
+      entry.down,
+      metadata.download,
+      metadata.downloadTotal,
+      metadata.downTotal,
+    );
+    const safeDownload = Number.isFinite(downloadBytes) && downloadBytes >= 0 ? downloadBytes : 0;
+    if (connectionId) {
+      nextDownloads[connectionId] = safeDownload;
+    }
+    const previous = connectionId ? Number(prevDownloads[connectionId] || 0) : 0;
+    const realtimeDownloadSpeed = readNumeric(
+      entry.downloadSpeed,
+      entry.download_speed,
+      entry.downSpeed,
+      entry.down_speed,
+      entry.downloadRate,
+      entry.download_rate,
+      entry.downRate,
+      entry.down_rate,
+    );
+    const realtimeUploadSpeed = readNumeric(
+      entry.uploadSpeed,
+      entry.upload_speed,
+      entry.upSpeed,
+      entry.up_speed,
+      entry.uploadRate,
+      entry.upload_rate,
+      entry.upRate,
+      entry.up_rate,
+    );
+    const deltaDownloadSpeed = connectionId ? Math.max(0, safeDownload - previous) : 0;
+    const fallbackSnapshotSpeed = safeDownload;
+    const downloadSpeed = Math.max(
+      0,
+      Number.isFinite(realtimeDownloadSpeed) ? realtimeDownloadSpeed : 0,
+      Number.isFinite(realtimeUploadSpeed) ? realtimeUploadSpeed : 0,
+      deltaDownloadSpeed,
+      fallbackSnapshotSpeed,
+    );
+    let chains = Array.isArray(entry.chains)
+      ? entry.chains.map((value) => String(value || '').trim()).filter(Boolean)
+      : [];
+    if (!chains.length) {
+      chains = parseTopProxyChainText(entry.chain || metadata.chain || '');
+    }
+    if (!chains.length) {
+      chains = parseTopProxyChainText(entry.outbound || metadata.outbound || '');
+    }
+    let pushed = false;
+    chains.forEach((chainName) => {
+      const rawName = String(chainName || '').trim();
+      if (!rawName) {
+        return;
+      }
+      const leafName = resolveTopProxyLeafNode(rawName, proxyMap, proxyLookup);
+      const candidate = !isLikelyProxyGroup(leafName)
+        ? leafName
+        : (!isLikelyProxyGroup(rawName) ? rawName : '');
+      const finalName = String(candidate || '').trim();
+      if (!finalName) {
+        return;
+      }
+      if (isTopProxyExcludedName(finalName)) {
+        return;
+      }
+      speedByNode.set(finalName, Number(speedByNode.get(finalName) || 0) + downloadSpeed);
+      pushed = true;
+    });
+    if (!pushed) {
+      const fallbackName = extractConnectionNodeName(entry);
+      if (fallbackName && !isTopProxyExcludedName(fallbackName)) {
+        speedByNode.set(fallbackName, Number(speedByNode.get(fallbackName) || 0) + downloadSpeed);
+      }
+    }
+  });
+  const totalConnections = rows.length;
+  setNodeTextIfChanged(overviewTopProxyTotal, String(totalConnections));
+  if (speedByNode.size <= 0 || totalConnections <= 0) {
+    if (hasRecentCached && applyTopProxyRows(cachedEntries, totalConnections, false)) {
+      state.topProxyConnectionDownloads = nextDownloads;
       return;
     }
-    const upload = Number(item && item.upload);
-    const download = Number(item && item.download);
-    const traffic = Math.max(0, (Number.isFinite(upload) ? upload : 0) + (Number.isFinite(download) ? download : 0));
-    if (traffic > 0) {
-      hasTrafficValue = true;
-    }
-    nodeTotals.set(name, Number(nodeTotals.get(name) || 0) + traffic);
-    nodeCounts.set(name, Number(nodeCounts.get(name) || 0) + 1);
-  });
-  const totalConnections = Array.from(nodeCounts.values()).reduce((sum, count) => sum + Number(count || 0), 0);
-  setNodeTextIfChanged(overviewTopProxyTotal, String(totalConnections));
-  if (nodeTotals.size <= 0 || totalConnections <= 0) {
     state.topProxyAt = 0;
     state.topProxyNodeTotals = {};
+    state.topProxyConnectionDownloads = nextDownloads;
     setNodeHtmlIfChanged(
       overviewTopProxyList,
       `<div class="top-proxy-empty">${escapeTopologyText(ti('overview.topProxyEmpty', 'No active proxy chains yet'))}</div>`,
     );
     return;
   }
-  const prevAt = Number(state.topProxyAt || 0);
-  const prevTotals = state.topProxyNodeTotals && typeof state.topProxyNodeTotals === 'object'
-    ? state.topProxyNodeTotals
-    : {};
-  const now = Date.now();
-  const deltaSec = prevAt > 0 ? Math.max(0.2, (now - prevAt) / 1000) : 0;
-  const top = Array.from(nodeTotals.entries())
-    .map(([name, totalBytes]) => {
-      const prevBytes = Number(prevTotals[name] || 0);
-      const deltaBytes = Math.max(0, totalBytes - prevBytes);
-      const connectionCount = Number(nodeCounts.get(name) || 0);
-      const measuredRate = hasTrafficValue && deltaSec > 0 ? (deltaBytes / deltaSec) : 0;
-      const fallbackRate = connectionCount * 1024;
-      return {
-        name,
-        rate: measuredRate > 0 ? measuredRate : fallbackRate,
-      };
-    })
+  const top = Array.from(speedByNode.entries())
+    .map(([name, rate]) => ({ name, rate: Math.max(0, Number(rate || 0)) }))
     .sort((a, b) => b.rate - a.rate || a.name.localeCompare(b.name))
     .slice(0, TOP_PROXY_MAX_ITEMS);
-
-  const maxRate = Math.max(1, ...top.map((item) => Number(item.rate || 0)));
-  const axisMax = Math.max(1024, niceMaxValue(maxRate * 1.06));
-  const rowsMarkup = top.map((item) => {
-    const fillPercent = Math.max(0, Math.min(100, (Number(item.rate || 0) / axisMax) * 100));
-    return `<div class="top-proxy-row">
-      <span class="top-proxy-name" title="${escapeTopologyText(item.name || '-')}">${escapeTopologyText(item.name || '-')}</span>
-      <span class="top-proxy-track" data-node="${escapeTopologyText(item.name || '-')}" title="${escapeTopologyText(item.name || '-')}"><i style="width:${fillPercent}%;"></i></span>
-    </div>`;
-  }).join('');
-  const axisMarkup = [0, 1, 2, 3, 4]
-    .map((step) => `<span>${escapeTopologyText(formatTopProxyRateLabel(axisMax * (step / 4)))}</span>`)
-    .join('');
-  const markup = `<div class="top-proxy-chart">
-    <div class="top-proxy-rows">${rowsMarkup}</div>
-    <div class="top-proxy-axis">${axisMarkup}</div>
-  </div>`;
+  if (!applyTopProxyRows(top, totalConnections, true)) {
+    if (hasRecentCached && applyTopProxyRows(cachedEntries, totalConnections, false)) {
+      state.topProxyConnectionDownloads = nextDownloads;
+      return;
+    }
+    setNodeHtmlIfChanged(
+      overviewTopProxyList,
+      `<div class="top-proxy-empty">${escapeTopologyText(ti('overview.topProxyEmpty', 'No active proxy chains yet'))}</div>`,
+    );
+    return;
+  }
 
   state.topProxyAt = now;
-  state.topProxyNodeTotals = Object.fromEntries(nodeTotals.entries());
-  setNodeHtmlIfChanged(overviewTopProxyList, markup);
+  state.topProxyNodeTotals = Object.fromEntries(speedByNode.entries());
+  state.topProxyConnectionDownloads = nextDownloads;
 }
 
 function parseTopProxyChainText(value = '') {
@@ -8079,6 +8222,11 @@ function isLikelyProxyGroup(value = '') {
     'グループ', 'グローバル', '선택', '자동', '그룹',
   ];
   return groupKeywords.some((keyword) => lower.includes(keyword.toLowerCase()));
+}
+
+function isTopProxyExcludedName(value = '') {
+  const text = String(value || '').trim().toLowerCase();
+  return text === 'direct' || text === 'reject' || text === 'pass';
 }
 
 function normalizeTopProxyGroupType(value = '') {
@@ -8248,6 +8396,16 @@ function extractConnectionNodeName(item = {}) {
       return candidate;
     }
   }
+  if (chainCandidates.length) {
+    const forced = String(chainCandidates[0] || '').trim();
+    if (forced) {
+      return forced;
+    }
+  }
+  const outboundFallback = String(entry.outbound || metadata.outbound || '').trim();
+  if (outboundFallback) {
+    return outboundFallback;
+  }
   return '';
 }
 
@@ -8283,14 +8441,18 @@ function renderMemoryHistoryChart(values = []) {
     updateMemoryAxisLabels(0, 0);
     return;
   }
-  const rawMin = Math.min(...samples);
   const rawMax = Math.max(...samples);
-  const spread = Math.max(1, rawMax - rawMin);
-  const padding = Math.max(256 * 1024, spread * 0.35);
-  const ratioFloor = rawMin > 0 ? (rawMin * 0.82) : 0;
-  const rangeMin = Math.max(0, Math.max(ratioFloor, rawMin - padding));
-  const rangeMax = Math.max(rangeMin + 1, rawMax + padding);
-  updateMemoryAxisLabels(rangeMax, rangeMin);
+  const baseStep = 25 * 1024 * 1024;
+  const segments = Math.max(1, Math.ceil(rawMax / baseStep));
+  const maxTicks = 9;
+  const minTicks = 4;
+  // +2: one for 0B baseline, one extra headroom tick above current max segment.
+  const tickCount = Math.min(maxTicks, Math.max(minTicks, segments + 2));
+  const stepMultiple = Math.max(1, Math.ceil(segments / Math.max(1, tickCount - 2)));
+  const axisStep = baseStep * stepMultiple;
+  const rangeMin = 0;
+  const rangeMax = Math.max(axisStep, axisStep * Math.max(1, tickCount - 1));
+  updateMemoryAxisLabels(rangeMax, rangeMin, axisStep, tickCount);
   overviewMemoryLine.setAttribute('d', buildSparkPathInRange(samples, rangeMin, rangeMax));
   overviewMemoryArea.setAttribute('d', buildSparkAreaInRange(samples, rangeMin, rangeMax));
 }
@@ -8336,10 +8498,33 @@ function formatMemoryAxisLabel(valueBytes = 0) {
   return `${Math.round(value)} B`;
 }
 
-function updateMemoryAxisLabels(maxValue = 0, minValue = 0) {
+function formatMemoryTrendValue(valueBytes = 0) {
+  const value = Math.max(0, Number(valueBytes) || 0);
+  const mib = value / (1024 * 1024);
+  if (mib >= 1) {
+    return `${mib.toFixed(1)} MiB`;
+  }
+  if (value >= 1024) {
+    return `${(value / 1024).toFixed(1)} KiB`;
+  }
+  return `${Math.round(value)} B`;
+}
+
+function updateMemoryAxisLabels(maxValue = 0, minValue = 0, axisStepValue = 0, tickCountValue = 5) {
   const max = Math.max(0, Number(maxValue) || 0);
-  let min = Number(minValue) || 0;
+  const min = Math.max(0, Number(minValue) || 0);
+  const tickCount = Math.max(2, Number(tickCountValue) || 5);
+  const setAxisMarkup = (labels = []) => {
+    if (!overviewMemoryAxis) {
+      return;
+    }
+    const markup = labels
+      .map((label) => `<span>${escapeTopologyText(String(label || '-'))}</span>`)
+      .join('');
+    setNodeHtmlIfChanged(overviewMemoryAxis, markup || '<span>-</span>');
+  };
   if (max <= 0) {
+    setAxisMarkup(['-']);
     if (overviewMemoryAxisTop) setNodeTextIfChanged(overviewMemoryAxisTop, '-');
     if (overviewMemoryAxisHigh) setNodeTextIfChanged(overviewMemoryAxisHigh, '-');
     if (overviewMemoryAxisMid) setNodeTextIfChanged(overviewMemoryAxisMid, '-');
@@ -8347,23 +8532,17 @@ function updateMemoryAxisLabels(maxValue = 0, minValue = 0) {
     if (overviewMemoryAxisZero) setNodeTextIfChanged(overviewMemoryAxisZero, '-');
     return;
   }
-  if (!Number.isFinite(min) || min <= 0) {
-    min = max * 0.72;
+  const step = Math.max(1, Number(axisStepValue) || ((max - min) / Math.max(1, tickCount - 1)));
+  const labels = [];
+  for (let index = tickCount - 1; index >= 0; index -= 1) {
+    labels.push(formatMemoryAxisLabel(min + (step * index)));
   }
-  min = Math.max(0, Math.min(max, min));
-  const range = Math.max(1, max - min);
-  const labels = [
-    formatMemoryAxisLabel(max),
-    formatMemoryAxisLabel(min + (range * 0.75)),
-    formatMemoryAxisLabel(min + (range * 0.5)),
-    formatMemoryAxisLabel(min + (range * 0.25)),
-    formatMemoryAxisLabel(min),
-  ];
+  setAxisMarkup(labels);
   if (overviewMemoryAxisTop) setNodeTextIfChanged(overviewMemoryAxisTop, labels[0]);
   if (overviewMemoryAxisHigh) setNodeTextIfChanged(overviewMemoryAxisHigh, labels[1]);
   if (overviewMemoryAxisMid) setNodeTextIfChanged(overviewMemoryAxisMid, labels[2]);
   if (overviewMemoryAxisLow) setNodeTextIfChanged(overviewMemoryAxisLow, labels[3]);
-  if (overviewMemoryAxisZero) setNodeTextIfChanged(overviewMemoryAxisZero, labels[4]);
+  if (overviewMemoryAxisZero) setNodeTextIfChanged(overviewMemoryAxisZero, labels[Math.max(0, labels.length - 1)]);
 }
 
 function formatClockTime(date = new Date()) {
@@ -8399,7 +8578,7 @@ function updateMemoryHoverHintByRatio(ratio = 0) {
     return;
   }
   const memLabel = t('overview.memory');
-  setNodeTextIfChanged(overviewMemoryHint, `${memLabel} (${formatClockTime(new Date(at))}): ${formatMemoryAxisLabel(value)}`);
+  setNodeTextIfChanged(overviewMemoryHint, `${memLabel} (${formatClockTime(new Date(at))}): ${formatMemoryTrendValue(value)}`);
   const hintLeft = Math.max(12, Math.min(88, 8 + (clamped * 84)));
   overviewMemoryHint.style.left = `${hintLeft}%`;
   overviewMemoryChart.classList.add('is-hovering');
@@ -8420,6 +8599,10 @@ function bindOverviewMemoryHoverHint() {
   overviewMemoryChart.addEventListener('pointerenter', handlePointerMove);
   overviewMemoryChart.addEventListener('pointermove', handlePointerMove);
   overviewMemoryChart.addEventListener('pointerleave', hideMemoryHoverHint);
+  overviewMemoryChart.addEventListener('mouseenter', handlePointerMove);
+  overviewMemoryChart.addEventListener('mousemove', handlePointerMove);
+  overviewMemoryChart.addEventListener('mouseleave', hideMemoryHoverHint);
+  overviewMemoryChart.addEventListener('click', handlePointerMove);
   overviewMemoryChart.dataset.hoverBound = 'true';
 }
 
@@ -8452,10 +8635,10 @@ function updateMemoryTrend(valueBytes) {
   state.memorySamples = state.memorySamples.filter((item) => item.at >= threshold);
   state.memoryPeak = Math.max(Number(state.memoryPeak || 0), value);
   state.memoryLast = value;
-  if (overviewMemoryLegendValue) setNodeTextIfChanged(overviewMemoryLegendValue, formatMemoryAxisLabel(value));
+  if (overviewMemoryLegendValue) setNodeTextIfChanged(overviewMemoryLegendValue, formatMemoryTrendValue(value));
   if (overviewMemoryHint) {
     const memLabel = t('overview.memory');
-    setNodeTextIfChanged(overviewMemoryHint, `${memLabel} (${formatClockTime(new Date(now))}): ${formatMemoryAxisLabel(value)}`);
+    setNodeTextIfChanged(overviewMemoryHint, `${memLabel} (${formatClockTime(new Date(now))}): ${formatMemoryTrendValue(value)}`);
   }
   renderMemoryHistoryChart(state.memorySamples.map((item) => item.value));
 }
@@ -8656,6 +8839,250 @@ function applyOverviewNetworkSnapshot(data) {
     const text = maskIpAddress(rawInternetIp || state.overviewIpRaw.internet || '') || '-';
     setNodeTextIfChanged(overviewInternetIp, text);
     setOverviewCopyButtonVisible(overviewInternetIpCopy, Boolean(text && text !== '-'));
+  }
+}
+
+function maskNetworkIntelIp(ip = '', sourceTag = '') {
+  const raw = String(ip || '').trim();
+  if (!raw) {
+    return '-';
+  }
+  if (!state.overviewNetworkIntelMasked) {
+    return raw;
+  }
+  if (sourceTag === 'ipapi') {
+    return '***.***.***.***';
+  }
+  return maskIpAddress(raw) || '-';
+}
+
+function formatNetworkIntelIpipLine(payload = {}) {
+  const ip = String(payload.ip || '').trim();
+  const detailRaw = String(payload.detail || '').trim();
+  const [locationRaw = '', providerRaw = ''] = detailRaw.split(' · ');
+  const cleanPart = (value = '') => String(value || '').replace(/^[,\s，]+|[,\s，]+$/g, '').trim();
+  const locationParts = String(locationRaw || '').trim().split(/[,\s，]+/).filter(Boolean).map((part) => cleanPart(part));
+  const country = cleanPart(locationParts[0] || '');
+  const region = cleanPart(locationParts[1] || '');
+  const city = cleanPart(locationParts[2] || '');
+  const providerFromLocation = cleanPart(locationParts.slice(3).join(''));
+  const provider = cleanPart(providerRaw || providerFromLocation || '');
+  const maskText = (value = '') => (String(value || '').trim() ? '**' : '');
+  const displayRegion = state.overviewNetworkIntelMasked ? maskText(region) : region;
+  const displayCity = state.overviewNetworkIntelMasked ? maskText(city) : city;
+  const displayProvider = state.overviewNetworkIntelMasked ? maskText(provider) : provider;
+  const displayIp = maskNetworkIntelIp(ip, 'ipip');
+  const meta = [country, displayRegion, displayCity, displayProvider].filter(Boolean).join(',') || '-';
+  return `${meta} (${displayIp})`;
+}
+
+function formatNetworkIntelIpapiLine(payload = {}) {
+  const source = String(payload.source || '').trim();
+  const detail = String(payload.detail || '').trim() || source || '-';
+  const ip = String(payload.ip || '').trim();
+  const originalIp = String(payload.originalIp || ip || '').trim();
+  const displayOriginalIp = state.overviewNetworkIntelMasked
+    ? maskNetworkIntelIp(originalIp, 'ipapi')
+    : (originalIp || '-');
+  const nativeIpRaw = payload && typeof payload.nativeIp === 'boolean' ? payload.nativeIp : null;
+  const nativeText = nativeIpRaw === null
+    ? '-'
+    : (nativeIpRaw ? ti('overview.nativeYes', 'Yes') : ti('overview.nativeNo', 'No'));
+  const riskScore = Number(payload && payload.riskScore);
+  const riskLevel = String(payload && payload.riskLevel ? payload.riskLevel : '').trim().toLowerCase();
+  const riskLevelText = riskLevel
+    ? ti(`overview.risk${riskLevel.charAt(0).toUpperCase()}${riskLevel.slice(1)}`, riskLevel || '-')
+    : '-';
+  let riskText = '-';
+  if (Number.isFinite(riskScore) && riskScore > 0) {
+    riskText = `${Math.max(0, Math.round(riskScore))} (${riskLevelText})`;
+  } else if (riskLevelText && riskLevelText !== '-') {
+    riskText = riskLevelText;
+  }
+  const main = detail || '-';
+  return {
+    main,
+    originalIp: displayOriginalIp,
+    nativeText,
+    riskText,
+  };
+}
+
+function renderNetworkIntelLine(node, value) {
+  if (!node) {
+    return;
+  }
+  const safeValue = escapeTopologyText(String(value || '').trim() || '-');
+  setNodeHtmlIfChanged(node, `<span class="network-intel-value">${safeValue}</span>`);
+}
+
+function renderNetworkIntelIpapiCard(node, payload = {}) {
+  if (!node) {
+    return;
+  }
+  const normalized = payload && typeof payload === 'object' ? payload : {};
+  const originalIpLabel = ti('overview.originalIpLabel', 'Original IP');
+  const nativeIpLabel = ti('overview.nativeIpLabel', 'Native IP');
+  const riskLabel = ti('overview.riskScoreLabel', 'Risk Score');
+  const main = escapeTopologyText(String(normalized.main || '-'));
+  const originalIp = escapeTopologyText(String(normalized.originalIp || '-'));
+  const nativeText = escapeTopologyText(String(normalized.nativeText || '-'));
+  const riskText = escapeTopologyText(String(normalized.riskText || '-'));
+  setNodeHtmlIfChanged(
+    node,
+    `<div class="network-intel-value">${main}</div>
+     <div class="network-intel-api-extra">
+       <div><span class="network-intel-key">${escapeTopologyText(originalIpLabel)}：</span><span class="network-intel-value">${originalIp}</span></div>
+       <div><span class="network-intel-key">${escapeTopologyText(nativeIpLabel)}：</span><span class="network-intel-value">${nativeText}</span></div>
+       <div><span class="network-intel-key">${escapeTopologyText(riskLabel)}：</span><span class="network-intel-value">${riskText}</span></div>
+     </div>`,
+  );
+}
+
+function updateOverviewNetworkIntelPrivacyButton() {
+  if (!overviewNetInfoPrivacyBtn) {
+    return;
+  }
+  const privacyOn = Boolean(state.overviewNetworkIntelMasked);
+  const nextLabel = privacyOn
+    ? ti('overview.networkPrivacyOn', 'Privacy On')
+    : ti('overview.networkPrivacyOff', 'Privacy Off');
+  overviewNetInfoPrivacyBtn.setAttribute('data-tip-key', privacyOn ? 'overview.networkPrivacyOn' : 'overview.networkPrivacyOff');
+  overviewNetInfoPrivacyBtn.setAttribute('aria-label', nextLabel);
+  overviewNetInfoPrivacyBtn.classList.toggle('is-active', state.overviewNetworkIntelMasked);
+  overviewNetInfoPrivacyBtn.classList.toggle('is-masked', state.overviewNetworkIntelMasked);
+}
+
+function renderOverviewNetworkIntel(snapshot = null) {
+  const data = snapshot && typeof snapshot === 'object' ? snapshot : {};
+  if (overviewNetInfoDirect) {
+    renderNetworkIntelLine(overviewNetInfoDirect, formatNetworkIntelIpipLine(data.ipip || {}));
+  }
+  if (overviewNetInfoProxy) {
+    renderNetworkIntelIpapiCard(overviewNetInfoProxy, formatNetworkIntelIpapiLine(data.ipapi || {}));
+  }
+  updateOverviewNetworkIntelPrivacyButton();
+}
+
+async function loadOverviewNetworkIntel(force = false) {
+  if (!overviewNetInfoDirect && !overviewNetInfoProxy) {
+    return false;
+  }
+  if (!window.clashfox || typeof window.clashfox.getOverviewNetworkIntel !== 'function') {
+    return false;
+  }
+  if (state.overviewNetworkIntelLoading) {
+    if (force) {
+      state.overviewNetworkIntelForcePending = true;
+    }
+    return false;
+  }
+  state.overviewNetworkIntelLoading = true;
+  if (overviewNetInfoRefreshBtn) {
+    overviewNetInfoRefreshBtn.classList.add('is-loading');
+  }
+  try {
+    const response = await window.clashfox.getOverviewNetworkIntel({ force: Boolean(force) });
+    if (!response || !response.ok || !response.data) {
+      return false;
+    }
+    state.overviewNetworkIntelData = response.data;
+    renderOverviewNetworkIntel(state.overviewNetworkIntelData);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    state.overviewNetworkIntelLoading = false;
+    if (overviewNetInfoRefreshBtn) {
+      overviewNetInfoRefreshBtn.classList.remove('is-loading');
+    }
+    if (state.overviewNetworkIntelForcePending) {
+      state.overviewNetworkIntelForcePending = false;
+      loadOverviewNetworkIntel(true).catch(() => {});
+    }
+  }
+}
+
+function renderOverviewSiteLatency(items = []) {
+  if (!overviewSiteLatencyList) {
+    return;
+  }
+  const rows = Array.isArray(items) ? items : [];
+  const validValues = rows
+    .map((item) => Number(item && item.latencyMs))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  const maxLatency = validValues.length ? Math.max(...validValues) : 0;
+  const averageLatency = validValues.length
+    ? Math.round(validValues.reduce((sum, value) => sum + value, 0) / validValues.length)
+    : 0;
+  if (overviewSiteLatencyAvg) {
+    const avgLabel = ti('overview.networkLatencyAvg', 'Avg');
+    setNodeTextIfChanged(overviewSiteLatencyAvg, averageLatency > 0 ? `${avgLabel}: ${averageLatency} ms` : `${avgLabel}: -`);
+  }
+  if (!rows.length) {
+    setNodeHtmlIfChanged(
+      overviewSiteLatencyList,
+      `<div class="network-intel-latency-row"><span>-</span><span class="latency-value">-</span></div>`,
+    );
+    return;
+  }
+  const markup = rows.map((item) => {
+    const label = String(item && item.label ? item.label : '-').trim() || '-';
+    const value = Number(item && item.latencyMs);
+    const valueText = Number.isFinite(value) && value > 0 ? `${Math.round(value)} ms` : '-';
+    const percent = Number.isFinite(value) && value > 0 && maxLatency > 0
+      ? Math.max(8, Math.min(100, Math.round((value / maxLatency) * 100)))
+      : 0;
+    const tone = String(item && item.tone ? item.tone : 'neutral').trim() || 'neutral';
+    return `<div class="network-intel-latency-row" data-tone="${escapeTopologyText(tone)}">
+      <div class="network-intel-latency-row-main">
+        <span>${escapeTopologyText(label)}</span>
+        <span class="latency-value">${escapeTopologyText(valueText)}</span>
+      </div>
+      <div class="network-intel-latency-bar-track">
+        <div class="network-intel-latency-bar-fill" style="width:${percent}%;"></div>
+      </div>
+    </div>`;
+  }).join('');
+  setNodeHtmlIfChanged(overviewSiteLatencyList, markup);
+}
+
+async function loadOverviewSiteLatency(force = false) {
+  if (!overviewSiteLatencyList) {
+    return false;
+  }
+  if (!window.clashfox || typeof window.clashfox.getOverviewSiteLatency !== 'function') {
+    return false;
+  }
+  if (state.overviewSiteLatencyLoading) {
+    if (force) {
+      state.overviewSiteLatencyForcePending = true;
+    }
+    return false;
+  }
+  state.overviewSiteLatencyLoading = true;
+  if (overviewSiteLatencyRefreshBtn) {
+    overviewSiteLatencyRefreshBtn.classList.add('is-loading');
+  }
+  try {
+    const response = await window.clashfox.getOverviewSiteLatency({ force: Boolean(force) });
+    if (!response || !response.ok || !response.data) {
+      return false;
+    }
+    const items = Array.isArray(response.data.items) ? response.data.items : [];
+    renderOverviewSiteLatency(items);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    state.overviewSiteLatencyLoading = false;
+    if (overviewSiteLatencyRefreshBtn) {
+      overviewSiteLatencyRefreshBtn.classList.remove('is-loading');
+    }
+    if (state.overviewSiteLatencyForcePending) {
+      state.overviewSiteLatencyForcePending = false;
+      loadOverviewSiteLatency(true).catch(() => {});
+    }
   }
 }
 
@@ -10585,6 +11012,8 @@ async function loadOverview(showToastOnSuccess = false) {
       if (networkSnapshot && networkSnapshot.ok && networkSnapshot.data) {
         applyOverviewNetworkSnapshot(networkSnapshot.data);
       }
+      loadOverviewNetworkIntel(false).catch(() => {});
+      loadOverviewSiteLatency(false).catch(() => {});
       if (showToastOnSuccess) {
         showToast(response.error || ti('labels.overviewError', 'Overview error'), 'error');
       }
@@ -10594,6 +11023,8 @@ async function loadOverview(showToastOnSuccess = false) {
       ? { ...(response.data || {}), ...networkSnapshot.data }
       : response.data;
     updateOverviewUI(mergedOverviewData);
+    loadOverviewNetworkIntel(false).catch(() => {});
+    loadOverviewSiteLatency(false).catch(() => {});
     if (showToastOnSuccess) {
       showToast(t('labels.statusRefreshed'));
     }
@@ -12066,9 +12497,20 @@ function refreshPageRefs() {
   overviewMemoryAxisMid = document.getElementById('overviewMemoryAxisMid');
   overviewMemoryAxisLow = document.getElementById('overviewMemoryAxisLow');
   overviewMemoryAxisZero = document.getElementById('overviewMemoryAxisZero');
+  overviewMemoryAxis = document.getElementById('overviewMemoryAxis');
   overviewMemoryHint = document.getElementById('overviewMemoryHint');
   overviewMemoryLegendValue = document.getElementById('overviewMemoryLegendValue');
+  overviewNetInfoDirect = document.getElementById('overviewNetInfoDirect');
+  overviewNetInfoProxy = document.getElementById('overviewNetInfoProxy');
+  overviewNetInfoPrivacyBtn = document.getElementById('overviewNetInfoPrivacyBtn');
+  overviewNetInfoRefreshBtn = document.getElementById('overviewNetInfoRefreshBtn');
+  overviewSiteLatencyList = document.getElementById('overviewSiteLatencyList');
+  overviewSiteLatencyAvg = document.getElementById('overviewSiteLatencyAvg');
+  overviewSiteLatencyRefreshBtn = document.getElementById('overviewSiteLatencyRefreshBtn');
   bindOverviewMemoryHoverHint();
+  updateOverviewNetworkIntelPrivacyButton();
+  renderOverviewNetworkIntel(state.overviewNetworkIntelData);
+  renderOverviewSiteLatency([]);
   overviewProviderSubscriptionSummary = document.getElementById('overviewProviderSubscriptionSummary');
   overviewProviderSubscriptionList = document.getElementById('overviewProviderSubscriptionList');
   overviewRulesSwitch = document.getElementById('overviewRulesSwitch');
@@ -12595,6 +13037,14 @@ function stopOverviewActivity() {
   if (state.topProxyTimer) {
     clearInterval(state.topProxyTimer);
     state.topProxyTimer = null;
+  }
+  if (state.overviewNetworkIntelTimer) {
+    clearInterval(state.overviewNetworkIntelTimer);
+    state.overviewNetworkIntelTimer = null;
+  }
+  if (state.overviewSiteLatencyTimer) {
+    clearInterval(state.overviewSiteLatencyTimer);
+    state.overviewSiteLatencyTimer = null;
   }
   if (state.trafficTimer) {
     clearInterval(state.trafficTimer);
@@ -13167,6 +13617,25 @@ function bindPageEvents() {
   if (overviewInternetIpCopy && overviewInternetIpCopy.dataset.bound !== 'true') {
     overviewInternetIpCopy.dataset.bound = 'true';
     overviewInternetIpCopy.addEventListener('click', () => handleOverviewTextCopy(state.overviewIpRaw.internet));
+  }
+  if (overviewNetInfoPrivacyBtn && overviewNetInfoPrivacyBtn.dataset.bound !== 'true') {
+    overviewNetInfoPrivacyBtn.dataset.bound = 'true';
+    overviewNetInfoPrivacyBtn.addEventListener('click', () => {
+      state.overviewNetworkIntelMasked = !state.overviewNetworkIntelMasked;
+      renderOverviewNetworkIntel(state.overviewNetworkIntelData);
+    });
+  }
+  if (overviewNetInfoRefreshBtn && overviewNetInfoRefreshBtn.dataset.bound !== 'true') {
+    overviewNetInfoRefreshBtn.dataset.bound = 'true';
+    overviewNetInfoRefreshBtn.addEventListener('click', async () => {
+      await loadOverviewNetworkIntel(true);
+    });
+  }
+  if (overviewSiteLatencyRefreshBtn && overviewSiteLatencyRefreshBtn.dataset.bound !== 'true') {
+    overviewSiteLatencyRefreshBtn.dataset.bound = 'true';
+    overviewSiteLatencyRefreshBtn.addEventListener('click', async () => {
+      await loadOverviewSiteLatency(true);
+    });
   }
   langButtons.forEach((btn) => {
     btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
@@ -15161,6 +15630,26 @@ function startOverviewTimer() {
       loadTopProxyOverview();
     }
   }, 12000);
+
+  if (state.overviewNetworkIntelTimer) {
+    clearInterval(state.overviewNetworkIntelTimer);
+  }
+  state.overviewNetworkIntelTimer = setInterval(() => {
+    if (currentPage === 'overview') {
+      loadOverviewNetworkIntel(false);
+    }
+  }, 15000);
+  loadOverviewNetworkIntel(false).catch(() => {});
+
+  if (state.overviewSiteLatencyTimer) {
+    clearInterval(state.overviewSiteLatencyTimer);
+  }
+  state.overviewSiteLatencyTimer = setInterval(() => {
+    if (currentPage === 'overview') {
+      loadOverviewSiteLatency(false);
+    }
+  }, 15000);
+  loadOverviewSiteLatency(false).catch(() => {});
 }
 
 function bridgeReady() {
@@ -15225,13 +15714,18 @@ function updateDashboardFrameSrc() {
   // Dashboard has been replaced by a local panel implementation.
 }
 
-function setPanelActionPending(pending) {
+function setPanelActionPending(pending, actionType = '') {
   state.panelActionPending = Boolean(pending);
+  state.panelActionType = state.panelActionPending ? String(actionType || '').trim() : '';
   if (panelInstallBtn) {
     panelInstallBtn.disabled = state.panelActionPending;
+    panelInstallBtn.classList.toggle('is-loading', state.panelActionPending && state.panelActionType === 'install');
+    panelInstallBtn.setAttribute('aria-busy', state.panelActionPending && state.panelActionType === 'install' ? 'true' : 'false');
   }
   if (panelUpdateBtn) {
     panelUpdateBtn.disabled = state.panelActionPending;
+    panelUpdateBtn.classList.toggle('is-loading', state.panelActionPending && state.panelActionType === 'update');
+    panelUpdateBtn.setAttribute('aria-busy', state.panelActionPending && state.panelActionType === 'update' ? 'true' : 'false');
   }
 }
 
@@ -15315,7 +15809,7 @@ async function handlePanelInstallAction() {
     showToast(t('labels.panelInstallFailed'), 'error');
     return;
   }
-  setPanelActionPending(true);
+  setPanelActionPending(true, 'install');
   showToast(t('labels.panelInstallInProgress'), 'info');
   try {
     const response = await ensurePanelInstalledAndActivated(preset);
@@ -15345,7 +15839,7 @@ async function handlePanelUpdateAction() {
   if (!preset || preset.name === 'metacubexd') {
     return;
   }
-  setPanelActionPending(true);
+  setPanelActionPending(true, 'update');
   showToast(t('labels.panelUpdateInProgress'), 'info');
   try {
     const response = await updatePanelMainBridge(preset);
