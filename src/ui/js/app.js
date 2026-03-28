@@ -2787,24 +2787,6 @@ function positionCustomSelectMenu(entry) {
   }
   const overlayRoot = document.getElementById('overlayRoot') || document.body;
   const { wrapper, trigger, menu } = entry;
-  const inlineMode = Boolean(document.body && document.body.dataset.page === 'settings');
-  if (inlineMode) {
-    if (menu.parentNode !== wrapper) {
-      wrapper.appendChild(menu);
-    }
-    menu.classList.remove('is-floating');
-    menu.removeAttribute('data-placement');
-    menu.style.top = '';
-    menu.style.left = '';
-    menu.style.width = '';
-    menu.style.maxHeight = '';
-    menu.style.visibility = '';
-    menu.style.pointerEvents = 'auto';
-    if (wrapper) {
-      wrapper.style.zIndex = '4001';
-    }
-    return;
-  }
   if (overlayRoot && menu.parentNode !== overlayRoot) {
     overlayRoot.appendChild(menu);
   }
