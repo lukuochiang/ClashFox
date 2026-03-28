@@ -72,6 +72,30 @@ function run(command, args, options = {}) {
   }
 }
 
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function runWithRetry(command, args, options = {}, maxAttempts = 3) {
+  let lastError;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      run(command, args, options);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt >= maxAttempts) {
+        break;
+      }
+      process.stderr.write(
+        `[retry ${attempt}/${maxAttempts}] ${command} ${args.join(' ')} failed, retrying...\n`,
+      );
+      sleep(2500 * attempt);
+    }
+  }
+  throw lastError;
+}
+
 function ensureDistDir() {
   const distDir = path.join(ROOT, 'dist');
   fs.mkdirSync(distDir, { recursive: true });
@@ -181,10 +205,24 @@ function buildConfig({ includeHelper = true, forceX64Suffix = false } = {}) {
         if (!entry || typeof entry !== 'object') return true;
         return entry.from !== 'helper' && entry.from !== 'static/helper' && entry.to !== 'helper';
       });
+  const normalizedMacTarget = Array.isArray(base.mac && base.mac.target)
+    ? base.mac.target.map((entry) => {
+        if (!entry || typeof entry !== 'object') {
+          return entry;
+        }
+        // Arch is controlled by CLI flags (--x64/--arm64/--universal).
+        // Keeping fixed arch arrays in config makes repeated invocations overlap.
+        return { target: entry.target };
+      })
+    : (base.mac && base.mac.target);
   const config = {
     ...base,
     files,
     extraResources,
+    mac: {
+      ...(base.mac || {}),
+      target: normalizedMacTarget,
+    },
     extraMetadata: {
       ...(base.extraMetadata || {}),
       version: effectiveAppVersion,
@@ -242,15 +280,27 @@ function buildMac() {
   const commonArgs = ['--mac'];
   const buildAll = !requestedArch || requestedArch === 'all';
   if (buildAll || requestedArch === 'x64') {
-    run('npx', ['electron-builder', ...commonArgs, '--x64', '--publish', 'never', '--config', tempX64ConfigPath], { env });
+    runWithRetry(
+      'npx',
+      ['electron-builder', ...commonArgs, '--x64', '--publish', 'never', '--config', tempX64ConfigPath],
+      { env },
+    );
     renameUnpackedMacDir('mac', 'mac-x64');
   }
   if (buildAll || requestedArch === 'arm64') {
-    run('npx', ['electron-builder', ...commonArgs, '--arm64', '--publish', 'never', '--config', tempConfigPath], { env });
+    runWithRetry(
+      'npx',
+      ['electron-builder', ...commonArgs, '--arm64', '--publish', 'never', '--config', tempConfigPath],
+      { env },
+    );
     renameUnpackedMacDir('mac', 'mac-arm64');
   }
   if (buildAll || requestedArch === 'universal') {
-    run('npx', ['electron-builder', ...commonArgs, '--universal', '--publish', 'never', '--config', tempConfigPath], { env });
+    runWithRetry(
+      'npx',
+      ['electron-builder', ...commonArgs, '--universal', '--publish', 'never', '--config', tempConfigPath],
+      { env },
+    );
     renameUnpackedMacDir('mac', 'mac-universal');
   }
 }
