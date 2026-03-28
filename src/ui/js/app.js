@@ -4004,7 +4004,7 @@ function readSettings() {
   }
   try {
     const parsed = normalizeSettingsForUi(JSON.parse(raw));
-    const merged = { ...DEFAULT_SETTINGS, ...parsed };
+    const merged = { ...parsed, ...DEFAULT_SETTINGS };
     if (state.fileSettings) {
       if (!merged.userDataPaths) {
         merged.userDataPaths = {};
@@ -4651,7 +4651,7 @@ const resolveAbsolutePath = (relativePath) => {
 };
 
 function applySettings(settings) {
-  state.settings = { ...DEFAULT_SETTINGS, ...settings };
+  state.settings = { ...settings, ...DEFAULT_SETTINGS };
   state.settings.windowWidth = sanitizeWindowDimension(
     state.settings.windowWidth,
     MAIN_WINDOW_DEFAULT_WIDTH,
@@ -6444,7 +6444,7 @@ async function loadDefaultSettings() {
     if (payload && typeof payload === 'object') {
       DEFAULT_SETTINGS = payload;
       if (state && typeof state === 'object') {
-        state.settings = { ...DEFAULT_SETTINGS, ...(state.settings || {}) };
+        state.settings = { ...(state.settings || {}), ...DEFAULT_SETTINGS };
       }
     }
   } catch (error) {
