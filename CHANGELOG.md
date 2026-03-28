@@ -7,14 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-03-28
+
 ### Added
 - CHANGELOG.md for tracking version changes
 - Production-ready logging system with environment-aware output
+- Network intelligence and site latency widgets
+- Top proxies and memory trend cards
+- Locale-aware UI scaling and improved text wrapping
+- Foxboard integration with refined card layouts
 
 ### Changed
 - Disabled debug mode in production (`debugMode: false`)
 - Cleaned up console.log/error/warn calls in production builds
 - Optimized error handling to be silent in production while maintaining functionality
+- Updated dashboard module with refined proxy empty texts
+- Improved card layout and visual styling
+- Adjusted help doc card layout and text overflow handling
+
+### Fixed
+- Corrected card header and styling issues
+- Improved macOS build reliability and release channel detection
+- Multiple bug fixes and stability improvements
 
 ### Removed
 - Development console logs from production builds
