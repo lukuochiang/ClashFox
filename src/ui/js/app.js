@@ -193,6 +193,7 @@ let statusConfig = document.getElementById('statusConfig');
 let statusKernelPathRow = document.getElementById('statusKernelPathRow');
 let statusConfigRow = document.getElementById('statusConfigRow');
 let statusPill = document.getElementById('statusPill');
+let statusPillText = document.getElementById('statusPillText');
 let overviewUptime = document.getElementById('overviewUptime');
 let overviewConnections = document.getElementById('overviewConnections');
 let overviewMemory = document.getElementById('overviewMemory');
@@ -2743,8 +2744,8 @@ function applyI18n() {
 
   applyCardIcons();
 
-  if (statusPill && !statusPill.dataset.state) {
-    statusPill.dataset.state = 'unknown';
+  if (statusPill) {
+    applyStatusPillState(statusPill.dataset.state || 'unknown');
   }
   updateThemeToggle();
   refreshNavButtonTooltips();
@@ -6905,24 +6906,38 @@ function syncRunningIndicators(running) {
   if (overviewStatus) {
     overviewStatus.textContent = label;
   }
-  if (statusPill) {
-    // Always reflect the latest real status instead of keeping a stale transition state.
-    statusPill.dataset.state = running ? 'running' : 'stopped';
-    statusPill.dataset.i18nTipKey = running ? 'labels.running' : 'labels.stopped';
-    statusPill.dataset.i18nTip = statusPill.dataset.i18nTipKey;
-    statusPill.dataset.tip = label;
-    statusPill.setAttribute('aria-label', label);
-    if (statusPill.dataset.nativeTitle === 'false') {
-      statusPill.removeAttribute('title');
-    } else {
-      statusPill.setAttribute('title', label);
-    }
-  }
+  applyStatusPillState(running ? 'running' : 'stopped');
   const dashboardNav = document.getElementById('navDashboard');
   if (dashboardNav) {
     dashboardNav.disabled = false;
     dashboardNav.classList.remove('is-disabled');
     dashboardNav.setAttribute('aria-disabled', 'false');
+  }
+}
+
+function applyStatusPillState(nextState = 'unknown') {
+  if (!statusPill) {
+    return;
+  }
+  const stateKey = nextState === 'running' || nextState === 'stopped' ? nextState : 'unknown';
+  const tipKey = stateKey === 'running'
+    ? 'labels.running'
+    : stateKey === 'stopped'
+      ? 'labels.stopped'
+      : 'labels.unknown';
+  const label = t(tipKey);
+  statusPill.dataset.state = stateKey;
+  statusPill.dataset.i18nTipKey = tipKey;
+  statusPill.dataset.i18nTip = tipKey;
+  statusPill.dataset.tip = label;
+  statusPill.setAttribute('aria-label', label);
+  if (statusPillText) {
+    statusPillText.textContent = label;
+  }
+  if (statusPill.dataset.nativeTitle === 'false') {
+    statusPill.removeAttribute('title');
+  } else {
+    statusPill.setAttribute('title', label);
   }
 }
 
@@ -12199,6 +12214,7 @@ function refreshLayoutRefs() {
   themeToggle = document.getElementById('themeToggle');
   refreshStatusBtn = document.getElementById('refreshStatus');
   statusPill = document.getElementById('statusPill');
+  statusPillText = document.getElementById('statusPillText');
   foxRankPanel = document.getElementById('foxRankPanel');
   foxRankPill = document.getElementById('foxRankPill');
   foxRankPillTier = document.getElementById('foxRankPillTier');
@@ -12461,6 +12477,7 @@ function refreshPageRefs() {
   statusKernelPathRow = document.getElementById('statusKernelPathRow');
   statusConfigRow = document.getElementById('statusConfigRow');
   statusPill = document.getElementById('statusPill');
+  statusPillText = document.getElementById('statusPillText');
   overviewUptime = document.getElementById('overviewUptime');
   overviewConnections = document.getElementById('overviewConnections');
   overviewMemory = document.getElementById('overviewMemory');

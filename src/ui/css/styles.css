@@ -3069,16 +3069,17 @@ h1 {
 }
 
 .status-light {
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
-  border-radius: 18px;
-  background: rgba(148, 171, 197, 0.12);
-  border: 1px solid rgba(148, 171, 197, 0.35);
-  display: grid;
-  place-items: center;
+  min-height: 30px;
+  padding: 0 12px 0 10px;
+  border-radius: 999px;
+  background: rgba(148, 171, 197, 0.1);
+  border: 1px solid rgba(148, 171, 197, 0.3);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   cursor: pointer;
-  overflow: visible;
+  white-space: nowrap;
+  transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
 
 .status-light * {
@@ -3086,22 +3087,53 @@ h1 {
 }
 
 .status-light .status-dot {
-  width: 12px;
-  height: 12px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: #96a8bb;
-  box-shadow: 0 0 0 6px rgba(148, 171, 197, 0.16);
+  background: #8ea3b8;
+  box-shadow: 0 0 0 3px rgba(148, 171, 197, 0.16);
+}
+
+.status-light .status-pill-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #5c6f84;
+  line-height: 1;
 }
 
 .status-light[data-state="running"] .status-dot {
-  background: var(--mint);
-  box-shadow: 0 0 0 6px rgba(140, 224, 198, 0.18);
-  animation: pulse 2s ease-in-out infinite;
+  background: #2f7a6f;
+  box-shadow: 0 0 0 3px rgba(47, 122, 111, 0.15);
+  animation: pulse 2.8s ease-in-out infinite;
 }
 
 .status-light[data-state="stopped"] .status-dot {
-  background: var(--accent-strong);
-  box-shadow: 0 0 0 6px rgba(255, 122, 74, 0.18);
+  background: #b24e43;
+  box-shadow: 0 0 0 3px rgba(178, 78, 67, 0.15);
+}
+
+.status-light[data-state="running"] {
+  background: linear-gradient(180deg, rgba(232, 249, 245, 0.92), rgba(221, 243, 237, 0.88));
+  border-color: rgba(126, 189, 178, 0.42);
+}
+
+.status-light[data-state="running"] .status-pill-label {
+  color: #2f7a6f;
+}
+
+.status-light[data-state="stopped"] {
+  background: linear-gradient(180deg, rgba(255, 237, 232, 0.92), rgba(249, 225, 220, 0.88));
+  border-color: rgba(221, 138, 126, 0.42);
+}
+
+.status-light[data-state="stopped"] .status-pill-label {
+  color: #b24e43;
+}
+
+.status-light[data-state="unknown"] {
+  background: rgba(148, 171, 197, 0.1);
+  border-color: rgba(148, 171, 197, 0.3);
 }
 
 .panel {
@@ -4669,20 +4701,12 @@ body[data-theme="day"] .help-about-secondary {
   border-color: rgba(221, 138, 126, 0.42);
 }
 
-.status-light[data-state="running"] .status-dot,
 .card-icon.running,
 .card-icon.running::before {
   color: #2f7a6f;
   background-color: #2f7a6f;
   border-color: rgba(126, 189, 178, 0.64);
   box-shadow: 0 0 0 8px rgba(47, 122, 111, 0.12), 0 0 18px rgba(47, 122, 111, 0.24);
-}
-
-.status-light[data-state="stopped"] .status-dot {
-  color: #b24e43;
-  background-color: #b24e43;
-  border-color: rgba(221, 138, 126, 0.66);
-  box-shadow: 0 0 0 8px rgba(178, 78, 67, 0.12), 0 0 18px rgba(178, 78, 67, 0.24);
 }
 
 body[data-theme="day"] .overview-card[data-module="running"] .card-icon.running,

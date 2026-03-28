@@ -249,45 +249,73 @@ body[data-theme="night"] .submenu-root {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  min-height: 24px;
+  padding: 0 9px 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 171, 197, 0.3);
+  background: rgba(148, 171, 197, 0.1);
+  font-size: 11px;
   font-weight: 600;
+  letter-spacing: 0.02em;
   white-space: nowrap;
   flex: 0 0 auto;
+  line-height: 1;
+  color: #5c6f84;
 }
 
 .menu-header-status .status-dot {
-  width: 11px;
-  height: 11px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: #96a8bb;
-  box-shadow: 0 0 0 4px rgba(148, 171, 197, 0.16);
+  background: #8ea3b8;
+  box-shadow: 0 0 0 2px rgba(148, 171, 197, 0.16);
 }
 
 .menu-header-status.running {
   color: #2f7a6f;
+  background: linear-gradient(180deg, rgba(232, 249, 245, 0.92), rgba(221, 243, 237, 0.88));
+  border-color: rgba(126, 189, 178, 0.42);
 }
 
 .menu-header-status.running .status-dot {
   background: #2f7a6f;
-  box-shadow: 0 0 0 4px rgba(47, 122, 111, 0.16);
+  box-shadow: 0 0 0 2px rgba(47, 122, 111, 0.15);
+  animation: tray-status-breath 2.8s ease-in-out infinite;
 }
 
 .menu-header-status.stopped {
   color: #b24e43;
+  background: linear-gradient(180deg, rgba(255, 237, 232, 0.92), rgba(249, 225, 220, 0.88));
+  border-color: rgba(221, 138, 126, 0.42);
 }
 
 .menu-header-status.stopped .status-dot {
   background: #b24e43;
-  box-shadow: 0 0 0 4px rgba(178, 78, 67, 0.16);
+  box-shadow: 0 0 0 2px rgba(178, 78, 67, 0.15);
 }
 
+.menu-header-status.unknown,
 .menu-header-status.neutral {
   color: var(--muted);
+  background: rgba(148, 171, 197, 0.1);
+  border-color: rgba(148, 171, 197, 0.3);
 }
 
+.menu-header-status.unknown .status-dot,
 .menu-header-status.neutral .status-dot {
   background: #96a8bb;
-  box-shadow: 0 0 0 4px rgba(148, 171, 197, 0.16);
+  box-shadow: 0 0 0 2px rgba(148, 171, 197, 0.16);
+}
+
+@keyframes tray-status-breath {
+  0%, 100% {
+    box-shadow: 0 0 0 2px rgba(47, 122, 111, 0.14);
+    opacity: 0.95;
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(47, 122, 111, 0.18);
+    opacity: 1;
+  }
 }
 
 .menu-chart {
