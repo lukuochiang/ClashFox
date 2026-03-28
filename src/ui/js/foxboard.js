@@ -1,5 +1,5 @@
 import FOXBOARD_I18N from '../locales/foxboard-i18n.js';
-import { initDashboardPanel, teardownDashboardPanel, setDashboardLocale } from './dashboard.js';
+import { initDashboardPanel, teardownDashboardPanel, setDashboardLocale } from './foxboard-workbench.js';
 
 const foxboardLocaleUtils = globalThis.CLASHFOX_LOCALE_UTILS || {};
 const resolveLocaleFromSettings = typeof foxboardLocaleUtils.resolveLocaleFromSettings === 'function'

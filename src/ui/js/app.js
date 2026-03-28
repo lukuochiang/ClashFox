@@ -8045,6 +8045,8 @@ function renderTopProxyCard(connections = []) {
     return true;
   };
   const rows = Array.isArray(connections) ? connections : [];
+  const topProxyEmptyText = ti('overview.topProxyEmpty', 'No active proxy chains yet');
+  const topProxyNoDataText = ti('overview.topProxyNoData', 'No proxy speed data yet');
   if (!rows.length) {
     if (hasRecentCached && applyTopProxyRows(cachedEntries, Number(overviewTopProxyTotal.textContent || 0) || 0, false)) {
       return;
@@ -8055,7 +8057,7 @@ function renderTopProxyCard(connections = []) {
     setNodeTextIfChanged(overviewTopProxyTotal, '0');
     setNodeHtmlIfChanged(
       overviewTopProxyList,
-      `<div class="top-proxy-empty">${escapeTopologyText(ti('overview.topProxyEmpty', 'No active proxy chains yet'))}</div>`,
+      `<div class="top-proxy-empty">${escapeTopologyText(topProxyEmptyText)}</div>`,
     );
     return;
   }
@@ -8174,7 +8176,7 @@ function renderTopProxyCard(connections = []) {
     state.topProxyConnectionDownloads = nextDownloads;
     setNodeHtmlIfChanged(
       overviewTopProxyList,
-      `<div class="top-proxy-empty">${escapeTopologyText(ti('overview.topProxyEmpty', 'No active proxy chains yet'))}</div>`,
+      `<div class="top-proxy-empty">${escapeTopologyText(topProxyNoDataText)}</div>`,
     );
     return;
   }
@@ -8189,7 +8191,7 @@ function renderTopProxyCard(connections = []) {
     }
     setNodeHtmlIfChanged(
       overviewTopProxyList,
-      `<div class="top-proxy-empty">${escapeTopologyText(ti('overview.topProxyEmpty', 'No active proxy chains yet'))}</div>`,
+      `<div class="top-proxy-empty">${escapeTopologyText(topProxyNoDataText)}</div>`,
     );
     return;
   }
@@ -15866,7 +15868,7 @@ async function initDashboardFrame() {
   }
   try {
     if (!dashboardLocalModule) {
-      dashboardLocalModule = await import('./dashboard.js');
+      dashboardLocalModule = await import('./foxboard-workbench.js');
     }
     if (dashboardLocalModule && typeof dashboardLocalModule.initDashboardPanel === 'function') {
       await dashboardLocalModule.initDashboardPanel();

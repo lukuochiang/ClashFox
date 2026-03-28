@@ -7796,7 +7796,7 @@ function detectTunConflictLikely() {
   };
 }
 
-async function runTrayCommand(command, args = [], labels = TRAY_I18N.en, sudoPass = '') {
+async function runTrayCommand(command, args = [], labels = getTrayLabels(), sudoPass = '') {
   let effectiveSudoPass = sudoPass || '';
   let result = await runBridgeWithAutoAuth(command, args, { sudoPass: effectiveSudoPass });
   return { ok: true, sudoPass: effectiveSudoPass, result };
@@ -7870,7 +7870,18 @@ function resolveDashboardOverlayThemeMode(settings = null) {
   return 'auto';
 }
 
-function buildDashboardStoppedOverlayDataUrl(labels = TRAY_I18N.en, themeMode = 'auto') {
+function resolveDashboardStatusText(labels = getUiLabels(), key = '', controllerUrl = '') {
+  const source = labels && typeof labels === 'object' ? labels : getUiLabels();
+  const fallbackMap = {
+    dashboardConnecting: 'Connecting to:{url}',
+    dashboardConnected: 'Connected to:{url}',
+    dashboardUnavailable: 'Unable to connect to:{url}',
+  };
+  const template = String(source[key] || fallbackMap[key] || '').trim();
+  return template.replace('{url}', String(controllerUrl || '').trim());
+}
+
+function buildDashboardStatusDataUrl(labels = getTrayLabels(), themeMode = 'auto', messageText = '') {
   const escapeHtml = (value = '') => String(value || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -7878,7 +7889,7 @@ function buildDashboardStoppedOverlayDataUrl(labels = TRAY_I18N.en, themeMode = 
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
   const title = escapeHtml(String(labels.dashboard || 'Dashboard').trim() || 'Dashboard');
-  const message = escapeHtml(String(labels.notRunning || 'Kernel is not running.').trim() || 'Kernel is not running.');
+  const message = escapeHtml(String(messageText || labels.notRunning || 'Kernel is not running.').trim() || 'Kernel is not running.');
   const normalizedMode = ['day', 'night', 'auto'].includes(String(themeMode || '').trim().toLowerCase())
     ? String(themeMode || '').trim().toLowerCase()
     : 'auto';
@@ -7888,34 +7899,15 @@ function buildDashboardStoppedOverlayDataUrl(labels = TRAY_I18N.en, themeMode = 
   const initialIsDark = forcedNight || (!forcedDay && Boolean(nativeTheme && nativeTheme.shouldUseDarkColors));
   const pageBackground = initialIsDark ? '#0f1216' : '#f5f8fc';
   const textColor = initialIsDark ? '#e5e7eb' : '#1e293b';
-  const maskBackground = initialIsDark ? 'rgba(9, 14, 22, 0.36)' : 'rgba(226, 234, 244, 0.34)';
-  const cardBackground = initialIsDark ? 'rgba(22, 30, 42, 0.88)' : 'rgba(255, 255, 255, 0.9)';
-  const cardBorder = initialIsDark ? 'rgba(127, 145, 168, 0.28)' : 'rgba(148, 163, 184, 0.30)';
-  const cardShadow = initialIsDark ? '0 18px 36px rgba(2, 6, 23, 0.22)' : '0 12px 28px rgba(15, 23, 42, 0.12)';
-  const titleColor = initialIsDark ? '#f8fafc' : '#0f172a';
   const messageColor = initialIsDark ? '#cbd5e1' : '#475569';
   const autoThemeCss = normalizedMode === 'auto'
     ? `
   @media (prefers-color-scheme: dark) {
     html, body { background: #0f1216; color: #e5e7eb; }
-    .mask { background: rgba(9, 14, 22, 0.36); }
-    .card {
-      background: rgba(22, 30, 42, 0.88);
-      border-color: rgba(127, 145, 168, 0.28);
-      box-shadow: 0 18px 36px rgba(2, 6, 23, 0.22);
-    }
-    .title { color: #f8fafc; }
     .message { color: #cbd5e1; }
   }
   @media (prefers-color-scheme: light) {
     html, body { background: #f5f8fc; color: #1e293b; }
-    .mask { background: rgba(226, 234, 244, 0.34); }
-    .card {
-      background: rgba(255, 255, 255, 0.9);
-      border-color: rgba(148, 163, 184, 0.30);
-      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
-    }
-    .title { color: #0f172a; }
     .message { color: #475569; }
   }`
     : '';
@@ -7937,49 +7929,33 @@ function buildDashboardStoppedOverlayDataUrl(labels = TRAY_I18N.en, themeMode = 
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
     color: ${textColor};
   }
-  .mask {
+  body {
+    display: grid;
+    place-items: center;
+  }
+  .status-wrap {
     position: fixed;
     inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: ${maskBackground};
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-  }
-  .card {
-    min-width: 320px;
-    max-width: min(560px, calc(100vw - 48px));
-    padding: 18px 20px;
-    border-radius: 10px;
-    background: ${cardBackground};
-    border: 1px solid ${cardBorder};
-    box-shadow: ${cardShadow};
-    backdrop-filter: blur(2px);
-    -webkit-backdrop-filter: blur(2px);
-  }
-  .title {
-    margin: 0;
-    font-size: 15px;
-    font-weight: 600;
-    line-height: 1.4;
-    color: ${titleColor};
+    background: transparent;
+    padding: 24px;
+    text-align: center;
   }
   .message {
-    margin: 8px 0 0;
-    font-size: 13px;
-    line-height: 1.5;
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.6;
     color: ${messageColor};
+    letter-spacing: 0.01em;
   }
 ${autoThemeCss}
 </style>
 </head>
 <body>
-  <div class="mask">
-    <div class="card" role="status" aria-live="polite">
-      <h1 class="title">${title}</h1>
-      <p class="message">${message}</p>
-    </div>
+  <div class="status-wrap">
+    <p class="message" role="status" aria-live="polite">${message}</p>
   </div>
 </body>
 </html>`;
@@ -7989,7 +7965,8 @@ ${autoThemeCss}
 async function openDashboardPanel() {
   try {
     const settings = readAppSettings();
-    const labels = getTrayLabels();
+    const trayLabels = getTrayLabels();
+    const uiLabels = getUiLabels();
     const overlayThemeMode = resolveDashboardOverlayThemeMode(settings);
     const panelManager = settings && typeof settings.panelManager === 'object'
       ? settings.panelManager
@@ -8004,6 +7981,9 @@ async function openDashboardPanel() {
       controller = `http://${controller}`;
     }
     controller = controller.replace(/\/+$/, '');
+    const dashboardConnecting = resolveDashboardStatusText(uiLabels, 'dashboardConnecting', controller);
+    const dashboardConnected = resolveDashboardStatusText(uiLabels, 'dashboardConnected', controller);
+    const dashboardUnavailable = resolveDashboardStatusText(uiLabels, 'dashboardUnavailable', controller);
     const dashboardUrl = new URL(`${controller}/ui/${panel}/`);
     if (secret) {
       // Different dashboards use different query keys; set both for compatibility.
@@ -8015,10 +7995,11 @@ async function openDashboardPanel() {
     const kernelRunning = Boolean(runningStatus && runningStatus.ok && runningStatus.data && runningStatus.data.running);
     const url = kernelRunning
       ? dashboardUrl.toString()
-      : buildDashboardStoppedOverlayDataUrl(labels, overlayThemeMode);
+      : buildDashboardStatusDataUrl(trayLabels, overlayThemeMode, dashboardUnavailable);
     if (dashboardWindow && !dashboardWindow.isDestroyed()) {
       dashboardWindow.show();
       dashboardWindow.focus();
+      dashboardWindow.setTitle(kernelRunning ? dashboardConnecting : dashboardUnavailable);
       dashboardWindow.loadURL(url);
       return;
     }
@@ -8056,7 +8037,17 @@ async function openDashboardPanel() {
         event.preventDefault();
       }
     });
-
+    dashboardWindow.webContents.on('did-finish-load', () => {
+      if (dashboardWindow && !dashboardWindow.isDestroyed()) {
+        dashboardWindow.setTitle(kernelRunning ? dashboardConnected : dashboardUnavailable);
+      }
+    });
+    dashboardWindow.webContents.on('did-fail-load', () => {
+      if (dashboardWindow && !dashboardWindow.isDestroyed()) {
+        dashboardWindow.setTitle(dashboardUnavailable);
+      }
+    });
+    dashboardWindow.setTitle(kernelRunning ? dashboardConnecting : dashboardUnavailable);
     dashboardWindow.loadURL(url);
   } catch (err) {
     // keep tray-only flow stable; do not reopen main window on panel failure
@@ -9916,7 +9907,7 @@ function openFoxboardWindow() {
         event.preventDefault();
       }
     });
-    windowRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'dashboard.html'));
+    windowRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'foxboard.html'));
   } catch {
   }
 }
@@ -9969,7 +9960,7 @@ function preloadFoxboardWindow() {
         event.preventDefault();
       }
     });
-    preloadRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'dashboard.html'));
+    preloadRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'foxboard.html'));
   } catch {
     if (foxboardPreloadWindow && !foxboardPreloadWindow.isDestroyed()) {
       foxboardPreloadWindow.close();

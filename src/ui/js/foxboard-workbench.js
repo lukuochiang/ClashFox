@@ -1,4 +1,4 @@
-import DASHBOARD_I18N from '../locales/dashboard-i18n.js';
+import FOXBOARD_I18N from '../locales/foxboard-i18n.js';
 
 const POLL_MS = 2200;
 const DASHBOARD_PREFS_KEY = 'clashfox.dashboardLocalPrefs.v1';
@@ -44,11 +44,11 @@ function normalizeLocale(value) {
 }
 
 function t(key, fallback = '') {
-  const pack = DASHBOARD_I18N[state.locale] || DASHBOARD_I18N.en;
+  const pack = FOXBOARD_I18N[state.locale] || FOXBOARD_I18N.en;
   if (Object.prototype.hasOwnProperty.call(pack, key)) {
     return pack[key];
   }
-  return fallback || (DASHBOARD_I18N.en[key] || key);
+  return fallback || (FOXBOARD_I18N.en[key] || key);
 }
 
 function readPrefs() {

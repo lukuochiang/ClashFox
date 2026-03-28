@@ -6640,9 +6640,14 @@ body[data-theme="day"] .rules-overview-switch button.active {
 }
 
 .top-proxy-empty {
-  padding: 6px 4px;
-  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(var(--overview-analytics-chart-height) + var(--top-proxy-axis-height));
+  padding: 8px 10px;
+  color: color-mix(in srgb, var(--muted) 70%, var(--ink) 30%);
   font-size: 12px;
+  text-align: center;
 }
 
 .top-proxy-axis {
