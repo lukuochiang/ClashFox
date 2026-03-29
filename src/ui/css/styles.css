@@ -4311,7 +4311,7 @@ body[data-theme="night"] .help-about-team-logo {
 
 .help-about-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -4360,30 +4360,6 @@ body[data-theme="night"] .help-about-team-logo {
 .help-about-meta-icon-version {
   --help-about-meta-icon-mask: var(--icon-tag);
   --help-about-meta-icon-fill: linear-gradient(135deg, #63c5ff 0%, #5c8eff 100%);
-}
-
-.help-about-meta-icon-build {
-  background: none;
-  mask-image: none;
-  -webkit-mask-image: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-family: "JetBrains Mono", "SFMono-Regular", "Consolas", monospace;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  font-size: 9px;
-  line-height: 1;
-  color: #ffb15a;
-}
-
-.help-about-meta-icon-build::before {
-  content: "123";
-  display: block;
-  background: linear-gradient(135deg, #ffcb67 0%, #ff8d58 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
 }
 
 .help-about-meta-icon-team {

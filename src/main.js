@@ -12159,18 +12159,6 @@ function createWindow(showOnCreate = false) {
   // Do not auto-open DevTools here; it should only open when toggled on.
 }
 
-function getBuildNumber() {
-  try {
-    // APP_PATH points to app.asar when packaged, ensuring package.json is found.
-    const pkgPath = path.join(APP_PATH, 'package.json');
-    const raw = fs.readFileSync(pkgPath, 'utf8');
-    const parsed = JSON.parse(raw);
-    return parsed.buildNumber;
-  } catch {
-    return undefined;
-  }
-}
-
 function createAboutWindow() {
   if (!mainWindow) {
     return;
@@ -13545,20 +13533,13 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:appInfo', () => {
     const versionValue = String(app.getVersion() || '').trim() || '0.0.0';
-    const buildNumber = getBuildNumber();
-    const normalizedBuild = Number.isFinite(buildNumber) && buildNumber > 0 ? buildNumber : 1;
-    const baseVersionMatch = versionValue.match(/^(\d+\.\d+\.\d+)/);
-    const baseVersion = baseVersionMatch ? baseVersionMatch[1] : versionValue.replace(/-.*/, '');
     const devMode = !app.isPackaged;
-    const displayVersion = devMode
-      ? `v${baseVersion || '0.0.0'}-alpha.${normalizedBuild}`
-      : `v${versionValue}`;
+    const displayVersion = `v${versionValue}`;
     return {
       ok: true,
       data: {
         name: app.getName(),
         version: versionValue,
-        buildNumber: String(buildNumber ?? ''),
         isDev: devMode,
         displayVersion,
       },

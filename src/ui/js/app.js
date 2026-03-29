@@ -2198,7 +2198,6 @@ let helperLogsRevealBtn = document.getElementById('helperLogsRevealBtn');
 let helperLogsPath = document.getElementById('helperLogsPath');
 let helperVersionText = document.getElementById('helperVersionText');
 let helpAboutVersion = document.getElementById('helpAboutVersion');
-let helpAboutBuild = document.getElementById('helpAboutBuild');
 let appInfoCache = null;
 let appInfoPromise = null;
 let helpAboutStatus = document.getElementById('helpAboutStatus');
@@ -6465,7 +6464,6 @@ function applyAppInfo(appInfo) {
     return;
   }
   const helpVersionEl = helpAboutVersion || document.getElementById('helpAboutVersion');
-  const helpBuildEl = helpAboutBuild || document.getElementById('helpAboutBuild');
   if (appName) {
     appName.textContent = appInfo.name || 'ClashFox';
   }
@@ -6473,13 +6471,9 @@ function applyAppInfo(appInfo) {
     ? appInfo.displayVersion
     : (() => {
       const version = appInfo.version || '0.0.0';
-      const baseVersionMatch = String(version).match(/^(\d+\.\d+\.\d+)/);
-      const baseVersion = baseVersionMatch ? baseVersionMatch[1] : String(version).replace(/-.*/, '');
       const isDev = Boolean(appInfo.isDev);
-      const buildNumber = Number.parseInt(appInfo.buildNumber, 10);
-      const normalizedBuild = Number.isFinite(buildNumber) && buildNumber > 0 ? buildNumber : 1;
       return isDev
-        ? `v${baseVersion || '0.0.0'}-alpha.${normalizedBuild}`
+        ? `v${version}-dev`
         : `v${version}`;
     })();
   if (appVersion) {
@@ -6488,10 +6482,6 @@ function applyAppInfo(appInfo) {
   if (helpVersionEl) {
     helpVersionEl.textContent = displayVersion;
     helpAboutVersion = helpVersionEl;
-  }
-  if (helpBuildEl) {
-    helpBuildEl.textContent = appInfo.buildNumber || '-';
-    helpAboutBuild = helpBuildEl;
   }
 }
 
@@ -12693,7 +12683,6 @@ function refreshPageRefs() {
   helperLogsPath = document.getElementById('helperLogsPath');
   helperVersionText = document.getElementById('helperVersionText');
   helpAboutVersion = document.getElementById('helpAboutVersion');
-  helpAboutBuild = document.getElementById('helpAboutBuild');
   helpAboutStatus = document.getElementById('helpAboutStatus');
   helpCheckAppUpdateBtn = document.getElementById('helpCheckAppUpdateBtn');
   helpCheckKernelUpdateBtn = document.getElementById('helpCheckKernelUpdateBtn');

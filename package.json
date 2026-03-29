@@ -1,7 +1,6 @@
 {
   "name": "ClashFox",
   "version": "0.5.4-beta.0",
-  "buildNumber": 1,
   "description": "ClashFox GUI for Mihomo",
   "license": "GPL-3.0",
   "author": "Kuochiang Lu <lukuochiang@gmail.com> (https://github.com/lukuochiang/ClashFox)",
@@ -9,7 +8,7 @@
   "type": "commonjs",
   "scripts": {
     "start": "electron .",
-    "dev": "node static/scripts/bump-version.js && node -e 'const p=require(\"./package.json\"); console.log(`> ClashFox@${p.version} dev (buildNumber: ${p.buildNumber})`)' && CLASHFOX_DEV=1 electron .",
+    "dev": "node -e 'const p=require(\"./package.json\"); console.log(`> ClashFox@${p.version} dev`)' && CLASHFOX_DEV=1 electron .",
     "build:mac": "node static/scripts/build-mac.js",
     "build:mac:x64": "node static/scripts/build-mac.js --arch x64",
     "build:mac:arm64": "node static/scripts/build-mac.js --arch arm64",
