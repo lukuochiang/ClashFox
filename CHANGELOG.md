@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.5.4-beta.1](https://github.com/lukuochiang/ClashFox/compare/v0.5.4-beta.0...v0.5.4-beta.1) (2026-03-29)
+
+
+### Bug Fixes
+
+* simplify version management with standard-version ([3d505b7](https://github.com/lukuochiang/ClashFox/commit/3d505b783bc81657b8cd06243a02f271fe9d2b9d))
+
 ### [0.5.4-beta.0](https://github.com/lukuochiang/ClashFox/compare/v0.5.3...v0.5.4-beta.0) (2026-03-29)
 
 
