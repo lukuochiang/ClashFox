@@ -836,6 +836,12 @@ function openTopologyZoomModal() {
 }
 
 function bindTopologyZoomModal() {
+  if (topologyZoomModal) {
+    const overlayRoot = document.getElementById('overlayRoot') || document.body;
+    if (overlayRoot && topologyZoomModal.parentNode !== overlayRoot) {
+      overlayRoot.appendChild(topologyZoomModal);
+    }
+  }
   if (overviewTopologyZoomBtn && overviewTopologyZoomBtn.dataset.bound !== 'true') {
     overviewTopologyZoomBtn.dataset.bound = 'true';
     overviewTopologyZoomBtn.addEventListener('pointerdown', (event) => {
@@ -3980,13 +3986,16 @@ function mapSettingsForFile(settings) {
 }
 
 function readSettings() {
+  if (state.fileSettings && typeof state.fileSettings === 'object' && Object.keys(state.fileSettings).length) {
+    return normalizeSettingsForUi({ ...DEFAULT_SETTINGS, ...state.fileSettings });
+  }
   const raw = localStorage.getItem(SETTINGS_KEY);
   if (!raw) {
     return { ...DEFAULT_SETTINGS, ...(state.fileSettings || {}) };
   }
   try {
     const parsed = normalizeSettingsForUi(JSON.parse(raw));
-    const merged = { ...parsed, ...DEFAULT_SETTINGS };
+    const merged = { ...DEFAULT_SETTINGS, ...parsed };
     if (state.fileSettings) {
       if (!merged.userDataPaths) {
         merged.userDataPaths = {};
@@ -4065,19 +4074,9 @@ async function syncSettingsFromFile() {
   }
   state.fileSettings = { ...merged };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
-  if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
-    const { externalUiUrl: _externalUiUrl, externalUiName: _externalUiName, ...restSettings } = merged;
-    const fileSettings = mapSettingsForFile(restSettings);
-    const { externalUiUrl: _currentExternalUiUrl, externalUiName: _currentExternalUiName, ...currentRestSettings } = state.fileSettings || {};
-    const currentFileSettings = mapSettingsForFile(currentRestSettings);
-    if (JSON.stringify(fileSettings) !== JSON.stringify(currentFileSettings)) {
-    window.clashfox.writeSettings(fileSettings);
-    }
-  }
 }
 
 function saveSettings(patch, options = {}) {
-  const forceWrite = Boolean(options && options.forceWrite);
   const nextPatch = { ...(patch || {}) };
   const proxyPatchKeys = LEGACY_PROXY_FIELDS;
   const hasProxyPatch = Object.prototype.hasOwnProperty.call(nextPatch, 'proxy')
@@ -4232,22 +4231,29 @@ function saveSettings(patch, options = {}) {
       delete nextSettings[key];
     }
   });
-  const { externalUiUrl: _currentExternalUiUrl, externalUiName: _currentExternalUiName, ...currentRestSettings } = currentSettings;
   const { externalUiUrl: _nextExternalUiUrl, externalUiName: _nextExternalUiName, ...nextRestSettings } = nextSettings;
-  const currentFileSettings = mapSettingsForFile(currentRestSettings);
   const nextFileSettings = mapSettingsForFile(nextRestSettings);
-  if (!forceWrite && JSON.stringify(currentFileSettings) === JSON.stringify(nextFileSettings)) {
-    state.settings = nextSettings;
-    state.fileSettings = { ...state.fileSettings, ...nextPatch };
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
-    return;
-  }
   state.settings = nextSettings;
   state.fileSettings = { ...state.fileSettings, ...nextPatch };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
   if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
-    Promise.resolve(window.clashfox.writeSettings(nextFileSettings, forceWrite ? { forceWrite: true } : {})).catch((error) => {
-    });
+    Promise.resolve(window.clashfox.writeSettings(nextFileSettings, { forceWrite: true }))
+      .then((response) => {
+        if (!response || !response.ok) {
+          const detail = response && (response.error || response.details)
+            ? `: ${String(response.error || response.details)}`
+            : '';
+          if (typeof showToast === 'function') {
+            showToast(`Save settings failed${detail}`, 'error');
+          }
+        }
+      })
+      .catch((error) => {
+        if (typeof showToast === 'function') {
+          const detail = error && error.message ? `: ${error.message}` : '';
+          showToast(`Save settings failed${detail}`, 'error');
+        }
+      });
   }
 }
 
@@ -4633,7 +4639,7 @@ const resolveAbsolutePath = (relativePath) => {
 };
 
 function applySettings(settings) {
-  state.settings = { ...settings, ...DEFAULT_SETTINGS };
+  state.settings = { ...DEFAULT_SETTINGS, ...(settings || {}) };
   state.settings.windowWidth = sanitizeWindowDimension(
     state.settings.windowWidth,
     MAIN_WINDOW_DEFAULT_WIDTH,
@@ -6426,7 +6432,7 @@ async function loadDefaultSettings() {
     if (payload && typeof payload === 'object') {
       DEFAULT_SETTINGS = payload;
       if (state && typeof state === 'object') {
-        state.settings = { ...(state.settings || {}), ...DEFAULT_SETTINGS };
+        state.settings = { ...DEFAULT_SETTINGS, ...(state.settings || {}) };
       }
     }
   } catch (error) {

@@ -5155,7 +5155,7 @@ body[data-theme="day"] .history-axis {
 
 .topology-card {
   display: grid;
-  gap: 12px;
+  /*gap: 12px;*/
 }
 
 .topology-stage {
@@ -5171,19 +5171,21 @@ body[data-theme="day"] .history-axis {
 }
 
 .topology-zoom-btn {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  z-index: 12;
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  min-height: 28px;
+  position: relative;
+  z-index: 1;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
   padding: 0;
   backdrop-filter: none;
   pointer-events: auto;
   touch-action: manipulation;
   cursor: zoom-in;
+}
+
+.topology-card-actions {
+  gap: 6px;
 }
 
 .topology-zoom-btn svg,

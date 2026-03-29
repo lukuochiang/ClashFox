@@ -12204,7 +12204,10 @@ function setDockIcon() {
 }
 
 app.whenReady().then(() => {
-  globalSettings.debugMode = false;
+  const startupSettings = readAppSettings();
+  globalSettings.debugMode = Boolean(
+    startupSettings && (startupSettings.debugMode ?? startupSettings.appearance?.debugMode),
+  );
   ensureAppDirs();
   setDockIcon();
   createTrayMenu();
@@ -13427,6 +13430,17 @@ app.whenReady().then(() => {
       return { ok: true, unchanged: true };
     }
     globalSettings.debugMode = next;
+    try {
+      const persisted = readAppSettings();
+      if (!persisted.appearance || typeof persisted.appearance !== 'object') {
+        persisted.appearance = {};
+      }
+      persisted.debugMode = next;
+      persisted.appearance.debugMode = next;
+      writeAppSettings(persisted);
+    } catch (error) {
+      return { ok: false, error: error && error.message ? error.message : 'persist_debug_mode_failed' };
+    }
     applyDevToolsState();
     return { ok: true };
   });
