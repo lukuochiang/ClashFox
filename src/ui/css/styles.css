@@ -11815,6 +11815,96 @@ body[data-theme="day"] .modal {
   justify-content: center;
 }
 
+.update-guide-card.is-checking {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.update-guide-modal.is-checking .update-guide-head {
+  padding: 18px 22px 12px;
+  border-bottom: 1px solid rgba(148, 171, 197, 0.18);
+}
+
+.update-guide-modal.is-checking .modal-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 30px;
+}
+
+.update-guide-modal.is-checking .modal-title::before {
+  content: "";
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #6bd6ff 0%, #3394ff 100%);
+  mask-image: var(--icon-search);
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: 16px 16px;
+  -webkit-mask-image: var(--icon-search);
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: 16px 16px;
+  box-shadow: 0 6px 16px rgba(53, 143, 255, 0.28);
+}
+
+.update-guide-modal.is-checking .update-guide-body {
+  padding: 18px 22px 16px;
+}
+
+.update-guide-body.is-checking .update-guide-checking-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  background: rgba(130, 96, 45, 0.2);
+  border: 1px solid rgba(255, 176, 69, 0.2);
+  color: #ffb058;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.update-guide-checking-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 176, 69, 0.25);
+  border-top-color: #ffb058;
+  border-radius: 999px;
+  animation: iconSpin 0.9s linear infinite;
+  flex: 0 0 14px;
+}
+
+.update-guide-modal.is-checking .update-guide-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 18px 22px;
+  background: rgba(136, 164, 205, 0.17);
+  border-top: 1px solid rgba(148, 171, 197, 0.2);
+}
+
+.update-guide-modal.is-checking .update-guide-btn.is-cancel {
+  width: auto;
+  min-width: 84px;
+  height: 38px;
+  padding: 0 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 171, 197, 0.32);
+  background: rgba(21, 35, 56, 0.52);
+  color: #d2e4fb;
+  box-shadow: 0 8px 16px rgba(8, 18, 33, 0.24);
+}
+
+body[data-theme="day"] .update-guide-modal.is-checking .update-guide-btn.is-cancel {
+  background: rgba(230, 238, 252, 0.88);
+  border-color: rgba(127, 158, 206, 0.34);
+  color: #35527a;
+}
+
 body[data-theme="night"] .update-guide-card {
   background:
     linear-gradient(180deg, rgba(126, 108, 255, 0.18), rgba(126, 108, 255, 0) 56px),

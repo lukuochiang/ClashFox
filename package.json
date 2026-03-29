@@ -1,7 +1,7 @@
 {
   "name": "ClashFox",
-  "version": "0.5.1",
-  "buildNumber": 10,
+  "version": "0.5.2",
+  "buildNumber": 1,
   "description": "ClashFox GUI for Mihomo",
   "license": "GPL-3.0",
   "author": "Kuochiang Lu <lukuochiang@gmail.com> (https://github.com/lukuochiang/ClashFox)",
@@ -130,6 +130,7 @@
     ]
   },
   "dependencies": {
+    "electron-updater": "^6.8.3",
     "maxmind": "^4.3.24",
     "mmdb-lib": "^2.1.1",
     "tiny-lru": "^11.2.11"

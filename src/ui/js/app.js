@@ -2155,6 +2155,7 @@ let confirmBody = document.getElementById('confirmBody');
 let confirmCancel = document.getElementById('confirmCancel');
 let confirmOk = document.getElementById('confirmOk');
 let updateGuideModal = document.getElementById('updateGuideModal');
+let updateGuideCard = document.getElementById('updateGuideCard');
 let updateGuideTitle = document.getElementById('updateGuideTitle');
 let updateGuideBody = document.getElementById('updateGuideBody');
 let updateGuideClose = document.getElementById('updateGuideClose');
@@ -4962,9 +4963,23 @@ function promptUpdateGuide({
   if (!updateGuideModal || !updateGuideTitle || !updateGuideBody || !updateGuideClose || !updateGuidePrimaryBtn || !updateGuideReleaseBtn || !updateGuideAlphaBtn) {
     return Promise.resolve(null);
   }
+  if (updateGuideCard) {
+    updateGuideCard.classList.remove('is-checking');
+  }
+  if (updateGuideBody) {
+    updateGuideBody.classList.remove('is-checking');
+  }
+  if (updateGuidePrimaryBtn) {
+    updateGuidePrimaryBtn.classList.remove('is-cancel');
+    updateGuidePrimaryBtn.classList.remove('ghost');
+    updateGuidePrimaryBtn.classList.add('primary');
+  }
+  if (updateGuideModal) {
+    updateGuideModal.classList.remove('is-checking');
+  }
   updateGuideTitle.textContent = title || ti('help.appUpdateChoicesTitle', 'Update Options');
   updateGuideBody.textContent = body || ti('help.updateGuideHint', 'Choose a version channel to continue.');
-  updateGuidePrimaryBtn.textContent = primaryLabel || ti('install.updateDialogPrimaryAction', 'Update Kernel');
+  updateGuidePrimaryBtn.textContent = primaryLabel || ti('actions.continue', 'Continue');
   updateGuideReleaseBtn.textContent = releaseLabel || formatAppUpdateChannelText('help.appUpdateOpenChannelAction', 'Open {channel}', 'stable');
   updateGuideAlphaBtn.textContent = alphaLabel || formatAppUpdateChannelText('help.appUpdateOpenChannelAction', 'Open {channel}', 'alpha');
   updateGuidePrimaryBtn.classList.toggle('is-hidden', !primaryLabel);
@@ -5040,6 +5055,77 @@ function promptUpdateGuide({
       updateGuideClose.focus();
     }
   });
+}
+
+function openAppUpdateCheckingDialog() {
+  if (!updateGuideModal || !updateGuideTitle || !updateGuideBody || !updateGuideClose || !updateGuidePrimaryBtn || !updateGuideReleaseBtn || !updateGuideAlphaBtn) {
+    return {
+      close: () => {},
+      isCancelled: () => false,
+    };
+  }
+  let cancelled = false;
+  let closed = false;
+  const cleanup = () => {
+    if (closed) {
+      return;
+    }
+    closed = true;
+    updateGuideModal.classList.remove('show', 'is-checking');
+    updateGuideModal.setAttribute('aria-hidden', 'true');
+    if (updateGuideCard) {
+      updateGuideCard.classList.remove('is-checking');
+    }
+    updateGuideBody.classList.remove('is-checking');
+    updateGuidePrimaryBtn.classList.remove('is-cancel');
+    updateGuidePrimaryBtn.classList.remove('ghost');
+    updateGuidePrimaryBtn.classList.add('primary');
+    updateGuideClose.removeEventListener('click', onCancel);
+    updateGuidePrimaryBtn.removeEventListener('click', onCancel);
+    updateGuideModal.removeEventListener('keydown', onKeydown);
+    updateGuideModal.removeEventListener('click', onBackdrop);
+  };
+  const onCancel = () => {
+    cancelled = true;
+    cleanup();
+  };
+  const onKeydown = (event) => {
+    if (event.key === 'Escape') {
+      onCancel();
+    }
+  };
+  const onBackdrop = (event) => {
+    if (event.target === updateGuideModal) {
+      onCancel();
+    }
+  };
+
+  updateGuideTitle.textContent = ti('help.updateCheckingTitle', '检查更新');
+  updateGuideBody.innerHTML = `<div class="update-guide-checking-pill">
+    <span class="update-guide-checking-spinner" aria-hidden="true"></span>
+    <span>${ti('help.checkingAppUpdate', 'Checking app updates...')}</span>
+  </div>`;
+  updateGuideBody.classList.add('is-checking');
+  updateGuidePrimaryBtn.textContent = ti('confirm.cancel', '取消');
+  updateGuidePrimaryBtn.classList.remove('is-hidden', 'primary');
+  updateGuidePrimaryBtn.classList.add('ghost', 'is-cancel');
+  updateGuideReleaseBtn.classList.add('is-hidden');
+  updateGuideAlphaBtn.classList.add('is-hidden');
+  if (updateGuideCard) {
+    updateGuideCard.classList.add('is-checking');
+  }
+  updateGuideModal.classList.add('show', 'is-checking');
+  updateGuideModal.setAttribute('aria-hidden', 'false');
+  updateGuideClose.addEventListener('click', onCancel);
+  updateGuidePrimaryBtn.addEventListener('click', onCancel);
+  updateGuideModal.addEventListener('keydown', onKeydown);
+  updateGuideModal.addEventListener('click', onBackdrop);
+  updateGuidePrimaryBtn.focus();
+
+  return {
+    close: cleanup,
+    isCancelled: () => cancelled,
+  };
 }
 
 function getProxyModeInputs() {
@@ -6427,6 +6513,7 @@ async function handleHelpAppUpdateCheck() {
     setHelpAboutStatus(ti('help.updateCheckBridgeMissing', 'Update check is unavailable.'), 'error');
     return;
   }
+  const checkingDialog = openAppUpdateCheckingDialog();
   if (helpCheckAppUpdateBtn) {
     helpCheckAppUpdateBtn.disabled = true;
   }
@@ -6436,6 +6523,11 @@ async function handleHelpAppUpdateCheck() {
       window.clashfox.checkUpdates({ manual: true, acceptBeta: false }),
       window.clashfox.checkUpdates({ manual: true, acceptBeta: true }),
     ]);
+    if (checkingDialog.isCancelled()) {
+      setHelpAboutStatus(ti('help.updateEntryHint', 'Use the buttons below to check app, kernel, and helper updates.'), 'idle');
+      return;
+    }
+    checkingDialog.close();
     const stableAvailable = Boolean(stableResult && stableResult.ok && stableResult.status === 'update_available' && !stableResult.prerelease);
     const prereleaseAvailable = Boolean(alphaResult && alphaResult.ok && alphaResult.status === 'update_available' && alphaResult.prerelease);
     if (!stableAvailable && !prereleaseAvailable) {
@@ -6512,6 +6604,7 @@ async function handleHelpAppUpdateCheck() {
   } catch (err) {
     setHelpAboutStatus(ti('help.updateEntryHint', 'Use the buttons below to check app, kernel, and helper updates.'), 'idle');
   } finally {
+    checkingDialog.close();
     if (helpCheckAppUpdateBtn) {
       helpCheckAppUpdateBtn.disabled = false;
     }
@@ -12554,6 +12647,7 @@ function refreshPageRefs() {
   confirmCancel = document.getElementById('confirmCancel');
   confirmOk = document.getElementById('confirmOk');
   updateGuideModal = document.getElementById('updateGuideModal');
+  updateGuideCard = document.getElementById('updateGuideCard');
   updateGuideTitle = document.getElementById('updateGuideTitle');
   updateGuideBody = document.getElementById('updateGuideBody');
   updateGuideClose = document.getElementById('updateGuideClose');
