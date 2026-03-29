@@ -18,12 +18,21 @@
     "build:mac:beta": "node static/scripts/build-mac.js --channel beta",
     "build:mac:rc": "node static/scripts/build-mac.js --channel rc",
     "build:mac:stable": "node static/scripts/build-mac.js --channel stable",
-    "clean:dist": "rm -rf dist artifacts"
+    "clean:dist": "rm -rf dist artifacts",
+    "commit": "cz",
+    "release": "standard-version",
+    "release:first": "standard-version --first-release",
+    "release:alpha": "standard-version --prerelease alpha",
+    "release:beta": "standard-version --prerelease beta",
+    "release:rc": "standard-version --prerelease rc"
   },
   "devDependencies": {
+    "commitizen": "^4.3.1",
+    "cz-conventional-changelog": "^3.3.0",
     "electron": "^28.2.0",
     "electron-builder": "^26.8.1",
-    "electron-reload": "^1.5.0"
+    "electron-reload": "^1.5.0",
+    "standard-version": "^9.5.0"
   },
   "build": {
     "appId": "com.clashfox.gui",
@@ -134,5 +143,10 @@
     "maxmind": "^4.3.24",
     "mmdb-lib": "^2.1.1",
     "tiny-lru": "^11.2.11"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
   }
 }

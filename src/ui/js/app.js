@@ -8873,7 +8873,10 @@ function formatNetworkIntelIpipLine(payload = {}) {
 
 function formatNetworkIntelIpapiLine(payload = {}) {
   const source = String(payload.source || '').trim();
-  const detail = String(payload.detail || '').trim() || source || '-';
+  const detail = String(payload.detail || '').trim();
+  const sourceLabel = source.replace(/^https?:\/\//i, '').replace(/\/+$/g, '');
+  const fallbackMain = detail || (sourceLabel && !/^api\.ipapi\.is$/i.test(sourceLabel) ? sourceLabel : '');
+  const displayMain = fallbackMain || ti('overview.ipapiUnavailable', 'Unavailable');
   const ip = String(payload.ip || '').trim();
   const originalIp = String(payload.originalIp || ip || '').trim();
   const displayOriginalIp = state.overviewNetworkIntelMasked
@@ -8894,7 +8897,7 @@ function formatNetworkIntelIpapiLine(payload = {}) {
   } else if (riskLevelText && riskLevelText !== '-') {
     riskText = riskLevelText;
   }
-  const main = detail || '-';
+  const main = displayMain || '-';
   return {
     main,
     originalIp: displayOriginalIp,
