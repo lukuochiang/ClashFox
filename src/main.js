@@ -800,6 +800,102 @@ function mergeDefaultSettings(base = {}, overrides = {}) {
   return merged;
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function cloneJsonValue(value) {
+  if (value === null || value === undefined) {
+    return value;
+  }
+  if (typeof value !== 'object') {
+    return value;
+  }
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    if (Array.isArray(value)) {
+      return value.slice();
+    }
+    return { ...value };
+  }
+}
+
+function mergeMissingDefaultsOneWay(target, defaults) {
+  if (!isPlainObject(target) || !isPlainObject(defaults)) {
+    return false;
+  }
+  let changed = false;
+  const mergeArrayMissingItems = (targetArray, defaultArray) => {
+    if (!Array.isArray(targetArray) || !Array.isArray(defaultArray)) {
+      return false;
+    }
+    let arrayChanged = false;
+    defaultArray.forEach((item) => {
+      const exists = targetArray.some((current) => {
+        try {
+          return JSON.stringify(current) === JSON.stringify(item);
+        } catch {
+          return current === item;
+        }
+      });
+      if (!exists) {
+        targetArray.push(cloneJsonValue(item));
+        arrayChanged = true;
+      }
+    });
+    return arrayChanged;
+  };
+  Object.keys(defaults).forEach((key) => {
+    const defaultValue = defaults[key];
+    if (!Object.prototype.hasOwnProperty.call(target, key) || target[key] === undefined) {
+      target[key] = cloneJsonValue(defaultValue);
+      changed = true;
+      return;
+    }
+    if (Array.isArray(target[key]) && Array.isArray(defaultValue)) {
+      if (mergeArrayMissingItems(target[key], defaultValue)) {
+        changed = true;
+      }
+      return;
+    }
+    if (isPlainObject(target[key]) && isPlainObject(defaultValue)) {
+      if (mergeMissingDefaultsOneWay(target[key], defaultValue)) {
+        changed = true;
+      }
+    }
+  });
+  return changed;
+}
+
+function reconcileSettingsFileWithDefaults() {
+  ensureAppDirs();
+  const settingsPath = getSettingsPath();
+  const defaults = readDefaultSettingsFile();
+  if (!defaults || typeof defaults !== 'object') {
+    return { changed: false, created: false };
+  }
+  if (!fs.existsSync(settingsPath)) {
+    writeAppSettings(defaults);
+    return { changed: true, created: true };
+  }
+  let parsed = {};
+  try {
+    const raw = fs.readFileSync(settingsPath, 'utf8');
+    const candidate = JSON.parse(raw);
+    parsed = candidate && typeof candidate === 'object' ? candidate : {};
+  } catch {
+    parsed = {};
+  }
+  const next = cloneJsonValue(parsed) || {};
+  const changed = mergeMissingDefaultsOneWay(next, defaults);
+  if (!changed) {
+    return { changed: false, created: false };
+  }
+  writeAppSettings(next);
+  return { changed: true, created: false };
+}
+
 function getSettingsPath() {
   return path.join(APP_DATA_DIR, 'runtime', 'settings.json');
 }
@@ -829,47 +925,28 @@ function readAppSettings() {
   try {
     const settingsPath = getSettingsPath();
     if (!fs.existsSync(settingsPath)) {
-      const fallback = mergeAppearanceAliases(
-        mergePanelManagerAliases(
-          mergeUserDataPathAliases(
-            normalizeSettingsForStorage(readDefaultSettingsFile()),
-          ),
-        ),
-      );
+      const fallback = {};
       appSettingsCache = cloneSettingsSnapshot(fallback);
       return cloneSettingsSnapshot(fallback) || {};
     }
     const raw = fs.readFileSync(settingsPath, 'utf8');
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') {
-      const fallback = mergeAppearanceAliases(
-        mergePanelManagerAliases(
-          mergeUserDataPathAliases(
-            normalizeSettingsForStorage(readDefaultSettingsFile()),
-          ),
-        ),
-      );
+      const fallback = {};
       appSettingsCache = cloneSettingsSnapshot(fallback);
       return cloneSettingsSnapshot(fallback) || {};
     }
-    const merged = mergeDefaultSettings(readDefaultSettingsFile(), parsed);
     const normalized = mergeAppearanceAliases(
       mergePanelManagerAliases(
         mergeUserDataPathAliases(
-          normalizeSettingsForStorage(merged),
+          normalizeSettingsForStorage(parsed),
         ),
       ),
     );
     appSettingsCache = cloneSettingsSnapshot(normalized);
     return cloneSettingsSnapshot(normalized) || {};
   } catch {
-    const fallback = mergeAppearanceAliases(
-      mergePanelManagerAliases(
-        mergeUserDataPathAliases(
-          normalizeSettingsForStorage(readDefaultSettingsFile()),
-        ),
-      ),
-    );
+    const fallback = {};
     appSettingsCache = cloneSettingsSnapshot(fallback);
     return cloneSettingsSnapshot(fallback) || {};
   }
@@ -1068,6 +1145,7 @@ function buildDefaultDirectorySettings() {
     configDir: 'config',
     coreDir: 'core',
     dataDir: 'data',
+    helperDir: 'helper',
     logDir: 'logs',
     pidDir: 'runtime',
   };
@@ -1080,10 +1158,12 @@ function mergeUserDataPathAliases(settings = {}) {
     : {};
   return {
     ...source,
+    userAppDataDir: normalizeTextValue(paths.userAppDataDir) || normalizeTextValue(source.userAppDataDir),
     configFile: normalizeTextValue(paths.configFile) || normalizeTextValue(source.configFile),
     configDir: normalizeTextValue(paths.configDir) || normalizeTextValue(source.configDir),
     coreDir: normalizeTextValue(paths.coreDir) || normalizeTextValue(source.coreDir),
     dataDir: normalizeTextValue(paths.dataDir) || normalizeTextValue(source.dataDir),
+    helperDir: normalizeTextValue(paths.helperDir) || normalizeTextValue(source.helperDir),
     logDir: normalizeTextValue(paths.logDir) || normalizeTextValue(source.logDir),
     pidDir: normalizeTextValue(paths.pidDir) || normalizeTextValue(source.pidDir),
   };
@@ -1329,6 +1409,7 @@ function normalizeSettingsForStorage(input = {}) {
   const configuredConfigDir = normalizeTextValue(parsed.configDir) || defaultDirs.configDir;
   const configuredCoreDir = normalizeTextValue(parsed.coreDir) || defaultDirs.coreDir;
   const configuredDataDir = normalizeTextValue(parsed.dataDir) || defaultDirs.dataDir;
+  const configuredHelperDir = normalizeTextValue(parsed.helperDir) || defaultDirs.helperDir;
   const configuredLogDir = normalizeTextValue(parsed.logDir) || defaultDirs.logDir;
   const configuredPidDir = normalizeTextValue(parsed.pidDir) || defaultDirs.pidDir;
   parsed.userDataPaths = {
@@ -1337,6 +1418,7 @@ function normalizeSettingsForStorage(input = {}) {
     configDir: configuredConfigDir,
     coreDir: configuredCoreDir,
     dataDir: configuredDataDir,
+    helperDir: configuredHelperDir,
     logDir: configuredLogDir,
     pidDir: configuredPidDir,
   };
@@ -1345,6 +1427,7 @@ function normalizeSettingsForStorage(input = {}) {
   delete parsed.configDir;
   delete parsed.coreDir;
   delete parsed.dataDir;
+  delete parsed.helperDir;
   delete parsed.logDir;
   delete parsed.pidDir;
   delete parsed.configPath;
@@ -11572,19 +11655,7 @@ async function handleTrayMenuAction(action, payload = {}) {
     case 'check-update':
       hideTrayMenuWindow();
       try {
-        const result = await checkForUpdates({ manual: true });
-        if (!result.ok) {
-          const reason = String(result.error || 'unknown_error');
-          await shell.openExternal(resolveCheckUpdateUrlFromSettings());
-          emitMainToast(`Check for updates failed (${reason}). Opened releases page.`, 'warn');
-          return { ok: true, hide: true, result };
-        }
-        if (result.status === 'update_available') {
-          await shell.openExternal(result.releaseUrl || resolveCheckUpdateUrlFromSettings());
-          emitMainToast(`Update available: v${result.latestVersion}`, 'info');
-          return { ok: true, hide: true, result };
-        }
-        emitMainToast('Already up to date.', 'info');
+        await shell.openExternal(resolveCheckUpdateUrlFromSettings());
         return { ok: true, hide: true };
       } catch {
         return { ok: false, hide: true };
@@ -12204,11 +12275,12 @@ function setDockIcon() {
 }
 
 app.whenReady().then(() => {
+  ensureAppDirs();
+  reconcileSettingsFileWithDefaults();
   const startupSettings = readAppSettings();
   globalSettings.debugMode = Boolean(
     startupSettings && (startupSettings.debugMode ?? startupSettings.appearance?.debugMode),
   );
-  ensureAppDirs();
   setDockIcon();
   createTrayMenu();
   ensureTrayMenuWindow();
@@ -12944,6 +13016,7 @@ app.whenReady().then(() => {
             configDir: 'config',
             coreDir: 'core',
             dataDir: 'data',
+            helperDir: 'helper',
             logDir: 'logs',
             pidDir: 'runtime',
           },
@@ -12992,6 +13065,24 @@ app.whenReady().then(() => {
         parsed.userDataPaths.configFile = 'default.yaml';
         changed = true;
       }
+      const defaultDirs = buildDefaultDirectorySettings();
+      [
+        'userAppDataDir',
+        'configDir',
+        'coreDir',
+        'dataDir',
+        'helperDir',
+        'logDir',
+        'pidDir',
+      ].forEach((key) => {
+        if (!normalizeTextValue(parsedPaths[key])) {
+          if (!parsed.userDataPaths) {
+            parsed.userDataPaths = {};
+          }
+          parsed.userDataPaths[key] = defaultDirs[key];
+          changed = true;
+        }
+      });
       const parsedTrayMenu = parsed.trayMenu && typeof parsed.trayMenu === 'object'
         ? parsed.trayMenu
         : {};
@@ -13205,10 +13296,9 @@ app.whenReady().then(() => {
       if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
         changed = true;
       }
-      if (changed) {
-        writeAppSettings(normalized);
-      }
       const responseData = mergeAppearanceAliases(mergePanelManagerAliases(mergeUserDataPathAliases(normalized)));
+      // Read path must be side-effect free: do not write settings during read.
+      appSettingsCache = cloneSettingsSnapshot(responseData);
       responseData.helperStatus = {
         ...(responseData.helper && typeof responseData.helper === 'object' ? responseData.helper : {}),
       };
@@ -13327,7 +13417,7 @@ app.whenReady().then(() => {
         }
       }
       emitSettingsUpdated(normalizedForUi);
-      return { ok: true };
+      return { ok: true, data: normalizedForUi };
     } catch (err) {
       return { ok: false, error: err.message };
     }

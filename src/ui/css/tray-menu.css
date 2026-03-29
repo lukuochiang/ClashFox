@@ -271,8 +271,8 @@ body[data-theme="night"] .submenu-root {
 }
 
 .menu-header-logo {
-  width: 48px;
-  height: 48px;
+  width: 42px;
+  height: 42px;
   border-radius: 8px;
   overflow: hidden;
   flex: 0 0 auto;
@@ -291,7 +291,7 @@ body[data-theme="night"] .submenu-root {
 
 .menu-header-title {
   font-family: var(--font-display);
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.5px;
   line-height: 1;

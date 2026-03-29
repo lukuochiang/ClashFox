@@ -1,7 +1,7 @@
 {
   "name": "ClashFox",
   "version": "0.5.1",
-  "buildNumber": 2,
+  "buildNumber": 9,
   "description": "ClashFox GUI for Mihomo",
   "license": "GPL-3.0",
   "author": "Kuochiang Lu <lukuochiang@gmail.com> (https://github.com/lukuochiang/ClashFox)",
@@ -87,7 +87,7 @@
       "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
       "target": [
         {
-          "target": "zip",
+          "target": "dmg",
           "arch": [
             "x64",
             "arm64",
@@ -95,7 +95,7 @@
           ]
         },
         {
-          "target": "dmg",
+          "target": "zip",
           "arch": [
             "x64",
             "arm64",
@@ -103,6 +103,25 @@
           ]
         }
       ]
+    },
+    "dmg": {
+      "window": {
+        "width": 540,
+        "height": 380
+      },
+      "contents": [
+        {
+          "x": 130,
+          "y": 190
+        },
+        {
+          "x": 410,
+          "y": 190,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ],
+      "title": "ClashFox Installer"
     },
     "publish": [
       {

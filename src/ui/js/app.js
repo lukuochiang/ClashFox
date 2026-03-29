@@ -2231,7 +2231,6 @@ let customSelectGlobalBound = false;
 
 const I18N = window.CLASHFOX_I18N || {};
 
-const SETTINGS_KEY = 'clashfox-settings';
 const METACUBEX_CATALOG_CACHE_KEY = 'clashfox-metacubex-version-catalog-v1';
 const METACUBEX_CATALOG_CACHE_MAX_AGE_MS = 30 * 60 * 1000;
 const MAIN_WINDOW_DEFAULT_WIDTH = 1004;
@@ -2416,9 +2415,11 @@ const state = {
   },
   hasKernel: false,
   configDefault: '',
-  settings: { ...DEFAULT_SETTINGS },
+  settings: {},
+  settingsHydrated: false,
 };
 state.foxRank = loadFoxRankFromStorage();
+let settingsWriteChain = Promise.resolve();
 
 const CORE_STARTUP_ESTIMATE_MIN_MS = 900;
 const CORE_STARTUP_ESTIMATE_MAX_MS = 10000;
@@ -3544,6 +3545,9 @@ function normalizeSettingsForUi(settings) {
   if (!normalized.dataDir && typeof userDataPaths.dataDir === 'string') {
     normalized.dataDir = userDataPaths.dataDir;
   }
+  if (!normalized.helperDir && typeof userDataPaths.helperDir === 'string') {
+    normalized.helperDir = userDataPaths.helperDir;
+  }
   if (!normalized.logDir && typeof userDataPaths.logDir === 'string') {
     normalized.logDir = userDataPaths.logDir;
   }
@@ -3618,123 +3622,66 @@ function mapSettingsForFile(settings) {
     installVersion: _existingAppearanceInstallVersion,
     ...existingAppearanceSansLogs
   } = existingAppearance;
+  // 读取顶层或 appearance 中的字段值
+  const getTopOrAppearance = (key, fallback) => {
+    const topValue = mapped[key];
+    const appearanceValue = existingAppearance[key];
+    return topValue !== undefined ? topValue : (appearanceValue !== undefined ? appearanceValue : fallback);
+  };
   mapped.appearance = {
     ...existingAppearanceSansLogs,
-    lang: normalizeUiLanguage(String(mapped.lang || existingAppearance.lang || 'auto'), {
+    lang: normalizeUiLanguage(String(getTopOrAppearance('lang', 'auto')), {
       allowAuto: true,
       fallback: 'auto',
     }),
-    theme: String(mapped.theme || existingAppearance.theme || 'auto'),
-    foxRankSkin: String(
-      mapped.foxRankSkin
-      || existingAppearance.foxRankSkin
-      || ''
-    ).trim().toLowerCase(),
-    debugMode: Object.prototype.hasOwnProperty.call(mapped, 'debugMode')
-      ? Boolean(mapped.debugMode)
-      : Boolean(existingAppearance.debugMode),
-    acceptBeta: Object.prototype.hasOwnProperty.call(mapped, 'acceptBeta')
-      ? Boolean(mapped.acceptBeta)
-      : Boolean(existingAppearance.acceptBeta),
-    windowWidth: Number.parseInt(String(mapped.windowWidth ?? existingAppearance.windowWidth ?? MAIN_WINDOW_DEFAULT_WIDTH), 10) || MAIN_WINDOW_DEFAULT_WIDTH,
-    windowHeight: Number.parseInt(String(mapped.windowHeight ?? existingAppearance.windowHeight ?? MAIN_WINDOW_DEFAULT_HEIGHT), 10) || MAIN_WINDOW_DEFAULT_HEIGHT,
-    mainWindowClosed: Object.prototype.hasOwnProperty.call(mapped, 'mainWindowClosed')
-      ? Boolean(mapped.mainWindowClosed)
-      : Boolean(existingAppearance.mainWindowClosed),
-    sidebarCollapsed: Object.prototype.hasOwnProperty.call(mapped, 'sidebarCollapsed')
-      ? Boolean(mapped.sidebarCollapsed)
-      : Boolean(existingAppearance.sidebarCollapsed),
+    theme: String(getTopOrAppearance('theme', 'auto')),
+    foxRankSkin: String(getTopOrAppearance('foxRankSkin', '')).trim().toLowerCase(),
+    debugMode: getTopOrAppearance('debugMode', false) !== false,
+    acceptBeta: getTopOrAppearance('acceptBeta', false) !== false,
+    windowWidth: Number.parseInt(String(getTopOrAppearance('windowWidth', MAIN_WINDOW_DEFAULT_WIDTH)), 10) || MAIN_WINDOW_DEFAULT_WIDTH,
+    windowHeight: Number.parseInt(String(getTopOrAppearance('windowHeight', MAIN_WINDOW_DEFAULT_HEIGHT)), 10) || MAIN_WINDOW_DEFAULT_HEIGHT,
+    mainWindowClosed: getTopOrAppearance('mainWindowClosed', false) !== false,
+    sidebarCollapsed: getTopOrAppearance('sidebarCollapsed', false) !== false,
     generalPageSize: String(
-      mapped.generalPageSize
-      || existingAppearance.generalPageSize
+      getTopOrAppearance('generalPageSize', '')
       || mapped.backupsPageSize
       || mapped.kernelPageSize
       || '10'
     ).trim() || '10',
   };
+  // 读取 trayMenu 字段的辅助函数，支持从多个位置读取
+  const getTrayMenuValue = (key, legacyKey, fallback) => {
+    if (Object.prototype.hasOwnProperty.call(mapped, key)) {
+      return Boolean(mapped[key]);
+    }
+    if (Object.prototype.hasOwnProperty.call(mapped, legacyKey)) {
+      return Boolean(mapped[legacyKey]);
+    }
+    if (Object.prototype.hasOwnProperty.call(existingTrayMenu, key)) {
+      return Boolean(existingTrayMenu[key]);
+    }
+    if (Object.prototype.hasOwnProperty.call(existingTrayMenu, legacyKey)) {
+      return Boolean(existingTrayMenu[legacyKey]);
+    }
+    if (Object.prototype.hasOwnProperty.call(existingAppearance, key)) {
+      return Boolean(existingAppearance[key]);
+    }
+    if (Object.prototype.hasOwnProperty.call(existingAppearance, legacyKey)) {
+      return Boolean(existingAppearance[legacyKey]);
+    }
+    return Boolean(fallback);
+  };
   mapped.trayMenu = {
     ...existingTrayMenu,
-    chartEnabled: Object.prototype.hasOwnProperty.call(mapped, 'chartEnabled')
-      ? Boolean(mapped.chartEnabled)
-      : (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuChartEnabled')
-        ? Boolean(mapped.trayMenuChartEnabled)
-        : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'chartEnabled')
-          ? Boolean(existingTrayMenu.chartEnabled)
-          : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuChartEnabled')
-            ? Boolean(existingTrayMenu.trayMenuChartEnabled)
-            : Boolean(existingAppearance.chartEnabled ?? existingAppearance.trayMenuChartEnabled)))),
-    providerTrafficEnabled: Object.prototype.hasOwnProperty.call(mapped, 'providerTrafficEnabled')
-      ? Boolean(mapped.providerTrafficEnabled)
-      : (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuProviderTrafficEnabled')
-        ? Boolean(mapped.trayMenuProviderTrafficEnabled)
-        : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'providerTrafficEnabled')
-          ? Boolean(existingTrayMenu.providerTrafficEnabled)
-          : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuProviderTrafficEnabled')
-            ? Boolean(existingTrayMenu.trayMenuProviderTrafficEnabled)
-            : Boolean(existingAppearance.providerTrafficEnabled ?? existingAppearance.trayMenuProviderTrafficEnabled)))),
-    trackersEnabled: Object.prototype.hasOwnProperty.call(mapped, 'trackersEnabled')
-      ? Boolean(mapped.trackersEnabled)
-      : (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuTrackersEnabled')
-        ? Boolean(mapped.trayMenuTrackersEnabled)
-        : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trackersEnabled')
-          ? Boolean(existingTrayMenu.trackersEnabled)
-          : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuTrackersEnabled')
-            ? Boolean(existingTrayMenu.trayMenuTrackersEnabled)
-            : Boolean(existingAppearance.trackersEnabled ?? existingAppearance.trayMenuTrackersEnabled)))),
-    foxboardEnabled: Object.prototype.hasOwnProperty.call(mapped, 'foxboardEnabled')
-      ? Boolean(mapped.foxboardEnabled)
-      : (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuFoxboardEnabled')
-        ? Boolean(mapped.trayMenuFoxboardEnabled)
-        : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'foxboardEnabled')
-          ? Boolean(existingTrayMenu.foxboardEnabled)
-          : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuFoxboardEnabled')
-            ? Boolean(existingTrayMenu.trayMenuFoxboardEnabled)
-            : Boolean(existingAppearance.foxboardEnabled ?? existingAppearance.trayMenuFoxboardEnabled)))),
-    panelEnabled: Object.prototype.hasOwnProperty.call(mapped, 'panelEnabled')
-      ? Boolean(mapped.panelEnabled)
-      : (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuPanelEnabled')
-        ? Boolean(mapped.trayMenuPanelEnabled)
-        : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'panelEnabled')
-          ? Boolean(existingTrayMenu.panelEnabled)
-          : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuPanelEnabled')
-            ? Boolean(existingTrayMenu.trayMenuPanelEnabled)
-            : Boolean(existingAppearance.panelEnabled ?? existingAppearance.trayMenuPanelEnabled)))),
-    dashboardEnabled: Object.prototype.hasOwnProperty.call(mapped, 'dashboardEnabled')
-      ? Boolean(mapped.dashboardEnabled)
-      : (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuDashboardEnabled')
-        ? Boolean(mapped.trayMenuDashboardEnabled)
-        : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'dashboardEnabled')
-          ? Boolean(existingTrayMenu.dashboardEnabled)
-          : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuDashboardEnabled')
-            ? Boolean(existingTrayMenu.trayMenuDashboardEnabled)
-            : Boolean(existingAppearance.dashboardEnabled ?? existingAppearance.trayMenuDashboardEnabled)))),
-    kernelManagerEnabled: Object.prototype.hasOwnProperty.call(mapped, 'kernelManagerEnabled')
-      ? Boolean(mapped.kernelManagerEnabled)
-      : (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuKernelManagerEnabled')
-        ? Boolean(mapped.trayMenuKernelManagerEnabled)
-        : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'kernelManagerEnabled')
-          ? Boolean(existingTrayMenu.kernelManagerEnabled)
-          : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuKernelManagerEnabled')
-            ? Boolean(existingTrayMenu.trayMenuKernelManagerEnabled)
-            : Boolean(existingAppearance.kernelManagerEnabled ?? existingAppearance.trayMenuKernelManagerEnabled)))),
-    directoryLocationsEnabled: Object.prototype.hasOwnProperty.call(mapped, 'directoryLocationsEnabled')
-      ? Boolean(mapped.directoryLocationsEnabled)
-      : (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuDirectoryLocationsEnabled')
-        ? Boolean(mapped.trayMenuDirectoryLocationsEnabled)
-        : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'directoryLocationsEnabled')
-          ? Boolean(existingTrayMenu.directoryLocationsEnabled)
-          : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuDirectoryLocationsEnabled')
-            ? Boolean(existingTrayMenu.trayMenuDirectoryLocationsEnabled)
-            : Boolean(existingAppearance.directoryLocationsEnabled ?? existingAppearance.trayMenuDirectoryLocationsEnabled)))),
-    copyShellExportCommandEnabled: Object.prototype.hasOwnProperty.call(mapped, 'copyShellExportCommandEnabled')
-      ? Boolean(mapped.copyShellExportCommandEnabled)
-      : (Object.prototype.hasOwnProperty.call(mapped, 'trayMenuCopyShellExportCommandEnabled')
-        ? Boolean(mapped.trayMenuCopyShellExportCommandEnabled)
-        : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'copyShellExportCommandEnabled')
-          ? Boolean(existingTrayMenu.copyShellExportCommandEnabled)
-          : (Object.prototype.hasOwnProperty.call(existingTrayMenu, 'trayMenuCopyShellExportCommandEnabled')
-            ? Boolean(existingTrayMenu.trayMenuCopyShellExportCommandEnabled)
-            : Boolean(existingAppearance.copyShellExportCommandEnabled ?? existingAppearance.trayMenuCopyShellExportCommandEnabled)))),
+    chartEnabled: getTrayMenuValue('chartEnabled', 'trayMenuChartEnabled', true),
+    providerTrafficEnabled: getTrayMenuValue('providerTrafficEnabled', 'trayMenuProviderTrafficEnabled', true),
+    trackersEnabled: getTrayMenuValue('trackersEnabled', 'trayMenuTrackersEnabled', true),
+    foxboardEnabled: getTrayMenuValue('foxboardEnabled', 'trayMenuFoxboardEnabled', true),
+    panelEnabled: getTrayMenuValue('panelEnabled', 'trayMenuPanelEnabled', false),
+    dashboardEnabled: getTrayMenuValue('dashboardEnabled', 'trayMenuDashboardEnabled', true),
+    kernelManagerEnabled: getTrayMenuValue('kernelManagerEnabled', 'trayMenuKernelManagerEnabled', true),
+    directoryLocationsEnabled: getTrayMenuValue('directoryLocationsEnabled', 'trayMenuDirectoryLocationsEnabled', true),
+    copyShellExportCommandEnabled: getTrayMenuValue('copyShellExportCommandEnabled', 'trayMenuCopyShellExportCommandEnabled', true),
   };
   const existingPanelManager = mapped.panelManager && typeof mapped.panelManager === 'object'
     ? mapped.panelManager
@@ -3755,13 +3702,13 @@ function mapSettingsForFile(settings) {
   };
   mapped.panelManager = {
     ...existingPanelManager,
-    panelChoice: String(mapped.panelChoice || existingPanelManager.panelChoice || 'zashboard'),
-    externalUi: String(mapped.externalUi || existingPanelManager.externalUi || 'ui'),
-    externalController: String(mapped.externalController || existingPanelManager.externalController || '127.0.0.1:9090'),
-    secret: String(mapped.secret || existingPanelManager.secret || 'clashfox'),
+    panelChoice: String(mapped.panelChoice ?? existingPanelManager.panelChoice ?? 'zashboard'),
+    externalUi: String(mapped.externalUi ?? existingPanelManager.externalUi ?? 'ui'),
+    externalController: String(mapped.externalController ?? existingPanelManager.externalController ?? '127.0.0.1:9090'),
+    secret: String(mapped.secret ?? existingPanelManager.secret ?? 'clashfox'),
     authentication: (() => {
       const auth = normalizeAuthList(
-        Array.isArray(mapped.authentication) && mapped.authentication.length
+        (mapped.authentication !== undefined && mapped.authentication.length)
           ? mapped.authentication
           : existingPanelManager.authentication,
       );
@@ -3774,26 +3721,34 @@ function mapSettingsForFile(settings) {
   const existingKernelRaw = mapped.kernel && typeof mapped.kernel === 'object'
     ? mapped.kernel
     : {};
+  const existingAppearanceForKernel = mapped.appearance && typeof mapped.appearance === 'object'
+    ? mapped.appearance
+    : {};
   const { source: _mappedKernelSource, updatedAt: _mappedKernelUpdatedAt, ...existingKernel } = existingKernelRaw;
+  // 读取顶层、kernel 或 appearance 中的字段值
+  const getKernelOrAppearance = (key, fallback) => {
+    const topValue = mapped[key];
+    const kernelValue = existingKernel[key];
+    const appearanceValue = existingAppearanceForKernel[key];
+    return topValue !== undefined ? topValue : (kernelValue !== undefined ? kernelValue : (appearanceValue !== undefined ? appearanceValue : fallback));
+  };
   mapped.kernel = {
     ...existingKernel,
-    githubUser: normalizeKernelSource(
-      String(mapped.githubUser || existingKernel.githubUser || 'vernesong'),
-    ) || 'vernesong',
-    installVersionMode: normalizeInstallVersionMode(
-      mapped.installVersionMode || existingKernel.installVersionMode || 'latest',
-    ),
-    installVersion: String(mapped.installVersion ?? existingKernel.installVersion ?? '').trim(),
+    githubUser: normalizeKernelSource(String(getKernelOrAppearance('githubUser', 'vernesong'))) || 'vernesong',
+    installVersionMode: normalizeInstallVersionMode(getKernelOrAppearance('installVersionMode', 'latest')),
+    installVersion: String(getKernelOrAppearance('installVersion', '') || '').trim(),
   };
   mapped.userDataPaths = {
     ...existingPaths,
-    ...(mapped.configFile ? { configFile: normalizeConfigFileName(mapped.configFile) } : {}),
-    ...(mapped.configFileDir ? { configFile: normalizeConfigFileName(mapped.configFileDir) } : {}),
-    ...(mapped.configDir ? { configDir: String(mapped.configDir) } : {}),
-    ...(mapped.coreDir ? { coreDir: String(mapped.coreDir) } : {}),
-    ...(mapped.dataDir ? { dataDir: String(mapped.dataDir) } : {}),
-    ...(mapped.logDir ? { logDir: String(mapped.logDir) } : {}),
-    ...(mapped.pidDir ? { pidDir: String(mapped.pidDir) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(mapped, 'userAppDataDir') ? { userAppDataDir: String(mapped.userAppDataDir) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(mapped, 'configFile') ? { configFile: normalizeConfigFileName(mapped.configFile) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(mapped, 'configFileDir') ? { configFile: normalizeConfigFileName(mapped.configFileDir) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(mapped, 'configDir') ? { configDir: String(mapped.configDir) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(mapped, 'coreDir') ? { coreDir: String(mapped.coreDir) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(mapped, 'dataDir') ? { dataDir: String(mapped.dataDir) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(mapped, 'helperDir') ? { helperDir: String(mapped.helperDir) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(mapped, 'logDir') ? { logDir: String(mapped.logDir) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(mapped, 'pidDir') ? { pidDir: String(mapped.pidDir) } : {}),
   };
   if (typeof mapped.configPath === 'string') {
     mapped.userDataPaths.configFile = normalizeConfigFileName(mapped.configPath);
@@ -3841,11 +3796,17 @@ function mapSettingsForFile(settings) {
   if (Object.prototype.hasOwnProperty.call(mapped, 'dataDir')) {
     delete mapped.dataDir;
   }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'helperDir')) {
+    delete mapped.helperDir;
+  }
   if (Object.prototype.hasOwnProperty.call(mapped, 'logDir')) {
     delete mapped.logDir;
   }
   if (Object.prototype.hasOwnProperty.call(mapped, 'pidDir')) {
     delete mapped.pidDir;
+  }
+  if (Object.prototype.hasOwnProperty.call(mapped, 'userAppDataDir')) {
+    delete mapped.userAppDataDir;
   }
   if (Object.prototype.hasOwnProperty.call(mapped, 'panelChoice')) {
     delete mapped.panelChoice;
@@ -3987,50 +3948,12 @@ function mapSettingsForFile(settings) {
 
 function readSettings() {
   if (state.fileSettings && typeof state.fileSettings === 'object' && Object.keys(state.fileSettings).length) {
-    return normalizeSettingsForUi({ ...DEFAULT_SETTINGS, ...state.fileSettings });
+    return normalizeSettingsForUi(state.fileSettings);
   }
-  const raw = localStorage.getItem(SETTINGS_KEY);
-  if (!raw) {
-    return { ...DEFAULT_SETTINGS, ...(state.fileSettings || {}) };
+  if (state.settings && typeof state.settings === 'object' && Object.keys(state.settings).length) {
+    return normalizeSettingsForUi(state.settings);
   }
-  try {
-    const parsed = normalizeSettingsForUi(JSON.parse(raw));
-    const merged = { ...DEFAULT_SETTINGS, ...parsed };
-    if (state.fileSettings) {
-      if (!merged.userDataPaths) {
-        merged.userDataPaths = {};
-      }
-      if (state.fileSettings.userDataPaths && typeof state.fileSettings.userDataPaths === 'object') {
-        if (!merged.userDataPaths.userAppDataDir && state.fileSettings.userDataPaths.userAppDataDir) {
-          merged.userDataPaths.userAppDataDir = state.fileSettings.userDataPaths.userAppDataDir;
-        }
-        if (!merged.userDataPaths.configFile && state.fileSettings.userDataPaths.configFile) {
-          merged.userDataPaths.configFile = state.fileSettings.userDataPaths.configFile;
-        }
-        if (!merged.userDataPaths.configDir && state.fileSettings.userDataPaths.configDir) {
-          merged.userDataPaths.configDir = state.fileSettings.userDataPaths.configDir;
-        }
-        if (!merged.userDataPaths.coreDir && state.fileSettings.userDataPaths.coreDir) {
-          merged.userDataPaths.coreDir = state.fileSettings.userDataPaths.coreDir;
-        }
-        if (!merged.userDataPaths.dataDir && state.fileSettings.userDataPaths.dataDir) {
-          merged.userDataPaths.dataDir = state.fileSettings.userDataPaths.dataDir;
-        }
-        if (!merged.userDataPaths.logDir && state.fileSettings.userDataPaths.logDir) {
-          merged.userDataPaths.logDir = state.fileSettings.userDataPaths.logDir;
-        }
-        if (!merged.userDataPaths.pidDir && state.fileSettings.userDataPaths.pidDir) {
-          merged.userDataPaths.pidDir = state.fileSettings.userDataPaths.pidDir;
-        }
-      }
-    }
-    if (merged.userDataPaths && merged.userDataPaths.configFile && (!parsed.userDataPaths || !parsed.userDataPaths.configFile || parsed.userDataPaths.configFile !== merged.userDataPaths.configFile)) {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
-    }
-    return merged;
-  } catch {
-    return { ...DEFAULT_SETTINGS, ...(state.fileSettings || {}) };
-  }
+  return normalizeSettingsForUi({});
 }
 
 async function syncSettingsFromFile() {
@@ -4041,42 +3964,15 @@ async function syncSettingsFromFile() {
   if (!response || !response.ok || !response.data) {
     return;
   }
-  const merged = normalizeSettingsForUi({ ...DEFAULT_SETTINGS, ...response.data });
-  if (window.clashfox && typeof window.clashfox.getUserDataPath === 'function') {
-    const userData = await window.clashfox.getUserDataPath();
-    if (userData && userData.ok && userData.path) {
-      const base = userData.path;
-      if (!merged.userDataPaths) {
-        merged.userDataPaths = {};
-      }
-      if (!merged.userDataPaths.configDir) {
-        merged.userDataPaths.configDir = 'config';
-      }
-      if (!merged.userDataPaths.coreDir) {
-        merged.userDataPaths.coreDir = 'core';
-      }
-      if (!merged.userDataPaths.dataDir) {
-        merged.userDataPaths.dataDir = 'data';
-      }
-      if (!merged.userDataPaths.logDir) {
-        merged.userDataPaths.logDir = 'logs';
-      }
-      if (!merged.userDataPaths.helperDir) {
-        merged.userDataPaths.helperDir = 'helper';
-      }
-      if (!merged.userDataPaths.pidDir) {
-        merged.userDataPaths.pidDir = 'runtime';
-      }
-      if (!merged.userDataPaths.userAppDataDir) {
-        merged.userDataPaths.userAppDataDir = base;
-      }
-    }
-  }
+  const merged = normalizeSettingsForUi(response.data);
   state.fileSettings = { ...merged };
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
+  state.settings = { ...merged };
 }
 
 function saveSettings(patch, options = {}) {
+  if (!state.settingsHydrated) {
+    return;
+  }
   const nextPatch = { ...(patch || {}) };
   const proxyPatchKeys = LEGACY_PROXY_FIELDS;
   const hasProxyPatch = Object.prototype.hasOwnProperty.call(nextPatch, 'proxy')
@@ -4100,8 +3996,8 @@ function saveSettings(patch, options = {}) {
     });
   }
   const nextAppearance = {
-    ...((state.settings && state.settings.appearance) || {}),
     ...((state.fileSettings && state.fileSettings.appearance) || {}),
+    ...((state.settings && state.settings.appearance) || {}),
     ...((nextPatch.appearance && typeof nextPatch.appearance === 'object') ? nextPatch.appearance : {}),
   };
   const appearanceKeys = [
@@ -4125,8 +4021,8 @@ function saveSettings(patch, options = {}) {
     nextPatch.appearance = nextAppearance;
   }
   const nextKernel = {
-    ...((state.settings && state.settings.kernel) || {}),
     ...((state.fileSettings && state.fileSettings.kernel) || {}),
+    ...((state.settings && state.settings.kernel) || {}),
     ...((nextPatch.kernel && typeof nextPatch.kernel === 'object') ? nextPatch.kernel : {}),
   };
   const kernelKeys = [
@@ -4143,8 +4039,8 @@ function saveSettings(patch, options = {}) {
     nextPatch.kernel = nextKernel;
   }
   const nextTrayMenu = {
-    ...((state.settings && state.settings.trayMenu) || {}),
     ...((state.fileSettings && state.fileSettings.trayMenu) || {}),
+    ...((state.settings && state.settings.trayMenu) || {}),
     ...((nextPatch.trayMenu && typeof nextPatch.trayMenu === 'object') ? nextPatch.trayMenu : {}),
   };
   const trayMenuKeys = [
@@ -4176,8 +4072,8 @@ function saveSettings(patch, options = {}) {
     nextPatch.trayMenu = nextTrayMenu;
   }
   const nextUserDataPaths = {
-    ...((state.settings && state.settings.userDataPaths) || {}),
     ...((state.fileSettings && state.fileSettings.userDataPaths) || {}),
+    ...((state.settings && state.settings.userDataPaths) || {}),
     ...((nextPatch.userDataPaths && typeof nextPatch.userDataPaths === 'object') ? nextPatch.userDataPaths : {}),
   };
   const userDataPathKeys = [
@@ -4200,8 +4096,8 @@ function saveSettings(patch, options = {}) {
   }
 
   const nextPanelManager = {
-    ...((state.settings && state.settings.panelManager) || {}),
     ...((state.fileSettings && state.fileSettings.panelManager) || {}),
+    ...((state.settings && state.settings.panelManager) || {}),
     ...((nextPatch.panelManager && typeof nextPatch.panelManager === 'object') ? nextPatch.panelManager : {}),
   };
   if (Object.prototype.hasOwnProperty.call(nextPatch, 'panelChoice')) {
@@ -4234,10 +4130,11 @@ function saveSettings(patch, options = {}) {
   const { externalUiUrl: _nextExternalUiUrl, externalUiName: _nextExternalUiName, ...nextRestSettings } = nextSettings;
   const nextFileSettings = mapSettingsForFile(nextRestSettings);
   state.settings = nextSettings;
-  state.fileSettings = { ...state.fileSettings, ...nextPatch };
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
+  state.fileSettings = normalizeSettingsForUi(nextFileSettings);
   if (window.clashfox && typeof window.clashfox.writeSettings === 'function') {
-    Promise.resolve(window.clashfox.writeSettings(nextFileSettings, { forceWrite: true }))
+    settingsWriteChain = settingsWriteChain
+      .catch(() => {})
+      .then(() => window.clashfox.writeSettings(nextFileSettings, { forceWrite: true }))
       .then((response) => {
         if (!response || !response.ok) {
           const detail = response && (response.error || response.details)
@@ -4246,7 +4143,14 @@ function saveSettings(patch, options = {}) {
           if (typeof showToast === 'function') {
             showToast(`Save settings failed${detail}`, 'error');
           }
+          return;
         }
+        if (response.data && typeof response.data === 'object') {
+          const normalizedFromFile = normalizeSettingsForUi(response.data);
+          state.fileSettings = { ...normalizedFromFile };
+          state.settings = { ...normalizedFromFile };
+        }
+        return syncSettingsFromFile();
       })
       .catch((error) => {
         if (typeof showToast === 'function') {
@@ -4309,7 +4213,7 @@ function applySidebarCollapsedState(collapsed = false, persist = false) {
     sidebarCollapseToggle.setAttribute('aria-label', label);
   }
   if (!state.settings) {
-    state.settings = { ...DEFAULT_SETTINGS };
+    state.settings = {};
   }
   if (!state.settings.appearance) {
     state.settings.appearance = {};
@@ -4639,7 +4543,7 @@ const resolveAbsolutePath = (relativePath) => {
 };
 
 function applySettings(settings) {
-  state.settings = { ...DEFAULT_SETTINGS, ...(settings || {}) };
+  state.settings = normalizeSettingsForUi(settings || {});
   state.settings.windowWidth = sanitizeWindowDimension(
     state.settings.windowWidth,
     MAIN_WINDOW_DEFAULT_WIDTH,
@@ -4654,11 +4558,17 @@ function applySettings(settings) {
   );
   if (!state.settings.panelChoice) {
     state.settings.panelChoice = 'zashboard';
-    saveSettings({ panelChoice: 'zashboard' });
+    if (!state.settings.panelManager || typeof state.settings.panelManager !== 'object') {
+      state.settings.panelManager = {};
+    }
+    state.settings.panelManager.panelChoice = 'zashboard';
   }
   if (!state.settings.externalUi) {
     state.settings.externalUi = 'ui';
-    saveSettings({ externalUi: 'ui' });
+    if (!state.settings.panelManager || typeof state.settings.panelManager !== 'object') {
+      state.settings.panelManager = {};
+    }
+    state.settings.panelManager.externalUi = 'ui';
   }
   const dataDir = state.settings.userDataPaths?.dataDir
     ? resolveAbsolutePath(state.settings.userDataPaths.dataDir)
@@ -4723,13 +4633,13 @@ function applySettings(settings) {
     settingsProxyAllowLan.checked = Boolean(state.settings.proxy?.allowLan);
   }
   if (settingsConfigDir) {
-    settingsConfigDir.value = resolveAbsolutePath(state.settings.userDataPaths?.configDir || '');
+    settingsConfigDir.value = resolveAbsolutePath(state.settings.userDataPaths?.configDir || 'config');
   }
   if (settingsCoreDir) {
-    settingsCoreDir.value = resolveAbsolutePath(state.settings.userDataPaths?.coreDir || '');
+    settingsCoreDir.value = resolveAbsolutePath(state.settings.userDataPaths?.coreDir || 'core');
   }
   if (settingsDataDir) {
-    settingsDataDir.value = resolveAbsolutePath(state.settings.userDataPaths?.dataDir || '');
+    settingsDataDir.value = resolveAbsolutePath(state.settings.userDataPaths?.dataDir || 'data');
   }
   if (settingsHelperDir) {
     settingsHelperDir.value = resolveAbsolutePath(state.settings.userDataPaths?.helperDir || 'helper');
@@ -4943,7 +4853,7 @@ if (window.clashfox && typeof window.clashfox.onMainWindowResize === 'function')
       MAIN_WINDOW_MAX_HEIGHT,
     );
 
-    state.settings = { ...DEFAULT_SETTINGS, ...(state.settings || {}), windowWidth: nextWidth, windowHeight: nextHeight };
+    state.settings = { ...(state.settings || {}), windowWidth: nextWidth, windowHeight: nextHeight };
     state.fileSettings = { ...(state.fileSettings || {}), windowWidth: nextWidth, windowHeight: nextHeight };
 
     if (settingsWindowWidth) {
@@ -4953,11 +4863,6 @@ if (window.clashfox && typeof window.clashfox.onMainWindowResize === 'function')
       settingsWindowHeight.value = nextHeight;
     }
 
-    try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
-    } catch {
-      // ignore storage write errors
-    }
   });
 }
 
@@ -5899,7 +5804,7 @@ function selectKernelSource(nextSource = '', { persist = false } = {}) {
     settingsGithubUser.value = normalized;
   }
   if (!state.settings || typeof state.settings !== 'object') {
-    state.settings = { ...DEFAULT_SETTINGS };
+    state.settings = {};
   }
   state.settings.githubUser = normalized;
   if (!state.settings.kernel || typeof state.settings.kernel !== 'object') {
@@ -6147,7 +6052,7 @@ function syncKernelVersionInState(version = '') {
     return;
   }
   if (!state.settings) {
-    state.settings = { ...DEFAULT_SETTINGS };
+    state.settings = {};
   }
   if (!state.fileSettings) {
     state.fileSettings = {};
@@ -6431,9 +6336,6 @@ async function loadDefaultSettings() {
     const payload = await response.json();
     if (payload && typeof payload === 'object') {
       DEFAULT_SETTINGS = payload;
-      if (state && typeof state === 'object') {
-        state.settings = { ...DEFAULT_SETTINGS, ...(state.settings || {}) };
-      }
     }
   } catch (error) {
     // Silent error handling in production
@@ -6835,7 +6737,7 @@ function cacheMihomoStatusForUi(running, source = 'status') {
   };
   state.mihomoStatus = snapshot;
   if (!state.settings) {
-    state.settings = { ...DEFAULT_SETTINGS };
+    state.settings = {};
   }
   if (!state.fileSettings) {
     state.fileSettings = {};
@@ -6848,11 +6750,6 @@ function cacheMihomoStatusForUi(running, source = 'status') {
   }
   state.settings.kernel.running = snapshot.running;
   state.fileSettings.kernel.running = snapshot.running;
-  try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
-  } catch {
-    // ignore
-  }
 }
 
 function applyKernelRunningState(running, source = 'status') {
@@ -11526,7 +11423,7 @@ function isCurrentConfigPath(candidatePath = '', currentPath = '') {
 
 function syncRuntimeTunState(tunEnabled, tunStack = null) {
   if (!state.settings) {
-    state.settings = { ...DEFAULT_SETTINGS };
+    state.settings = {};
   }
   if (!state.settings.proxy || typeof state.settings.proxy !== 'object') {
     state.settings.proxy = {};
@@ -11537,11 +11434,6 @@ function syncRuntimeTunState(tunEnabled, tunStack = null) {
   if (typeof tunStack === 'string' && tunStack) {
     const normalizedStack = normalizeTunStack(tunStack);
     state.settings.proxy.stack = normalizedStack;
-  }
-  try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
-  } catch {
-    // ignore
   }
 }
 
@@ -15899,9 +15791,15 @@ async function initApp() {
   });
   await loadDefaultSettings();
   await loadStaticConfigs();
+  const bridgeOk = await waitForBridge();
+  if (!bridgeOk) {
+    showToast(t('labels.bridgeMissing'), 'error');
+    return;
+  }
   await syncSettingsFromFile();
   await refreshSystemLocaleFromMain();
   applySettings(readSettings());
+  state.settingsHydrated = true;
   if (state.themeSetting === 'auto' && prefersDarkQuery) {
     applySystemTheme(prefersDarkQuery.matches);
   }
@@ -15922,11 +15820,6 @@ async function initApp() {
     }
   }
   setActiveNav(currentPage);
-  const ok = await waitForBridge();
-  if (!ok) {
-    showToast(t('labels.bridgeMissing'), 'error');
-    return;
-  }
   loadAppInfo(true);
   if (currentPage !== 'overview') {
     await loadStatusSilently().catch(() => {});

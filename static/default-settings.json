@@ -37,6 +37,7 @@
     "configDir": "config",
     "coreDir": "core",
     "dataDir": "data",
+    "helperDir": "helper",
     "logDir": "logs",
     "pidDir": "runtime"
   },
@@ -66,6 +67,9 @@
     "network-history",
     "network-topology",
     "provider-subscription",
-    "rules-overview"
+    "rules-overview",
+    "top-proxies",
+    "memory-trend",
+    "network-intel"
   ]
 }
