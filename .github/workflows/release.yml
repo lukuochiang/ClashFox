@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*.*.*"
+      - "v*.*.*-alpha*"
       - "v*.*.*-beta*"
       - "v*.*.*-rc*"
   workflow_dispatch:
@@ -37,6 +38,12 @@ jobs:
             INPUT_TAG="${GITHUB_REF_NAME}"
           fi
 
+          # Validate tag format
+          if [[ ! "$INPUT_TAG" =~ ^v ]]; then
+            echo "❌ Error: Invalid tag format '$INPUT_TAG'. Must start with 'v'"
+            exit 1
+          fi
+
           CHANNEL="${{ inputs.channel }}"
           # Always trust tag suffix when it encodes a release channel.
           # This avoids mismatches when workflow_dispatch keeps its default channel input.
@@ -44,14 +51,18 @@ jobs:
             CHANNEL="beta"
           elif [[ "$INPUT_TAG" == *"-rc"* ]]; then
             CHANNEL="rc"
+          elif [[ "$INPUT_TAG" == *"-alpha"* ]]; then
+            CHANNEL="alpha"
           elif [[ "$INPUT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             CHANNEL="stable"
+          else
+            echo "⚠️ Warning: Tag '$INPUT_TAG' does not match any known channel pattern, defaulting to '$CHANNEL'"
           fi
 
           VERSION="${INPUT_TAG#v}"
           RELEASE_NAME="ClashFox ${VERSION}"
           PRERELEASE="false"
-          if [[ "$CHANNEL" == "beta" || "$CHANNEL" == "rc" ]]; then
+          if [[ "$CHANNEL" == "beta" || "$CHANNEL" == "rc" || "$CHANNEL" == "alpha" ]]; then
             PRERELEASE="true"
           fi
 
@@ -67,6 +78,48 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ steps.meta.outputs.input_tag }}
+
+      - name: Extract changelog section
+        id: changelog
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.meta.outputs.version }}"
+
+          # Extract changelog from version title to next version title or end of file
+          if awk "/### \[${VERSION}\]/,/^(### \[|$)/" CHANGELOG.md | sed '$d' > release-notes.md; then
+            if [[ -s release-notes.md ]]; then
+              echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
+              cat release-notes.md >> $GITHUB_ENV
+              echo "EOF" >> $GITHUB_ENV
+              echo "✅ Changelog extracted successfully for version ${VERSION}"
+            else
+              echo "⚠️ No changelog content found for version ${VERSION}, using default message"
+              echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
+              echo "## Release ${VERSION}" >> $GITHUB_ENV
+              echo "" >> $GITHUB_ENV
+              echo "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md) for details." >> $GITHUB_ENV
+              echo "EOF" >> $GITHUB_ENV
+            fi
+          else
+            echo "❌ Failed to extract changelog for version ${VERSION}, using default message"
+            echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
+            echo "## Release ${VERSION}" >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            echo "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md) for details." >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+          fi
+
+      - name: Save version changelog
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.meta.outputs.version }}"
+          mkdir -p releases/$VERSION
+          if npx conventional-changelog -p angular -r 1 > releases/$VERSION/changelog.md 2>&1; then
+            echo "Conventional changelog generated successfully"
+          else
+            echo "⚠️ Failed to generate conventional changelog, skipping"
+            echo "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md) for details." > releases/$VERSION/changelog.md
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -159,6 +212,13 @@ jobs:
           printf '%s\n' "${{ steps.meta.outputs.version }}" > artifacts/version.txt
           ls -al artifacts
 
+      - name: Upload changelog artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog-${{ steps.meta.outputs.version }}
+          path: releases/
+          retention-days: 90
+
       - name: Create/Update release
         uses: ncipollo/release-action@v1
         with:
@@ -168,4 +228,4 @@ jobs:
           allowUpdates: true
           replacesArtifacts: true
           artifacts: "artifacts/*"
-          generateReleaseNotes: true
+          body: ${{ env.RELEASE_BODY }}
