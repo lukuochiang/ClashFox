@@ -6510,43 +6510,124 @@ async function handleHelpAppUpdateCheck() {
   }
   setHelpAboutStatus(ti('help.checkingAppUpdate', 'Checking app updates...'), 'checking');
   try {
-    const result = await window.clashfox.checkUpdates({ manual: true, acceptBeta: allowBeta });
+    const stablePromise = window.clashfox.checkUpdates({ manual: true, acceptBeta: false });
+    const betaPromise = allowBeta
+      ? window.clashfox.checkUpdates({ manual: true, acceptBeta: true })
+      : Promise.resolve(null);
+    const [stableResult, betaResult] = await Promise.all([stablePromise, betaPromise]);
     if (checkingDialog.isCancelled()) {
       setHelpAboutStatus(ti('help.updateEntryHint', 'Use the buttons below to check app, kernel, and helper updates.'), 'idle');
       return;
     }
     checkingDialog.close();
-    const updateAvailable = Boolean(result && result.ok && result.status === 'update_available');
-    if (!updateAvailable) {
+    const stableAvailable = Boolean(
+      stableResult
+      && stableResult.ok
+      && stableResult.status === 'update_available'
+      && !stableResult.prerelease,
+    );
+    const betaAvailable = Boolean(
+      betaResult
+      && betaResult.ok
+      && betaResult.status === 'update_available'
+      && betaResult.prerelease,
+    );
+    if (!stableAvailable && !betaAvailable) {
       setHelpAboutStatus(ti('help.appAlreadyLatest', 'App is up to date.'), 'success');
       return;
     }
-    const nextVersion = normalizeVersionForDisplay(result && result.latestVersion ? result.latestVersion : '');
-    const channel = resolveAppReleaseChannel(nextVersion, Boolean(result && result.prerelease));
-    const bodyText = nextVersion
-      ? formatAppUpdateChannelText(
-        'help.appUpdateChannelBodyVersion',
-        'A newer {channel} version v{version} is available. Open the latest tag page?',
-        channel,
-        nextVersion,
-      )
-      : formatAppUpdateChannelText(
-        'help.appUpdateChannelBody',
-        'A newer {channel} version is available. Open the latest tag page?',
-        channel,
+    if (!allowBeta) {
+      const stableVersion = normalizeVersionForDisplay(stableResult && stableResult.latestVersion ? stableResult.latestVersion : '');
+      const bodyText = stableVersion
+        ? formatAppUpdateChannelText(
+          'help.appUpdateChannelBodyVersion',
+          'A newer {channel} version v{version} is available. Open the latest tag page?',
+          'stable',
+          stableVersion,
+        )
+        : formatAppUpdateChannelText(
+          'help.appUpdateChannelBody',
+          'A newer {channel} version is available. Open the latest tag page?',
+          'stable',
+        );
+      const choice = await promptUpdateGuide({
+        title: ti('help.appUpdateChoicesTitle', 'Update Options'),
+        body: bodyText,
+        primaryLabel: formatAppUpdateChannelText('help.appUpdateOpenChannelAction', 'Open {channel}', 'stable'),
+      });
+      if (choice === 'primary' && window.clashfox && typeof window.clashfox.openExternal === 'function') {
+        await window.clashfox.openExternal((stableResult && stableResult.releaseUrl) || APP_RELEASES_URL);
+      }
+      const statusText = stableVersion
+        ? `${formatAppUpdateChannelText('help.appUpdateChannelAvailable', '{channel} update available', 'stable')}: v${stableVersion}`
+        : formatAppUpdateChannelText('help.appUpdateChannelAvailable', '{channel} update available', 'stable');
+      setHelpAboutStatus(statusText, 'warning');
+      return;
+    }
+
+    const stableVersion = normalizeVersionForDisplay(stableResult && stableResult.latestVersion ? stableResult.latestVersion : '');
+    const betaVersion = normalizeVersionForDisplay(betaResult && betaResult.latestVersion ? betaResult.latestVersion : '');
+    const betaChannel = resolveAppReleaseChannel(betaVersion, Boolean(betaResult && betaResult.prerelease));
+    const bodyParts = [];
+    if (betaAvailable) {
+      bodyParts.push(
+        betaVersion
+          ? formatAppUpdateChannelText(
+            'help.appUpdateChannelBodyVersion',
+            'A newer {channel} version v{version} is available. Open the latest tag page?',
+            betaChannel,
+            betaVersion,
+          )
+          : formatAppUpdateChannelText(
+            'help.appUpdateChannelBody',
+            'A newer {channel} version is available. Open the latest tag page?',
+            betaChannel,
+          ),
       );
+    }
+    if (stableAvailable) {
+      bodyParts.push(
+        stableVersion
+          ? formatAppUpdateChannelText(
+            'help.appUpdateChannelBodyVersion',
+            'A newer {channel} version v{version} is available. Open the latest tag page?',
+            'stable',
+            stableVersion,
+          )
+          : formatAppUpdateChannelText(
+            'help.appUpdateChannelBody',
+            'A newer {channel} version is available. Open the latest tag page?',
+            'stable',
+          ),
+      );
+    }
     const choice = await promptUpdateGuide({
       title: ti('help.appUpdateChoicesTitle', 'Update Options'),
-      body: bodyText,
-      primaryLabel: formatAppUpdateChannelText('help.appUpdateOpenChannelAction', 'Open {channel}', channel),
+      body: bodyParts.join(' '),
+      releaseLabel: formatAppUpdateChannelText('help.appUpdateOpenChannelAction', 'Open {channel}', 'stable'),
+      alphaLabel: formatAppUpdateChannelText('help.appUpdateOpenChannelAction', 'Open {channel}', betaChannel),
     });
-    if (choice === 'primary' && window.clashfox && typeof window.clashfox.openExternal === 'function') {
-      await window.clashfox.openExternal((result && result.releaseUrl) || APP_RELEASES_URL);
+    if (choice === 'release' && window.clashfox && typeof window.clashfox.openExternal === 'function') {
+      await window.clashfox.openExternal((stableResult && stableResult.releaseUrl) || APP_RELEASES_URL);
+    } else if (choice === 'alpha' && window.clashfox && typeof window.clashfox.openExternal === 'function') {
+      await window.clashfox.openExternal((betaResult && betaResult.releaseUrl) || APP_RELEASES_URL);
     }
-    const statusText = nextVersion
-      ? `${formatAppUpdateChannelText('help.appUpdateChannelAvailable', '{channel} update available', channel)}: v${nextVersion}`
-      : formatAppUpdateChannelText('help.appUpdateChannelAvailable', '{channel} update available', channel);
-    setHelpAboutStatus(statusText, 'warning');
+    const statusParts = [];
+    if (stableAvailable) {
+      statusParts.push(
+        stableVersion
+          ? `${formatAppUpdateChannelText('help.appUpdateChannelAvailable', '{channel} update available', 'stable')}: v${stableVersion}`
+          : formatAppUpdateChannelText('help.appUpdateChannelAvailable', '{channel} update available', 'stable'),
+      );
+    }
+    if (betaAvailable) {
+      statusParts.push(
+        betaVersion
+          ? `${formatAppUpdateChannelText('help.appUpdateChannelAvailable', '{channel} update available', betaChannel)}: v${betaVersion}`
+          : formatAppUpdateChannelText('help.appUpdateChannelAvailable', '{channel} update available', betaChannel),
+      );
+    }
+    setHelpAboutStatus(statusParts.join(' · '), 'warning');
   } catch (err) {
     setHelpAboutStatus(ti('help.updateEntryHint', 'Use the buttons below to check app, kernel, and helper updates.'), 'idle');
   } finally {
