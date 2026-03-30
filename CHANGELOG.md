@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.5.4-beta.2](https://github.com/lukuochiang/ClashFox/compare/v0.5.4-beta.1...v0.5.4-beta.2) (2026-03-30)
+
+
+### Bug Fixes
+
+* fix: ensure tray panel update is sent when ready ([431c975](https://github.com/lukuochiang/ClashFox/commit/431c975dedb594426ed4a62a726cf963f0509a2f))
+
 ### [0.5.4-beta.1](https://github.com/lukuochiang/ClashFox/compare/v0.5.4-beta.0...v0.5.4-beta.1) (2026-03-29)
 
 
