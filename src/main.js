@@ -12788,7 +12788,14 @@ app.whenReady().then(() => {
       return;
     }
     if (trayPanelPendingPayload) {
-      sendTrayPanelUpdate(trayPanelPendingPayload);
+      // Force send the payload regardless of signature when panel is ready
+      if (
+        trayPanelWindow
+        && !trayPanelWindow.isDestroyed()
+        && trayPanelPendingPayload
+      ) {
+        trayPanelWindow.webContents.send('clashfox:trayPanel:update', trayPanelPendingPayload);
+      }
     }
     if (trayPanelVisible && trayPanelLastSize.width && trayPanelLastSize.height) {
       positionTrayPanelWindow(trayPanelLastSize.width, trayPanelLastSize.height);
