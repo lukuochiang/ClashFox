@@ -6503,94 +6503,50 @@ async function handleHelpAppUpdateCheck() {
     setHelpAboutStatus(ti('help.updateCheckBridgeMissing', 'Update check is unavailable.'), 'error');
     return;
   }
+  const allowBeta = Boolean(state.settings && state.settings.acceptBeta);
   const checkingDialog = openAppUpdateCheckingDialog();
   if (helpCheckAppUpdateBtn) {
     helpCheckAppUpdateBtn.disabled = true;
   }
   setHelpAboutStatus(ti('help.checkingAppUpdate', 'Checking app updates...'), 'checking');
   try {
-    const [stableResult, alphaResult] = await Promise.all([
-      window.clashfox.checkUpdates({ manual: true, acceptBeta: false }),
-      window.clashfox.checkUpdates({ manual: true, acceptBeta: true }),
-    ]);
+    const result = await window.clashfox.checkUpdates({ manual: true, acceptBeta: allowBeta });
     if (checkingDialog.isCancelled()) {
       setHelpAboutStatus(ti('help.updateEntryHint', 'Use the buttons below to check app, kernel, and helper updates.'), 'idle');
       return;
     }
     checkingDialog.close();
-    const stableAvailable = Boolean(stableResult && stableResult.ok && stableResult.status === 'update_available' && !stableResult.prerelease);
-    const prereleaseAvailable = Boolean(alphaResult && alphaResult.ok && alphaResult.status === 'update_available' && alphaResult.prerelease);
-    if (!stableAvailable && !prereleaseAvailable) {
+    const updateAvailable = Boolean(result && result.ok && result.status === 'update_available');
+    if (!updateAvailable) {
       setHelpAboutStatus(ti('help.appAlreadyLatest', 'App is up to date.'), 'success');
       return;
     }
-    const stableVersion = normalizeVersionForDisplay(stableResult && stableResult.latestVersion ? stableResult.latestVersion : '');
-    const prereleaseVersion = normalizeVersionForDisplay(alphaResult && alphaResult.latestVersion ? alphaResult.latestVersion : '');
-    const prereleaseChannel = resolveAppReleaseChannel(prereleaseVersion, Boolean(alphaResult && alphaResult.prerelease));
-    const bodyParts = [];
-    if (prereleaseAvailable) {
-      bodyParts.push(
-        prereleaseVersion
-          ? formatAppUpdateChannelText(
-            'help.appUpdateChannelBodyVersion',
-            'A newer {channel} version v{version} is available. Open the latest tag page?',
-            prereleaseChannel,
-            prereleaseVersion,
-          )
-          : formatAppUpdateChannelText(
-            'help.appUpdateChannelBody',
-            'A newer {channel} version is available. Open the latest tag page?',
-            prereleaseChannel,
-          ),
+    const nextVersion = normalizeVersionForDisplay(result && result.latestVersion ? result.latestVersion : '');
+    const channel = resolveAppReleaseChannel(nextVersion, Boolean(result && result.prerelease));
+    const bodyText = nextVersion
+      ? formatAppUpdateChannelText(
+        'help.appUpdateChannelBodyVersion',
+        'A newer {channel} version v{version} is available. Open the latest tag page?',
+        channel,
+        nextVersion,
+      )
+      : formatAppUpdateChannelText(
+        'help.appUpdateChannelBody',
+        'A newer {channel} version is available. Open the latest tag page?',
+        channel,
       );
-    }
-    if (stableAvailable) {
-      bodyParts.push(
-        stableVersion
-          ? formatAppUpdateChannelText(
-            'help.appUpdateChannelBodyVersion',
-            'A newer {channel} version v{version} is available. Open the latest tag page?',
-            'stable',
-            stableVersion,
-          )
-          : formatAppUpdateChannelText(
-            'help.appUpdateChannelBody',
-            'A newer {channel} version is available. Open the latest tag page?',
-            'stable',
-          ),
-      );
-    }
     const choice = await promptUpdateGuide({
       title: ti('help.appUpdateChoicesTitle', 'Update Options'),
-      body: bodyParts.join(' '),
-      releaseLabel: stableAvailable
-        ? formatAppUpdateChannelText('help.appUpdateOpenChannelAction', 'Open {channel}', 'stable')
-        : '',
-      alphaLabel: prereleaseAvailable
-        ? formatAppUpdateChannelText('help.appUpdateOpenChannelAction', 'Open {channel}', prereleaseChannel)
-        : '',
+      body: bodyText,
+      primaryLabel: formatAppUpdateChannelText('help.appUpdateOpenChannelAction', 'Open {channel}', channel),
     });
-    if (choice === 'release' && window.clashfox && typeof window.clashfox.openExternal === 'function') {
-      await window.clashfox.openExternal((stableResult && stableResult.releaseUrl) || APP_RELEASES_URL);
-    } else if (choice === 'alpha' && window.clashfox && typeof window.clashfox.openExternal === 'function') {
-      await window.clashfox.openExternal((alphaResult && alphaResult.releaseUrl) || APP_RELEASES_URL);
+    if (choice === 'primary' && window.clashfox && typeof window.clashfox.openExternal === 'function') {
+      await window.clashfox.openExternal((result && result.releaseUrl) || APP_RELEASES_URL);
     }
-    const statusParts = [];
-    if (stableAvailable) {
-      statusParts.push(
-        stableVersion
-          ? `${formatAppUpdateChannelText('help.appUpdateChannelAvailable', '{channel} update available', 'stable')}: v${stableVersion}`
-          : formatAppUpdateChannelText('help.appUpdateChannelAvailable', '{channel} update available', 'stable'),
-      );
-    }
-    if (prereleaseAvailable) {
-      statusParts.push(
-        prereleaseVersion
-          ? `${formatAppUpdateChannelText('help.appUpdateChannelAvailable', '{channel} update available', prereleaseChannel)}: v${prereleaseVersion}`
-          : formatAppUpdateChannelText('help.appUpdateChannelAvailable', '{channel} update available', prereleaseChannel),
-      );
-    }
-    setHelpAboutStatus(statusParts.join(' · '), 'warning');
+    const statusText = nextVersion
+      ? `${formatAppUpdateChannelText('help.appUpdateChannelAvailable', '{channel} update available', channel)}: v${nextVersion}`
+      : formatAppUpdateChannelText('help.appUpdateChannelAvailable', '{channel} update available', channel);
+    setHelpAboutStatus(statusText, 'warning');
   } catch (err) {
     setHelpAboutStatus(ti('help.updateEntryHint', 'Use the buttons below to check app, kernel, and helper updates.'), 'idle');
   } finally {

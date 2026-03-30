@@ -1740,7 +1740,10 @@ function normalizeSettingsForStorage(input = {}) {
   return ordered;
 }
 
-function resolveCheckUpdateUrlFromSettings() {
+function resolveCheckUpdateUrlFromSettings(acceptBeta) {
+  if (typeof acceptBeta === 'boolean') {
+    return acceptBeta ? CHECK_UPDATE_BETA_URL : CHECK_UPDATE_STABLE_URL;
+  }
   const settings = readAppSettings();
   return settings && settings.acceptBeta ? CHECK_UPDATE_BETA_URL : CHECK_UPDATE_STABLE_URL;
 }
@@ -3503,7 +3506,7 @@ async function checkForUpdates({ manual = false, acceptBeta } = {}) {
       acceptBeta: allowBeta,
       currentVersion,
       latestVersion,
-      releaseUrl: latest.html_url || resolveCheckUpdateUrlFromSettings(),
+      releaseUrl: latest.html_url || resolveCheckUpdateUrlFromSettings(allowBeta),
       releaseName: latest.name || latest.tag_name,
       publishedAt: latest.published_at || '',
       prerelease: Boolean(latest.prerelease),
