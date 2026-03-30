@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.5.4](https://github.com/lukuochiang/ClashFox/compare/v0.5.4-beta.2...v0.5.4) (2026-03-30)
+
+
+### Features
+
+* simplify app update check logic ([c78add1](https://github.com/lukuochiang/ClashFox/commit/c78add1e013d11595ffa5bcc223ade5a3e3e0c3e))
+
 ### [0.5.4-beta.2](https://github.com/lukuochiang/ClashFox/compare/v0.5.4-beta.1...v0.5.4-beta.2) (2026-03-30)
 
 
