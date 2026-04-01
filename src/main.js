@@ -1,6 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const http = require('http');
 const https = require('https');
 const dns = require('dns');
 const net = require('net');
@@ -41,7 +42,6 @@ function ensureAppDirs() {
   try {
     const userAppDataDir = resolveUserAppDataDirFromSettings();
     const coreDir = resolveCoreDirectoryFromSettings();
-    const configDir = resolveConfigDirectoryFromSettings();
     const dataDir = resolveDataDirectoryFromSettings();
     const logDir = resolveLogDirectoryFromSettings();
     const pidDir = resolvePidDirectoryFromSettings();
@@ -49,7 +49,6 @@ function ensureAppDirs() {
     fs.mkdirSync(userAppDataDir, { recursive: true });
     fs.mkdirSync(WORK_DIR, { recursive: true });
     fs.mkdirSync(coreDir, { recursive: true });
-    fs.mkdirSync(configDir, { recursive: true });
     fs.mkdirSync(dataDir, { recursive: true });
     fs.mkdirSync(logDir, { recursive: true });
     fs.mkdirSync(pidDir, { recursive: true });
@@ -579,7 +578,7 @@ function refreshTrayMenuLabelsOnly() {
       return { ...item, label: labels.kernelManager };
     }
     if (item.submenu === 'directory') {
-      return { ...item, label: labels.directoryLocations || 'Directory Locations' };
+      return { ...item, label: labels.directoryLocations || 'Storage Paths' };
     }
     if (item.action === 'open-settings') {
       return { ...item, label: navLabels.settings || 'Settings' };
@@ -664,11 +663,11 @@ function refreshTrayMenuLabelsOnly() {
       if (!item || item.type === 'separator') {
         return item;
       }
-      if (item.action === 'open-user-directory') {
-        return { ...item, label: labels.userDirectory || 'User Directory' };
+      if (item.action === 'open-core-directory') {
+        return { ...item, label: labels.userCoreDirectory || 'Core Directory' };
       }
-      if (item.action === 'open-config-directory') {
-        return { ...item, label: labels.userConfigDirectory || 'Config Directory' };
+      if (item.action === 'open-data-directory') {
+        return { ...item, label: labels.userDataDirectory || 'Data Directory' };
       }
       if (item.action === 'open-work-directory') {
         return { ...item, label: labels.workDirectory || 'Work Directory' };
@@ -1142,7 +1141,6 @@ function buildDefaultDirectorySettings() {
   return {
     userAppDataDir,
     configFile: 'default.yaml',
-    configDir: 'config',
     coreDir: 'core',
     dataDir: 'data',
     helperDir: 'helper',
@@ -1160,9 +1158,8 @@ function mergeUserDataPathAliases(settings = {}) {
     ...source,
     userAppDataDir: normalizeTextValue(paths.userAppDataDir) || normalizeTextValue(source.userAppDataDir),
     configFile: normalizeTextValue(paths.configFile) || normalizeTextValue(source.configFile),
-    configDir: normalizeTextValue(paths.configDir) || normalizeTextValue(source.configDir),
     coreDir: normalizeTextValue(paths.coreDir) || normalizeTextValue(source.coreDir),
-    dataDir: normalizeTextValue(paths.dataDir) || normalizeTextValue(source.dataDir),
+    dataDir: normalizeTextValue(paths.dataDir) || normalizeTextValue(paths.configDir) || normalizeTextValue(source.dataDir) || normalizeTextValue(source.configDir),
     helperDir: normalizeTextValue(paths.helperDir) || normalizeTextValue(source.helperDir),
     logDir: normalizeTextValue(paths.logDir) || normalizeTextValue(source.logDir),
     pidDir: normalizeTextValue(paths.pidDir) || normalizeTextValue(source.pidDir),
@@ -1406,16 +1403,14 @@ function normalizeSettingsForStorage(input = {}) {
     return parts.length ? parts[parts.length - 1] : normalized;
   };
   const configuredConfigFile = normalizeConfigFileName(parsed.configFile) || defaultDirs.configFile;
-  const configuredConfigDir = normalizeTextValue(parsed.configDir) || defaultDirs.configDir;
   const configuredCoreDir = normalizeTextValue(parsed.coreDir) || defaultDirs.coreDir;
-  const configuredDataDir = normalizeTextValue(parsed.dataDir) || defaultDirs.dataDir;
+  const configuredDataDir = normalizeTextValue(parsed.dataDir) || normalizeTextValue(parsed.configDir) || defaultDirs.dataDir;
   const configuredHelperDir = normalizeTextValue(parsed.helperDir) || defaultDirs.helperDir;
   const configuredLogDir = normalizeTextValue(parsed.logDir) || defaultDirs.logDir;
   const configuredPidDir = normalizeTextValue(parsed.pidDir) || defaultDirs.pidDir;
   parsed.userDataPaths = {
     userAppDataDir,
     configFile: configuredConfigFile,
-    configDir: configuredConfigDir,
     coreDir: configuredCoreDir,
     dataDir: configuredDataDir,
     helperDir: configuredHelperDir,
@@ -1748,26 +1743,6 @@ function resolveCheckUpdateUrlFromSettings(acceptBeta) {
   return settings && settings.acceptBeta ? CHECK_UPDATE_BETA_URL : CHECK_UPDATE_STABLE_URL;
 }
 
-function resolveConfigDirectoryFromSettings() {
-  const settings = readAppSettings();
-  const configured = settings
-    && settings.userDataPaths
-    && typeof settings.userDataPaths.configDir === 'string'
-    ? settings.userDataPaths.configDir.trim()
-    : '';
-  if (configured) {
-    const userAppDataDir = settings
-      && settings.userDataPaths
-      && typeof settings.userDataPaths.userAppDataDir === 'string'
-      ? settings.userDataPaths.userAppDataDir.trim()
-      : process.platform === 'win32'
-        ? '%USERPROFILE%/AppData/Roaming/ClashFox'
-        : '~/Library/Application Support/ClashFox';
-    return path.resolve(expandUserHome(userAppDataDir), configured);
-  }
-  return path.join(APP_DATA_DIR, 'config');
-}
-
 function resolveCoreDirectoryFromSettings() {
   const settings = readAppSettings();
   const configured = settings
@@ -1828,6 +1803,26 @@ function resolveLogDirectoryFromSettings() {
   return path.join(APP_DATA_DIR, 'logs');
 }
 
+function resolveHelperDirectoryFromSettings() {
+  const settings = readAppSettings();
+  const configured = settings
+    && settings.userDataPaths
+    && typeof settings.userDataPaths.helperDir === 'string'
+    ? settings.userDataPaths.helperDir.trim()
+    : '';
+  if (configured) {
+    const userAppDataDir = settings
+      && settings.userDataPaths
+      && typeof settings.userDataPaths.userAppDataDir === 'string'
+      ? settings.userDataPaths.userAppDataDir.trim()
+      : process.platform === 'win32'
+        ? '%USERPROFILE%/AppData/Roaming/ClashFox'
+        : '~/Library/Application Support/ClashFox';
+    return path.resolve(expandUserHome(userAppDataDir), configured);
+  }
+  return HELPER_USER_DIR;
+}
+
 function resolvePidDirectoryFromSettings() {
   const settings = readAppSettings();
   const configured = settings
@@ -1878,13 +1873,13 @@ function formatFileModifiedTime(value) {
 
 function listConfigFilesFromFs() {
   try {
-    const configDir = resolveConfigDirectoryFromSettings();
-    fs.mkdirSync(configDir, { recursive: true });
-    const items = fs.readdirSync(configDir, { withFileTypes: true })
+    const configFilesDir = resolveDataDirectoryFromSettings();
+    fs.mkdirSync(configFilesDir, { recursive: true });
+    const items = fs.readdirSync(configFilesDir, { withFileTypes: true })
       .filter((entry) => entry && entry.isFile())
       .filter((entry) => /\.(ya?ml|json)$/i.test(String(entry.name || '')))
       .map((entry) => {
-        const filePath = path.join(configDir, entry.name);
+        const filePath = path.join(configFilesDir, entry.name);
         const stat = fs.statSync(filePath);
         return {
           name: entry.name,
@@ -2053,6 +2048,207 @@ function buildUniqueFilePath(targetDir, fileName) {
     idx += 1;
   }
   return candidate;
+}
+
+function sanitizeImportedConfigFileName(fileName = '') {
+  const raw = String(fileName || '').trim().replace(/[?#].*$/, '');
+  if (!raw) {
+    return 'imported-config';
+  }
+  const baseName = path.basename(raw);
+  const cleaned = baseName
+    .replace(/[^0-9A-Za-z._-]+/g, '-')
+    .replace(/^[.-]+/, '')
+    .replace(/-+/g, '-')
+    .replace(/-+$/, '');
+  return cleaned || 'imported-config';
+}
+
+function resolveImportedConfigExtension(urlText = '', contentType = '') {
+  const allowSet = new Set(['.yaml', '.yml', '.json']);
+  try {
+    const parsed = new URL(String(urlText || ''));
+    const extFromPath = String(path.extname(parsed.pathname || '') || '').toLowerCase();
+    if (allowSet.has(extFromPath)) {
+      return extFromPath;
+    }
+  } catch {}
+  const typeText = String(contentType || '').toLowerCase();
+  if (typeText.includes('json')) {
+    return '.json';
+  }
+  return '.yaml';
+}
+
+function buildImportedConfigFileName(urlText = '', contentType = '') {
+  let parsedBaseName = '';
+  try {
+    const parsed = new URL(String(urlText || ''));
+    const decodedPath = decodeURIComponent(parsed.pathname || '');
+    parsedBaseName = path.basename(decodedPath || '');
+  } catch {
+    parsedBaseName = '';
+  }
+  const sanitized = sanitizeImportedConfigFileName(parsedBaseName);
+  const ext = resolveImportedConfigExtension(urlText, contentType);
+  const currentExt = String(path.extname(sanitized || '') || '').toLowerCase();
+  if (currentExt === '.yaml' || currentExt === '.yml' || currentExt === '.json') {
+    return sanitized;
+  }
+  return `${sanitized}${ext}`;
+}
+
+function fetchTextFromRemoteUrl(url, timeoutMs = 12000, depth = 0) {
+  return new Promise((resolve, reject) => {
+    if (depth > 5) {
+      reject(new Error('TOO_MANY_REDIRECTS'));
+      return;
+    }
+    const normalized = String(url || '').trim();
+    if (!normalized) {
+      reject(new Error('INVALID_URL'));
+      return;
+    }
+    let parsed;
+    try {
+      parsed = new URL(normalized);
+    } catch {
+      reject(new Error('INVALID_URL'));
+      return;
+    }
+    const client = parsed.protocol === 'http:' ? http : https;
+    const req = client.get(parsed, {
+      headers: {
+        'User-Agent': `ClashFox/${app.getVersion() || '0.0.0'}`,
+        Accept: 'application/x-yaml,application/yaml,text/yaml,text/plain,application/json,*/*',
+      },
+    }, (res) => {
+      const statusCode = Number(res.statusCode || 0);
+      if (statusCode >= 300 && statusCode < 400 && res.headers.location) {
+        res.resume();
+        const nextUrl = new URL(String(res.headers.location), parsed).toString();
+        fetchTextFromRemoteUrl(nextUrl, timeoutMs, depth + 1).then(resolve).catch(reject);
+        return;
+      }
+      if (statusCode < 200 || statusCode >= 300) {
+        res.resume();
+        reject(new Error(`HTTP_${statusCode}`));
+        return;
+      }
+      const chunks = [];
+      let totalBytes = 0;
+      const maxBytes = 2 * 1024 * 1024;
+      res.on('data', (chunk) => {
+        const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        totalBytes += buf.length;
+        if (totalBytes > maxBytes) {
+          req.destroy(new Error('PAYLOAD_TOO_LARGE'));
+          return;
+        }
+        chunks.push(buf);
+      });
+      res.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8');
+        resolve({
+          body,
+          contentType: String(res.headers['content-type'] || '').trim(),
+          finalUrl: parsed.toString(),
+        });
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error('TIMEOUT'));
+    });
+  });
+}
+
+function decodePossibleBase64Payload(raw = '') {
+  const text = String(raw || '').trim();
+  if (!text) {
+    return '';
+  }
+  const normalizeDecoded = (decoded = '') => String(decoded || '').replace(/^\uFEFF/, '').trim();
+  const looksLikeConfigText = (decoded = '') => {
+    const candidate = normalizeDecoded(decoded);
+    if (!candidate) {
+      return false;
+    }
+    if (candidate.startsWith('{') || candidate.startsWith('[')) {
+      return true;
+    }
+    if (candidate.includes('\n') && candidate.includes(':')) {
+      return true;
+    }
+    return /(proxies|proxy-providers|rules|mixed-port|mode|allow-lan)\s*:/i.test(candidate);
+  };
+  const tryDecode = (base64Text = '') => {
+    const normalizedBase64 = String(base64Text || '').trim().replace(/-/g, '+').replace(/_/g, '/');
+    if (!normalizedBase64) {
+      return '';
+    }
+    const padded = normalizedBase64.padEnd(Math.ceil(normalizedBase64.length / 4) * 4, '=');
+    try {
+      const decoded = Buffer.from(padded, 'base64').toString('utf8');
+      return normalizeDecoded(decoded);
+    } catch {
+      return '';
+    }
+  };
+
+  const dataUriMatch = text.match(/^data:[^;,]+;base64,(.+)$/i);
+  if (dataUriMatch && dataUriMatch[1]) {
+    const decoded = tryDecode(dataUriMatch[1]);
+    if (decoded) {
+      return decoded;
+    }
+  }
+
+  const compact = text.replace(/\s+/g, '');
+  if (
+    compact.length >= 32
+    && /^[A-Za-z0-9+/=_-]+$/.test(compact)
+  ) {
+    const decoded = tryDecode(compact);
+    if (decoded && looksLikeConfigText(decoded)) {
+      return decoded;
+    }
+  }
+  return '';
+}
+
+function normalizeImportedConfigContent(raw = '') {
+  const source = String(raw || '').replace(/^\uFEFF/, '');
+  const decoded = decodePossibleBase64Payload(source);
+  const normalized = decoded || source;
+  return String(normalized).replace(/\r\n/g, '\n').trim();
+}
+
+function normalizeConfigRenameFileName(inputName = '', currentName = '') {
+  const raw = String(inputName || '').trim();
+  if (!raw) {
+    return { ok: false, error: 'invalid_name' };
+  }
+  if (raw.includes('/') || raw.includes('\\')) {
+    return { ok: false, error: 'invalid_name' };
+  }
+  const safeRaw = raw.replace(/[\u0000-\u001f<>:"|?*]/g, '-').trim();
+  if (!safeRaw || safeRaw === '.' || safeRaw === '..') {
+    return { ok: false, error: 'invalid_name' };
+  }
+  const currentExt = String(path.extname(currentName || '') || '').toLowerCase();
+  const requestedExt = String(path.extname(safeRaw || '') || '').toLowerCase();
+  const fallbackExt = currentExt === '.yml' ? '.yml' : '.yaml';
+  const ext = requestedExt || fallbackExt;
+  if (!['.yaml', '.yml'].includes(ext)) {
+    return { ok: false, error: 'invalid_extension' };
+  }
+  const baseName = String(path.basename(safeRaw, path.extname(safeRaw) || '') || '').trim();
+  if (!baseName || baseName === '.' || baseName === '..') {
+    return { ok: false, error: 'invalid_name' };
+  }
+  const finalName = `${baseName}${ext}`;
+  return { ok: true, fileName: finalName };
 }
 
 function parseCommandOptionValues(args = [], flag = '') {
@@ -4062,7 +4258,7 @@ async function installMihomo({ githubUser = 'vernesong', version = '', channel =
   try {
     const validGithubUser = githubUser === 'MetaCubeX' ? 'MetaCubeX' : 'vernesong';
 
-    const coreDir = path.join(APP_DATA_DIR, 'core');
+    const coreDir = resolveCoreDirectoryFromSettings();
     const backupDir = path.join(coreDir, 'cfox-backup');
     const activeCore = path.join(coreDir, 'mihomo');
     const currentVersion = readInstalledKernelVersionRaw(activeCore);
@@ -4776,11 +4972,15 @@ function resolveConfigPathFromSettingsOrArgs(settings = null) {
     : '';
   const configFile = fromSettingsUserData || fromSettingsLegacy || 'default.yaml';
 
-  const configDir = settings
+  const dataDir = settings
     && settings.userDataPaths
-    && typeof settings.userDataPaths.configDir === 'string'
-    ? settings.userDataPaths.configDir.trim()
-    : 'config';
+    && typeof settings.userDataPaths.dataDir === 'string'
+    ? settings.userDataPaths.dataDir.trim()
+    : settings
+      && settings.userDataPaths
+      && typeof settings.userDataPaths.configDir === 'string'
+      ? settings.userDataPaths.configDir.trim()
+      : 'data';
 
   const userAppDataDir = settings
     && settings.userDataPaths
@@ -4790,7 +4990,7 @@ function resolveConfigPathFromSettingsOrArgs(settings = null) {
       ? '%USERPROFILE%/AppData/Roaming/ClashFox'
       : '~/Library/Application Support/ClashFox';
 
-  return path.resolve(expandUserHome(userAppDataDir), configDir, configFile);
+  return path.resolve(expandUserHome(userAppDataDir), dataDir, configFile);
 }
 
 async function resolveActiveNetworkServiceName() {
@@ -5292,7 +5492,7 @@ async function fetchPublicIpWithFallback({ proxyPort = '', useProxy = false } = 
 }
 
 function getPanelUiDir() {
-  return path.join(APP_DATA_DIR, 'data', 'ui');
+  return path.join(resolveDataDirectoryFromSettings(), 'ui');
 }
 
 function getPanelDir(panelName) {
@@ -10525,7 +10725,7 @@ function buildTrayMainMenuItems({
   }
   if (trayFeatureFlags.showDirectoryLocations) {
     items.push({ type: 'separator' });
-    items.push({ type: 'action', label: labels.directoryLocations || 'Directory Locations', submenu: 'directory', iconKey: 'directory' });
+    items.push({ type: 'action', label: labels.directoryLocations || 'Storage Paths', submenu: 'directory', iconKey: 'directory' });
   }
   items.push(
     { type: 'separator' },
@@ -10607,9 +10807,9 @@ function buildTraySubmenuData({
       },
     ],
     directory: [
-      { type: 'action', label: labels.userDirectory || 'User Directory', action: 'open-user-directory', iconKey: 'userDir' },
+      { type: 'action', label: labels.userCoreDirectory || 'Core Directory', action: 'open-core-directory', iconKey: 'coreDir' },
       { type: 'separator' },
-      { type: 'action', label: labels.userConfigDirectory || 'Config Directory', action: 'open-config-directory', iconKey: 'configDir' },
+      { type: 'action', label: labels.userDataDirectory || 'Data Directory', action: 'open-data-directory', iconKey: 'dataDir' },
       { type: 'separator' },
       { type: 'action', label: labels.helperDirectory || 'Helper Directory', action: 'open-helper-directory', iconKey: 'helperDir' },
       { type: 'separator' },
@@ -11872,11 +12072,15 @@ async function handleTrayMenuAction(action, payload = {}) {
       return { ok: true, submenu: 'kernel', kernelRunning: kernelRunning === null ? false : Boolean(kernelRunning) };
     }
     case 'open-user-directory': {
-      const opened = await openDirectoryInFinder(APP_DATA_DIR);
+      const opened = await openDirectoryInFinder(resolveUserAppDataDirFromSettings());
       return { ok: opened, hide: false, submenu: 'directory' };
     }
-    case 'open-config-directory': {
-      const opened = await openDirectoryInFinder(path.join(APP_DATA_DIR, 'config'));
+    case 'open-core-directory': {
+      const opened = await openDirectoryInFinder(resolveCoreDirectoryFromSettings());
+      return { ok: opened, hide: false, submenu: 'directory' };
+    }
+    case 'open-data-directory': {
+      const opened = await openDirectoryInFinder(resolveDataDirectoryFromSettings());
       return { ok: opened, hide: false, submenu: 'directory' };
     }
     case 'open-work-directory': {
@@ -11889,9 +12093,7 @@ async function handleTrayMenuAction(action, payload = {}) {
       return { ok: opened, hide: false, submenu: 'directory' };
     }
     case 'open-helper-directory': {
-      const helperDir = process.platform === 'darwin'
-        ? path.resolve(os.homedir(), 'Library', 'Application Support', 'ClashFox', 'helper')
-        : HELPER_USER_DIR;
+      const helperDir = resolveHelperDirectoryFromSettings();
       try {
         fs.mkdirSync(helperDir, { recursive: true });
       } catch {
@@ -11901,9 +12103,7 @@ async function handleTrayMenuAction(action, payload = {}) {
       return { ok: opened, hide: false, submenu: 'directory' };
     }
     case 'open-log-directory': {
-      const logDir = process.platform === 'darwin'
-        ? path.resolve(os.homedir(), 'Library', 'Application Support', 'ClashFox', 'logs')
-        : path.join(APP_DATA_DIR, 'logs');
+      const logDir = resolveLogDirectoryFromSettings();
       try {
         fs.mkdirSync(logDir, { recursive: true });
       } catch {
@@ -12136,8 +12336,7 @@ function createWindow(showOnCreate = false) {
     }
   });
 
-  const sendSystemTheme = () => {
-    setDockIcon(true);
+  win.webContents.on('did-finish-load', () => {
     BrowserWindow.getAllWindows().forEach((window) => {
       if (!window || window.isDestroyed()) {
         return;
@@ -12146,9 +12345,7 @@ function createWindow(showOnCreate = false) {
         dark: nativeTheme.shouldUseDarkColors,
       });
     });
-  };
-
-  win.webContents.on('did-finish-load', sendSystemTheme);
+  });
   win.webContents.on('did-start-loading', () => {
     if (!win || win.isDestroyed() || win.isMaximized() || win.isFullScreen()) {
       return;
@@ -12157,7 +12354,6 @@ function createWindow(showOnCreate = false) {
     persistMainWindowSizeToSettings(width, height);
     suppressMainWindowSizeApplyUntil = Date.now() + 4000;
   });
-  nativeTheme.on('updated', sendSystemTheme);
 
   // Do not auto-open DevTools here; it should only open when toggled on.
 }
@@ -12285,6 +12481,22 @@ app.whenReady().then(() => {
       app.dock.hide();
     }
   }
+
+  const sendSystemThemeToAllWindows = () => {
+    setDockIcon(true);
+    BrowserWindow.getAllWindows().forEach((window) => {
+      if (!window || window.isDestroyed()) {
+        return;
+      }
+      window.webContents.send('clashfox:systemTheme', {
+        dark: nativeTheme.shouldUseDarkColors,
+      });
+    });
+  };
+
+  nativeTheme.on('updated', sendSystemThemeToAllWindows);
+  setTimeout(sendSystemThemeToAllWindows, 100);
+
   setTimeout(() => {
     checkHelperOnStartup().catch(() => {});
   }, 1200);
@@ -12854,8 +13066,8 @@ app.whenReady().then(() => {
         return { ok: false, error: 'invalid_path' };
       }
       const resolvedTarget = path.resolve(String(targetPath));
-      const configDir = resolveConfigDirectoryFromSettings();
-      const normalizedDir = path.resolve(configDir);
+      const dataDir = resolveDataDirectoryFromSettings();
+      const normalizedDir = path.resolve(dataDir);
       const dirPrefix = `${normalizedDir}${path.sep}`;
       if (!(resolvedTarget === normalizedDir || resolvedTarget.startsWith(dirPrefix))) {
         return { ok: false, error: 'outside_config_dir' };
@@ -12879,6 +13091,80 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.handle('clashfox:renameConfig', async (_event, targetPath, nextFileName) => {
+    try {
+      const sourcePath = String(targetPath || '').trim();
+      if (!sourcePath) {
+        return { ok: false, error: 'invalid_path' };
+      }
+      const resolvedSource = path.resolve(sourcePath);
+      const dataDir = resolveDataDirectoryFromSettings();
+      const resolvedDataDir = path.resolve(dataDir);
+      if (!isPathInsideDirectory(resolvedSource, resolvedDataDir)) {
+        return { ok: false, error: 'outside_config_dir' };
+      }
+      if (!fs.existsSync(resolvedSource)) {
+        return { ok: false, error: 'not_found' };
+      }
+      const stat = fs.statSync(resolvedSource);
+      if (!stat.isFile()) {
+        return { ok: false, error: 'not_file' };
+      }
+      const currentName = path.basename(resolvedSource);
+      const normalizedName = normalizeConfigRenameFileName(nextFileName, currentName);
+      if (!normalizedName.ok) {
+        return { ok: false, error: normalizedName.error || 'invalid_name' };
+      }
+      const finalFileName = normalizedName.fileName;
+      const resolvedTarget = path.resolve(path.join(resolvedDataDir, finalFileName));
+      if (!isPathInsideDirectory(resolvedTarget, resolvedDataDir)) {
+        return { ok: false, error: 'outside_config_dir' };
+      }
+      if (resolvedTarget === resolvedSource) {
+        return {
+          ok: true,
+          unchanged: true,
+          data: {
+            oldPath: resolvedSource,
+            newPath: resolvedTarget,
+            fileName: finalFileName,
+          },
+        };
+      }
+      if (fs.existsSync(resolvedTarget)) {
+        return { ok: false, error: 'name_exists' };
+      }
+      fs.renameSync(resolvedSource, resolvedTarget);
+
+      const settings = readAppSettings();
+      const currentConfigAbsolute = resolveConfigPathFromSettingsOrArgs(settings);
+      let renamedCurrent = false;
+      if (currentConfigAbsolute && path.resolve(currentConfigAbsolute) === resolvedSource) {
+        renamedCurrent = true;
+        const currentSettingPath = normalizeTextValue(settings && settings.configPath);
+        const nextConfigPath = (
+          currentSettingPath && (path.isAbsolute(currentSettingPath) || /^[A-Za-z]:[\\/]/.test(currentSettingPath))
+        )
+          ? resolvedTarget
+          : finalFileName;
+        const nextSettings = { ...(settings || {}), configPath: nextConfigPath };
+        writeAppSettings(nextSettings);
+      }
+
+      return {
+        ok: true,
+        data: {
+          oldPath: resolvedSource,
+          newPath: resolvedTarget,
+          fileName: finalFileName,
+          renamedCurrent,
+        },
+      };
+    } catch (err) {
+      return { ok: false, error: err && err.message ? err.message : 'rename_failed' };
+    }
+  });
+
   ipcMain.handle('clashfox:importConfig', async () => {
     const selection = await dialog.showOpenDialog({
       title: 'Import Config File',
@@ -12894,7 +13180,7 @@ app.whenReady().then(() => {
     const sourcePath = selection.filePaths[0];
     try {
       ensureAppDirs();
-      const targetDir = resolveConfigDirectoryFromSettings();
+      const targetDir = resolveDataDirectoryFromSettings();
       fs.mkdirSync(targetDir, { recursive: true });
       const sourceName = path.basename(sourcePath);
       const targetPath = buildUniqueFilePath(targetDir, sourceName);
@@ -12905,11 +13191,54 @@ app.whenReady().then(() => {
           sourcePath,
           targetPath,
           fileName: path.basename(targetPath),
-          configDir: targetDir,
+          dataDir: targetDir,
         },
       };
     } catch (err) {
       return { ok: false, error: err && err.message ? err.message : 'import_failed' };
+    }
+  });
+
+  ipcMain.handle('clashfox:importConfigFromUrl', async (_event, rawUrl) => {
+    try {
+      const normalizedUrl = String(rawUrl || '').trim();
+      if (!normalizedUrl) {
+        return { ok: false, error: 'invalid_url' };
+      }
+      let parsed;
+      try {
+        parsed = new URL(normalizedUrl);
+      } catch {
+        return { ok: false, error: 'invalid_url' };
+      }
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        return { ok: false, error: 'invalid_protocol' };
+      }
+      const fetched = await fetchTextFromRemoteUrl(parsed.toString(), 12000);
+      const rawBody = String((fetched && fetched.body) || '');
+      const normalizedContent = normalizeImportedConfigContent(rawBody);
+      if (!normalizedContent) {
+        return { ok: false, error: 'empty_content' };
+      }
+      ensureAppDirs();
+      const targetDir = resolveDataDirectoryFromSettings();
+      fs.mkdirSync(targetDir, { recursive: true });
+      const fileName = buildImportedConfigFileName(parsed.toString(), fetched && fetched.contentType ? fetched.contentType : '');
+      const targetPath = buildUniqueFilePath(targetDir, fileName);
+      fs.writeFileSync(targetPath, normalizedContent, 'utf8');
+      return {
+        ok: true,
+        data: {
+          sourceUrl: parsed.toString(),
+          targetPath,
+          fileName: path.basename(targetPath),
+          dataDir: targetDir,
+          contentType: fetched && fetched.contentType ? fetched.contentType : '',
+          decodedFromBase64: normalizedContent !== String(rawBody || '').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').trim(),
+        },
+      };
+    } catch (err) {
+      return { ok: false, error: err && err.message ? err.message : 'import_from_url_failed' };
     }
   });
 
@@ -12999,7 +13328,6 @@ app.whenReady().then(() => {
     try {
       ensureAppDirs();
       const settingsPath = getSettingsPath();
-      const defaultConfigPath = path.join(APP_DATA_DIR, 'config', 'default.yaml');
       const baseDefaults = readDefaultSettingsFile();
       const fallbackOf = (key, fallback) => (
         Object.prototype.hasOwnProperty.call(baseDefaults, key) ? baseDefaults[key] : fallback
@@ -13011,7 +13339,6 @@ app.whenReady().then(() => {
               ? '%USERPROFILE%/AppData/Roaming/ClashFox'
               : '~/Library/Application Support/ClashFox',
             configFile: 'default.yaml',
-            configDir: 'config',
             coreDir: 'core',
             dataDir: 'data',
             helperDir: 'helper',
@@ -13063,10 +13390,20 @@ app.whenReady().then(() => {
         parsed.userDataPaths.configFile = 'default.yaml';
         changed = true;
       }
+      if (!normalizeTextValue(parsedPaths.dataDir) && normalizeTextValue(parsedPaths.configDir)) {
+        if (!parsed.userDataPaths) {
+          parsed.userDataPaths = {};
+        }
+        parsed.userDataPaths.dataDir = normalizeTextValue(parsedPaths.configDir);
+        changed = true;
+      }
+      if (Object.prototype.hasOwnProperty.call(parsedPaths, 'configDir')) {
+        delete parsedPaths.configDir;
+        changed = true;
+      }
       const defaultDirs = buildDefaultDirectorySettings();
       [
         'userAppDataDir',
-        'configDir',
         'coreDir',
         'dataDir',
         'helperDir',
@@ -13529,7 +13866,7 @@ app.whenReady().then(() => {
     } catch (error) {
       return { ok: false, error: error && error.message ? error.message : 'persist_debug_mode_failed' };
     }
-    applyDevToolsState();
+    // applyDevToolsState();
     return { ok: true };
   });
 

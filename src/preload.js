@@ -40,6 +40,8 @@ contextBridge.exposeInMainWorld('clashfox', {
   cancelCommand: () => ipcRenderer.invoke('clashfox:cancelCommand'),
   selectConfig: () => ipcRenderer.invoke('clashfox:selectConfig'),
   importConfig: () => ipcRenderer.invoke('clashfox:importConfig'),
+  importConfigFromUrl: (url) => ipcRenderer.invoke('clashfox:importConfigFromUrl', url),
+  renameConfig: (targetPath, nextFileName) => ipcRenderer.invoke('clashfox:renameConfig', targetPath, nextFileName),
   deleteConfig: (targetPath) => ipcRenderer.invoke('clashfox:deleteConfig', targetPath),
   selectDirectory: (title) => ipcRenderer.invoke('clashfox:selectDirectory', title),
   getAppInfo: (force = false) => fetchAppInfo(force),

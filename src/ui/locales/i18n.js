@@ -169,10 +169,11 @@ const I18N = {
       "kernelsHint": "Read-only list of available cores."
     },
     "control": {
-      "title": "Config Control",
+      "title": "Config List",
       "config": "Config Path",
       "browse": "Browse",
       "import": "Import Config",
+      "importUrlTooltip": "Import Config from URL",
       "reload": "Reload Config",
       "refresh": "Refresh",
       "delete": "Delete",
@@ -347,6 +348,7 @@ const I18N = {
       "restart": "Restart",
       "refresh": "Refresh",
       "copy": "Copy",
+      "rename": "Rename",
       "delete": "Delete"
     },
     "table": {
@@ -500,8 +502,8 @@ const I18N = {
       "trayMenuProviderTrafficDesc": "Show provider traffic summary in the tray menu.",
       "menuKernelManager": "Kernel Manager",
       "menuKernelManagerDesc": "Show Kernel Manager in the tray menu.",
-      "menuDirectoryLocations": "Directory Locations",
-      "menuDirectoryLocationsDesc": "Show Directory Locations in the tray menu.",
+      "menuDirectoryLocations": "Storage Paths",
+      "menuDirectoryLocationsDesc": "Show storage paths in the tray menu.",
       "menuTrackers": "Trackers",
       "menuTrackersDesc": "Show Trackers in the tray menu.",
       "menuFoxboard": "Foxboard",
@@ -528,7 +530,6 @@ const I18N = {
       "kernelPath": "Kernel Path",
       "configDefault": "Default Config",
       "logPath": "Log Path",
-      "configDir": "Config Dir",
       "coreDir": "Core Dir",
       "dataDir": "Data Dir",
       "helperDir": "Helper Dir",
@@ -745,10 +746,11 @@ const I18N = {
       "kernelsHint": "仅供浏览的核心文件列表。"
     },
     "control": {
-      "title": "配置控制",
+      "title": "配置列表",
       "config": "配置路径",
       "browse": "浏览",
       "import": "导入配置",
+      "importUrlTooltip": "从 URL 导入配置",
       "reload": "重载配置",
       "refresh": "刷新",
       "delete": "删除",
@@ -923,6 +925,7 @@ const I18N = {
       "restart": "重启",
       "refresh": "刷新",
       "copy": "复制",
+      "rename": "重命名",
       "delete": "删除"
     },
     "table": {
@@ -1076,8 +1079,8 @@ const I18N = {
       "trayMenuProviderTrafficDesc": "在托盘菜单中显示提供商流量汇总信息。",
       "menuKernelManager": "内核管理",
       "menuKernelManagerDesc": "在托盘菜单中显示内核管理。",
-      "menuDirectoryLocations": "目录位置",
-      "menuDirectoryLocationsDesc": "在托盘菜单中显示目录位置。",
+      "menuDirectoryLocations": "存储路径",
+      "menuDirectoryLocationsDesc": "在托盘菜单中显示存储路径。",
       "menuTrackers": "追踪器",
       "menuTrackersDesc": "在托盘菜单中显示追踪器。",
       "menuFoxboard": "Foxboard",
@@ -1104,7 +1107,6 @@ const I18N = {
       "kernelPath": "内核路径",
       "configDefault": "默认配置",
       "logPath": "日志路径",
-      "configDir": "配置目录",
       "coreDir": "内核目录",
       "dataDir": "数据目录",
       "helperDir": "助手目录",
@@ -1321,10 +1323,11 @@ const I18N = {
       "kernelsHint": "閲覧専用のコア一覧です。"
     },
     "control": {
-      "title": "設定コントロール",
+      "title": "設定リスト",
       "config": "設定パス",
       "browse": "参照",
       "import": "設定をインポート",
+      "importUrlTooltip": "URL から設定をインポート",
       "refresh": "更新",
       "delete": "削除",
       "recommendationsTitle": "おすすめ設定"
@@ -1498,6 +1501,7 @@ const I18N = {
       "restart": "再起動",
       "refresh": "更新",
       "copy": "コピー",
+      "rename": "名前を変更",
       "delete": "削除"
     },
     "table": {
@@ -1649,8 +1653,8 @@ const I18N = {
       "trayMenuProviderTrafficDesc": "トレイメニューにプロバイダ通信量の概要を表示します。",
       "menuKernelManager": "カーネル管理",
       "menuKernelManagerDesc": "トレイメニューにカーネル管理を表示します。",
-      "menuDirectoryLocations": "ディレクトリ場所",
-      "menuDirectoryLocationsDesc": "トレイメニューにディレクトリ場所を表示します。",
+      "menuDirectoryLocations": "保存パス",
+      "menuDirectoryLocationsDesc": "トレイメニューに保存パスを表示します。",
       "menuTrackers": "接続トラッカー",
       "menuTrackersDesc": "トレイメニューに接続トラッカーを表示します。",
       "menuFoxboard": "Foxboard",
@@ -1677,7 +1681,6 @@ const I18N = {
       "kernelPath": "カーネルパス",
       "configDefault": "既定設定",
       "logPath": "ログパス",
-      "configDir": "設定ディレクトリ",
       "coreDir": "コアディレクトリ",
       "dataDir": "データディレクトリ",
       "helperDir": "ヘルパーディレクトリ",
@@ -1892,10 +1895,11 @@ const I18N = {
       "kernelsHint": "읽기 전용 코어 목록입니다."
     },
     "control": {
-      "title": "설정 제어",
+      "title": "설정 목록",
       "config": "설정 경로",
       "browse": "찾아보기",
       "import": "설정 가져오기",
+      "importUrlTooltip": "URL에서 설정 가져오기",
       "refresh": "새로고침",
       "delete": "삭제",
       "recommendationsTitle": "추천 구성"
@@ -2069,6 +2073,7 @@ const I18N = {
       "restart": "재시작",
       "refresh": "새로고침",
       "copy": "복사",
+      "rename": "이름 변경",
       "delete": "삭제"
     },
     "table": {
@@ -2220,8 +2225,8 @@ const I18N = {
       "trayMenuProviderTrafficDesc": "트레이 메뉴에 제공자 트래픽 요약을 표시합니다.",
       "menuKernelManager": "커널 관리자",
       "menuKernelManagerDesc": "트레이 메뉴에 커널 관리자를 표시합니다.",
-      "menuDirectoryLocations": "디렉터리 위치",
-      "menuDirectoryLocationsDesc": "트레이 메뉴에 디렉터리 위치를 표시합니다.",
+      "menuDirectoryLocations": "저장 경로",
+      "menuDirectoryLocationsDesc": "트레이 메뉴에 저장 경로를 표시합니다.",
       "menuTrackers": "연결 추적",
       "menuTrackersDesc": "트레이 메뉴에 연결 추적을 표시합니다.",
       "menuFoxboard": "Foxboard",
@@ -2248,7 +2253,6 @@ const I18N = {
       "kernelPath": "커널 경로",
       "configDefault": "기본 설정",
       "logPath": "로그 경로",
-      "configDir": "설정 디렉터리",
       "coreDir": "코어 디렉터리",
       "dataDir": "데이터 디렉터리",
       "helperDir": "헬퍼 디렉터리",
@@ -2463,10 +2467,11 @@ const I18N = {
       "kernelsHint": "Liste en lecture seule des cœurs disponibles."
     },
     "control": {
-      "title": "Contrôle de configuration",
+      "title": "Liste des configurations",
       "config": "Chemin de configuration",
       "browse": "Parcourir",
       "import": "Importer la configuration",
+      "importUrlTooltip": "Importer la configuration depuis une URL",
       "refresh": "Actualiser",
       "delete": "Supprimer",
       "recommendationsTitle": "Configurations recommandées"
@@ -2640,6 +2645,7 @@ const I18N = {
       "restart": "Redémarrer",
       "refresh": "Actualiser",
       "copy": "Copier",
+      "rename": "Renommer",
       "delete": "Supprimer"
     },
     "table": {
@@ -2791,8 +2797,8 @@ const I18N = {
       "trayMenuProviderTrafficDesc": "Afficher le resume du trafic fournisseur dans le menu de la barre.",
       "menuKernelManager": "Gestionnaire du noyau",
       "menuKernelManagerDesc": "Afficher le gestionnaire du noyau dans le menu de la barre.",
-      "menuDirectoryLocations": "Emplacements des répertoires",
-      "menuDirectoryLocationsDesc": "Afficher les emplacements des répertoires dans le menu de la barre.",
+      "menuDirectoryLocations": "Chemins de stockage",
+      "menuDirectoryLocationsDesc": "Afficher les chemins de stockage dans le menu de la barre.",
       "menuTrackers": "Suivi des connexions",
       "menuTrackersDesc": "Afficher le suivi des connexions dans le menu de la barre.",
       "menuFoxboard": "Foxboard",
@@ -2819,7 +2825,6 @@ const I18N = {
       "kernelPath": "Chemin du noyau",
       "configDefault": "Config par défaut",
       "logPath": "Chemin des journaux",
-      "configDir": "Dossier config",
       "coreDir": "Dossier core",
       "dataDir": "Dossier data",
       "helperDir": "Dossier helper",
@@ -3034,10 +3039,11 @@ const I18N = {
       "kernelsHint": "Nur-Lesen-Liste der verfügbaren Kerne."
     },
     "control": {
-      "title": "Konfigurationssteuerung",
+      "title": "Konfigurationsliste",
       "config": "Konfigurationspfad",
       "browse": "Durchsuchen",
       "import": "Konfiguration importieren",
+      "importUrlTooltip": "Konfiguration per URL importieren",
       "refresh": "Aktualisieren",
       "delete": "Löschen",
       "recommendationsTitle": "Empfohlene Konfigurationen"
@@ -3211,6 +3217,7 @@ const I18N = {
       "restart": "Neu starten",
       "refresh": "Aktualisieren",
       "copy": "Kopieren",
+      "rename": "Umbenennen",
       "delete": "Löschen"
     },
     "table": {
@@ -3362,8 +3369,8 @@ const I18N = {
       "trayMenuProviderTrafficDesc": "Zusammenfassung des Provider-Traffics im Tray-Menü anzeigen.",
       "menuKernelManager": "Kernel-Manager",
       "menuKernelManagerDesc": "Kernel-Manager im Tray-Menü anzeigen.",
-      "menuDirectoryLocations": "Verzeichnisorte",
-      "menuDirectoryLocationsDesc": "Verzeichnisorte im Tray-Menü anzeigen.",
+      "menuDirectoryLocations": "Speicherpfade",
+      "menuDirectoryLocationsDesc": "Speicherpfade im Tray-Menü anzeigen.",
       "menuTrackers": "Verbindungen",
       "menuTrackersDesc": "Verbindungen im Tray-Menü anzeigen.",
       "menuFoxboard": "Foxboard",
@@ -3390,7 +3397,6 @@ const I18N = {
       "kernelPath": "Kernelpfad",
       "configDefault": "Standardkonfig",
       "logPath": "Logpfad",
-      "configDir": "Konfigordner",
       "coreDir": "Core-Ordner",
       "dataDir": "Datenordner",
       "helperDir": "Helper-Ordner",
@@ -3605,10 +3611,11 @@ const I18N = {
       "kernelsHint": "Список доступных ядер только для просмотра."
     },
     "control": {
-      "title": "Управление конфигурацией",
+      "title": "Список конфигураций",
       "config": "Путь к конфигурации",
       "browse": "Обзор",
       "import": "Импорт конфигурации",
+      "importUrlTooltip": "Импорт конфигурации по URL",
       "refresh": "Обновить",
       "delete": "Удалить",
       "recommendationsTitle": "Рекомендуемые конфигурации"
@@ -3782,6 +3789,7 @@ const I18N = {
       "restart": "Перезапустить",
       "refresh": "Обновить",
       "copy": "Копировать",
+      "rename": "Переименовать",
       "delete": "Удалить"
     },
     "table": {
@@ -3933,8 +3941,8 @@ const I18N = {
       "trayMenuProviderTrafficDesc": "Показывать сводку трафика провайдера в меню трея.",
       "menuKernelManager": "Диспетчер ядра",
       "menuKernelManagerDesc": "Показывать диспетчер ядра в меню трея.",
-      "menuDirectoryLocations": "Расположения каталогов",
-      "menuDirectoryLocationsDesc": "Показывать расположения каталогов в меню трея.",
+      "menuDirectoryLocations": "Пути хранения",
+      "menuDirectoryLocationsDesc": "Показывать пути хранения в меню трея.",
       "menuTrackers": "Отслеживание",
       "menuTrackersDesc": "Показывать отслеживание в меню трея.",
       "menuFoxboard": "Foxboard",
@@ -3961,7 +3969,6 @@ const I18N = {
       "kernelPath": "Путь ядра",
       "configDefault": "Конфиг по умолчанию",
       "logPath": "Путь логов",
-      "configDir": "Каталог конфигов",
       "coreDir": "Каталог ядра",
       "dataDir": "Каталог данных",
       "helperDir": "Каталог helper",

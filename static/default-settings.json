@@ -34,7 +34,6 @@
   "userDataPaths": {
     "userAppDataDir": "~/Library/Application Support/ClashFox/",
     "configFile": "default.yaml",
-    "configDir": "config",
     "coreDir": "core",
     "dataDir": "data",
     "helperDir": "helper",

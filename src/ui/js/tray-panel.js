@@ -20,6 +20,7 @@ let panelProviderPayloadSignature = '';
 let panelProviderCarouselIndex = 0;
 let panelProviderCarouselTimer = null;
 let lastSettingsSignature = '';
+let systemThemeIsDark = null;
 
 const PANEL_TRAFFIC_HISTORY_LIMIT = 520;
 const PANEL_TRAFFIC_INTERVAL_MS = 1000;
@@ -38,6 +39,8 @@ const FOX_RANK_SKIN_PALETTES = {
   aurora: { start: '#7df3d2', end: '#4bc6ff' },
   starlight: { start: '#c685ff', end: '#8d6dff' },
   'solar-crown': { start: '#f6d365', end: '#fda085' },
+  'nebula-flare': { start: '#ff8bd8', end: '#8f7cff' },
+  'void-aurora': { start: '#8ef0ff', end: '#6ea0ff' },
 };
 let panelI18n = {
   chartTitle: 'Network Rate',
@@ -88,17 +91,26 @@ async function applyTrayTheme(preloadedSettings = null) {
     } else if (preference === 'night' || preference === 'dark') {
       theme = 'night';
     } else {
-      theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'night'
-        : 'day';
+      if (systemThemeIsDark !== null) {
+        theme = systemThemeIsDark ? 'night' : 'day';
+      } else {
+        theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+          ? 'night'
+          : 'day';
+      }
     }
     document.body.dataset.theme = theme;
     document.documentElement.setAttribute('data-theme', theme);
     applyFoxRankThemeCssVarsFromSettings(resolvedSettings);
   } catch {
-    const fallback = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'night'
-      : 'day';
+    let fallback;
+    if (systemThemeIsDark !== null) {
+      fallback = systemThemeIsDark ? 'night' : 'day';
+    } else {
+      fallback = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'night'
+        : 'day';
+    }
     if (document.body) {
       document.body.dataset.theme = fallback;
       document.documentElement.setAttribute('data-theme', fallback);
@@ -878,7 +890,10 @@ if (window.clashfox && typeof window.clashfox.onTrayPanelVisibility === 'functio
 }
 
 if (window.clashfox && typeof window.clashfox.onSystemThemeChange === 'function') {
-  window.clashfox.onSystemThemeChange(() => {
+  window.clashfox.onSystemThemeChange((payload = {}) => {
+    if (payload && typeof payload.dark === 'boolean') {
+      systemThemeIsDark = payload.dark;
+    }
     applyTrayTheme().catch(() => {});
   });
 }

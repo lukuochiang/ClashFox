@@ -137,6 +137,13 @@ function normalizeModeValue(mode = 'rule') {
   return 'rule';
 }
 
+function resolveReloadConfigPath(source = {}) {
+  const candidate = source && typeof source === 'object'
+    ? (source.configPath || source.configFile || source.path || '')
+    : '';
+  return String(candidate || '').trim();
+}
+
 function sanitizeHeadersForLog(headers = {}) {
   const nextHeaders = { ...(headers || {}) };
   if (Object.prototype.hasOwnProperty.call(nextHeaders, 'Authorization')) {
@@ -178,7 +185,7 @@ function shouldSuppressMihomoRequestLog(method = 'GET', url = '', ok = true) {
 }
 
 function logMihomoApi(event, payload = {}) {
-  // Silent in production
+  // console.log(`[MihomoAPI] ${event}:`, payload);
 }
 
 let mihomoRequestSeq = 0;
@@ -285,29 +292,14 @@ async function runConfigRequestCandidates(source = {}, candidates = []) {
   return lastError;
 }
 
-function callBridge(bridge, methodName, ...args) {
-  const api = getBridge(bridge);
-  if (!api || typeof api[methodName] !== 'function') {
-    return null;
-  }
-  return api[methodName](...args);
-}
+// Removed callBridge function - no longer needed for Mihomo API requests
 
-// All /configs reads and writes should go through these helpers first so
-// renderer callers do not need to care whether the data comes from IPC or fetch.
+// Direct fetch to Mihomo controller - bypassing Bridge layer for better performance
 async function getConfigsViaBridgeOrFetch(source = {}, bridge) {
-  const bridged = callBridge(bridge, 'getMihomoConfigs', source);
-  if (bridged) {
-    return bridged;
-  }
   return fetchJsonThroughController(source, '/configs');
 }
 
 async function getVersionViaBridgeOrFetch(source = {}, bridge) {
-  const bridged = callBridge(bridge, 'getMihomoVersion', source);
-  if (bridged) {
-    return bridged;
-  }
   return fetchJsonThroughController(source, '/version');
 }
 
@@ -316,18 +308,7 @@ async function patchConfigsViaBridgeOrFetch(patch = {}, source = {}, bridge) {
   if (!Object.keys(configPatch).length) {
     return { ok: false, error: 'invalid_config_patch' };
   }
-  const bridged = callBridge(bridge, 'updateMihomoConfig', configPatch, source);
-  if (bridged) {
-    return bridged;
-  }
-  const allowLanOnly = Object.keys(configPatch).length === 1
-    && Object.prototype.hasOwnProperty.call(configPatch, 'allow-lan');
-  if (allowLanOnly) {
-    const legacyBridge = callBridge(bridge, 'updateMihomoAllowLan', Boolean(configPatch['allow-lan']), source);
-    if (legacyBridge) {
-      return legacyBridge;
-    }
-  }
+  // Direct fetch to Mihomo controller - bypassing Bridge layer for better performance
   return runConfigRequestCandidates(source, [
     {
       method: 'PATCH',
@@ -404,10 +385,7 @@ export async function updateModeViaController(mode = 'rule', source = {}, bridge
 }
 
 export async function reloadMihomoCore(source = {}, bridge) {
-  const bridged = callBridge(bridge, 'reloadMihomoCore', source);
-  if (bridged) {
-    return bridged;
-  }
+  // Direct fetch to Mihomo controller - bypassing Bridge layer for better performance
   return runConfigRequestCandidates(source, [
     {
       method: 'POST',
@@ -417,16 +395,14 @@ export async function reloadMihomoCore(source = {}, bridge) {
 }
 
 export async function reloadMihomoConfig(source = {}, bridge) {
-  const bridged = callBridge(bridge, 'reloadMihomoConfig', source);
-  if (bridged) {
-    return bridged;
-  }
+  // Direct fetch to Mihomo controller - bypassing Bridge layer for better performance
+  const configPath = resolveReloadConfigPath(source);
   return runConfigRequestCandidates(source, [
     {
       method: 'PUT',
       path: '/configs?reload=true',
       headers: { 'Content-Type': 'application/json' },
-      body: { path: '', payload: '' },
+      body: { path: configPath, payload: '' },
     },
   ]);
 }

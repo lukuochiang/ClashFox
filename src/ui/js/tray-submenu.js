@@ -18,6 +18,7 @@ let panelChartRatesRx = [];
 let panelChartRatesTx = [];
 let panelChartTotalRx = null;
 let panelChartTotalTx = null;
+let systemThemeIsDark = null;
 const CONNECTIVITY_REFRESH_MS = 1000;
 const SUBMENU_MIN_WIDTH = 170;
 const SUBMENU_MAX_WIDTH = 340;
@@ -45,6 +46,8 @@ const FOX_RANK_SKIN_PALETTES = {
   aurora: { start: '#7df3d2', end: '#4bc6ff' },
   starlight: { start: '#c685ff', end: '#8d6dff' },
   'solar-crown': { start: '#f6d365', end: '#fda085' },
+  'nebula-flare': { start: '#ff8bd8', end: '#8f7cff' },
+  'void-aurora': { start: '#8ef0ff', end: '#6ea0ff' },
 };
 
 function nextTick() {
@@ -161,17 +164,26 @@ async function applyTrayTheme(preloadedSettings = null) {
     } else if (preference === 'night' || preference === 'dark') {
       theme = 'night';
     } else {
-      theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'night'
-        : 'day';
+      if (systemThemeIsDark !== null) {
+        theme = systemThemeIsDark ? 'night' : 'day';
+      } else {
+        theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+          ? 'night'
+          : 'day';
+      }
     }
     document.body.dataset.theme = theme;
     document.documentElement.setAttribute('data-theme', theme);
     applyFoxRankThemeCssVarsFromSettings(resolvedSettings);
   } catch {
-    const fallback = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'night'
-      : 'day';
+    let fallback;
+    if (systemThemeIsDark !== null) {
+      fallback = systemThemeIsDark ? 'night' : 'day';
+    } else {
+      fallback = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'night'
+        : 'day';
+    }
     if (document.body) {
       document.body.dataset.theme = fallback;
       document.documentElement.setAttribute('data-theme', fallback);
@@ -204,6 +216,10 @@ function applyFoxRankThemeCssVarsFromSettings(settings = null) {
     node.style.setProperty('--fox-rank-skin-end', palette.end);
     node.style.setProperty('--fox-rank-aura-start', palette.start);
     node.style.setProperty('--fox-rank-aura-end', palette.end);
+    node.style.setProperty('--accent', palette.start);
+    node.style.setProperty('--accent-strong', palette.end);
+    node.style.setProperty('--chart-down', palette.start);
+    node.style.setProperty('--chart-up', palette.end);
     if (palette.skinId) {
       node.dataset.foxRankSkin = palette.skinId;
     } else if (node.dataset && Object.prototype.hasOwnProperty.call(node.dataset, 'foxRankSkin')) {
@@ -235,9 +251,10 @@ const ICON_SVGS = {
   kernelRestart: '<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v6h-6"/></svg>',
   folder: '<svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/><path d="M3 7V5a2 2 0 0 1 2-2h5l2 2h9"/></svg>',
   userDir: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0v1H5z"/></svg>',
-  configDir: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5"/></svg>',
+  coreDir: '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M3 10h2M3 14h2M19 10h2M19 14h2M10 3v2M14 3v2M10 19v2M14 19v2"/></svg>',
+  dataDir: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5"/></svg>',
   workDir: '<svg viewBox="0 0 24 24"><path d="M4 9h16v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9z"/><path d="M8 9V7a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M4 12h16"/></svg>',
-  helperDir: '<svg viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="9" rx="2"/><path d="M7 10V7a5 5 0 0 1 10 0v3"/><circle cx="12" cy="14.5" r="1.1"/></svg>',
+  helperDir: '<svg viewBox="0 0 24 24"><path d="M12 3 6.5 5.5v4.2c0 3.8 2.2 7.1 5.5 8.6 3.3-1.5 5.5-4.8 5.5-8.6V5.5L12 3Z" fill="var(--icon-fill-success)"/><path d="m9.4 12.1 1.6 1.6 3.7-3.7" fill="var(--icon-fill-text)"/></svg>',
   logDir: '<svg viewBox="0 0 24 24"><path d="M6 4h9l3 3v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M9 11h6M9 15h6"/></svg>',
 };
 
@@ -976,10 +993,9 @@ function makeRow(item) {
     const row = document.createElement('div');
     row.className = 'menu-row menu-row-provider disabled';
     row.classList.add(`status-${String(item.status || 'unknown')}`);
-    const check = document.createElement('div');
-    check.className = 'menu-check empty';
-    check.textContent = ' ';
-    row.appendChild(check);
+    if (item.checked || String(item.status || '').toLowerCase() === 'current') {
+      row.classList.add('selected');
+    }
     const bullet = document.createElement('div');
     bullet.className = 'menu-leading provider-bullet';
     row.appendChild(bullet);
@@ -1008,11 +1024,8 @@ function makeRow(item) {
     if (item.action) {
       row.dataset.action = String(item.action);
     }
-    if (typeof item.checked === 'boolean') {
-      const check = document.createElement('div');
-      check.className = `menu-check${item.checked ? '' : ' empty'}`;
-      check.textContent = item.checked ? '✓' : ' ';
-      row.appendChild(check);
+    if (item.checked) {
+      row.classList.add('selected');
     }
     const bullet = document.createElement('div');
     bullet.className = 'menu-leading child-bullet';
@@ -1052,6 +1065,7 @@ function makeRow(item) {
     row.dataset.iconKey = String(item.iconKey);
   }
   const actionName = item && item.action ? String(item.action).trim() : '';
+  const isNetworkToggle = NETWORK_TOGGLE_ACTIONS.has(actionName);
   const pending = NETWORK_TOGGLE_ACTIONS.has(actionName) && pendingActionSet.has(actionName);
   const isLoading = NETWORK_TOGGLE_ACTIONS.has(actionName) && loadingVisibleSet.has(actionName);
   const clickable = item.enabled !== false && !pending;
@@ -1062,8 +1076,11 @@ function makeRow(item) {
   }
 
   const leadingParts = makeLeading(item, isLoading);
-  if (typeof item.checked === 'boolean') {
+  if (typeof item.checked === 'boolean' && !isNetworkToggle) {
     row.appendChild(leadingParts.check);
+    if (item.checked) {
+      row.classList.add('selected');
+    }
   }
   row.appendChild(leadingParts.leading);
 
@@ -1350,7 +1367,10 @@ if (window.clashfox && typeof window.clashfox.onTraySubmenuVisibility === 'funct
 }
 
 if (window.clashfox && typeof window.clashfox.onSystemThemeChange === 'function') {
-  window.clashfox.onSystemThemeChange(() => {
+  window.clashfox.onSystemThemeChange((payload = {}) => {
+    if (payload && typeof payload.dark === 'boolean') {
+      systemThemeIsDark = payload.dark;
+    }
     applyTrayTheme().catch(() => {});
   });
 }

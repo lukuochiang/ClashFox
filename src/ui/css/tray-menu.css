@@ -951,6 +951,16 @@ body[data-theme="day"] .panel-card-title {
   color: #dbeeff;
 }
 
+.menu-row-provider.selected,
+.menu-row-child.selected {
+  background: transparent;
+}
+
+.menu-row-provider.selected .menu-label,
+.menu-row-child.selected .menu-label {
+  color: var(--ink);
+}
+
 .menu-row.disabled {
   color: var(--muted);
 }
@@ -1097,6 +1107,11 @@ body[data-theme="day"] .panel-card-title {
   box-shadow: 0 0 0 3px rgba(148, 171, 197, 0.2);
 }
 
+.menu-row-provider.selected .provider-bullet,
+.menu-row-child.selected .child-bullet {
+  animation: tray-selected-breath 1.8s ease-in-out infinite;
+}
+
 .menu-row-child.status-alive .child-bullet {
   background: var(--latency-good);
   box-shadow: 0 0 0 3px var(--latency-good-glow);
@@ -1120,6 +1135,17 @@ body[data-theme="day"] .panel-card-title {
 .menu-row-child.status-dead .child-bullet {
   background: var(--latency-dead);
   box-shadow: 0 0 0 3px var(--latency-dead-glow);
+}
+
+@keyframes tray-selected-breath {
+  0%, 100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.12);
+    filter: brightness(1.18);
+  }
 }
 
 .menu-row.disabled[data-icon-key="currentService"] .menu-leading {
@@ -1155,8 +1181,10 @@ body[data-theme="day"] .panel-card-title {
 .menu-row[data-icon-key="directory"] { --menu-icon-color: #61b7ff; }
 .menu-row[data-icon-key="folder"] { --menu-icon-color: #79d6c0; }
 .menu-row[data-icon-key="userDir"] { --menu-icon-color: #2dd4bf; }
-.menu-row[data-icon-key="configDir"] { --menu-icon-color: #38bdf8; }
+.menu-row[data-icon-key="coreDir"] { --menu-icon-color: #38bdf8; }
+.menu-row[data-icon-key="dataDir"] { --menu-icon-color: #60a5fa; }
 .menu-row[data-icon-key="workDir"] { --menu-icon-color: #22c55e; }
+.menu-row[data-icon-key="helperDir"] { --menu-icon-color: #22c55e; }
 .menu-row[data-icon-key="logDir"] { --menu-icon-color: #a78bfa; }
 
 @keyframes tray-spin {

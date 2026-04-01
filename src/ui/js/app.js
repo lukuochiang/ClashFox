@@ -67,7 +67,7 @@ let noticePopTitle = document.getElementById('noticePopTitle');
 let contentRoot = document.getElementById('contentRoot');
 let currentPage = document.body ? document.body.dataset.page : '';
 let appWindowVisible = !document.hidden;
-const VALID_PAGES = new Set(['overview', 'kernel', 'config', 'logs', 'settings', 'help', 'dashboard']);
+const VALID_PAGES = new Set(['overview', 'kernel', 'config', 'logs', 'settings', 'help', 'foxboard']);
 const FOX_RANK_STORAGE_KEY = 'clashfox-fox-rank-state';
 const FOX_RANK_PANEL_EXPANDED_KEY = 'clashfox-fox-rank-panel-expanded';
 const FOX_RANK_USAGE_RESET_VERSION = '2026-03-16-reset-usage-v1';
@@ -2102,6 +2102,7 @@ let backupTableFull = document.getElementById('backupTableFull');
 let kernelCurrentTable = document.getElementById('kernelCurrentTable');
 let configsRefresh = document.getElementById('configsRefresh');
 let configsImport = document.getElementById('configsImport');
+let configsImportUrl = document.getElementById('configsImportUrl');
 let configsReload = document.getElementById('configsReload');
 let configTable = document.getElementById('configTable');
 let configPrev = document.getElementById('configPrev');
@@ -2162,6 +2163,12 @@ let updateGuideClose = document.getElementById('updateGuideClose');
 let updateGuidePrimaryBtn = document.getElementById('updateGuidePrimaryBtn');
 let updateGuideReleaseBtn = document.getElementById('updateGuideReleaseBtn');
 let updateGuideAlphaBtn = document.getElementById('updateGuideAlphaBtn');
+let configUrlModal = document.getElementById('configUrlModal');
+let configUrlModalTitle = document.getElementById('configUrlModalTitle');
+let configUrlModalHint = document.getElementById('configUrlModalHint');
+let configUrlInput = document.getElementById('configUrlInput');
+let configUrlCancel = document.getElementById('configUrlCancel');
+let configUrlConfirm = document.getElementById('configUrlConfirm');
 let appName = document.getElementById('appName');
 let appVersion = document.getElementById('appVersion');
 let themeToggle = document.getElementById('themeToggle');
@@ -2173,12 +2180,10 @@ let settingsBrowseConfig = document.getElementById('settingsBrowseConfig');
 let settingsKernelPath = document.getElementById('settingsKernelPath');
 let settingsConfigDefault = document.getElementById('settingsConfigDefault');
 let settingsLogPath = document.getElementById('settingsLogPath');
-let settingsConfigDir = document.getElementById('settingsConfigDir');
 let settingsCoreDir = document.getElementById('settingsCoreDir');
 let settingsDataDir = document.getElementById('settingsDataDir');
 let settingsHelperDir = document.getElementById('settingsHelperDir');
 let settingsLogDir = document.getElementById('settingsLogDir');
-let settingsConfigDirReveal = document.getElementById('settingsConfigDirReveal');
 let settingsCoreDirReveal = document.getElementById('settingsCoreDirReveal');
 let settingsDataDirReveal = document.getElementById('settingsDataDirReveal');
 let settingsHelperDirReveal = document.getElementById('settingsHelperDirReveal');
@@ -3536,14 +3541,14 @@ function normalizeSettingsForUi(settings) {
   if (!normalized.configFile && typeof userDataPaths.configFileDir === 'string') {
     normalized.configFile = normalizeConfigFileName(userDataPaths.configFileDir);
   }
-  if (!normalized.configDir && typeof userDataPaths.configDir === 'string') {
-    normalized.configDir = userDataPaths.configDir;
-  }
   if (!normalized.coreDir && typeof userDataPaths.coreDir === 'string') {
     normalized.coreDir = userDataPaths.coreDir;
   }
   if (!normalized.dataDir && typeof userDataPaths.dataDir === 'string') {
     normalized.dataDir = userDataPaths.dataDir;
+  }
+  if (!normalized.dataDir && typeof userDataPaths.configDir === 'string') {
+    normalized.dataDir = userDataPaths.configDir;
   }
   if (!normalized.helperDir && typeof userDataPaths.helperDir === 'string') {
     normalized.helperDir = userDataPaths.helperDir;
@@ -3743,9 +3748,12 @@ function mapSettingsForFile(settings) {
     ...(Object.prototype.hasOwnProperty.call(mapped, 'userAppDataDir') ? { userAppDataDir: String(mapped.userAppDataDir) } : {}),
     ...(Object.prototype.hasOwnProperty.call(mapped, 'configFile') ? { configFile: normalizeConfigFileName(mapped.configFile) } : {}),
     ...(Object.prototype.hasOwnProperty.call(mapped, 'configFileDir') ? { configFile: normalizeConfigFileName(mapped.configFileDir) } : {}),
-    ...(Object.prototype.hasOwnProperty.call(mapped, 'configDir') ? { configDir: String(mapped.configDir) } : {}),
     ...(Object.prototype.hasOwnProperty.call(mapped, 'coreDir') ? { coreDir: String(mapped.coreDir) } : {}),
     ...(Object.prototype.hasOwnProperty.call(mapped, 'dataDir') ? { dataDir: String(mapped.dataDir) } : {}),
+    ...(!Object.prototype.hasOwnProperty.call(mapped, 'dataDir')
+      && Object.prototype.hasOwnProperty.call(mapped, 'configDir')
+      ? { dataDir: String(mapped.configDir) }
+      : {}),
     ...(Object.prototype.hasOwnProperty.call(mapped, 'helperDir') ? { helperDir: String(mapped.helperDir) } : {}),
     ...(Object.prototype.hasOwnProperty.call(mapped, 'logDir') ? { logDir: String(mapped.logDir) } : {}),
     ...(Object.prototype.hasOwnProperty.call(mapped, 'pidDir') ? { pidDir: String(mapped.pidDir) } : {}),
@@ -4079,7 +4087,6 @@ function saveSettings(patch, options = {}) {
   const userDataPathKeys = [
     'userAppDataDir',
     'configFile',
-    'configDir',
     'coreDir',
     'dataDir',
     'helperDir',
@@ -4091,6 +4098,10 @@ function saveSettings(patch, options = {}) {
       nextUserDataPaths[key] = nextPatch[key];
     }
   });
+  if (!Object.prototype.hasOwnProperty.call(nextPatch, 'dataDir')
+    && Object.prototype.hasOwnProperty.call(nextPatch, 'configDir')) {
+    nextUserDataPaths.dataDir = nextPatch.configDir;
+  }
   if (Object.keys(nextUserDataPaths).length) {
     nextPatch.userDataPaths = nextUserDataPaths;
   }
@@ -4632,9 +4643,6 @@ function applySettings(settings) {
   if (settingsProxyAllowLan) {
     settingsProxyAllowLan.checked = Boolean(state.settings.proxy?.allowLan);
   }
-  if (settingsConfigDir) {
-    settingsConfigDir.value = resolveAbsolutePath(state.settings.userDataPaths?.configDir || 'config');
-  }
   if (settingsCoreDir) {
     settingsCoreDir.value = resolveAbsolutePath(state.settings.userDataPaths?.coreDir || 'core');
   }
@@ -4949,6 +4957,108 @@ function promptConfirm({ title, body, confirmLabel, confirmTone = 'danger' }) {
     confirmOk.addEventListener('click', onConfirm);
     confirmModal.addEventListener('keydown', onKeydown);
     confirmOk.focus();
+  });
+}
+
+function promptConfigTextInput({
+  title = '',
+  hint = '',
+  placeholder = '',
+  defaultValue = '',
+  confirmLabel = '',
+  inputType = 'text',
+} = {}) {
+  if (!configUrlModal || !configUrlInput || !configUrlCancel || !configUrlConfirm) {
+    return Promise.resolve(null);
+  }
+  if (configUrlModalTitle) {
+    configUrlModalTitle.textContent = title || '';
+  }
+  if (configUrlModalHint) {
+    configUrlModalHint.textContent = hint || '';
+  }
+  configUrlCancel.textContent = ti('confirm.cancel', '取消');
+  configUrlConfirm.textContent = confirmLabel || ti('actions.doneAction', '完成');
+  configUrlInput.type = inputType || 'text';
+  configUrlInput.placeholder = placeholder || '';
+  configUrlInput.value = String(defaultValue || '').trim();
+  configUrlModal.classList.add('show');
+  configUrlModal.setAttribute('aria-hidden', 'false');
+
+  return new Promise((resolve) => {
+    const cleanup = () => {
+      configUrlModal.classList.remove('show');
+      configUrlModal.setAttribute('aria-hidden', 'true');
+      configUrlCancel.removeEventListener('click', onCancel);
+      configUrlConfirm.removeEventListener('click', onConfirm);
+      configUrlInput.removeEventListener('keydown', onKeydown);
+      configUrlModal.removeEventListener('click', onBackdrop);
+      configUrlModal.removeEventListener('keydown', onModalKeydown);
+    };
+
+    const onCancel = () => {
+      cleanup();
+      resolve(null);
+    };
+
+    const onConfirm = () => {
+      const value = String(configUrlInput.value || '').trim();
+      cleanup();
+      resolve(value || null);
+    };
+
+    const onKeydown = (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        onConfirm();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        onCancel();
+      }
+    };
+
+    const onModalKeydown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCancel();
+      }
+    };
+
+    const onBackdrop = (event) => {
+      if (event.target === configUrlModal) {
+        onCancel();
+      }
+    };
+
+    configUrlCancel.addEventListener('click', onCancel);
+    configUrlConfirm.addEventListener('click', onConfirm);
+    configUrlInput.addEventListener('keydown', onKeydown);
+    configUrlModal.addEventListener('click', onBackdrop);
+    configUrlModal.addEventListener('keydown', onModalKeydown);
+    configUrlInput.focus();
+    configUrlInput.select();
+  });
+}
+
+function promptConfigUrlImport(defaultUrl = '') {
+  return promptConfigTextInput({
+    title: ti('control.importUrlModalTitle', '从 URL 安装配置'),
+    hint: ti('control.importUrlModalHint', '你可以从 URL 导入配置。'),
+    placeholder: ti('control.importUrlModalPlaceholder', 'https://example.com/config.yaml'),
+    defaultValue: defaultUrl,
+    confirmLabel: ti('actions.doneAction', '完成'),
+    inputType: 'url',
+  });
+}
+
+function promptConfigRenameInput(currentName = '') {
+  return promptConfigTextInput({
+    title: ti('control.renameConfigTitle', '重命名配置'),
+    hint: ti('control.renameConfigHint', '仅支持 .yaml / .yml 文件名。'),
+    placeholder: ti('control.renameConfigPlaceholder', 'new-config.yaml'),
+    defaultValue: currentName,
+    confirmLabel: ti('actions.save', '保存'),
+    inputType: 'text',
   });
 }
 
@@ -6104,6 +6214,11 @@ function applyKernelVersionDisplay(versionRaw = '') {
   const kernelDisplay = formatKernelDisplay(normalizedVersion);
   if (overviewKernel) {
     overviewKernel.textContent = kernelDisplay || '-';
+    if (kernelDisplay && kernelDisplay !== '-') {
+      overviewKernel.title = kernelDisplay;
+    } else {
+      overviewKernel.removeAttribute('title');
+    }
   }
   if (installCurrentKernel) {
     installCurrentKernel.textContent = kernelDisplay && kernelDisplay !== '-' ? kernelDisplay : t('labels.notInstalled');
@@ -6359,9 +6474,6 @@ async function runCommand(command, args = [], options = {}) {
   const effectiveSettings = { ...(state.fileSettings || {}), ...(state.settings || {}) };
   const userDataPaths = effectiveSettings.userDataPaths || {};
   const pathArgs = [];
-  if (userDataPaths.configDir) {
-    pathArgs.push('--config-dir', resolveCommandPath(userDataPaths.configDir));
-  }
   if (userDataPaths.coreDir) {
     pathArgs.push('--core-dir', resolveCommandPath(userDataPaths.coreDir));
   }
@@ -6769,9 +6881,6 @@ function updateStatusUI(data) {
   }
   if (settingsLogPath) {
     settingsLogPath.textContent = data.logPath || '-';
-  }
-  if (settingsConfigDir) {
-    settingsConfigDir.placeholder = data.configDir || '-';
   }
   if (settingsCoreDir) {
     settingsCoreDir.placeholder = data.coreDir || '-';
@@ -11514,12 +11623,46 @@ function getCurrentConfigPath() {
   }
   const userDataPaths = state.settings?.userDataPaths || {};
   const userAppDataDir = String(userDataPaths.userAppDataDir || '').trim();
-  const configDir = String(userDataPaths.configDir || 'config').trim() || 'config';
+  const dataDir = String(userDataPaths.dataDir || userDataPaths.configDir || 'data').trim() || 'data';
   if (!userAppDataDir) {
     return selected;
   }
   const base = userAppDataDir.replace(/[\\/]+$/, '');
-  return `${base}/${configDir}/${selected}`.replace(/\/+/g, '/');
+  return `${base}/${dataDir}/${selected}`.replace(/\/+/g, '/');
+}
+
+function isAbsolutePath(value = '') {
+  const text = String(value || '').trim();
+  return text.startsWith('/') || /^[A-Za-z]:[\\/]/.test(text);
+}
+
+function resolveReloadConfigPath() {
+  const currentPath = String(getCurrentConfigPath() || '').trim();
+  if (!currentPath) {
+    return '';
+  }
+  if (isAbsolutePath(currentPath)) {
+    return currentPath;
+  }
+  const matched = Array.isArray(state.configs)
+    ? state.configs.find((item) => item && typeof item.path === 'string' && isCurrentConfigPath(item.path, currentPath))
+    : null;
+  if (matched && typeof matched.path === 'string' && isAbsolutePath(matched.path)) {
+    return matched.path.trim();
+  }
+  const settingsPaths = state.settings && state.settings.userDataPaths && typeof state.settings.userDataPaths === 'object'
+    ? state.settings.userDataPaths
+    : {};
+  const filePaths = state.fileSettings && state.fileSettings.userDataPaths && typeof state.fileSettings.userDataPaths === 'object'
+    ? state.fileSettings.userDataPaths
+    : {};
+  const userAppDataDir = String(settingsPaths.userAppDataDir || filePaths.userAppDataDir || '').trim();
+  const dataDir = String(settingsPaths.dataDir || settingsPaths.configDir || filePaths.dataDir || filePaths.configDir || 'data').trim() || 'data';
+  if (isAbsolutePath(userAppDataDir)) {
+    const base = userAppDataDir.replace(/[\\/]+$/, '');
+    return `${base}/${dataDir}/${currentPath}`.replace(/\/+/g, '/');
+  }
+  return currentPath;
 }
 
 function normalizeConfigPathKey(value = '') {
@@ -11636,13 +11779,12 @@ function renderConfigTable() {
     html += `<td class="name-col">${item.name || '-'} ${isCurrent ? `<span class="tag current">${t('labels.current')}</span>` : ''}</td>`;
     // html += `<td class="path-col">${item.path || '-'}</td>`;
     html += `<td class="modified-col">${item.modified || '-'}</td>`;
-    html += '<td class="action-col">';
+    html += '<td class="action-col"><div class="config-action-group">';
     if (!isCurrent) {
+      html += `<button class="icon-btn ghost small table-icon-btn list-action-icon-btn config-rename-btn" type="button" data-action="rename-config" data-path="${item.path || ''}" data-name="${item.name || ''}" data-tip-key="actions.rename" data-tip="${ti('actions.rename', 'Rename')}" data-position="top" data-native-title="false" aria-label="${ti('actions.rename', 'Rename')}"><svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="m14.6 5.2 4.2 4.2-9.7 9.7H4.9v-4.2l9.7-9.7Zm1.3-1.3 1.2-1.2a1.8 1.8 0 0 1 2.5 0l1.7 1.7a1.8 1.8 0 0 1 0 2.5l-1.2 1.2-4.2-4.2Z"></path></svg></button>`;
       html += `<button class="icon-btn ghost small table-icon-btn list-action-icon-btn config-delete-btn danger-action-btn" type="button" data-action="delete-config" data-path="${item.path || ''}" data-name="${item.name || ''}" data-tip-key="actions.delete" data-tip="${ti('actions.delete', 'Delete')}" data-position="top" data-native-title="false" aria-label="${ti('actions.delete', 'Delete')}"><svg viewBox="0 0 24 24" role="presentation" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 6h2v9h-2V9Zm4 0h2v9h-2V9ZM7 9h2v9H7V9Z"></path></svg></button>`;
-    } else {
-      html += '-';
     }
-    html += '</td>';
+    html += '</div></td>';
     // html += `<td class="current-col">${isCurrent ? t('labels.current') : '-'}</td>`;
     html += '</tr>';
   });
@@ -12626,6 +12768,7 @@ function refreshPageRefs() {
   kernelCurrentTable = document.getElementById('kernelCurrentTable');
   configsRefresh = document.getElementById('configsRefresh');
   configsImport = document.getElementById('configsImport');
+  configsImportUrl = document.getElementById('configsImportUrl');
   configsReload = document.getElementById('configsReload');
   configTable = document.getElementById('configTable');
   configPrev = document.getElementById('configPrev');
@@ -12684,6 +12827,12 @@ function refreshPageRefs() {
   updateGuidePrimaryBtn = document.getElementById('updateGuidePrimaryBtn');
   updateGuideReleaseBtn = document.getElementById('updateGuideReleaseBtn');
   updateGuideAlphaBtn = document.getElementById('updateGuideAlphaBtn');
+  configUrlModal = document.getElementById('configUrlModal');
+  configUrlModalTitle = document.getElementById('configUrlModalTitle');
+  configUrlModalHint = document.getElementById('configUrlModalHint');
+  configUrlInput = document.getElementById('configUrlInput');
+  configUrlCancel = document.getElementById('configUrlCancel');
+  configUrlConfirm = document.getElementById('configUrlConfirm');
   appName = document.getElementById('appName');
   appVersion = document.getElementById('appVersion');
   themeToggle = document.getElementById('themeToggle');
@@ -12695,12 +12844,10 @@ function refreshPageRefs() {
   settingsKernelPath = document.getElementById('settingsKernelPath');
   settingsConfigDefault = document.getElementById('settingsConfigDefault');
   settingsLogPath = document.getElementById('settingsLogPath');
-  settingsConfigDir = document.getElementById('settingsConfigDir');
   settingsCoreDir = document.getElementById('settingsCoreDir');
   settingsDataDir = document.getElementById('settingsDataDir');
   settingsHelperDir = document.getElementById('settingsHelperDir');
   settingsLogDir = document.getElementById('settingsLogDir');
-  settingsConfigDirReveal = document.getElementById('settingsConfigDirReveal');
   settingsCoreDirReveal = document.getElementById('settingsCoreDirReveal');
   settingsDataDirReveal = document.getElementById('settingsDataDirReveal');
   settingsHelperDirReveal = document.getElementById('settingsHelperDirReveal');
@@ -12873,7 +13020,7 @@ function refreshPageView() {
       renderRulesOverviewCard();
     }
   }
-  if (currentPage === 'dashboard') {
+  if (currentPage === 'foxboard') {
     initDashboardFrame();
   }
   if (currentPage === 'help') {
@@ -13188,13 +13335,13 @@ async function syncMainWindowActivity() {
     stopOverviewActivity();
     stopFoxRankActivity();
     closeMihomoPageLogsSocket();
-    if (dashboardLocalModule && typeof dashboardLocalModule.teardownDashboardPanel === 'function' && currentPage === 'dashboard') {
+    if (dashboardLocalModule && typeof dashboardLocalModule.teardownDashboardPanel === 'function' && currentPage === 'foxboard') {
       dashboardLocalModule.teardownDashboardPanel();
       state.dashboardLoaded = false;
     }
     return;
   }
-  if (currentPage === 'dashboard') {
+  if (currentPage === 'foxboard') {
     await initDashboardFrame();
   } else if (dashboardLocalModule && typeof dashboardLocalModule.teardownDashboardPanel === 'function' && state.dashboardLoaded) {
     dashboardLocalModule.teardownDashboardPanel();
@@ -13232,8 +13379,12 @@ async function navigatePage(targetPage, pushState = true) {
   if (!VALID_PAGES.has(normalized)) {
     return;
   }
-  if (currentPage === 'dashboard' && normalized !== 'dashboard' && dashboardLocalModule && typeof dashboardLocalModule.teardownDashboardPanel === 'function') {
+  // 停止非当前页面的定时器以减少资源占用
+  if (currentPage === 'foxboard' && normalized !== 'foxboard' && dashboardLocalModule && typeof dashboardLocalModule.teardownDashboardPanel === 'function') {
+    console.log('[PageNavigation] Leaving foxboard, stopping timers');
     dashboardLocalModule.teardownDashboardPanel();
+  } else if (currentPage !== 'foxboard' && normalized === 'foxboard') {
+    console.log('[PageNavigation] Entering foxboard, starting timers');
   }
   if (currentPage === 'overview') {
     closeTopologyZoomModal();
@@ -13542,7 +13693,10 @@ function bindPageEvents() {
       try {
         const response = isReloadCore
             ? await reloadMihomoCore(getMihomoApiSource())
-            : await reloadMihomoConfig(getMihomoApiSource());
+            : await reloadMihomoConfig({
+              ...getMihomoApiSource(),
+              configPath: resolveReloadConfigPath(),
+            }, null);
         if (!response || !response.ok) {
           const detail = response && (response.details || response.error)
               ? `: ${String(response.details || response.error)}`
@@ -14104,13 +14258,6 @@ async function revealSettingsDirectory(targetPath) {
   }
 }
 
-if (settingsConfigDirReveal) {
-  settingsConfigDirReveal.addEventListener('click', async () => {
-    const target = getRevealPath(settingsConfigDir);
-    await revealSettingsDirectory(target);
-  });
-}
-
 if (settingsCoreDirReveal) {
   settingsCoreDirReveal.addEventListener('click', async () => {
     const target = getRevealPath(settingsCoreDir);
@@ -14580,7 +14727,15 @@ async function handleConfigReload() {
     button.disabled = true;
   }
   try {
-    const response = await reloadMihomoConfig(getMihomoApiSource());
+    const expandedPath = resolveReloadConfigPath();
+    if (expandedPath && !isAbsolutePath(expandedPath)) {
+      showToast(`${ti('labels.configReloadFailed', 'Reload config failed')}: path is not absolute`, 'error');
+      return;
+    }
+    const response = await reloadMihomoConfig({
+      ...getMihomoApiSource(),
+      configPath: expandedPath,
+    }, null);
     if (!response || !response.ok) {
       const detail = response && (response.details || response.error)
           ? `: ${String(response.details || response.error)}`
@@ -14615,6 +14770,76 @@ async function handleConfigImport() {
     showToast(`${t('labels.configImported')}: ${fileName}`, 'info');
   } else {
     showToast(t('labels.configImported'), 'info');
+  }
+  await loadConfigs(true);
+}
+
+async function handleConfigImportFromUrl() {
+  if (!window.clashfox || typeof window.clashfox.importConfigFromUrl !== 'function') {
+    showToast(ti('control.importUrlUnavailable', 'URL 导入不可用。'), 'error');
+    return;
+  }
+  const inputUrl = await promptConfigUrlImport();
+  if (!inputUrl) {
+    return;
+  }
+  const triggerButton = configsImportUrl;
+  if (triggerButton) {
+    triggerButton.disabled = true;
+  }
+  try {
+    const result = await window.clashfox.importConfigFromUrl(inputUrl);
+    if (!result || !result.ok) {
+      const detail = result && result.error ? String(result.error) : 'import_failed';
+      showToast(`${t('labels.configImportFailed')}: ${detail}`, 'error');
+      return;
+    }
+    const fileName = result.data && result.data.fileName ? result.data.fileName : '';
+    const decodedHint = result && result.data && result.data.decodedFromBase64
+      ? ti('control.importUrlDecodedHint', '（已解码 Base64）')
+      : '';
+    if (fileName) {
+      showToast(`${t('labels.configImported')}: ${fileName}${decodedHint}`, 'info');
+    } else {
+      showToast(`${t('labels.configImported')}${decodedHint}`, 'info');
+    }
+    await loadConfigs(true);
+  } catch (error) {
+    const detail = error && error.message ? String(error.message) : 'import_failed';
+    showToast(`${t('labels.configImportFailed')}: ${detail}`, 'error');
+  } finally {
+    if (triggerButton) {
+      triggerButton.disabled = false;
+    }
+  }
+}
+
+async function handleConfigRename(targetPath, currentName = '') {
+  if (!targetPath || !window.clashfox || typeof window.clashfox.renameConfig !== 'function') {
+    return;
+  }
+  const nextName = await promptConfigRenameInput(currentName);
+  if (!nextName) {
+    return;
+  }
+  const result = await window.clashfox.renameConfig(targetPath, nextName);
+  if (!result || !result.ok) {
+    const detail = result && result.error ? String(result.error) : 'rename_failed';
+    showToast(`${ti('labels.configRenameFailed', 'Rename config failed')}: ${detail}`, 'error');
+    return;
+  }
+  if (result.unchanged) {
+    showToast(ti('labels.configRenameUnchanged', 'File name not changed.'), 'info');
+    return;
+  }
+  const fileName = result.data && result.data.fileName ? result.data.fileName : '';
+  if (fileName) {
+    showToast(`${ti('labels.configRenameSuccess', 'Config renamed')}: ${fileName}`, 'info');
+  } else {
+    showToast(ti('labels.configRenameSuccess', 'Config renamed'), 'info');
+  }
+  if (result.data && result.data.renamedCurrent) {
+    showToast(t('labels.configNeedsRestart'), 'info');
   }
   await loadConfigs(true);
 }
@@ -14698,10 +14923,6 @@ async function resetPathSetting(key, label) {
     return;
   }
   const userDataPathsUpdate = {};
-  if (key === 'configDir' && settingsConfigDir) {
-    userDataPathsUpdate.configDir = '';
-    settingsConfigDir.value = '';
-  }
   if (key === 'coreDir' && settingsCoreDir) {
     userDataPathsUpdate.coreDir = '';
     settingsCoreDir.value = '';
@@ -15213,6 +15434,15 @@ if (tunStackSelect) {
 
 if (configTable) {
   configTable.addEventListener('click', async (event) => {
+    const renameBtn = event.target.closest('button[data-action="rename-config"]');
+    if (renameBtn) {
+      event.preventDefault();
+      event.stopPropagation();
+      const targetPath = renameBtn.getAttribute('data-path') || '';
+      const configName = renameBtn.getAttribute('data-name') || '';
+      await handleConfigRename(targetPath, configName);
+      return;
+    }
     const deleteBtn = event.target.closest('button[data-action="delete-config"]');
     if (deleteBtn) {
       event.preventDefault();
@@ -15227,7 +15457,8 @@ if (configTable) {
       return;
     }
     const path = row.getAttribute('data-path') || '';
-    if (!path || path === getCurrentConfigPath()) {
+    const currentPath = getCurrentConfigPath();
+    if (!path || isCurrentConfigPath(path, currentPath)) {
       return;
     }
     // Avoid radio input switching before user confirms.
@@ -15242,8 +15473,9 @@ if (configTable) {
       renderConfigTable();
       return;
     }
+    // Switch config path
     saveSettings({configPath: path});
-    showToast(t('labels.configNeedsRestart'));
+    showToast(t('labels.configNeedsRestart'));  // 提示"需要重启"
     renderConfigTable();
   });
 }
@@ -15264,6 +15496,9 @@ if (configsReload) {
 }
 if (configsImport) {
   configsImport.addEventListener('click', handleConfigImport);
+}
+if (configsImportUrl) {
+  configsImportUrl.addEventListener('click', handleConfigImportFromUrl);
 }
 if (configPrev) {
   configPrev.addEventListener('click', () => {
@@ -15883,7 +16118,7 @@ async function handlePanelUpdateAction() {
 }
 
 async function initDashboardFrame() {
-  if (!isMainWindowVisible() || currentPage !== 'dashboard') {
+  if (!isMainWindowVisible() || currentPage !== 'foxboard') {
     return;
   }
   try {
@@ -15978,7 +16213,7 @@ async function handleMainWindowVisibilityChange() {
   if (!appWindowVisible) {
     stopOverviewActivity();
     closeMihomoPageLogsSocket();
-    if (currentPage === 'dashboard' && dashboardLocalModule && typeof dashboardLocalModule.teardownDashboardPanel === 'function') {
+    if (currentPage === 'foxboard' && dashboardLocalModule && typeof dashboardLocalModule.teardownDashboardPanel === 'function') {
       dashboardLocalModule.teardownDashboardPanel();
       state.dashboardLoaded = false;
     }

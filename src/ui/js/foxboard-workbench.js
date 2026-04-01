@@ -909,7 +909,7 @@ function renderAll() {
 }
 
 function dashboardLog(scope, message, payload = null, level = 'log') {
-  return;
+  console.log(`[Foxboard][${scope}] ${message}`, payload || '');
 }
 
 async function refreshSnapshot() {

@@ -449,20 +449,20 @@
                 <div class="paths-item">
                   <span class="paths-label" data-i18n="settings.externalController">External Controller</span>
                   <div class="input-group">
-                    <input id="externalController" class="paths-input" type="text" placeholder="-" />
+                    <input id="externalController" class="paths-input" type="text" placeholder="-" readonly/>
                   </div>
                 </div>
                 <div class="paths-item">
                   <span class="paths-label" data-i18n="settings.secret">Secret</span>
                   <div class="input-group">
-                    <input id="externalSecret" class="paths-input" type="text" placeholder="-" />
+                    <input id="externalSecret" class="paths-input" type="text" placeholder="-" readonly/>
                   </div>
                 </div>
                 <div class="paths-item">
                   <span class="paths-label" data-i18n="settings.authentication">Authentication</span>
                   <div class="input-group">
                     <!--                    <textarea id="externalAuth" class="paths-input" rows="2" placeholder="-"></textarea>-->
-                    <input id="externalAuth" class="paths-input" type="text" placeholder="-" />
+                    <input id="externalAuth" class="paths-input" type="text" placeholder="-" readonly/>
                   </div>
                 </div>
               </div>
@@ -473,26 +473,6 @@
                 <h3 data-i18n="settings.paths">Paths</h3>
               </div>
               <div class="card-body paths-row paths-row-grid">
-                <div class="paths-item">
-                  <span class="paths-label" data-i18n="settings.configDir">Config Dir</span>
-                  <div class="input-group">
-                    <input id="settingsConfigDir" class="paths-input" type="text" placeholder="-" readonly />
-                    <button
-                      class="icon-btn ghost settings-reveal-icon-btn"
-                      id="settingsConfigDirReveal"
-                      type="button"
-                      data-tip-key="settings.revealInFinder"
-                      data-position="left"
-                      data-native-title="false"
-                      aria-label="Reveal in Finder">
-                      <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-                        <path d="M14 5h5v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M10 14l9-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                        <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
                 <div class="paths-item">
                   <span class="paths-label" data-i18n="settings.coreDir">Core Dir</span>
                   <div class="input-group">
