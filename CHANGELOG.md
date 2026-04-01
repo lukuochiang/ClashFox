@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.5.5](https://github.com/lukuochiang/ClashFox/compare/v0.5.4...v0.5.5) (2026-04-01)
+
+
+### Features
+
+* enhance configuration management and UI updates ([2dca10e](https://github.com/lukuochiang/ClashFox/commit/2dca10e4d72e957497bfe3a9f7b2755ab05b7338))
+* show stable and beta updates concurrently ([aaf67d9](https://github.com/lukuochiang/ClashFox/commit/aaf67d949c1794de9a790bcf480b37e8151625a7))
+
 ### [0.5.4](https://github.com/lukuochiang/ClashFox/compare/v0.5.4-beta.2...v0.5.4) (2026-03-30)
 
 
