@@ -68,7 +68,7 @@ This software is provided "as is", without warranty of any kind. The authors are
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=lukuochiang/ClashFox&type=date&legend=top-left)](https://www.star-history.com/#lukuochiang/ClashFox&type=date&legend=top-left)
+[![Stargazers over time](https://starchart.cc/lukuochiang/ClashFox.svg?variant=adaptive)](https://starchart.cc/lukuochiang/ClashFox)
 
 ---
 
