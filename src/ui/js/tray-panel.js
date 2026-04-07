@@ -16,6 +16,8 @@ let panelChartRatesTx = [];
 let panelChartTotalRx = null;
 let panelChartTotalTx = null;
 let panelChartHasSample = false;
+let panelChartLoadingTimer = null;
+const PANEL_CHART_LOADING_TIMEOUT_MS = 5000;
 let panelProviderPayloadSignature = '';
 let panelProviderCarouselIndex = 0;
 let panelProviderCarouselTimer = null;
@@ -218,6 +220,7 @@ function stopPanelTrafficReconnect() {
 
 function closePanelTrafficSocket() {
   stopPanelTrafficReconnect();
+  clearPanelChartLoadingTimer();
   panelChartReconnectAttempts = 0;
   const socket = panelChartSocket;
   panelChartSocket = null;
@@ -420,6 +423,27 @@ function buildPanelProviderTrafficMarkup(payload = null) {
   `;
 }
 
+function clearPanelChartLoadingTimer() {
+  if (panelChartLoadingTimer) {
+    clearTimeout(panelChartLoadingTimer);
+    panelChartLoadingTimer = null;
+  }
+}
+
+function schedulePanelChartLoadingTimeout() {
+  clearPanelChartLoadingTimer();
+  panelChartLoadingTimer = setTimeout(() => {
+    panelChartLoadingTimer = null;
+    if (panelChartHasSample) {
+      return;
+    }
+    const loadingEl = document.getElementById('panelChartLoading');
+    if (loadingEl) {
+      loadingEl.classList.add('is-hidden');
+    }
+  }, PANEL_CHART_LOADING_TIMEOUT_MS);
+}
+
 function renderPanelTrafficChart() {
   if (!panelRendererVisible) {
     return;
@@ -553,6 +577,7 @@ function applyPanelTrafficSnapshot(payload = {}) {
   if (!Number.isFinite(down) || !Number.isFinite(up) || down < 0 || up < 0) {
     return;
   }
+  clearPanelChartLoadingTimer();
   panelChartHasSample = true;
   panelChartRatesRx.push(down);
   panelChartRatesTx.push(up);
@@ -815,6 +840,7 @@ function renderPanel() {
   if (canReuseDom) {
     if (!panelChartHasSample) {
       renderPanelTrafficChart();
+      schedulePanelChartLoadingTimeout();
     }
     resizePanelToContent();
     openPanelTrafficSocket().catch(() => {});
@@ -827,6 +853,7 @@ function renderPanel() {
   panelRenderedItemsSignature = panelItemsSignature;
   if (!panelChartHasSample) {
     renderPanelTrafficChart();
+    schedulePanelChartLoadingTimeout();
   }
   resizePanelToContent();
   openPanelTrafficSocket().catch(() => {});

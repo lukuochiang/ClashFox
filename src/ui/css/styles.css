@@ -3743,6 +3743,8 @@ body[data-theme="day"] .overview-summary-value {
   align-items: center;
   gap: 6px;
   max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .meta-value-inline > span {
@@ -3750,6 +3752,7 @@ body[data-theme="day"] .overview-summary-value {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .overview-inline-copy-btn.icon-btn {
@@ -7036,7 +7039,7 @@ body[data-theme="day"] .rules-overview-switch button.active {
   height: var(--overview-analytics-chart-height);
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid rgba(148, 171, 197, 0.2);
+  /*border: 1px solid rgba(148, 171, 197, 0.2);*/
   background:
     repeating-linear-gradient(
       to bottom,
@@ -7062,6 +7065,29 @@ body[data-theme="day"] .rules-overview-switch button.active {
   bottom: 0;
   border-left: 1px dashed rgba(166, 180, 202, 0.35);
   pointer-events: none;
+}
+
+.memory-trend-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--muted);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 200ms ease, visibility 200ms ease;
+}
+
+.memory-trend-chart.is-empty .memory-trend-empty {
+  opacity: 1;
+  visibility: visible;
+}
+
+.memory-trend-chart.is-empty .history-svg {
+  opacity: 0.3;
 }
 
 body[data-theme="day"] .memory-trend-chart {

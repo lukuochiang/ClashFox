@@ -8561,6 +8561,7 @@ function renderMemoryHistoryChart(values = []) {
     overviewMemoryLine.setAttribute('d', '');
     overviewMemoryArea.setAttribute('d', '');
     updateMemoryAxisLabels(0, 0);
+    if (overviewMemoryChart) overviewMemoryChart.classList.add('is-empty');
     return;
   }
   const samples = values
@@ -8570,8 +8571,10 @@ function renderMemoryHistoryChart(values = []) {
     overviewMemoryLine.setAttribute('d', '');
     overviewMemoryArea.setAttribute('d', '');
     updateMemoryAxisLabels(0, 0);
+    if (overviewMemoryChart) overviewMemoryChart.classList.add('is-empty');
     return;
   }
+  if (overviewMemoryChart) overviewMemoryChart.classList.remove('is-empty');
   const rawMax = Math.max(...samples);
   const baseStep = 25 * 1024 * 1024;
   const segments = Math.max(1, Math.ceil(rawMax / baseStep));
