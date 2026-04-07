@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.5.6](https://github.com/lukuochiang/ClashFox/compare/v0.5.5...v0.5.6) (2026-04-07)
+
+
+### Features
+
+* add initial HTML structure and styling for ClashFox UI ([e83ef5a](https://github.com/lukuochiang/ClashFox/commit/e83ef5afa9d71c6e24f330fb245209efebff5660))
+
+
+### Bug Fixes
+
+* update image paths for logos and icons across multiple files ([575b7e6](https://github.com/lukuochiang/ClashFox/commit/575b7e6de80ce8e49f00465b5dd29c9522074c1e))
+
 ### [0.5.5](https://github.com/lukuochiang/ClashFox/compare/v0.5.4...v0.5.5) (2026-04-01)
 
 
