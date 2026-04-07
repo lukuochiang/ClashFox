@@ -1693,8 +1693,8 @@ function renderHeader(force = false) {
   headerEl.innerHTML = `
     <div class="menu-header-left">
       <div class="menu-header-logo">
-        <img class="logo-dark" src="../assets/logo_night.png" alt="logo"/>
-        <img class="logo-light" src="../assets/logo_light.png" alt="logo"/>
+        <img class="logo-dark" src="../assets/logo-night.png" alt="logo"/>
+        <img class="logo-light" src="../assets/logo-light.png" alt="logo"/>
       </div>
       <div class="menu-header-title">${title}</div>
     </div>

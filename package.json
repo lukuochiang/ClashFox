@@ -90,7 +90,7 @@
     ],
     "mac": {
       "category": "public.app-category.utilities",
-      "icon": "src/ui/assets/icns/logo.icns",
+      "icon": "src/ui/assets/icns/logo-light.icns",
       "identity": null,
       "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
       "target": [
@@ -114,22 +114,26 @@
     },
     "dmg": {
       "window": {
-        "width": 540,
-        "height": 380
+        "width": 640,
+        "height": 452
       },
       "contents": [
         {
-          "x": 130,
-          "y": 190
+          "x": 180,
+          "y": 210,
+          "type": "file"
         },
         {
-          "x": 410,
-          "y": 190,
+          "x": 460,
+          "y": 210,
           "type": "link",
           "path": "/Applications"
         }
       ],
-      "title": "ClashFox Installer"
+      "title": "ClashFox Installer",
+      "background": "build/clashfox-installer-bg.png",
+      "iconSize": 110,
+      "iconTextSize": 13
     },
     "publish": [
       {

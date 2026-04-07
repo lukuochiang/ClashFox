@@ -6922,7 +6922,7 @@ function buildTrayIconWithState({ active = true } = {}) {
     const dataUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(trayTemplateSvg)}`;
     icon = nativeImage.createFromDataURL(dataUrl);
     if (icon.isEmpty()) {
-      const fallbackIconPath = path.join(APP_PATH, 'src', 'ui', 'assets', 'menu.png');
+      const fallbackIconPath = path.join(APP_PATH, 'src', 'ui', 'assets', 'tray-logo.png');
       icon = nativeImage.createFromPath(fallbackIconPath);
       icon = trimTransparentPadding(icon);
     }
@@ -6933,7 +6933,7 @@ function buildTrayIconWithState({ active = true } = {}) {
       }
     }
   } else {
-    const iconPath = path.join(APP_PATH, 'src', 'ui', 'assets', 'menu.png');
+    const iconPath = path.join(APP_PATH, 'src', 'ui', 'assets', 'tray-logo.png');
     icon = nativeImage.createFromPath(iconPath);
     icon = trimTransparentPadding(icon);
     if (!icon.isEmpty()) {
@@ -12440,12 +12440,12 @@ function setDockIcon() {
   const icnsDir = path.join(APP_PATH, 'src', 'ui', 'assets', 'icns');
   const iconCandidates = isDark
     ? [
-      path.join(icnsDir, 'logo_night.icns'),
-      path.join(icnsDir, 'logo.icns'),
+      path.join(icnsDir, 'logo-night.icns'),
+      // path.join(icnsDir, 'logo.icns'),
     ]
     : [
-      path.join(icnsDir, 'logo_light.icns'),
-      path.join(icnsDir, 'logo.icns'),
+      path.join(icnsDir, 'logo-light.icns'),
+      // path.join(icnsDir, 'logo.icns'),
     ];
 
   for (const iconPath of iconCandidates) {
