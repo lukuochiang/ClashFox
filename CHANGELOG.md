@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.5.7](https://github.com/lukuochiang/ClashFox/compare/v0.5.6...v0.5.7) (2026-04-07)
+
+
+### Features
+
+* add empty state for memory trend chart ([715258c](https://github.com/lukuochiang/ClashFox/commit/715258c9f5fe8f3b14e38f862b4e035da30746dc))
+* close dev tools when debug mode is off ([8c95ea1](https://github.com/lukuochiang/ClashFox/commit/8c95ea192ed78f1e4dae0bdeb8c65b2f67b76c1b))
+
 ### [0.5.6](https://github.com/lukuochiang/ClashFox/compare/v0.5.5...v0.5.6) (2026-04-07)
 
 
