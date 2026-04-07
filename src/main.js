@@ -13866,7 +13866,15 @@ app.whenReady().then(() => {
     } catch (error) {
       return { ok: false, error: error && error.message ? error.message : 'persist_debug_mode_failed' };
     }
-    // applyDevToolsState();
+    // 关闭 debug 模式时，关闭所有打开的开发者工具窗口
+    if (!next) {
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (win && !win.isDestroyed() && win.webContents && win.webContents.isDevToolsOpened()) {
+          win.webContents.closeDevTools();
+        }
+      });
+    }
+    applyAppMenu();
     return { ok: true };
   });
 

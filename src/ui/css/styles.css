@@ -10044,6 +10044,18 @@ body[data-theme="night"] .help-doc-card-disclaimer {
   border-color: rgba(208, 127, 71, 0.22);
 }
 
+body[data-theme="day"] .help-doc-card-privacy {
+  border-color: rgba(88, 148, 214, 0.32);
+}
+
+body[data-theme="day"] .help-doc-card-license {
+  border-color: rgba(88, 148, 214, 0.26);
+}
+
+body[data-theme="day"] .help-doc-card-disclaimer {
+  border-color: rgba(208, 127, 71, 0.32);
+}
+
 body[data-theme="night"] .help-doc-license-link {
   color: rgba(235, 242, 250, 0.95);
 }
