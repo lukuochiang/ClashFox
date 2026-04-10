@@ -1134,6 +1134,14 @@ function getVisibleSubmenuItems() {
   return submenuItems;
 }
 
+function isOutboundGroupSubmenuKey(key = submenuKey) {
+  return String(key || '').startsWith('outbound-group:');
+}
+
+function getOutboundGroupHeightCap() {
+  return isScrollableSubmenuKey() ? 958 : 560;
+}
+
 function estimateSubmenuDimensions() {
   const items = Array.isArray(submenuItems) ? submenuItems : [];
   if (submenuKey === 'panel') {
@@ -1203,12 +1211,15 @@ function estimateSubmenuDimensions() {
   }, 20);
   const heightCap = submenuKey === 'panel'
     ? 500
-    : (layout === 'scrollable'
-      ? 520
-      : (submenuKey === 'network' ? 220 : 420));
+    : (isOutboundGroupSubmenuKey()
+      ? (layout === 'scrollable' ? 640 : 560)
+      : (layout === 'scrollable'
+        ? 520
+        : (submenuKey === 'network' ? 220 : 420)));
+  const minHeight = isOutboundGroupSubmenuKey() ? 44 : 72;
   return {
     width,
-    height: Math.max(72, Math.min(heightCap, Math.round(contentHeight))),
+    height: Math.max(minHeight, Math.min(heightCap, Math.round(contentHeight))),
   };
 }
 
@@ -1246,6 +1257,9 @@ function getSubmenuHeightCap() {
   if (submenuKey === 'panel') {
     return 500;
   }
+  if (isOutboundGroupSubmenuKey()) {
+    return getOutboundGroupHeightCap();
+  }
   if (isScrollableSubmenuKey()) {
     return 520;
   }
@@ -1261,7 +1275,9 @@ function resizeSubmenuToContent(force = false) {
   const fallbackHeight = estimateSubmenuDimensions().height || 0;
   const cap = getSubmenuHeightCap();
   const contentHeight = Math.ceil(measuredHeight || fallbackHeight || 0);
-  const height = Math.max(60, Math.min(cap, contentHeight));
+  const minHeight = isOutboundGroupSubmenuKey() ? 44 : 60;
+  const listMinHeight = isOutboundGroupSubmenuKey() ? 24 : 96;
+  const height = Math.max(minHeight, Math.min(cap, contentHeight));
   const scrollable = isScrollableSubmenuKey();
   if (!force && width === lastResizeWidth && height === lastResizeHeight) {
     return false;
@@ -1275,10 +1291,10 @@ function resizeSubmenuToContent(force = false) {
   }
   if (submenuListEl) {
     if (scrollable) {
-      submenuListEl.style.maxHeight = `${Math.max(96, height)}px`;
+      submenuListEl.style.maxHeight = `${Math.max(listMinHeight, height)}px`;
       submenuListEl.style.overflowY = contentHeight > height ? 'auto' : 'hidden';
     } else {
-      submenuListEl.style.maxHeight = `${Math.max(96, height)}px`;
+      submenuListEl.style.maxHeight = `${Math.max(listMinHeight, height)}px`;
       submenuListEl.style.overflowY = contentHeight > height ? 'auto' : 'hidden';
     }
   }
