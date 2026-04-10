@@ -862,6 +862,64 @@ body[data-theme="day"] .provider-traffic-item-meta.secondary {
   overflow-y: visible;
 }
 
+.submenu-scroll-hint,
+.submenu-scroll-down-hint {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 24px;
+  height: 16px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
+  background: color-mix(in srgb, var(--panel-soft) 82%, transparent);
+  color: color-mix(in srgb, var(--ink) 90%, transparent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+  z-index: 8;
+}
+
+.submenu-scroll-hint-up {
+  top: 4px;
+}
+
+.submenu-scroll-down-hint {
+  bottom: 4px;
+}
+
+.submenu-scroll-hint.visible,
+.submenu-scroll-down-hint.visible {
+  opacity: 0.92;
+  pointer-events: auto;
+  cursor: s-resize;
+}
+
+.submenu-scroll-hint-up.visible {
+  cursor: n-resize;
+}
+
+.submenu-scroll-hint-chevron {
+  width: 10px;
+  height: 10px;
+  display: block;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+body[data-theme="day"] .submenu-scroll-hint,
+body[data-theme="day"] .submenu-scroll-down-hint {
+  background: color-mix(in srgb, #ffffff 90%, transparent);
+  border-color: rgba(108, 132, 160, 0.34);
+  color: rgba(62, 80, 101, 0.92);
+}
+
 .submenu-root.is-scrollable .menu-list {
   scrollbar-gutter: stable both-edges;
   scrollbar-width: thin;
@@ -1363,8 +1421,8 @@ body[data-theme="day"] .menu-provider-link-subtitle {
   border-radius: 50%;
   position: relative;
   flex: 0 0 auto;
-  border: 1px solid color-mix(in srgb, var(--ink) 42%, transparent);
-  background: transparent;
+  border: 1px solid rgba(74, 195, 128, 0.9);
+  background: rgba(74, 195, 128, 0.14);
 }
 
 .menu-selected-pill::before {
@@ -1376,7 +1434,7 @@ body[data-theme="day"] .menu-provider-link-subtitle {
   height: 4px;
   border-radius: 50%;
   transform: translate(-50%, -50%);
-  background: color-mix(in srgb, var(--ink) 78%, transparent);
+  background: #34c27a;
 }
 
 .menu-badge {

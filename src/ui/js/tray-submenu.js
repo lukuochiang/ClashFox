@@ -1,5 +1,7 @@
 const submenuRootEl = document.getElementById('submenuRoot');
 const submenuListEl = document.getElementById('submenuList');
+const submenuScrollUpHintEl = document.getElementById('submenuScrollUpHint');
+const submenuScrollDownHintEl = document.getElementById('submenuScrollDownHint');
 
 let submenuKey = '';
 let submenuItems = [];
@@ -41,6 +43,10 @@ let submenuRendererVisible = false;
 let resizeSubmenuFrame = null;
 let submenuMeasureGeneration = 0;
 let submenuMeasureObserver = null;
+let submenuAutoScrollTimer = null;
+let submenuAutoScrollDirection = 0;
+const SUBMENU_AUTO_SCROLL_STEP_PX = 8;
+const SUBMENU_AUTO_SCROLL_INTERVAL_MS = 20;
 const FOX_RANK_SKIN_PALETTES = {
   campfire: { start: '#ffb86c', end: '#ff8f57' },
   aurora: { start: '#7df3d2', end: '#4bc6ff' },
@@ -385,6 +391,8 @@ function setSubmenuRendererVisible(nextVisible) {
   submenuRendererVisible = visible;
   if (!visible) {
     submenuMeasureGeneration += 1;
+    stopSubmenuAutoScroll();
+    updateSubmenuScrollHints();
     if (resizeSubmenuFrame !== null && typeof cancelAnimationFrame === 'function') {
       cancelAnimationFrame(resizeSubmenuFrame);
       resizeSubmenuFrame = null;
@@ -400,6 +408,7 @@ function setSubmenuRendererVisible(nextVisible) {
   if (submenuKey) {
     renderSubmenu();
   }
+  updateSubmenuScrollHints();
   startSubmenuLiveActivity();
 }
 
@@ -1138,6 +1147,132 @@ function isOutboundGroupSubmenuKey(key = submenuKey) {
   return String(key || '').startsWith('outbound-group:');
 }
 
+function stopSubmenuAutoScroll() {
+  if (submenuAutoScrollTimer) {
+    clearInterval(submenuAutoScrollTimer);
+    submenuAutoScrollTimer = null;
+  }
+  submenuAutoScrollDirection = 0;
+}
+
+function canSubmenuScrollUp() {
+  if (!submenuListEl) {
+    return false;
+  }
+  return submenuListEl.scrollTop > 1;
+}
+
+function canSubmenuScrollDown() {
+  if (!submenuListEl) {
+    return false;
+  }
+  const maxTop = Math.max(0, Math.ceil((submenuListEl.scrollHeight || 0) - (submenuListEl.clientHeight || 0)));
+  return submenuListEl.scrollTop < (maxTop - 1);
+}
+
+function isSubmenuHintContextReady() {
+  if (!submenuRendererVisible || !submenuListEl) {
+    return false;
+  }
+  if (!isScrollableSubmenuKey() || !isOutboundGroupSubmenuKey()) {
+    return false;
+  }
+  return (submenuListEl.scrollHeight || 0) > ((submenuListEl.clientHeight || 0) + 1);
+}
+
+function shouldShowSubmenuScrollUpHint() {
+  if (!submenuScrollUpHintEl || !isSubmenuHintContextReady()) {
+    return false;
+  }
+  return canSubmenuScrollUp();
+}
+
+function shouldShowSubmenuScrollDownHint() {
+  if (!submenuScrollDownHintEl || !isSubmenuHintContextReady()) {
+    return false;
+  }
+  return canSubmenuScrollDown();
+}
+
+function updateSubmenuScrollHints() {
+  const upVisible = shouldShowSubmenuScrollUpHint();
+  const downVisible = shouldShowSubmenuScrollDownHint();
+  if (submenuScrollUpHintEl) {
+    submenuScrollUpHintEl.classList.toggle('visible', upVisible);
+    submenuScrollUpHintEl.setAttribute('aria-hidden', upVisible ? 'false' : 'true');
+  }
+  if (submenuScrollDownHintEl) {
+    submenuScrollDownHintEl.classList.toggle('visible', downVisible);
+    submenuScrollDownHintEl.setAttribute('aria-hidden', downVisible ? 'false' : 'true');
+  }
+  if (
+    (submenuAutoScrollDirection < 0 && !upVisible)
+    || (submenuAutoScrollDirection > 0 && !downVisible)
+    || (!upVisible && !downVisible)
+  ) {
+    stopSubmenuAutoScroll();
+  }
+}
+
+function startSubmenuAutoScroll(direction = 0) {
+  const dir = Number(direction) < 0 ? -1 : 1;
+  if (!submenuListEl) {
+    return;
+  }
+  if (dir < 0 && !shouldShowSubmenuScrollUpHint()) {
+    return;
+  }
+  if (dir > 0 && !shouldShowSubmenuScrollDownHint()) {
+    return;
+  }
+  if (submenuAutoScrollTimer) {
+    if (submenuAutoScrollDirection === dir) {
+      return;
+    }
+    stopSubmenuAutoScroll();
+  }
+  submenuAutoScrollDirection = dir;
+  submenuAutoScrollTimer = setInterval(() => {
+    if (!submenuListEl) {
+      stopSubmenuAutoScroll();
+      return;
+    }
+    const maxTop = Math.max(0, Math.ceil((submenuListEl.scrollHeight || 0) - (submenuListEl.clientHeight || 0)));
+    const nextTop = submenuListEl.scrollTop + (dir * SUBMENU_AUTO_SCROLL_STEP_PX);
+    if (maxTop <= 0) {
+      stopSubmenuAutoScroll();
+    } else if (dir > 0 && submenuListEl.scrollTop >= maxTop) {
+      submenuListEl.scrollTop = maxTop;
+      stopSubmenuAutoScroll();
+    } else if (dir < 0 && submenuListEl.scrollTop <= 0) {
+      submenuListEl.scrollTop = 0;
+      stopSubmenuAutoScroll();
+    } else {
+      submenuListEl.scrollTop = Math.max(0, Math.min(maxTop, nextTop));
+    }
+    updateSubmenuScrollHints();
+  }, SUBMENU_AUTO_SCROLL_INTERVAL_MS);
+}
+
+function initSubmenuScrollHints() {
+  if (submenuScrollUpHintEl) {
+    submenuScrollUpHintEl.addEventListener('mouseenter', () => {
+      startSubmenuAutoScroll(-1);
+    });
+    submenuScrollUpHintEl.addEventListener('mouseleave', () => {
+      stopSubmenuAutoScroll();
+    });
+  }
+  if (submenuScrollDownHintEl) {
+    submenuScrollDownHintEl.addEventListener('mouseenter', () => {
+      startSubmenuAutoScroll(1);
+    });
+    submenuScrollDownHintEl.addEventListener('mouseleave', () => {
+      stopSubmenuAutoScroll();
+    });
+  }
+}
+
 function getOutboundGroupHeightCap() {
   return isScrollableSubmenuKey() ? 958 : 560;
 }
@@ -1298,6 +1433,7 @@ function resizeSubmenuToContent(force = false) {
       submenuListEl.style.overflowY = contentHeight > height ? 'auto' : 'hidden';
     }
   }
+  updateSubmenuScrollHints();
   window.clashfox.traySubmenuResize({ width, height });
   return true;
 }
@@ -1340,11 +1476,13 @@ function renderSubmenu() {
   if (!submenuRendererVisible) {
     return;
   }
+  stopSubmenuAutoScroll();
   submenuListEl.innerHTML = '';
   getVisibleSubmenuItems().forEach((item) => {
     submenuListEl.appendChild(makeRow(item));
   });
   scheduleResizeSubmenuToContent();
+  updateSubmenuScrollHints();
 }
 
 function setSubmenu(payload) {
@@ -1362,6 +1500,7 @@ function setSubmenu(payload) {
     submenuRootEl.classList.toggle('is-scrollable', isScrollableSubmenuKey());
   }
   if (!submenuRendererVisible) {
+    updateSubmenuScrollHints();
     return;
   }
   ensureSubmenuResizeObserver();
@@ -1475,17 +1614,21 @@ if (window.clashfox && typeof window.clashfox.traySubmenuReady === 'function') {
   window.clashfox.traySubmenuReady();
 }
 
+initSubmenuScrollHints();
+
 if (submenuListEl) {
   submenuListEl.addEventListener('scroll', () => {
     if (window.clashfox && typeof window.clashfox.traySubmenuHover === 'function') {
       window.clashfox.traySubmenuHover(true);
       lastHoverSent = true;
     }
+    updateSubmenuScrollHints();
   });
 }
 
 window.addEventListener('beforeunload', () => {
   clearSubmenuResizeObserver();
+  stopSubmenuAutoScroll();
   if (resizeSubmenuFrame !== null && typeof cancelAnimationFrame === 'function') {
     cancelAnimationFrame(resizeSubmenuFrame);
     resizeSubmenuFrame = null;
