@@ -4554,7 +4554,9 @@ const resolveAbsolutePath = (relativePath) => {
       : `${userAppDataDir}/${inputPath}`;
 };
 
-function applySettings(settings) {
+function applySettings(settings, options = {}) {
+  const preserveSidebarState = Boolean(options && options.preserveSidebarState);
+  const currentSidebarCollapsed = Boolean(menuContainer && menuContainer.classList.contains('is-collapsed'));
   state.settings = normalizeSettingsForUi(settings || {});
   state.settings.windowWidth = sanitizeWindowDimension(
     state.settings.windowWidth,
@@ -4595,7 +4597,10 @@ function applySettings(settings) {
   document.body.classList.remove('no-theme-transition');
   setLanguage(state.settings.lang, false, false);
   syncDebugMode(state.settings.debugMode);
-  applySidebarCollapsedState(state.settings.appearance && state.settings.appearance.sidebarCollapsed, false);
+  const nextSidebarCollapsed = preserveSidebarState
+    ? currentSidebarCollapsed
+    : Boolean(state.settings.appearance && state.settings.appearance.sidebarCollapsed);
+  applySidebarCollapsedState(nextSidebarCollapsed, false);
   if (settingsWindowWidth) {
     settingsWindowWidth.value = state.settings.windowWidth;
   }
@@ -13442,7 +13447,7 @@ async function navigatePage(targetPage, pushState = true) {
   }
   setActiveNav(normalized);
   refreshPageRefs();
-  applySettings(state.settings || readSettings());
+  applySettings(state.settings || readSettings(), { preserveSidebarState: true });
   applyI18n();
   bindPageEvents();
   refreshPageView();
