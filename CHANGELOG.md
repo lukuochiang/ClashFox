@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.5.8](https://github.com/lukuochiang/ClashFox/compare/v0.5.7...v0.5.8) (2026-04-10)
+
+
+### Features
+
+* add auto-scroll hints to tray submenu ([137764c](https://github.com/lukuochiang/ClashFox/commit/137764c81f5dd3806e4d8ce3f96b9c1a53457a28))
+* adjust layout for outbound-group submenus ([bfecdbe](https://github.com/lukuochiang/ClashFox/commit/bfecdbef24f39dcc493e8bd96b75fa806079a385))
+* enhance fox rank share section with close button and styling updates ([df866e5](https://github.com/lukuochiang/ClashFox/commit/df866e5356b721fde8f1af45f46e34ed9b0f2814))
+
+
+### Bug Fixes
+
+* preserve sidebar state on navigation ([1ac4dd2](https://github.com/lukuochiang/ClashFox/commit/1ac4dd212b3deefae52c678c86293013289fda4d))
+
 ### [0.5.7](https://github.com/lukuochiang/ClashFox/compare/v0.5.6...v0.5.7) (2026-04-07)
 
 
