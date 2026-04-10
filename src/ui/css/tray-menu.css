@@ -646,14 +646,14 @@ body[data-theme="night"] .menu-chart-footer {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(4px, 1fr));
   gap: 2px;
-  height: 5px;
+  height: 3px;
   margin-top: 0;
 }
 
 .menu-provider-link-chart[data-chart-mode="manual"] {
   display: flex;
   gap: 0;
-  height: 6px;
+  height: 3px;
   margin-top: 0;
   width: 100%;
   align-self: stretch;
@@ -1342,6 +1342,41 @@ body[data-theme="day"] .menu-provider-link-subtitle {
   font-size: 12px;
   font-weight: 700;
   line-height: 1;
+}
+
+.menu-row-outbound-mode {
+  padding-right: 10px;
+}
+
+.menu-row-outbound-mode.selected {
+  background: transparent;
+}
+
+.menu-row-outbound-mode.selected .menu-label {
+  color: var(--ink);
+}
+
+.menu-selected-pill {
+  margin-left: auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  position: relative;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--ink) 42%, transparent);
+  background: transparent;
+}
+
+.menu-selected-pill::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: color-mix(in srgb, var(--ink) 78%, transparent);
 }
 
 .menu-badge {

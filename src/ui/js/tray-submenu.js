@@ -1066,6 +1066,7 @@ function makeRow(item) {
   }
   const actionName = item && item.action ? String(item.action).trim() : '';
   const isNetworkToggle = NETWORK_TOGGLE_ACTIONS.has(actionName);
+  const isOutboundModeSubmenu = submenuKey === 'outbound';
   const pending = NETWORK_TOGGLE_ACTIONS.has(actionName) && pendingActionSet.has(actionName);
   const isLoading = NETWORK_TOGGLE_ACTIONS.has(actionName) && loadingVisibleSet.has(actionName);
   const clickable = item.enabled !== false && !pending;
@@ -1077,12 +1078,17 @@ function makeRow(item) {
 
   const leadingParts = makeLeading(item, isLoading);
   if (typeof item.checked === 'boolean' && !isNetworkToggle) {
-    row.appendChild(leadingParts.check);
+    if (!isOutboundModeSubmenu) {
+      row.appendChild(leadingParts.check);
+    }
     if (item.checked) {
       row.classList.add('selected');
     }
   }
   row.appendChild(leadingParts.leading);
+  if (isOutboundModeSubmenu) {
+    row.classList.add('menu-row-outbound-mode');
+  }
 
   const label = document.createElement('div');
   label.className = 'menu-label';
@@ -1108,6 +1114,11 @@ function makeRow(item) {
     badge.className = `menu-badge tone-${tone}`;
     badge.textContent = String(item.rightBadge.text);
     row.appendChild(badge);
+  }
+  if (isOutboundModeSubmenu && item.checked) {
+    const selectedPill = document.createElement('div');
+    selectedPill.className = 'menu-selected-pill';
+    row.appendChild(selectedPill);
   }
 
   if (clickable) {

@@ -10406,8 +10406,8 @@ body[data-page="foxboard"] #dashboardLocalPanel {
   background-repeat: no-repeat;
   background-position: center;
   background-size: 14px 14px;
-  opacity: 0.8;
-  filter: saturate(0.78) brightness(0.94);
+  opacity: 0.85;
+  filter: saturate(0.9) brightness(1);
 }
 
 .dashboard-group-switch button[data-dashboard-group="client"]::before {
@@ -10433,8 +10433,8 @@ body[data-page="foxboard"] #dashboardLocalPanel {
 .dashboard-sidebar-label {
   font-size: 11px;
   font-weight: 700;
-  color: rgba(233, 233, 235, 0.6);
-  letter-spacing: 0.08em;
+  color: rgba(233, 233, 235, 0.65);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -10457,8 +10457,8 @@ body[data-page="foxboard"] #dashboardLocalPanel {
   width: 100%;
   padding: 10px 12px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
-  color: rgba(239, 239, 242, 0.86);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(239, 239, 242, 0.92);
   text-align: left;
   font-size: 12px;
   line-height: 1.25;
@@ -10466,13 +10466,13 @@ body[data-page="foxboard"] #dashboardLocalPanel {
 
 .dashboard-filter-item:hover,
 .dashboard-filter-item.active {
-  background: rgba(242, 225, 198, 0.16);
-  color: #fff7ee;
+  background: rgba(242, 225, 198, 0.18);
+  color: #fff9f0;
 }
 
 .dashboard-filter-item span {
-  color: rgba(255, 255, 255, 0.45);
-  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 10px;
 }
 
 .dashboard-main-local {
@@ -10522,8 +10522,8 @@ body[data-page="foxboard"] #dashboardLocalPanel {
   background-repeat: no-repeat;
   background-position: center;
   background-size: 14px 14px;
-  opacity: 0.82;
-  filter: saturate(0.78) brightness(0.95);
+  opacity: 0.9;
+  filter: saturate(0.9) brightness(1);
   transform: none;
 }
 
@@ -11331,8 +11331,8 @@ body[data-theme="day"] .foxboard-header {
 
 body[data-theme="day"] .dashboard-sidebar-local {
   background:
-    linear-gradient(180deg, rgba(248, 251, 255, 0.94) 0%, rgba(241, 247, 252, 0.92) 100%);
-  border-right-color: rgba(132, 154, 178, 0.22);
+    linear-gradient(180deg, rgba(250, 252, 255, 0.98) 0%, rgba(244, 248, 252, 0.96) 100%);
+  border-right-color: rgba(132, 154, 178, 0.24);
 }
 
 body[data-theme="day"] .dashboard-group-switch {
@@ -11341,17 +11341,17 @@ body[data-theme="day"] .dashboard-group-switch {
 }
 
 body[data-theme="day"] .dashboard-group-switch button {
-  color: #56697d;
+  color: #4a6075;
 }
 
 body[data-theme="day"] .dashboard-group-switch button.active {
-  background: rgba(244, 221, 182, 0.52);
-  border: 1px solid rgba(224, 165, 82, 0.28);
-  color: #2f4257;
+  background: rgba(240, 225, 190, 0.6);
+  border: 1px solid rgba(200, 160, 80, 0.32);
+  color: #2a3d50;
 }
 
 body[data-theme="day"] .dashboard-sidebar-label {
-  color: #6b7d92;
+  color: #5a7085;
 }
 
 body[data-theme="day"] .dashboard-main-local {
@@ -11395,14 +11395,14 @@ body[data-theme="day"] .dashboard-tabs-local button::before,
 body[data-theme="day"] .dashboard-stat::before,
 body[data-theme="day"] .dashboard-table-header h3::before,
 body[data-theme="day"] .dashboard-data-card .dashboard-data-card-title::before {
-  filter: brightness(0.94) saturate(1.04);
-  opacity: 0.98;
+  filter: brightness(0.7) saturate(1);
+  opacity: 1;
 }
 
 body[data-theme="day"] .dashboard-group-switch button.active::before,
 body[data-theme="day"] .dashboard-tabs-local button.active::before {
-  filter: brightness(0.28) saturate(1.1);
-  opacity: 0.9;
+  filter: brightness(0.3) saturate(1.1);
+  opacity: 0.95;
 }
 
 body[data-theme="day"] .dashboard-group-switch button.active,
@@ -11450,20 +11450,20 @@ body[data-theme="day"] .dashboard-sidebar-local .dashboard-sidebar-label {
 }
 
 body[data-theme="day"] .dashboard-filter-item {
-  color: #3e5369;
-  background: rgba(255, 255, 255, 0.92);
-  border-color: rgba(132, 154, 178, 0.18);
+  color: #2f4559;
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(132, 154, 178, 0.2);
 }
 
 body[data-theme="day"] .dashboard-filter-item span {
-  color: rgba(92, 108, 129, 0.64);
+  color: rgba(80, 100, 120, 0.75);
 }
 
 body[data-theme="day"] .dashboard-filter-item:hover,
 body[data-theme="day"] .dashboard-filter-item.active {
-  background: rgba(230, 239, 248, 0.82);
-  color: #385068;
-  border-color: rgba(146, 171, 199, 0.28);
+  background: rgba(235, 242, 250, 0.9);
+  color: #2a3f58;
+  border-color: rgba(130, 165, 200, 0.35);
 }
 
 body[data-theme="day"] .dashboard-detail-close {
