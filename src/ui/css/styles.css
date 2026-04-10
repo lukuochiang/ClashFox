@@ -19,7 +19,7 @@
   --mint: #67d6bd;
   --ink: #e8f0f8;
   --muted: #91a5bb;
-  --border: rgba(132, 157, 188, 0.22);
+  --border: rgba(132, 157, 188, 0.38);
   --card-title-ink: color-mix(in srgb, var(--ink) 92%, #ffffff 8%);
   --card-divider: color-mix(in srgb, var(--border) 84%, rgba(255, 255, 255, 0.04));
   --card-divider-soft: color-mix(in srgb, var(--border) 62%, transparent);
@@ -30,10 +30,10 @@
   );
   --card-header-divider: color-mix(in srgb, rgba(120, 148, 186, 0.36) 76%, transparent);
   --card-header-accent: linear-gradient(90deg, color-mix(in srgb, var(--accent) 72%, #ffffff 28%), color-mix(in srgb, var(--accent-strong) 64%, #ffffff 36%));
-  --glass-card-bg: linear-gradient(145deg, rgba(23, 33, 48, 0.52), rgba(18, 28, 41, 0.42));
+  --glass-card-bg: linear-gradient(145deg, rgba(23, 33, 48, 0.85), rgba(18, 28, 41, 0.78));
   --glass-card-border: rgba(164, 192, 228, 0.24);
   --glass-card-shadow: 0 10px 28px rgba(6, 12, 20, 0.2);
-  --glass-card-blur: 16px;
+  --glass-card-blur: 8px;
   --glass-title-bg: linear-gradient(145deg, rgba(34, 48, 68, 0.44), rgba(24, 36, 54, 0.34));
   --glass-title-border: rgba(164, 192, 228, 0.3);
   --status-pill-bg: rgba(114, 136, 164, 0.2);
@@ -200,7 +200,7 @@ body[data-theme="day"], html[data-theme="day"] body {
   --mint: #3a9f8f;
   --ink: #1f2d3d;
   --muted: #5d6f82;
-  --border: rgba(128, 149, 173, 0.26);
+  --border: rgba(128, 149, 173, 0.42);
   --card-title-ink: color-mix(in srgb, var(--ink) 90%, #0f1d2c 10%);
   --card-divider: color-mix(in srgb, var(--border) 88%, rgba(118, 152, 189, 0.12));
   --card-divider-soft: color-mix(in srgb, var(--border) 68%, transparent);
@@ -211,7 +211,7 @@ body[data-theme="day"], html[data-theme="day"] body {
   );
   --card-header-divider: color-mix(in srgb, rgba(133, 161, 196, 0.44) 78%, transparent);
   --card-header-accent: linear-gradient(90deg, color-mix(in srgb, var(--accent) 82%, #8cc6ff 18%), color-mix(in srgb, var(--accent-strong) 78%, #78b6f7 22%));
-  --glass-card-bg: linear-gradient(145deg, rgba(255, 255, 255, 0.58), rgba(244, 250, 255, 0.44));
+  --glass-card-bg: linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(244, 250, 255, 0.88));
   --glass-card-border: rgba(128, 154, 182, 0.3);
   --glass-card-shadow: 0 10px 24px rgba(56, 82, 112, 0.12);
   --glass-card-blur: 14px;
@@ -583,8 +583,8 @@ body[data-theme="day"] .fox-rank-pill {
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(130% 100% at 100% 0%, color-mix(in srgb, var(--fox-rank-aura-start) 16%, transparent) 0%, transparent 58%),
-    radial-gradient(120% 90% at 0% 100%, color-mix(in srgb, var(--fox-rank-aura-end) 14%, transparent) 0%, transparent 54%),
+    radial-gradient(130% 100% at 100% 0%, color-mix(in srgb, var(--fox-rank-aura-start) 28%, transparent) 0%, transparent 58%),
+    radial-gradient(120% 90% at 0% 100%, color-mix(in srgb, var(--fox-rank-aura-end) 24%, transparent) 0%, transparent 54%),
     var(--glass-card-bg);
   border-radius: 12px;
   padding: 6px 10px 4px;
@@ -616,8 +616,8 @@ body[data-theme="day"] .fox-rank-pill {
 body[data-theme="day"] .fox-rank-card {
   color: #3a4d63;
   background:
-    radial-gradient(130% 100% at 100% 0%, color-mix(in srgb, var(--accent) 12%, transparent) 0%, transparent 58%),
-    radial-gradient(120% 90% at 0% 100%, color-mix(in srgb, #84b8ee 10%, transparent) 0%, transparent 54%),
+    radial-gradient(130% 100% at 100% 0%, color-mix(in srgb, var(--accent) 24%, transparent) 0%, transparent 58%),
+    radial-gradient(120% 90% at 0% 100%, color-mix(in srgb, #84b8ee 20%, transparent) 0%, transparent 54%),
     var(--glass-card-bg);
   border: 1px solid var(--glass-card-border);
   border-bottom-color: var(--glass-card-border);
@@ -659,8 +659,7 @@ body[data-theme="day"] .fox-rank-card:hover {
 
 .fox-rank-halo {
   border-radius: 999px;
-  filter: blur(6px);
-  opacity: 0.42;
+  opacity: 0.28;
 }
 
 .fox-rank-halo-a {
@@ -858,11 +857,11 @@ body[data-theme="day"] .fox-rank-progress-text {
 .fox-rank-footer-pill {
   display: inline-flex;
   align-items: center;
-  height: 22px;
-  min-height: 22px;
+  height: 16px;
+  min-height: 16px;
   padding: 0 8px;
   border-radius: 999px;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.01em;
@@ -1047,7 +1046,7 @@ body[data-theme="day"] .fox-rank-metric-value {
   overflow: hidden;
   padding: 14px 14px 12px;
   gap: 10px;
-  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.24);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.32);
   transform: translateY(8px) scale(0.985);
   transition: transform 80ms ease;
   display: grid;
@@ -1067,7 +1066,7 @@ body[data-theme="day"] .fox-rank-metric-value {
   background:
     radial-gradient(72% 58% at 12% 8%, color-mix(in srgb, var(--fox-rank-aura-start) 18%, transparent) 0%, transparent 74%),
     radial-gradient(64% 54% at 100% 100%, color-mix(in srgb, var(--fox-rank-aura-end) 16%, transparent) 0%, transparent 72%);
-  opacity: 0.92;
+  opacity: 0.98;
 }
 
 .fox-rank-detail-card > * {
@@ -1091,8 +1090,7 @@ body[data-theme="day"] .fox-rank-metric-value {
 
 .fox-rank-detail-halo {
   border-radius: 999px;
-  filter: blur(8px);
-  opacity: 0.38;
+  opacity: 0.24;
 }
 
 .fox-rank-detail-halo-a {
@@ -1147,6 +1145,7 @@ body[data-theme="day"] .fox-rank-detail-card {
   background:
     radial-gradient(120% 100% at 100% 0%, rgba(119, 170, 231, 0.16) 0%, rgba(119, 170, 231, 0) 58%),
     linear-gradient(145deg, rgba(245, 249, 255, 0.99), rgba(237, 244, 252, 0.99));
+  box-shadow: 0 16px 30px rgba(88, 120, 157, 0.2);
 }
 
 body[data-theme="day"] .fox-rank-detail-card::before {
@@ -1293,17 +1292,17 @@ body.fox-rank-brief-open {
   flex: 0 0 auto;
   padding: 10px;
   border-radius: 12px;
-  border: 1px solid rgba(148, 171, 197, 0.16);
+  border: 1px solid rgba(148, 171, 197, 0.32);
   background:
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--fox-rank-aura-start) 10%, rgba(41, 57, 79, 0.36)),
-      color-mix(in srgb, var(--fox-rank-aura-end) 9%, rgba(28, 39, 56, 0.3))
+      color-mix(in srgb, var(--fox-rank-aura-start) 20%, rgba(41, 57, 79, 0.72)),
+      color-mix(in srgb, var(--fox-rank-aura-end) 18%, rgba(28, 39, 56, 0.6))
     ),
-    rgba(148, 171, 197, 0.05);
-  box-shadow:
-    inset 0 1px 0 rgba(235, 242, 252, 0.04),
-    0 10px 20px rgba(0, 0, 0, 0.08);
+    rgba(148, 171, 197, 0.1);
+  /*box-shadow:*/
+  /*  inset 0 1px 0 rgba(235, 242, 252, 0.08),*/
+  /*  0 10px 20px rgba(0, 0, 0, 0.12);*/
   overflow: visible;
 }
 
@@ -1324,6 +1323,60 @@ body.fox-rank-brief-open {
   flex-direction: column;
 }
 
+.fox-rank-share-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  min-height: 24px;
+}
+
+.fox-rank-share-header h4 {
+  margin: 0;
+  font-size: 0.78rem;
+  flex: 1;
+}
+
+.fox-rank-share-close {
+  position: relative;
+  top: 0;
+  right: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(148, 171, 197, 0.12);
+  color: var(--ink);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all 0.2s ease;
+  font-size: 14px;
+  z-index: 2;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.fox-rank-share-close:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-1px);
+  background: rgba(148, 171, 197, 0.18);
+}
+
+body[data-theme="day"] .fox-rank-share-close {
+  border-color: rgba(128, 149, 173, 0.42);
+  background: rgba(128, 149, 173, 0.1);
+  color: var(--ink);
+}
+
+body[data-theme="day"] .fox-rank-share-close:hover {
+  border-color: var(--accent-strong);
+  color: var(--accent-strong);
+  background: rgba(128, 149, 173, 0.16);
+}
+
 .fox-rank-detail-section-progression {
   display: grid;
   gap: 10px;
@@ -1338,8 +1391,8 @@ body.fox-rank-brief-open {
   border-radius: 12px;
   align-self: flex-start;
   background: rgba(124, 150, 182, 0.15);
-  border: 1px solid rgba(148, 171, 197, 0.18);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  /*border: 1px solid rgba(148, 171, 197, 0.18);*/
+  /*box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);*/
 }
 
 .fox-rank-section-tabs button {
@@ -1408,10 +1461,10 @@ body[data-theme="day"] .fox-rank-section-tabs button.active {
   border: 1px solid var(--border);
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--fox-rank-aura-start) 12%, rgba(148, 171, 197, 0.12)),
-    color-mix(in srgb, var(--fox-rank-aura-end) 10%, rgba(148, 171, 197, 0.07))
+    color-mix(in srgb, var(--fox-rank-aura-start) 24%, rgba(148, 171, 197, 0.24)),
+    color-mix(in srgb, var(--fox-rank-aura-end) 20%, rgba(148, 171, 197, 0.14))
   );
-  box-shadow: inset 0 1px 0 rgba(235, 242, 252, 0.04);
+  /*box-shadow: inset 0 1px 0 rgba(235, 242, 252, 0.08);*/
 }
 
 .fox-rank-weekly-metric span,
@@ -1529,6 +1582,7 @@ body[data-theme="day"] .fox-rank-log-index {
 .fox-rank-skin-item {
   --fox-rank-skin-color: var(--fox-rank-aura-start);
   display: grid;
+  grid-template-rows: auto auto auto;
   gap: 6px;
   opacity: 0;
   animation: fox-rank-stagger-in 0.35s ease forwards;
@@ -1540,8 +1594,21 @@ body[data-theme="day"] .fox-rank-log-index {
   );
 }
 
+.fox-rank-skin-item strong {
+  display: block;
+}
+
+.fox-rank-skin-item span {
+  display: block;
+}
+
+.fox-rank-skin-item .fox-rank-skin-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .fox-rank-skin-item em {
-  justify-self: start;
   font-size: 0.54rem;
   font-style: normal;
   padding: 1px 6px;
@@ -1606,11 +1673,11 @@ body[data-theme="day"] .fox-rank-skin-item[data-fox-rank-skin] {
   display: grid;
   gap: 10px;
   background:
-    radial-gradient(120% 120% at 100% 0%, rgba(127, 172, 242, 0.16) 0%, rgba(127, 172, 242, 0) 50%),
-    linear-gradient(145deg, rgba(35, 49, 68, 0.82), rgba(23, 31, 45, 0.86));
-  box-shadow:
-    inset 0 1px 0 rgba(241, 247, 255, 0.08),
-    0 12px 24px rgba(0, 0, 0, 0.12);
+    radial-gradient(120% 120% at 100% 0%, rgba(127, 172, 242, 0.24) 0%, rgba(127, 172, 242, 0) 50%),
+    linear-gradient(145deg, rgba(35, 49, 68, 0.95), rgba(23, 31, 45, 0.92));
+  /*box-shadow:*/
+  /*  inset 0 1px 0 rgba(241, 247, 255, 0.12),*/
+  /*  0 12px 24px rgba(0, 0, 0, 0.12);*/
 }
 
 /* 分享卡容器增强 */
@@ -1843,9 +1910,9 @@ body[data-theme="day"] .metric-item:hover {
 
 
 body[data-theme="day"] .fox-rank-share-preview {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(243, 248, 253, 0.9));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 248, 253, 0.96));
   /*background:*/
-  /*  radial-gradient(120% 120% at 100% 0%, rgba(127, 172, 242, 0.12) 0%, rgba(127, 172, 242, 0) 50%),*/
+  /*  radial-gradient(120% 120% at 100% 0%, rgba(127, 172, 242, 0.24) 0%, rgba(127, 172, 242, 0) 50%),*/
   /*  linear-gradient(145deg, rgba(242, 247, 253, 0.98), rgba(236, 243, 251, 0.98));*/
 }
 
@@ -2025,19 +2092,19 @@ body[data-theme="day"] .fox-rank-badge-item[data-fox-rank-badge] {
 
 body[data-theme="day"] .fox-rank-detail-section {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(240, 246, 252, 0.82)),
-    rgba(230, 239, 249, 0.3);
-  border-color: rgba(177, 199, 223, 0.42);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.8),
-    0 12px 24px rgba(168, 189, 214, 0.1);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(240, 246, 252, 0.94)),
+    rgba(230, 239, 249, 0.5);
+  border-color: rgba(177, 199, 223, 0.6);
+  /*box-shadow:*/
+  /*  inset 0 1px 0 rgba(255, 255, 255, 0.9),*/
+  /*  0 12px 24px rgba(168, 189, 214, 0.15);*/
 }
 
 body[data-theme="day"] .fox-rank-share-preview {
-  border-color: rgba(174, 198, 225, 0.5);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.8),
-    0 12px 24px rgba(168, 189, 214, 0.12);
+  border-color: rgba(174, 198, 225, 0.7);
+  /*box-shadow:*/
+  /*  inset 0 1px 0 rgba(255, 255, 255, 0.9),*/
+  /*  0 12px 24px rgba(168, 189, 214, 0.15);*/
 }
 
 .fox-rank-badge-item.unlocked-fresh {
@@ -2282,6 +2349,7 @@ body[data-theme="day"] .fox-rank-brief-boost {
   transform: translateY(14px);
   pointer-events: none;
   transition: opacity 180ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  background-color: black;
 }
 
 .fox-rank-share-drawer.is-visible {
@@ -2653,7 +2721,7 @@ body[data-theme="day"] .sidebar-theme-toggle:hover {
 
 .sidebar-fox-divider[data-state="issue"] .sidebar-fox-divider__tail {
   animation-duration: 4.2s;
-  opacity: 0.92;
+  opacity: 0.98;
 }
 
 .sidebar-fox-divider.is-hovered .sidebar-fox-divider__fox {
@@ -3371,7 +3439,7 @@ body[data-page="overview"] .overview-summary-strip {
   align-items: flex-start;
   justify-content: center;
   gap: 6px;
-  font-size: calc(11px * var(--ui-label-scale));
+  font-size: calc(10px * var(--ui-label-scale));
   line-height: 1.25;
   font-weight: 700;
   letter-spacing: calc(0.08em * var(--ui-letter-spacing-scale));
@@ -4348,8 +4416,8 @@ body[data-theme="night"] .help-about-team-logo {
   /*box-shadow:*/
   /*  inset 0 1px 0 rgba(255, 255, 255, 0.06),*/
   /*  0 4px 10px rgba(6, 12, 22, 0.10);*/
-  -webkit-backdrop-filter: blur(8px) saturate(112%);
-  backdrop-filter: blur(8px) saturate(112%);
+  -webkit-backdrop-filter: blur(4px) saturate(112%);
+  backdrop-filter: blur(2px) saturate(112%);
 }
 
 .help-about-label,
@@ -7113,7 +7181,7 @@ body[data-theme="day"] .memory-trend-chart {
   color: rgba(235, 241, 250, 0.95);
   border: 1px solid rgba(167, 189, 214, 0.28);
   background: rgba(28, 36, 51, 0.74);
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(1px);
   white-space: nowrap;
   opacity: 0;
   visibility: hidden;
@@ -10224,8 +10292,8 @@ body[data-page="foxboard"] {
   display: grid;
   place-items: center;
   background: rgba(9, 12, 17, 0.28);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   z-index: 8;
   opacity: 0;
   pointer-events: none;
@@ -11328,7 +11396,7 @@ body[data-theme="day"] .dashboard-stat::before,
 body[data-theme="day"] .dashboard-table-header h3::before,
 body[data-theme="day"] .dashboard-data-card .dashboard-data-card-title::before {
   filter: brightness(0.94) saturate(1.04);
-  opacity: 0.92;
+  opacity: 0.98;
 }
 
 body[data-theme="day"] .dashboard-group-switch button.active::before,
@@ -12325,4 +12393,37 @@ body[data-theme="day"] .update-guide-card {
     border-bottom: none;
     padding-bottom: 0;
   }
+}
+
+/* 截图优化 - 减少模糊效果，增加背景实度 */
+.screenshot-optimized .fox-rank-card,
+.screenshot-optimized .fox-rank-share-preview,
+.screenshot-optimized .fox-rank-detail-section,
+.screenshot-optimized .fox-rank-detail-card,
+.screenshot-optimized .card,
+.screenshot-optimized .overview-summary-strip,
+.screenshot-optimized .metric-item {
+  backdrop-filter: blur(1px) !important;
+  -webkit-backdrop-filter: blur(1px) !important;
+  filter: blur(0) !important;
+}
+
+.screenshot-optimized .fox-rank-detail-section {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--fox-rank-aura-start) 30%, rgba(41, 57, 79, 0.85)),
+      color-mix(in srgb, var(--fox-rank-aura-end) 26%, rgba(28, 39, 56, 0.8))
+    ),
+    rgba(148, 171, 197, 0.15) !important;
+}
+
+.screenshot-optimized .fox-rank-share-preview {
+  background:
+    radial-gradient(120% 120% at 100% 0%, rgba(127, 172, 242, 0.3) 0%, rgba(127, 172, 242, 0) 58%),
+    linear-gradient(145deg, rgba(35, 49, 68, 0.98), rgba(23, 31, 45, 0.96)) !important;
+}
+
+.screenshot-optimized body[data-theme="day"] .fox-rank-share-preview {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(243, 248, 253, 0.98)) !important;
 }

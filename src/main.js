@@ -389,10 +389,10 @@ const PANEL_PRESETS = {
     'external-ui-url': 'ui',
   },
 };
-const DEFAULT_MAIN_WINDOW_WIDTH = 1080;
-const DEFAULT_MAIN_WINDOW_HEIGHT = 675;
+const DEFAULT_MAIN_WINDOW_WIDTH = 1200;
+const DEFAULT_MAIN_WINDOW_HEIGHT = 725;
 const MIN_MAIN_WINDOW_WIDTH = 980;
-const MIN_MAIN_WINDOW_HEIGHT = 675;
+const MIN_MAIN_WINDOW_HEIGHT = 725;
 const MAX_MAIN_WINDOW_WIDTH = 4096;
 const MAX_MAIN_WINDOW_HEIGHT = 2160;
 const trayIconCache = new Map();
@@ -7621,7 +7621,7 @@ function emitTrayRefresh() {
 function emitSettingsUpdated(settings = {}) {
   const payload = settings && typeof settings === 'object' ? settings : {};
   BrowserWindow.getAllWindows().forEach((win) => {
-    if (!win || win.isDestroyed() || !win.webContents || !win.isVisible()) {
+    if (!win || win.isDestroyed() || !win.webContents) {
       return;
     }
     win.webContents.send('clashfox:settingsUpdated', payload);
@@ -8291,10 +8291,10 @@ async function openDashboardPanel() {
     }
 
     dashboardWindow = new BrowserWindow({
-      width: 1280,
-      height: 820,
+      width: 1200,
+      height: 725,
       minWidth: 960,
-      minHeight: 640,
+      minHeight: 725,
       alwaysOnTop: false,
       backgroundColor: '#0f1216',
       autoHideMenuBar: true,
@@ -10065,10 +10065,10 @@ function openWorldwideWindow() {
       return;
     }
     worldwideWindow = new BrowserWindow({
-      width: 1240,
-      height: 820,
+      width: 1200,
+      height: 725,
       minWidth: 900,
-      minHeight: 620,
+      minHeight: 725,
       show: true,
       alwaysOnTop: false,
       backgroundColor: '#0f1216',
@@ -10120,6 +10120,7 @@ function openFoxboardWindow() {
     if (foxboardWindow && !foxboardWindow.isDestroyed()) {
       foxboardWindow.show();
       foxboardWindow.focus();
+      pushCurrentSettingsToWindow(foxboardWindow);
       return;
     }
     if (foxboardPreloadWindow && !foxboardPreloadWindow.isDestroyed()) {
@@ -10139,13 +10140,14 @@ function openFoxboardWindow() {
       }
       foxboardWindow.show();
       foxboardWindow.focus();
+      pushCurrentSettingsToWindow(foxboardWindow);
       return;
     }
     foxboardWindow = new BrowserWindow({
-      width: 1320,
-      height: 860,
-      minWidth: 980,
-      minHeight: 680,
+      width: 1200,
+      height: 725,
+      minWidth: 1200,
+      minHeight: 725,
       show: true,
       alwaysOnTop: false,
       backgroundColor: '#0f1216',
@@ -10193,68 +10195,13 @@ function openFoxboardWindow() {
         event.preventDefault();
       }
     });
+    windowRef.webContents.on('did-finish-load', () => {
+      pushCurrentSettingsToWindow(windowRef);
+    });
     windowRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'foxboard.html'));
   } catch {
   }
 }
-
-function preloadFoxboardWindow() {
-  try {
-    if (
-      (foxboardWindow && !foxboardWindow.isDestroyed())
-      || (foxboardPreloadWindow && !foxboardPreloadWindow.isDestroyed())
-    ) {
-      return;
-    }
-    foxboardPreloadWindow = new BrowserWindow({
-      width: 1320,
-      height: 860,
-      minWidth: 980,
-      minHeight: 680,
-      show: false,
-      alwaysOnTop: false,
-      backgroundColor: '#0f1216',
-      autoHideMenuBar: true,
-      title: 'ClashFox Foxboard',
-      webPreferences: {
-        contextIsolation: true,
-        preload: path.join(__dirname, 'preload.js'),
-        devTools: globalSettings.debugMode,
-      },
-    });
-    const preloadRef = foxboardPreloadWindow;
-    preloadRef.on('closed', () => {
-      if (foxboardPreloadWindow === preloadRef) {
-        foxboardPreloadWindow = null;
-      }
-      if (foxboardWindow === preloadRef) {
-        foxboardWindow = null;
-      }
-    });
-    preloadRef.on('blur', () => {
-      if (preloadRef && !preloadRef.isDestroyed()) {
-        preloadRef.setAlwaysOnTop(false);
-      }
-    });
-    preloadRef.webContents.on('before-input-event', (event, input) => {
-      const key = String(input.key || '').toLowerCase();
-      const isDevToolsCombo =
-        (input.control && input.shift && key === 'i')
-        || (input.meta && input.alt && key === 'i')
-        || key === 'f12';
-      if (isDevToolsCombo && !globalSettings.debugMode) {
-        event.preventDefault();
-      }
-    });
-    preloadRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'foxboard.html'));
-  } catch {
-    if (foxboardPreloadWindow && !foxboardPreloadWindow.isDestroyed()) {
-      foxboardPreloadWindow.close();
-    }
-    foxboardPreloadWindow = null;
-  }
-}
-
 function focusPreferredWindowOnActivate() {
   const candidates = [
     BrowserWindow.getFocusedWindow(),
@@ -10278,67 +10225,6 @@ function focusPreferredWindowOnActivate() {
   target.focus();
   return true;
 }
-
-function preloadWorldwideWindow() {
-  try {
-    if (
-      (worldwideWindow && !worldwideWindow.isDestroyed())
-      || (worldwidePreloadWindow && !worldwidePreloadWindow.isDestroyed())
-    ) {
-      return;
-    }
-    worldwidePreloadWindow = new BrowserWindow({
-      width: 1240,
-      height: 820,
-      minWidth: 900,
-      minHeight: 620,
-      show: false,
-      alwaysOnTop: false,
-      backgroundColor: '#0f1216',
-      autoHideMenuBar: true,
-      title: 'ClashFox Worldwide',
-      webPreferences: {
-        contextIsolation: true,
-        preload: path.join(__dirname, 'preload.js'),
-        devTools: globalSettings.debugMode,
-      },
-    });
-    const preloadRef = worldwidePreloadWindow;
-    preloadRef.on('closed', () => {
-      if (worldwidePreloadWindow === preloadRef) {
-        worldwidePreloadWindow = null;
-      }
-      if (worldwideWindow === preloadRef) {
-        worldwideWindow = null;
-      }
-    });
-    preloadRef.on('blur', () => {
-      if (preloadRef && !preloadRef.isDestroyed()) {
-        preloadRef.setAlwaysOnTop(false);
-      }
-    });
-    preloadRef.webContents.on('before-input-event', (event, input) => {
-      const key = String(input.key || '').toLowerCase();
-      const isDevToolsCombo =
-        (input.control && input.shift && key === 'i')
-        || (input.meta && input.alt && key === 'i')
-        || key === 'f12';
-      if (isDevToolsCombo && !globalSettings.debugMode) {
-        event.preventDefault();
-      }
-    });
-    preloadRef.webContents.on('did-finish-load', () => {
-      pushCurrentSettingsToWindow(preloadRef);
-    });
-    preloadRef.loadFile(path.join(APP_PATH, 'src', 'ui', 'html', 'trackers.html'));
-  } catch {
-    if (worldwidePreloadWindow && !worldwidePreloadWindow.isDestroyed()) {
-      worldwidePreloadWindow.close();
-    }
-    worldwidePreloadWindow = null;
-  }
-}
-
 function buildMenuTemplate() {
   const viewMenu = globalSettings.debugMode
     ? { role: 'viewMenu' }
@@ -12276,6 +12162,12 @@ function createWindow(showOnCreate = false) {
     if (app.dock && app.dock.hide) {
       app.dock.hide();
     }
+    // 关闭主窗口时同时关闭开发者工具
+    BrowserWindow.getAllWindows().forEach((w) => {
+      if (w && !w.isDestroyed() && w !== win && w.webContents && w.webContents.isDevToolsOpened()) {
+        w.webContents.closeDevTools();
+      }
+    });
   });
 
   win.on('resize', () => {

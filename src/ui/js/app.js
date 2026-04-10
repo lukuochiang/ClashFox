@@ -167,6 +167,7 @@ let foxRankBadgeList = document.getElementById('foxRankBadgeList');
 let foxRankSkinList = document.getElementById('foxRankSkinList');
 let foxRankShareSection = document.getElementById('foxRankShareSection');
 let foxRankSharePreview = document.getElementById('foxRankSharePreview');
+let foxRankShareClose = document.getElementById('foxRankShareClose');
 let foxRankPreviewPngBtn = document.getElementById('foxRankPreviewPngBtn');
 let foxRankCopySummaryBtn = document.getElementById('foxRankCopySummaryBtn');
 let foxRankExportPngBtn = document.getElementById('foxRankExportPngBtn');
@@ -2238,7 +2239,7 @@ const I18N = window.CLASHFOX_I18N || {};
 
 const METACUBEX_CATALOG_CACHE_KEY = 'clashfox-metacubex-version-catalog-v1';
 const METACUBEX_CATALOG_CACHE_MAX_AGE_MS = 30 * 60 * 1000;
-const MAIN_WINDOW_DEFAULT_WIDTH = 1080;
+const MAIN_WINDOW_DEFAULT_WIDTH = 1200;
 const MAIN_WINDOW_DEFAULT_HEIGHT = 675;
 const MAIN_WINDOW_MIN_WIDTH = 980;
 const MAIN_WINDOW_MIN_HEIGHT = 675;
@@ -10137,7 +10138,7 @@ function buildFoxRankExportCanvas(snapshot = null) {
   ctx.globalAlpha = 1.0;
 
   // 光晕效果 A - 右上角（大光晕）
-  ctx.globalAlpha = 0.38;
+  ctx.globalAlpha = 0.09;
   const haloAGradient = ctx.createRadialGradient(canvas.width - 40, -60, 0, canvas.width - 40, -60, 90);
   haloAGradient.addColorStop(0, tier.colorStart);
   haloAGradient.addColorStop(0.72, 'transparent');
@@ -10147,6 +10148,7 @@ function buildFoxRankExportCanvas(snapshot = null) {
   ctx.fill();
 
   // 光晕效果 B - 左下角（大光晕）
+  ctx.globalAlpha = 0.09;
   const haloBGradient = ctx.createRadialGradient(-50, canvas.height + 70, 0, -50, canvas.height + 70, 100);
   haloBGradient.addColorStop(0, tier.colorEnd);
   haloBGradient.addColorStop(0.72, 'transparent');
@@ -10156,7 +10158,7 @@ function buildFoxRankExportCanvas(snapshot = null) {
   ctx.fill();
 
   // 光晕效果 C - 左上角（中等光晕）
-  ctx.globalAlpha = 0.32;
+  ctx.globalAlpha = 0.08;
   const haloCGradient = ctx.createRadialGradient(40, 50, 0, 40, 50, 60);
   haloCGradient.addColorStop(0, tier.colorStart);
   haloCGradient.addColorStop(0.65, 'transparent');
@@ -10175,16 +10177,16 @@ function buildFoxRankExportCanvas(snapshot = null) {
   ];
   particles.forEach((p) => {
     // 粒子核心
-    ctx.globalAlpha = 0.68;
+    ctx.globalAlpha = 0.19;
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
     ctx.fill();
 
     // 粒子光晕
-    ctx.globalAlpha = 0.34;
+    ctx.globalAlpha = 0.09;
     const glowGradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 14);
-    glowGradient.addColorStop(0, 'rgba(255, 255, 255, 0.38)');
+    glowGradient.addColorStop(0, 'rgba(255, 255, 255, 0.12)');
     glowGradient.addColorStop(1, 'transparent');
     ctx.fillStyle = glowGradient;
     ctx.beginPath();
@@ -10579,15 +10581,18 @@ function renderFoxRankDetailPanel(snapshot = null) {
   if (foxRankSkinList) {
     setNodeHtmlIfChanged(foxRankSkinList, getFoxRankSkinItems(data)
       .map((item, index) => {
-        const status = item.active
-          ? foxRankText('equipped', 'Equipped')
-          : item.unlocked
-            ? foxRankText('unlocked', 'Unlocked')
-            : item.pendingLabel
-              ? item.pendingLabel
-            : formatFoxRankText('levelPrefix', { level: item.unlockTier + 1 }, `Lv. ${item.unlockTier + 1}`);
         const className = `fox-rank-skin-item ${item.unlocked ? 'is-unlocked' : 'is-locked'}${item.active ? ' is-active' : ''}`;
-        return `<div class="${className}" data-fox-rank-skin="${escapeLogCell(item.id)}" style="animation-delay:${index * 50}ms"><strong>${escapeLogCell(item.name)}</strong><span>${escapeLogCell(item.desc)}</span><em>${escapeLogCell(status)}</em></div>`;
+        // Bottom-right: "Equipped" badge for active skin
+        const equippedBadge = item.active
+          ? `<em class="fox-rank-skin-equipped">${escapeLogCell(foxRankText('equipped', 'Equipped'))}</em>`
+          : '';
+        // Bottom-left: "Unlocked" or lock condition (always show for unlocked skins)
+        const bottomLeftBadge = item.unlocked
+          ? `<em class="fox-rank-skin-status">${escapeLogCell(foxRankText('unlocked', 'Unlocked'))}</em>`
+          : (item.pendingLabel
+            ? `<em class="fox-rank-skin-status">${escapeLogCell(item.pendingLabel)}</em>`
+            : `<em class="fox-rank-skin-status">${escapeLogCell(formatFoxRankText('levelPrefix', { level: item.unlockTier + 1 }, `Lv. ${item.unlockTier + 1}`))}</em>`);
+        return `<div class="${className}" data-fox-rank-skin="${escapeLogCell(item.id)}" style="animation-delay:${index * 50}ms"><strong>${escapeLogCell(item.name)}</strong><span>${escapeLogCell(item.desc)}</span><div class="fox-rank-skin-footer">${bottomLeftBadge}${equippedBadge}</div></div>`;
       })
       .join(''));
   }
@@ -12405,6 +12410,7 @@ function refreshLayoutRefs() {
   foxRankSkinList = document.getElementById('foxRankSkinList');
   foxRankShareSection = document.getElementById('foxRankShareSection');
   foxRankSharePreview = document.getElementById('foxRankSharePreview');
+  foxRankShareClose = document.getElementById('foxRankShareClose');
   foxRankPreviewPngBtn = document.getElementById('foxRankPreviewPngBtn');
   foxRankCopySummaryBtn = document.getElementById('foxRankCopySummaryBtn');
   foxRankExportPngBtn = document.getElementById('foxRankExportPngBtn');
@@ -13674,6 +13680,10 @@ function bindPageEvents() {
   if (foxRankBriefClose && foxRankBriefClose.dataset.bound !== 'true') {
     foxRankBriefClose.dataset.bound = 'true';
     foxRankBriefClose.addEventListener('click', closeFoxRankBriefModal);
+  }
+  if (foxRankShareClose && foxRankShareClose.dataset.bound !== 'true') {
+    foxRankShareClose.dataset.bound = 'true';
+    foxRankShareClose.addEventListener('click', () => closeFoxRankShareSection());
   }
   if (foxRankBriefOpenDetail && foxRankBriefOpenDetail.dataset.bound !== 'true') {
     foxRankBriefOpenDetail.dataset.bound = 'true';

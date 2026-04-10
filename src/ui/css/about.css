@@ -29,7 +29,6 @@ body::before, body::after {
   position: absolute;
   width: 480px;
   height: 480px;
-  filter: blur(2px);
   z-index: 0;
 }
 

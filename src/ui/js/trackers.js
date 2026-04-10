@@ -351,6 +351,7 @@ function applySettingsPayload(settings = {}) {
   const applyNow = () => {
     syncLanguageFromPreference();
     applyThemeMode(themePreference);
+    applyFoxRankThemeCssVarsFromSettings(settings);
   };
   if (languagePreference === 'auto') {
     refreshSystemLocaleFromMain().finally(applyNow);

@@ -41,8 +41,7 @@ body {
   gap: 14px;
   border: 1px solid rgba(148, 171, 197, 0.24);
   border-radius: 12px;
-  background: rgba(11, 18, 25, 0.68);
-  backdrop-filter: blur(10px);
+  background: rgba(11, 18, 25, 0.92);
   padding: 12px 14px;
 }
 
@@ -127,13 +126,12 @@ body {
   max-width: calc(100% - 24px);
   border: 1px solid rgba(148, 171, 197, 0.28);
   border-radius: 10px;
-  background: rgba(11, 18, 25, 0.78);
+  background: rgba(11, 18, 25, 0.9);
   color: #d8e2ee;
   padding: 8px 10px;
   font-size: 12px;
   line-height: 1.45;
   z-index: 600;
-  backdrop-filter: blur(6px);
 }
 
 .worldwide-empty {
@@ -164,10 +162,9 @@ body {
   width: min(320px, calc(100% - 24px));
   border: 1px solid rgba(148, 171, 197, 0.3);
   border-radius: 10px;
-  background: rgba(9, 16, 23, 0.82);
+  background: rgba(9, 16, 23, 0.92);
   padding: 10px;
   z-index: 650;
-  backdrop-filter: blur(7px);
 }
 
 .worldwide-detail-title {
@@ -200,7 +197,7 @@ body {
 /* 只在远程节点上应用圆圈样式 */
 .remote-pulse-marker svg {
   display: block !important;
-  filter: drop-shadow(0 0 3px rgba(47, 143, 216, 0.5));
+  filter: drop-shadow(0 0 1px rgba(47, 143, 216, 0.6));
 }
 
 /* Local Mac节点不应该有任何圆形装饰 */
@@ -252,7 +249,6 @@ body {
 .world-link-path {
   stroke-linecap: round;
   stroke-linejoin: round;
-  filter: drop-shadow(0 0 1px rgba(22, 54, 82, 0.28));
 }
 
 .world-line-label-wrap {
@@ -326,7 +322,7 @@ html[data-theme="day"] body {
 
 html[data-theme="day"] .worldwide-header {
   border: 1px solid rgba(96, 126, 154, 0.25);
-  background: rgba(244, 249, 255, 0.84);
+  background: rgba(250, 253, 255, 0.96);
 }
 
 html[data-theme="day"] .worldwide-header p {
@@ -350,7 +346,7 @@ html[data-theme="day"] .worldwide-map-wrap {
 
 html[data-theme="day"] .worldwide-stats {
   border: 1px solid rgba(96, 126, 154, 0.28);
-  background: rgba(246, 251, 255, 0.9);
+  background: rgba(250, 253, 255, 0.96);
   color: #2b445b;
 }
 
@@ -362,7 +358,7 @@ html[data-theme="day"] .worldwide-empty {
 
 html[data-theme="day"] .worldwide-detail {
   border: 1px solid rgba(102, 130, 156, 0.3);
-  background: rgba(245, 251, 255, 0.92);
+  background: rgba(248, 253, 255, 0.96);
 }
 
 html[data-theme="day"] .worldwide-detail-title {
@@ -376,7 +372,7 @@ html[data-theme="day"] #worldwideDetailBody {
 
 
 .world-link-flow {
-  filter: drop-shadow(0 0 2px rgba(150, 232, 255, 0.52));
+  /* 移除模糊阴影，保持清晰 */
 }
 
 @media (max-width: 980px) {

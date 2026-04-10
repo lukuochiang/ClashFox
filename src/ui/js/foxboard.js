@@ -240,6 +240,7 @@ async function bootFoxboard() {
             ? window.matchMedia('(prefers-color-scheme: dark)').matches
             : document.documentElement.getAttribute('data-theme') === 'night';
           applyTheme(currentTheme, dark);
+          applyFoxRankThemeCssVarsFromSettings(mergedSettings);
         }).catch(() => {
           foxboardLog('settings', 'event update failed', null, 'warn');
         });

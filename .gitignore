@@ -23,3 +23,5 @@ dist
 .gitignore
 
 design
+
+.DS_Store
