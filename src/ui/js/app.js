@@ -6644,7 +6644,6 @@ async function handleHelpAppUpdateCheck() {
       setHelpAboutStatus(ti('help.updateEntryHint', 'Use the buttons below to check app, kernel, and helper updates.'), 'idle');
       return;
     }
-    checkingDialog.close();
     const stableAvailable = Boolean(
       stableResult
       && stableResult.ok
@@ -6658,9 +6657,16 @@ async function handleHelpAppUpdateCheck() {
       && betaResult.prerelease,
     );
     if (!stableAvailable && !betaAvailable) {
+      checkingDialog.close();
       setHelpAboutStatus(ti('help.appAlreadyLatest', 'App is up to date.'), 'success');
+      await promptUpdateGuide({
+        title: ti('help.appUpdateChoicesTitle', 'Update Options'),
+        body: ti('help.appAlreadyLatest', 'App is up to date.'),
+        primaryLabel: ti('confirm.ok', 'OK'),
+      });
       return;
     }
+    checkingDialog.close();
     if (!allowBeta) {
       const stableVersion = normalizeVersionForDisplay(stableResult && stableResult.latestVersion ? stableResult.latestVersion : '');
       const bodyText = stableVersion
