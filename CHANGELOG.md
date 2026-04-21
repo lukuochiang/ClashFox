@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.5.9](https://github.com/lukuochiang/ClashFox/compare/v0.5.8...v0.5.9) (2026-04-21)
+
+
+### Features
+
+* add masking for network intel location data ([df0136c](https://github.com/lukuochiang/ClashFox/commit/df0136c69e3da2752849e113ddde928db740c2e3))
+
+
+### Bug Fixes
+
+* correct kernel title and version parsing ([8bb1c3f](https://github.com/lukuochiang/ClashFox/commit/8bb1c3f8a6b8452e5c9d75e74d0fa276b55cb56a))
+* delay closing check updates dialog ([1cb3152](https://github.com/lukuochiang/ClashFox/commit/1cb3152e5be85f72a319d13bfa6090ab1c5d7269))
+* preserve sidebar state when toggling topNavMode ([c68fc18](https://github.com/lukuochiang/ClashFox/commit/c68fc18724e9e4da529a70060d33e3e085c773e1))
+* use normalized kernel version for display ([e400968](https://github.com/lukuochiang/ClashFox/commit/e400968548bf48959a419ebe4333fdd70d970c6e))
+
 ### [0.5.8](https://github.com/lukuochiang/ClashFox/compare/v0.5.7...v0.5.8) (2026-04-10)
 
 
