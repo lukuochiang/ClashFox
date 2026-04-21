@@ -9029,9 +9029,16 @@ function formatNetworkIntelIpipLine(payload = {}) {
 
 function formatNetworkIntelIpapiLine(payload = {}) {
   const source = String(payload.source || '').trim();
-  const detail = String(payload.detail || '').trim();
+  const detailRaw = String(payload.detail || '').trim();
   const sourceLabel = source.replace(/^https?:\/\//i, '').replace(/\/+$/g, '');
-  const fallbackMain = detail || (sourceLabel && !/^api\.ipapi\.is$/i.test(sourceLabel) ? sourceLabel : '');
+  let fallbackMain = detailRaw || (sourceLabel && !/^api\.ipapi\.is$/i.test(sourceLabel) ? sourceLabel : '');
+  if (state.overviewNetworkIntelMasked && fallbackMain) {
+    const [locationRaw = '', providerRaw = ''] = fallbackMain.split(' · ');
+    const maskPart = (value = '') => (String(value || '').trim() ? '**' : '');
+    const maskedLocation = String(locationRaw || '').trim().split(/[\s,，]+/).map(() => '**').join(' ');
+    const maskedProvider = maskPart(providerRaw);
+    fallbackMain = [maskedLocation, maskedProvider].filter(Boolean).join(' · ');
+  }
   const displayMain = fallbackMain || ti('overview.ipapiUnavailable', 'Unavailable');
   const ip = String(payload.ip || '').trim();
   const originalIp = String(payload.originalIp || ip || '').trim();

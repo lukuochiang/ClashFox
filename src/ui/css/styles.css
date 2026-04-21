@@ -3669,6 +3669,9 @@ body[data-theme="day"] .overview-summary-value {
 
 .meta-item > div {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .meta-item.full {
@@ -3822,6 +3825,7 @@ body[data-theme="day"] .overview-summary-value {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 18px;
 }
 
 .meta-value-inline {
@@ -3831,6 +3835,7 @@ body[data-theme="day"] .overview-summary-value {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 18px;
 }
 
 .meta-value-inline > span {
