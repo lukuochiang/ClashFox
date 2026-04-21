@@ -5506,12 +5506,12 @@ async function copyTextToClipboard(text) {
 }
 
 async function handleOverviewKernelCopy() {
-  const kernelText = overviewKernel ? String(overviewKernel.textContent || '').trim() : '';
-  if (!kernelText || kernelText === '-') {
+  const kernelRaw = overviewKernel ? String(overviewKernel.title || overviewKernel.textContent || '').trim() : '';
+  if (!kernelRaw || kernelRaw === '-') {
     showNoticePop(ti('labels.copyFailed', 'Copy failed.'), 'error');
     return;
   }
-  const copied = await copyTextToClipboard(kernelText);
+  const copied = await copyTextToClipboard(kernelRaw);
   showNoticePop(
     copied
       ? ti('labels.kernelCopied', 'Kernel version copied.')
@@ -6227,7 +6227,7 @@ function applyKernelVersionDisplay(versionRaw = '') {
     }
   }
   if (installCurrentKernel) {
-    installCurrentKernel.textContent = kernelDisplay && kernelDisplay !== '-' ? kernelDisplay : t('labels.notInstalled');
+    installCurrentKernel.textContent = normalizedVersion && normalizedVersion !== '-' ? normalizedVersion : t('labels.notInstalled');
   }
   if (statusVersion) {
     statusVersion.textContent = normalizedVersion || t('labels.notInstalled');
