@@ -4230,7 +4230,14 @@ function applySidebarCollapsedState(collapsed = false, persist = false) {
   if (!state.settings.appearance) {
     state.settings.appearance = {};
   }
-  state.settings.appearance.sidebarCollapsed = Boolean(collapsed);
+  // Only update the persisted preference when the user explicitly toggles
+  // (persist=true) or when the value is not driven by a transient topNavMode
+  // override.  In topNavMode the visual state is forced to "expanded" but the
+  // user's collapse preference must be preserved so that exiting topNavMode
+  // restores the intended sidebar state.
+  if (persist || !topNavMode) {
+    state.settings.appearance.sidebarCollapsed = Boolean(collapsed);
+  }
   if (persist) {
     saveSettings({ sidebarCollapsed: Boolean(collapsed) });
   }
@@ -16184,9 +16191,14 @@ async function initApp() {
     applySystemTheme(prefersDarkQuery.matches);
   }
   updateScrollbarWidthVar();
+  let lastTopNavMode = isTopNavMode();
   window.addEventListener('resize', () => {
     updateScrollbarWidthVar();
-    applySidebarCollapsedState(Boolean(state.settings && state.settings.appearance && state.settings.appearance.sidebarCollapsed), false);
+    const currentTopNavMode = isTopNavMode();
+    if (currentTopNavMode !== lastTopNavMode) {
+      lastTopNavMode = currentTopNavMode;
+      applySidebarCollapsedState(Boolean(state.settings && state.settings.appearance && state.settings.appearance.sidebarCollapsed), false);
+    }
     requestTopNavOverflowSync();
   });
   bindPageEvents();
