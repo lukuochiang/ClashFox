@@ -6220,8 +6220,8 @@ function applyKernelVersionDisplay(versionRaw = '') {
   const kernelDisplay = formatKernelDisplay(normalizedVersion);
   if (overviewKernel) {
     overviewKernel.textContent = kernelDisplay || '-';
-    if (kernelDisplay && kernelDisplay !== '-') {
-      overviewKernel.title = kernelDisplay;
+    if (normalizedVersion && normalizedVersion !== '-') {
+      overviewKernel.title = normalizedVersion;
     } else {
       overviewKernel.removeAttribute('title');
     }
@@ -8064,9 +8064,13 @@ function formatKernelDisplay(value) {
   if (!text) {
     return '-';
   }
-  const match = text.match(/alpha(?:-smart)?-[0-9a-f]+/i);
+  const match = text.match(/alpha-(smart-[0-9a-f]+)/i);
   if (match) {
-    return match[0];
+    return match[1];
+  }
+  const alphaMatch = text.match(/alpha(?:-smart)?-[0-9a-f]+/i);
+  if (alphaMatch) {
+    return alphaMatch[0];
   }
   const semver = text.match(/\bv?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\b/);
   if (semver) {
