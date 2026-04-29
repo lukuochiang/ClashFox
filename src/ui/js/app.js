@@ -7115,7 +7115,7 @@ function updateInstallVersionVisibility() {
 }
 
 function formatUptime(seconds) {
-  if (!Number.isFinite(seconds) || seconds < 0) {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
     return '-';
   }
   const days = Math.floor(seconds / 86400);
