@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.5.10](https://github.com/lukuochiang/ClashFox/compare/v0.5.9...v0.5.10) (2026-05-02)
+
+
+### Bug Fixes
+
+* handle zero seconds in formatUptime ([0d315aa](https://github.com/lukuochiang/ClashFox/commit/0d315aaee7d090cb71006f197d64255046afba42))
+
 ### [0.5.9](https://github.com/lukuochiang/ClashFox/compare/v0.5.8...v0.5.9) (2026-04-21)
 
 
