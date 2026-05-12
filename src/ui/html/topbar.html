@@ -1,6 +1,43 @@
 <div class="topbar-title">
-  <div class="eyebrow" data-i18n="topbar.eyebrow">Kernel Dashboard</div>
-  <h1 data-i18n="topbar.title">Mihomo Control Center</h1>
+  <span class="topbar-statusbar">
+    <span class="topbar-statusbar-kernel-icon" aria-hidden="true">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="4" width="16" height="16" rx="2" ry="2"/>
+        <rect x="9" y="9" width="6" height="6"/>
+        <line x1="9" y1="1" x2="9" y2="4"/>
+        <line x1="15" y1="1" x2="15" y2="4"/>
+        <line x1="9" y1="20" x2="9" y2="23"/>
+        <line x1="15" y1="20" x2="15" y2="23"/>
+        <line x1="20" y1="9" x2="23" y2="9"/>
+        <line x1="20" y1="14" x2="23" y2="14"/>
+        <line x1="1" y1="9" x2="4" y2="9"/>
+        <line x1="1" y1="14" x2="4" y2="14"/>
+      </svg>
+    </span>
+    <span class="topbar-statusbar-version" id="topbarVersion">-</span>
+    <span class="topbar-statusbar-sep" aria-hidden="true">·</span>
+    <span class="topbar-statusbar-uptime">
+      <span class="topbar-statusbar-uptime-icon" aria-hidden="true">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+      </span>
+      <span class="topbar-statusbar-item" id="topbarUptime">-</span>
+    </span>
+    <span class="topbar-statusbar-sep" aria-hidden="true">·</span>
+    <span class="topbar-statusbar-quality">
+      <span class="topbar-statusbar-quality-icon" aria-hidden="true">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="18" width="4" height="6" rx="1"/>
+          <rect x="8" y="12" width="4" height="12" rx="1"/>
+          <rect x="14" y="6" width="4" height="18" rx="1"/>
+          <rect x="20" y="2" width="4" height="22" rx="1"/>
+        </svg>
+      </span>
+      <span class="topbar-statusbar-quality-value" id="topbarQuality">-</span>
+    </span>
+  </span>
 </div>
 <div class="topbar-actions">
 <!--  <button class="icon-btn theme-toggle" id="themeToggle" aria-label="Switch to day mode" title="Switch to day mode">-->

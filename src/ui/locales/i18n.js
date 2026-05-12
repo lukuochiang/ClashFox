@@ -71,10 +71,6 @@ const I18N = {
       "nativeYes": "Yes",
       "nativeNo": "No"
     },
-    "topbar": {
-      "eyebrow": "Kernel Dashboard",
-      "title": "Mihomo Control Center"
-    },
     "status": {
       "core": "Core Status",
       "running": "Running",
@@ -620,6 +616,7 @@ const I18N = {
       "rulesSwitchRules": "规则",
       "rulesSwitchProviders": "规则提供商",
       "uptime": "运行时长",
+      "quality": "连接质量",
       "connections": "连接数",
       "memory": "内存",
       "statusLabel": "状态",
@@ -648,10 +645,6 @@ const I18N = {
       "riskHigh": "高",
       "nativeYes": "是",
       "nativeNo": "否"
-    },
-    "topbar": {
-      "eyebrow": "内核仪表盘",
-      "title": "Mihomo 控制中心"
     },
     "status": {
       "core": "内核状态",
@@ -1227,10 +1220,6 @@ const I18N = {
       "nativeYes": "はい",
       "nativeNo": "いいえ"
     },
-    "topbar": {
-      "eyebrow": "カーネルダッシュボード",
-      "title": "Mihomo コントロールセンター"
-    },
     "status": {
       "core": "コア状態",
       "running": "稼働中",
@@ -1802,10 +1791,6 @@ const I18N = {
       "nativeYes": "예",
       "nativeNo": "아니오"
     },
-    "topbar": {
-      "eyebrow": "커널 대시보드",
-      "title": "Mihomo 제어 센터"
-    },
     "status": {
       "core": "코어 상태",
       "running": "실행 중",
@@ -2374,10 +2359,6 @@ const I18N = {
       "riskHigh": "Élevé",
       "nativeYes": "Oui",
       "nativeNo": "Non"
-    },
-    "topbar": {
-      "eyebrow": "Tableau de bord du noyau",
-      "title": "Centre de contrôle Mihomo"
     },
     "status": {
       "core": "État du noyau",
@@ -2948,10 +2929,6 @@ const I18N = {
       "nativeYes": "Ja",
       "nativeNo": "Nein"
     },
-    "topbar": {
-      "eyebrow": "Kernel-Dashboard",
-      "title": "Mihomo Kontrollzentrum"
-    },
     "status": {
       "core": "Kernelstatus",
       "running": "Läuft",
@@ -3520,10 +3497,6 @@ const I18N = {
       "riskHigh": "Высокий",
       "nativeYes": "Да",
       "nativeNo": "Нет"
-    },
-    "topbar": {
-      "eyebrow": "Панель ядра",
-      "title": "Центр управления Mihomo"
     },
     "status": {
       "core": "Состояние ядра",

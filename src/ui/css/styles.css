@@ -36,19 +36,22 @@
   --glass-card-blur: 8px;
   --glass-title-bg: linear-gradient(145deg, rgba(34, 48, 68, 0.44), rgba(24, 36, 54, 0.34));
   --glass-title-border: rgba(164, 192, 228, 0.3);
-  --status-pill-bg: rgba(114, 136, 164, 0.2);
-  --status-pill-border: rgba(150, 176, 208, 0.3);
-  --status-pill-text: #aec3db;
+  /* === Status Pill - 简约现代风格优化 === */
+  --status-pill-bg: rgba(114, 136, 164, 0.12);
+  --status-pill-border: rgba(150, 176, 208, 0.2);
+  --status-pill-text: #8fa4b8;
   --status-dot: #8ea3b8;
-  --status-dot-ring: rgba(148, 171, 197, 0.2);
-  --status-running-bg: linear-gradient(180deg, rgba(60, 101, 90, 0.48), rgba(44, 83, 73, 0.42));
-  --status-running-border: rgba(108, 181, 164, 0.48);
-  --status-running-text: #bfe5db;
+  --status-dot-ring: rgba(142, 163, 184, 0.15);
+  /* Running 状态 - 更清新的绿色系 */
+  --status-running-bg: rgba(47, 122, 111, 0.08);
+  --status-running-border: rgba(87, 184, 164, 0.3);
+  --status-running-text: #5cb89e;
   --status-running-dot: #57b8a4;
   --status-running-ring: rgba(87, 184, 164, 0.2);
-  --status-stopped-bg: linear-gradient(180deg, rgba(110, 71, 64, 0.5), rgba(87, 54, 50, 0.42));
-  --status-stopped-border: rgba(199, 128, 117, 0.48);
-  --status-stopped-text: #f1c5bd;
+  /* Stopped 状态 - 更柔和的红色系 */
+  --status-stopped-bg: rgba(178, 78, 67, 0.08);
+  --status-stopped-border: rgba(205, 127, 113, 0.3);
+  --status-stopped-text: #cd7f71;
   --status-stopped-dot: #cd7f71;
   --status-stopped-ring: rgba(205, 127, 113, 0.2);
   --shadow: rgba(0, 0, 0, 0.35);
@@ -281,7 +284,8 @@ body.layout-ready .app {
 }
 
 #topbarContainer {
-  min-height: 60px;
+  /*min-height: 60px;*/
+  height: 45px;
 }
 
 body[data-theme="day"], html[data-theme="day"] body {
@@ -2407,9 +2411,10 @@ body[data-theme="day"] .sidebar-fox-divider {
 
 .sidebar-collapse-toggle {
   position: absolute;
-  top: -4px;
-  right: -14px;
-  z-index: 6;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  z-index: 999;
   width: 28px;
   height: 40px;
   padding: 0;
@@ -2426,37 +2431,40 @@ body[data-theme="day"] .sidebar-fox-divider {
   font: inherit;
   cursor: pointer;
   outline: none;
-  transform: none;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 80ms ease, color 80ms ease;
+  transition: opacity 0.2s ease, color 0.2s ease;
+}
+
+/* 隐藏原来的折叠按钮（功能已移至 logo） */
+.sidebar-collapse-toggle {
+  display: none !important;
+}
+
+/* 扩大 hover 检测区域 */
+.sidebar-collapse-toggle::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  z-index: -1;
+}
+
+/* hover 时显示图标 */
+.sidebar-collapse-toggle:hover,
+.sidebar-collapse-toggle:focus-visible {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  color: var(--ink);
 }
 
 .sidebar-collapse-toggle svg {
-  width: 12px;
-  height: 12px;
-  transition: transform 80ms ease;
-}
-
-.sidebar:hover .sidebar-collapse-toggle,
-.sidebar:focus-within .sidebar-collapse-toggle,
-.sidebar-collapse-toggle:focus-visible {
-  opacity: 1;
-  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  transition: transform 0.2s ease;
 }
 
 .sidebar.is-collapsed .sidebar-collapse-toggle svg {
   transform: rotate(180deg);
-}
-
-.sidebar-collapse-toggle:hover,
-.sidebar-collapse-toggle:focus-visible {
-  color: var(--ink);
-  background: transparent !important;
-  border-color: transparent !important;
-  box-shadow: none !important;
-  outline: none;
-  transform: none;
 }
 
 .sidebar.is-collapsed .sidebar-theme-toggle {
@@ -2486,6 +2494,41 @@ body[data-theme="day"] .sidebar-fox-divider {
   place-items: center;
   box-shadow: 0 10px 20px rgba(244, 179, 74, 0.18);
   overflow: hidden;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s ease;
+}
+
+.brand-mark:hover {
+  transform: scale(1.08);
+  box-shadow: 0 12px 24px rgba(244, 179, 74, 0.25);
+}
+
+.brand-mark:active {
+  transform: scale(0.95);
+}
+
+/* 点击时触发旋转动画 - 折叠（顺时针） */
+.brand-mark.animating-collapse {
+  animation: logoSpinCW 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes logoSpinCW {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.1); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+/* 点击时触发旋转动画 - 展开（逆时针） */
+.brand-mark.animating-expand {
+  animation: logoSpinCCW 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes logoSpinCCW {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(-180deg) scale(1.1); }
+  100% { transform: rotate(-360deg) scale(1); }
 }
 
 .brand-mark img {
@@ -3074,17 +3117,16 @@ body:not([data-theme="day"]) #helperLogsOpenBtn:hover {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  min-height: 60px;
-  margin-bottom: 12px;
-  padding-right: calc(0px + var(--scrollbar-width));
+  min-height: 45px;
+  margin-bottom: 18px;
+  padding-right: calc(2px + var(--scrollbar-width));
+  padding-left: calc(-2px + var(--scrollbar-width));
 }
 
 .topbar-title {
-  display: grid;
-  grid-template-rows: 14px 38px;
-  row-gap: 8px;
+  display: flex;
+  align-items: center;
   min-height: 60px;
-  align-content: center;
 }
 
 .topbar-actions {
@@ -3171,11 +3213,7 @@ body[data-theme="day"] .theme-toggle .icon-sun {
 }
 
 .eyebrow {
-  text-transform: uppercase;
-  letter-spacing: 0.25em;
-  font-size: 12px;
-  line-height: 14px;
-  color: var(--muted);
+  display: none;
 }
 
 h1 {
@@ -3185,23 +3223,158 @@ h1 {
 }
 
 .topbar-title h1 {
-  margin: 0;
-  line-height: 38px;
-  white-space: nowrap;
+  display: none;
 }
 
+/* === Topbar Statusbar - 简约现代优化 === */
+.topbar-statusbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.2;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+/* 版本号 - 等宽字体，更清晰 */
+.topbar-statusbar-version {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  /*background: rgba(99, 183, 255, 0.1);*/
+  /*padding: 2px 8px;*/
+  border-radius: 4px;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+/* Uptime 标签 - 更 subtle */
+.topbar-statusbar-label {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 500;
+}
+
+/* Uptime 时间 - 等宽，易读 */
+#topbarUptime {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums; /* 保证数字等宽 */
+}
+
+/* Uptime 图标 + 容器 */
+.topbar-statusbar-uptime {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.topbar-statusbar-uptime-icon {
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+/* 连接质量容器 + 图标 */
+.topbar-statusbar-quality {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.topbar-statusbar-quality-icon {
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.topbar-statusbar-quality-value {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 6px;
+  border-radius: 4px;
+  /*background: var(--bg-secondary, rgba(142, 163, 184, 0.08));*/
+  color: var(--ink);
+}
+
+/* 连接质量颜色 - 根据质量动态变化 */
+.topbar-statusbar-quality-value.quality-excellent {
+  color: #57b8a4;
+  background: rgba(87, 184, 164, 0.1);
+}
+
+.topbar-statusbar-quality-value.quality-good {
+  color: #63b7ff;
+  background: rgba(99, 183, 255, 0.1);
+}
+
+.topbar-statusbar-quality-value.quality-fair {
+  color: #f6d365;
+  background: rgba(246, 211, 101, 0.1);
+}
+
+.topbar-statusbar-quality-value.quality-poor {
+  color: #cd7f71;
+  background: rgba(205, 127, 113, 0.1);
+}
+
+/* 分隔符优化 - 更优雅 */
+.topbar-statusbar-sep {
+  color: var(--muted);
+  opacity: 0.25;
+  user-select: none;
+  margin: 0 1px;
+}
+
+/* 内核图标 */
+.topbar-statusbar-kernel-icon {
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+/* === 新增：Mihomo 图标 === */
+.topbar-statusbar-icon {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  background: var(--accent, #63b7ff);
+  mask-image: var(--icon-kernel);
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  -webkit-mask-image: var(--icon-kernel);
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+  flex-shrink: 0;
+}
+
+/* === Status Light (statusPill) - 简约现代优化 === */
 .status-light {
-  min-height: 30px;
-  padding: 0 12px 0 10px;
+  min-height: 28px;
+  padding: 0 14px 0 10px;
   border-radius: 999px;
   background: var(--status-pill-bg);
   border: 1px solid var(--status-pill-border);
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   cursor: pointer;
   white-space: nowrap;
-  transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  transition: all 180ms ease;
+  font-size: 12px;
 }
 
 .status-light * {
@@ -3209,44 +3382,49 @@ h1 {
 }
 
 .status-light .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--status-dot);
   box-shadow: 0 0 0 3px var(--status-dot-ring);
+  transition: all 180ms ease;
 }
 
 .status-light .status-pill-label {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
   color: var(--status-pill-text);
   line-height: 1;
+}
+
+/* Running 状态 - 简约现代 */
+.status-light[data-state="running"] {
+  background: var(--status-running-bg);
+  border-color: var(--status-running-border);
+  box-shadow: 0 0 0 1px rgba(87, 184, 164, 0.08);
 }
 
 .status-light[data-state="running"] .status-dot {
   background: var(--status-running-dot);
   box-shadow: 0 0 0 3px var(--status-running-ring);
-  animation: status-pill-breath 2.8s ease-in-out infinite;
-}
-
-.status-light[data-state="stopped"] .status-dot {
-  background: var(--status-stopped-dot);
-  box-shadow: 0 0 0 3px var(--status-stopped-ring);
-}
-
-.status-light[data-state="running"] {
-  background: var(--status-running-bg);
-  border-color: var(--status-running-border);
+  animation: status-pill-breath 2s ease-in-out infinite;
 }
 
 .status-light[data-state="running"] .status-pill-label {
   color: var(--status-running-text);
 }
 
+/* Stopped 状态 - 简约现代 */
 .status-light[data-state="stopped"] {
   background: var(--status-stopped-bg);
   border-color: var(--status-stopped-border);
+  box-shadow: 0 0 0 1px rgba(205, 127, 113, 0.08);
+}
+
+.status-light[data-state="stopped"] .status-dot {
+  background: var(--status-stopped-dot);
+  box-shadow: 0 0 0 3px var(--status-stopped-ring);
 }
 
 .status-light[data-state="stopped"] .status-pill-label {
@@ -12143,12 +12321,12 @@ body[data-theme="day"] .update-guide-card {
 @keyframes status-pill-breath {
   0%, 100% {
     transform: scale(1);
-    box-shadow: 0 0 0 3px var(--status-running-ring);
-    opacity: 0.95;
+    box-shadow: 0 0 0 3px var(--status-running-ring), 0 0 8px var(--status-running-dot);
+    opacity: 0.85;
   }
   50% {
-    transform: scale(1.08);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--status-running-ring) 90%, transparent);
+    transform: scale(1.15);
+    box-shadow: 0 0 0 6px var(--status-running-ring), 0 0 16px var(--status-running-dot);
     opacity: 1;
   }
 }

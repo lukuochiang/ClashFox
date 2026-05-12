@@ -196,6 +196,9 @@ let statusConfigRow = document.getElementById('statusConfigRow');
 let statusPill = document.getElementById('statusPill');
 let statusPillText = document.getElementById('statusPillText');
 let overviewUptime = document.getElementById('overviewUptime');
+let topbarVersion = document.getElementById('topbarVersion');
+let topbarUptime = document.getElementById('topbarUptime');
+let topbarQuality = document.getElementById('topbarQuality');
 let overviewConnections = document.getElementById('overviewConnections');
 let overviewMemory = document.getElementById('overviewMemory');
 let overviewStatus = document.getElementById('overviewStatus');
@@ -4219,7 +4222,8 @@ function applySidebarCollapsedState(collapsed = false, persist = false) {
     menuContainer.classList.toggle('is-collapsed', shouldCollapse);
   }
   if (sidebarCollapseToggle) {
-    sidebarCollapseToggle.style.display = topNavMode ? 'none' : '';
+    // 始终显示 logo，不根据 topNavMode 隐藏
+    sidebarCollapseToggle.style.display = '';
     const label = shouldCollapse ? 'Expand sidebar' : 'Collapse sidebar';
     sidebarCollapseToggle.setAttribute('title', label);
     sidebarCollapseToggle.setAttribute('aria-label', label);
@@ -4833,6 +4837,9 @@ if (window.clashfox && typeof window.clashfox.onMainCoreAction === 'function') {
       resetMihomoUptimeTracking();
       if (overviewUptime) {
         setNodeTextIfChanged(overviewUptime, '-');
+      }
+      if (topbarUptime) {
+        setNodeTextIfChanged(topbarUptime, '-');
       }
     }
     // Always sync from real kernel state; avoid synthetic transition states.
@@ -6214,6 +6221,19 @@ function hydrateOverviewIdentityFromSettings() {
   if (overviewStatus && typeof persistedKernel.running === 'boolean') {
     overviewStatus.textContent = persistedKernel.running ? t('labels.running') : t('labels.stopped');
   }
+  // Initialize topbar statusbar uptime
+  if (persistedKernel.running) {
+    const uptime = calculateMihomoUptime();
+    updateTopbarStatusbar(
+      topbarVersion ? topbarVersion.textContent : '-',
+      uptime > 0 ? formatUptime(uptime) : '-'
+    );
+  } else {
+    updateTopbarStatusbar(
+      topbarVersion ? topbarVersion.textContent : '-',
+      '-'
+    );
+  }
   state.overviewIpRaw.local = '';
   state.overviewIpRaw.proxy = '';
   state.overviewIpRaw.internet = '';
@@ -6225,6 +6245,7 @@ function hydrateOverviewIdentityFromSettings() {
 function applyKernelVersionDisplay(versionRaw = '') {
   const normalizedVersion = String(versionRaw || '').trim();
   const kernelDisplay = formatKernelDisplay(normalizedVersion);
+  // Running Status 卡片中的 Kernel 显示简写
   if (overviewKernel) {
     overviewKernel.textContent = kernelDisplay || '-';
     if (normalizedVersion && normalizedVersion !== '-') {
@@ -6233,12 +6254,16 @@ function applyKernelVersionDisplay(versionRaw = '') {
       overviewKernel.removeAttribute('title');
     }
   }
+  // 其他地方显示全称
   if (installCurrentKernel) {
     installCurrentKernel.textContent = normalizedVersion && normalizedVersion !== '-' ? normalizedVersion : t('labels.notInstalled');
   }
   if (statusVersion) {
     statusVersion.textContent = normalizedVersion || t('labels.notInstalled');
   }
+  // topbar 显示全称
+  updateTopbarStatusbar(normalizedVersion || '-',
+    topbarUptime ? topbarUptime.textContent : '-');
   setOverviewCopyButtonVisible(overviewKernelCopy, Boolean(kernelDisplay && kernelDisplay !== '-'));
 }
 
@@ -7124,6 +7149,46 @@ function formatUptime(seconds) {
   const secs = Math.floor(seconds % 60);
   const base = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   return days > 0 ? `${days}d ${base}` : base;
+}
+
+function updateTopbarStatusbar(versionText, uptimeText) {
+  if (topbarVersion) {
+    topbarVersion.textContent = versionText || '-';
+  }
+  if (topbarUptime) {
+    topbarUptime.textContent = uptimeText || '-';
+  }
+  // Refresh network quality
+  refreshTopbarQuality();
+}
+
+async function refreshTopbarQuality() {
+  if (!topbarQuality || !window.clashfox || typeof window.clashfox.trayMenuGetConnectivity !== 'function') {
+    return;
+  }
+  try {
+    const snapshot = await window.clashfox.trayMenuGetConnectivity(false);
+    if (!snapshot) {
+      return;
+    }
+    const text = snapshot.text ? String(snapshot.text) : '-';
+    const tone = snapshot.tone ? String(snapshot.tone) : 'neutral';
+    topbarQuality.textContent = text;
+    // Remove old quality classes
+    topbarQuality.classList.remove('quality-excellent', 'quality-good', 'quality-fair', 'quality-poor', 'quality-unknown');
+    // Add new quality class based on tone
+    if (tone === 'excellent' || tone === 'good') {
+      topbarQuality.classList.add('quality-excellent');
+    } else if (tone === 'fair') {
+      topbarQuality.classList.add('quality-fair');
+    } else if (tone === 'poor') {
+      topbarQuality.classList.add('quality-poor');
+    } else {
+      topbarQuality.classList.add('quality-unknown');
+    }
+  } catch {
+    // ignore
+  }
 }
 
 // JS-based uptime tracking functions
@@ -8077,9 +8142,10 @@ function formatKernelDisplay(value) {
   if (!text) {
     return '-';
   }
-  const match = text.match(/alpha-(smart-[0-9a-f]+)/i);
-  if (match) {
-    return match[1];
+  // smart 内核不显示 alpha- 前缀
+  const smartMatch = text.match(/alpha-(smart-[0-9a-f]+)/i);
+  if (smartMatch) {
+    return smartMatch[1]; // Return: smart-166a207
   }
   const alphaMatch = text.match(/alpha(?:-smart)?-[0-9a-f]+/i);
   if (alphaMatch) {
@@ -8885,8 +8951,12 @@ function updateOverviewUI(data) {
     // Just update the display immediately
     const uptime = calculateMihomoUptime();
     if (Number.isFinite(uptime) && uptime >= 0) {
+      const uptimeText = formatUptime(uptime);
       if (overviewUptime) {
-        setNodeTextIfChanged(overviewUptime, formatUptime(uptime));
+        setNodeTextIfChanged(overviewUptime, uptimeText);
+      }
+      if (topbarUptime) {
+        setNodeTextIfChanged(topbarUptime, uptimeText);
       }
     }
   } else {
@@ -8905,6 +8975,9 @@ function updateOverviewUI(data) {
       } else {
         setNodeTextIfChanged(overviewUptime, '-');
       }
+    }
+    if (topbarUptime) {
+      setNodeTextIfChanged(topbarUptime, '-');
     }
   }
   if (!wsConnectionFresh) {
@@ -12662,6 +12735,9 @@ function refreshPageRefs() {
   statusPill = document.getElementById('statusPill');
   statusPillText = document.getElementById('statusPillText');
   overviewUptime = document.getElementById('overviewUptime');
+  topbarVersion = document.getElementById('topbarVersion');
+  topbarUptime = document.getElementById('topbarUptime');
+  topbarQuality = document.getElementById('topbarQuality');
   overviewConnections = document.getElementById('overviewConnections');
   overviewMemory = document.getElementById('overviewMemory');
   overviewStatus = document.getElementById('overviewStatus');
@@ -12988,8 +13064,20 @@ function bindNavButtons() {
 function bindTopbarActions() {
   if (sidebarCollapseToggle && sidebarCollapseToggle.dataset.bound !== 'true') {
     sidebarCollapseToggle.dataset.bound = 'true';
-    sidebarCollapseToggle.addEventListener('click', () => {
-      const nextCollapsed = !(state.settings && state.settings.appearance && state.settings.appearance.sidebarCollapsed);
+    sidebarCollapseToggle.addEventListener('click', (e) => {
+      // 使用 DOM 状态作为真实来源，因为 saveSettings 会触发 syncSettingsFromFile
+      // 这会覆盖 state.settings 中的值，导致状态不一致
+      const isCurrentlyCollapsed = menuContainer && menuContainer.classList.contains('is-collapsed');
+      const nextCollapsed = !isCurrentlyCollapsed;
+      // 移除之前的动画类
+      sidebarCollapseToggle.classList.remove('animating-collapse', 'animating-expand');
+      void sidebarCollapseToggle.offsetWidth; // 强制重绘
+      // 根据折叠/展开状态添加不同的动画类
+      sidebarCollapseToggle.classList.add(nextCollapsed ? 'animating-collapse' : 'animating-expand');
+      // 动画结束后移除类
+      sidebarCollapseToggle.addEventListener('animationend', () => {
+        sidebarCollapseToggle.classList.remove('animating-collapse', 'animating-expand');
+      }, { once: true });
       applySidebarCollapsedState(nextCollapsed, true);
     });
   }
@@ -15899,8 +15987,14 @@ function startOverviewTimer() {
     // Use JS-based uptime calculation
     const uptime = calculateMihomoUptime();
     if (Number.isFinite(uptime) && uptime >= 0) {
-      setNodeTextIfChanged(overviewUptime, formatUptime(uptime));
+      const uptimeText = formatUptime(uptime);
+      setNodeTextIfChanged(overviewUptime, uptimeText);
+      if (topbarUptime) {
+        setNodeTextIfChanged(topbarUptime, uptimeText);
+      }
     }
+    // Refresh network quality
+    refreshTopbarQuality();
   }, 1000);
 
   if (state.providerSubscriptionTimer) {
