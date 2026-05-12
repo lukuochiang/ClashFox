@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.5.11](https://github.com/lukuochiang/ClashFox/compare/v0.5.10...v0.5.11) (2026-05-12)
+
+
+### Features
+
+* replace topbar title with kernel statusbar ([bb6782d](https://github.com/lukuochiang/ClashFox/commit/bb6782d80ee0d473f9f040a679563060f77981ca))
+
 ### [0.5.10](https://github.com/lukuochiang/ClashFox/compare/v0.5.9...v0.5.10) (2026-05-02)
 
 
