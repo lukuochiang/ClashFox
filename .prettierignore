@@ -1,0 +1,6 @@
+node_modules
+dist
+artifacts
+static/geoip
+static/helper
+package-lock.json

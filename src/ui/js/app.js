@@ -1,6 +1,24 @@
 import {SidebarFoxDivider} from '../components/sidebar-fox-divider.js';
 import {FOX_RANK_I18N} from '../locales/foxrank-i18n.js';
 
+const foxRankTheme = globalThis.CLASHFOX_FOX_RANK_THEME || {
+  normalizeSkinId: (value) => String(value || '').trim().toLowerCase(),
+  getPalette: () => null,
+  readSkinIdFromSettings: () => '',
+  applyCssVars: () => {},
+};
+const uiFormat = globalThis.CLASHFOX_FORMAT_UTILS || {
+  formatBytes: (value, options = {}) => {
+    const fallback = typeof options.fallback === 'string' ? options.fallback : '-';
+    const num = Number.parseFloat(value);
+    if (!Number.isFinite(num) || num < 0) {
+      return fallback;
+    }
+    return `${num} B`;
+  },
+};
+const sharedPanelPresets = globalThis.CLASHFOX_PANEL_PRESETS || null;
+
 const appLocaleUtils = globalThis.CLASHFOX_LOCALE_UTILS || {};
 const detectSystemLocale = typeof appLocaleUtils.detectSystemLocale === 'function'
   ? appLocaleUtils.detectSystemLocale
@@ -8,20 +26,9 @@ const detectSystemLocale = typeof appLocaleUtils.detectSystemLocale === 'functio
 let systemLocaleFromMain = '';
 
 // Default panel presets used before static config loads.
-const DEFAULT_PANEL_PRESETS = {
-  zashboard: {
-    name: 'zashboard',
-    displayName: 'Zashboard',
-    url: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
-    'external-ui-url': 'ui',
-  },
-  metacubexd: {
-    name: 'metacubexd',
-    displayName: 'MetaCubeXD',
-    url: 'https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz',
-    'external-ui-url': 'ui',
-  },
-};
+const DEFAULT_PANEL_PRESETS = sharedPanelPresets && sharedPanelPresets.presets
+  ? { ...sharedPanelPresets.presets }
+  : {};
 
 // apply last-used theme immediately to avoid flicker on reload
 // this will be overwritten later when settings are applied
@@ -117,14 +124,8 @@ const FOX_RANK_SKINS = [
   { id: 'nebula-flare', name: 'Nebula Flare', unlockTier: 17, desc: 'Meteor pulse for high-frequency route explorers.' },
   { id: 'void-aurora', name: 'Void Aurora', unlockTier: 19, desc: 'Final aurora layer for top-tier quality guardians.' },
 ];
-const FOX_RANK_SKIN_PALETTES = {
-  campfire: { start: '#ffb86c', end: '#ff8f57' },
-  aurora: { start: '#7df3d2', end: '#4bc6ff' },
-  starlight: { start: '#c685ff', end: '#8d6dff' },
-  'solar-crown': { start: '#f6d365', end: '#fda085' },
-  'nebula-flare': { start: '#ff8bd8', end: '#8f7cff' },
-  'void-aurora': { start: '#8ef0ff', end: '#6ea0ff' },
-};
+// FOX_RANK_SKIN_PALETTES moved to src/ui/utils/fox-rank-theme.js (shared source of truth).
+
 
 let foxRankPanel = document.getElementById('foxRankPanel');
 let foxRankPill = document.getElementById('foxRankPill');
@@ -453,60 +454,16 @@ function updateOverviewMemoryValue(inUseBytes) {
   }
 }
 
-function escapeTopologyText(value = '') {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function escapeTopologyXml(value = '') {
-  return escapeTopologyText(value);
-}
-
-function truncateTopologyLabel(value = '', maxLength = 24) {
-  const text = String(value || '').trim();
-  if (text.length <= maxLength) {
-    return text;
-  }
-  return `${text.slice(0, Math.max(1, maxLength - 1))}…`;
-}
-
-function clampTopologyNumber(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
-
-function estimateTopologyNodeWidth(columnKey = '', title = '', subtitle = '') {
-  const basis = Math.max(String(title || '').length, Math.round(String(subtitle || '').length * 0.82));
-  if (columnKey === 'source') {
-    return clampTopologyNumber(84 + (basis * 5.5), 118, 220);
-  }
-  if (columnKey === 'rule') {
-    return clampTopologyNumber(76 + (basis * 4.8), 100, 172);
-  }
-  if (columnKey === 'outbound') {
-    return clampTopologyNumber(72 + (basis * 4.5), 92, 148);
-  }
-  return clampTopologyNumber(68 + (basis * 4.2), 86, 126);
-}
-
-function estimateTopologyNodeHeight(columnKey = '', title = '', subtitle = '', fallback = 22) {
-  const titleLen = String(title || '').length;
-  const subtitleLen = String(subtitle || '').length;
-  const titleLines = columnKey === 'target'
-    ? 1
-    : Math.max(1, Math.min(2, Math.ceil(titleLen / (columnKey === 'source' ? 22 : 16))));
-  const hasSubtitle = Boolean(String(subtitle || '').trim());
-  const subtitleLines = hasSubtitle
-    ? Math.max(1, Math.min(2, Math.ceil(subtitleLen / (columnKey === 'source' ? 20 : 18))))
-    : 0;
-  const vertical = 10 + (titleLines * 14) + (subtitleLines ? ((subtitleLines * 11) + 4) : 0) + 8;
-  const minHeight = columnKey === 'target' ? 18 : fallback;
-  const maxHeight = columnKey === 'source' ? 96 : (columnKey === 'rule' ? 86 : 72);
-  return clampTopologyNumber(vertical, minHeight, maxHeight);
-}
+// Phase 3: pure topology text/geometry helpers extracted to src/ui/utils/topology-utils.js.
+const {
+  escapeTopologyText,
+  escapeTopologyXml,
+  truncateTopologyLabel,
+  buildTopologyColumnLayout,
+  buildTopologyBandPathFromAnchors,
+  aggregateTopologyStageLinks,
+  allocateTopologyLinkSlots,
+} = globalThis.CLASHFOX_TOPOLOGY_UTILS || {};
 
 function pruneTopologyEvents(now = Date.now()) {
   const next = (Array.isArray(state.topologyEvents) ? state.topologyEvents : [])
@@ -520,102 +477,6 @@ function computeTopologyAgeOpacity(timestamp = 0, now = Date.now()) {
   const age = Math.max(0, now - Number(timestamp || 0));
   const ratio = Math.max(0, Math.min(1, 1 - (age / TOPOLOGY_EVENT_TTL_MS)));
   return 0.18 + ratio * 0.72;
-}
-
-function buildTopologyColumnLayout(rows = [], columnKey = '', height = 286, gap = 6) {
-  const normalizedWeights = rows.map((row) => Math.max(0.4, Math.pow(Math.max(1, Number(row.weight || 0)), 1.05)));
-  const total = normalizedWeights.reduce((sum, weight) => sum + weight, 0) || rows.length || 1;
-  const minHeight = columnKey === 'target' ? 14 : 22;
-  const measuredHeights = rows.map((row) => estimateTopologyNodeHeight(columnKey, row.label || '', row.subLabel || '', minHeight));
-  const fixedHeight = measuredHeights.reduce((sum, item) => sum + item, 0) + (Math.max(0, rows.length - 1) * gap);
-  const availableHeight = Math.max(minHeight, height - Math.max(0, rows.length - 1) * gap);
-  const totalNodeHeight = measuredHeights.reduce((sum, item) => sum + item, 0) + (Math.max(0, rows.length - 1) * gap);
-  let cursorY = Math.max(0, Math.round((height - totalNodeHeight) / 2));
-  return rows.map((row, index) => {
-    const ratio = normalizedWeights[index] / total;
-    const weightedHeight = Math.max(minHeight, Math.round(availableHeight * ratio));
-    const measuredHeight = measuredHeights[index] || minHeight;
-    const nodeHeight = fixedHeight <= height ? measuredHeight : Math.max(minHeight, Math.min(weightedHeight, measuredHeight));
-    const nodeWidth = estimateTopologyNodeWidth(columnKey, row.label || '', row.subLabel || '');
-    const next = {
-      ...row,
-      columnKey,
-      top: cursorY,
-      height: nodeHeight,
-      centerY: cursorY + (nodeHeight / 2),
-      boxWidth: nodeWidth,
-    };
-    cursorY += nodeHeight + gap;
-    return next;
-  });
-}
-
-function buildTopologyBandPathFromAnchors(fromX, toX, fromCenterY, toCenterY) {
-  const x1 = fromX;
-  const y1 = fromCenterY;
-  const x2 = toX;
-  const y2 = toCenterY;
-  const dx = Math.max(18, (x2 - x1) * 0.34);
-  return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
-}
-
-function aggregateTopologyStageLinks(rows = [], fromKey = '', toKey = '') {
-  const map = new Map();
-  rows.forEach((row) => {
-    const fromId = String(row?.[fromKey] || '');
-    const toId = String(row?.[toKey] || '');
-    if (!fromId || !toId) return;
-    const aggregateKey = `${fromId}=>${toId}`;
-    const next = map.get(aggregateKey) || {
-      key: aggregateKey,
-      fromId,
-      toId,
-      hits: 0,
-      at: 0,
-    };
-    next.hits += Math.max(1, Number(row.hits || 1));
-    next.at = Math.max(next.at, Number(row.at || 0));
-    map.set(aggregateKey, next);
-  });
-  return Array.from(map.values());
-}
-
-function allocateTopologyLinkSlots(links = [], nodes = [], nodeField = '') {
-  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
-  const allocations = new Map();
-  const groups = new Map();
-  links.forEach((link) => {
-    const nodeId = String(link?.[nodeField] || '');
-    if (!nodeId) return;
-    const bucket = groups.get(nodeId) || [];
-    bucket.push(link);
-    groups.set(nodeId, bucket);
-  });
-  groups.forEach((groupLinks, nodeId) => {
-    const node = nodeMap.get(nodeId);
-    if (!node) return;
-    const sorted = groupLinks.slice().sort((a, b) => {
-      const aSort = Number(a.sortCenterY ?? 0);
-      const bSort = Number(b.sortCenterY ?? 0);
-      if (aSort !== bSort) return aSort - bSort;
-      const aHits = Number(a.hits || 0);
-      const bHits = Number(b.hits || 0);
-      if (aHits !== bHits) return bHits - aHits;
-      return String(a.key || '').localeCompare(String(b.key || ''));
-    });
-    const padding = clampTopologyNumber(Math.round(node.height * 0.14), 2, 8);
-    const startY = node.top + padding;
-    const endY = node.top + node.height - padding;
-    const usableSpan = Math.max(2, endY - startY);
-    const slotStep = sorted.length > 1 ? usableSpan / (sorted.length - 1) : 0;
-    sorted.forEach((link, index) => {
-      const centerY = sorted.length === 1
-        ? node.centerY
-        : clampTopologyNumber(startY + (slotStep * index), node.top + 1.5, node.top + node.height - 1.5);
-      allocations.set(link.key, { centerY });
-    });
-  });
-  return allocations;
 }
 
 function ensureTopologySvgLayers(svgEl = overviewTopologySvg) {
@@ -5434,6 +5295,9 @@ function formatCoreActionError(action, response) {
   if (helperMissing && new Set(['unexpected_error', 'helper_unreachable', 'socket_missing']).has(String(errorCode || '').trim())) {
     return ti('labels.helperNotInstalledHint', 'Privileged Helper is not installed. Please install it in Settings first.');
   }
+  if (String(errorCode || '').trim() === 'controller_port_conflict') {
+    return ti('labels.controllerPortConflictHint', 'The controller port is occupied by another app and no free port is available. Close other proxy apps, then try again.');
+  }
   const fallback = (details && genericErrors.has(errorCode))
     ? details
     : (response?.error || response?.details || response?.message
@@ -7304,19 +7168,7 @@ function formatLatency(value) {
 }
 
 function formatBytes(value) {
-  const num = Number.parseFloat(value);
-  if (!Number.isFinite(num) || num < 0) {
-    return '-';
-  }
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let size = num;
-  let idx = 0;
-  while (size >= 1024 && idx < units.length - 1) {
-    size /= 1024;
-    idx += 1;
-  }
-  const fixed = size >= 100 ? 0 : size >= 10 ? 1 : 2;
-  return `${size.toFixed(fixed)} ${units[idx]}`;
+  return uiFormat.formatBytes(value, { fallback: '-' });
 }
 
 function formatBitrate(bytesPerSec) {
@@ -9804,7 +9656,7 @@ function resolveFoxRankSkinPaletteFromSettings(settings = null) {
     || appearance.foxRankSkin
     || '',
   ).trim().toLowerCase();
-  const palette = FOX_RANK_SKIN_PALETTES[skinId] || null;
+  const palette = foxRankTheme.getPalette(skinId);
   if (!palette) {
     return {
       skinId: '',
@@ -9830,18 +9682,7 @@ function applyFoxRankThemeCssVars(palette = null, settings = null) {
       end: String(palette.end || '#6ea7ea'),
     }
     : resolveFoxRankSkinPaletteFromSettings(settings);
-  const targets = [document.documentElement, document.body].filter(Boolean);
-  targets.forEach((node) => {
-    node.style.setProperty('--fox-rank-skin-start', resolved.start);
-    node.style.setProperty('--fox-rank-skin-end', resolved.end);
-    node.style.setProperty('--fox-rank-aura-start', resolved.start);
-    node.style.setProperty('--fox-rank-aura-end', resolved.end);
-    if (resolved.skinId) {
-      node.dataset.foxRankSkin = resolved.skinId;
-    } else if (node.dataset && Object.prototype.hasOwnProperty.call(node.dataset, 'foxRankSkin')) {
-      delete node.dataset.foxRankSkin;
-    }
-  });
+  foxRankTheme.applyCssVars(resolved);
 }
 
 function resolveFoxRankSkinPalette(snapshot = null) {
@@ -9852,7 +9693,7 @@ function resolveFoxRankSkinPalette(snapshot = null) {
   const skinId = String(data && data.activeSkin && data.activeSkin.id ? data.activeSkin.id : '').trim();
   const fallbackStart = String(tier && tier.colorStart ? tier.colorStart : '#8dc2fa');
   const fallbackEnd = String(tier && tier.colorEnd ? tier.colorEnd : '#6ea7ea');
-  const skinPalette = FOX_RANK_SKIN_PALETTES[skinId] || null;
+  const skinPalette = foxRankTheme.getPalette(skinId);
   return {
     skinId,
     start: String(skinPalette && skinPalette.start ? skinPalette.start : fallbackStart),
@@ -16141,6 +15982,25 @@ function getPanelPreset(panelName = '') {
   return preset && typeof preset === 'object' ? {...preset, name: preset.name || key} : null;
 }
 
+function describePanelActionError(response, fallbackLabel) {
+  const code = String((response && response.error) || '').trim();
+  const details = String((response && response.details) || '').trim();
+  if (!code) {
+    return fallbackLabel;
+  }
+  if (code === 'panel_dir_not_writable') {
+    return `${ti('labels.panelDirNotWritable', 'The panel directory is not writable by the current user.')}${details ? `: ${details}` : ''}`;
+  }
+  if (code === 'sudo_required') {
+    return ti('labels.panelAuthCancelled', 'Authorization cancelled; the panel was not installed.');
+  }
+  if (code === 'system_auth_failed') {
+    return `${ti('labels.panelAuthFailed', 'System authorization failed.')}${details ? `: ${details}` : ''}`;
+  }
+  const detailSuffix = (details && code === 'empty_output') ? `: ${details.slice(0, 220)}` : '';
+  return `${fallbackLabel} (${code})${detailSuffix}`;
+}
+
 async function installPanelMainBridge(preset) {
   if (!preset) {
     return {ok: false, error: 'panel_preset_missing'};
@@ -16210,14 +16070,9 @@ async function handlePanelInstallAction() {
       showToast(t('labels.panelInstalled'));
       return;
     }
-    let errorMsg = t('labels.panelInstallFailed');
-    if (response && response.error) {
-      errorMsg = `${errorMsg} (${response.error})`;
-      if (response.error === 'empty_output' && response.details) {
-        errorMsg = `${errorMsg}: ${response.details}`;
-      }
-    }
-    showToast(errorMsg, 'error');
+    const errorMsg = describePanelActionError(response, t('labels.panelInstallFailed'));
+    const errorTone = String((response && response.error) || '').trim() === 'sudo_required' ? 'info' : 'error';
+    showToast(errorMsg, errorTone);
   } finally {
     setPanelActionPending(false);
   }
@@ -16246,8 +16101,9 @@ async function handlePanelUpdateAction() {
       showToast(t('labels.panelUpdated'));
       return;
     }
-    const suffix = response && response.error ? ` (${response.error})` : '';
-    showToast(`${t('labels.panelUpdateFailed')}${suffix}`, 'error');
+    const updateCode = String((response && response.error) || '').trim();
+    const updateTone = updateCode === 'sudo_required' ? 'info' : 'error';
+    showToast(describePanelActionError(response, t('labels.panelUpdateFailed')), updateTone);
   } finally {
     setPanelActionPending(false);
   }

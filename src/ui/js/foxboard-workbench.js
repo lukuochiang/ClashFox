@@ -1,5 +1,16 @@
 import FOXBOARD_I18N from '../locales/foxboard-i18n.js';
 
+const uiFormat = globalThis.CLASHFOX_FORMAT_UTILS || {
+  formatBytes: (value, options = {}) => {
+    const fallback = typeof options.fallback === 'string' ? options.fallback : '-';
+    const num = Number.parseFloat(value);
+    if (!Number.isFinite(num) || num < 0) {
+      return fallback;
+    }
+    return `${num} B`;
+  },
+};
+
 const POLL_MS = 2200;
 const DASHBOARD_PREFS_KEY = 'clashfox.dashboardLocalPrefs.v1';
 
@@ -77,19 +88,7 @@ function writePrefs() {
 }
 
 function formatBytes(value) {
-  const num = Number(value || 0);
-  if (!Number.isFinite(num) || num <= 0) {
-    return '0 B';
-  }
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let size = num;
-  let idx = 0;
-  while (size >= 1024 && idx < units.length - 1) {
-    size /= 1024;
-    idx += 1;
-  }
-  const fixed = size >= 100 ? 0 : size >= 10 ? 1 : 2;
-  return `${size.toFixed(fixed)} ${units[idx]}`;
+  return uiFormat.formatBytes(value, { fallback: '0 B', zeroText: '0 B' });
 }
 
 function formatRate(value) {

@@ -1,6 +1,6 @@
 {
   "name": "ClashFox",
-  "version": "0.5.11",
+  "version": "0.5.12",
   "description": "ClashFox GUI for Mihomo",
   "license": "GPL-3.0",
   "author": "Kuochiang Lu <lukuochiang@gmail.com> (https://github.com/lukuochiang/ClashFox)",
@@ -18,6 +18,12 @@
     "build:mac:rc": "node static/scripts/build-mac.js --channel rc",
     "build:mac:stable": "node static/scripts/build-mac.js --channel stable",
     "clean:dist": "rm -rf dist artifacts",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "node --test",
+    "test:watch": "node --test --watch",
+    "format": "prettier --write \"src/**/*.{js,css,html}\"",
+    "format:check": "prettier --check \"src/**/*.{js,css,html}\"",
     "commit": "cz",
     "release": "standard-version",
     "release:first": "standard-version --first-release",
@@ -26,11 +32,16 @@
     "release:rc": "standard-version --prerelease rc"
   },
   "devDependencies": {
+    "@eslint/js": "^9.13.0",
     "commitizen": "^4.3.1",
     "cz-conventional-changelog": "^3.3.0",
     "electron": "^28.2.0",
     "electron-builder": "^26.8.1",
     "electron-reload": "^1.5.0",
+    "eslint": "^9.13.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.12.0",
+    "prettier": "^3.3.3",
     "standard-version": "^9.5.0"
   },
   "build": {

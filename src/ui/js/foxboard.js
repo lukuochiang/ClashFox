@@ -5,16 +5,14 @@ const foxboardLocaleUtils = globalThis.CLASHFOX_LOCALE_UTILS || {};
 const resolveLocaleFromSettings = typeof foxboardLocaleUtils.resolveLocaleFromSettings === 'function'
   ? foxboardLocaleUtils.resolveLocaleFromSettings
   : (() => 'en');
+const foxRankTheme = globalThis.CLASHFOX_FOX_RANK_THEME || {
+  getPalette: () => null,
+  applyCssVars: () => {},
+};
 
 let foxboardDebugMode = false;
 let systemLocaleFromMain = '';
 let foxboardThemeSettingsSnapshot = null;
-const FOX_RANK_SKIN_PALETTES = {
-  campfire: { start: '#ffb86c', end: '#ff8f57' },
-  aurora: { start: '#7df3d2', end: '#4bc6ff' },
-  starlight: { start: '#c685ff', end: '#8d6dff' },
-  'solar-crown': { start: '#f6d365', end: '#fda085' },
-};
 
 function foxboardLog(scope, message, payload = null, level = 'log') {
   return;
@@ -57,7 +55,7 @@ function resolveFoxRankSkinPaletteFromSettings(settings = null) {
     || appearance.foxRankSkin
     || '',
   ).trim().toLowerCase();
-  const palette = FOX_RANK_SKIN_PALETTES[skinId] || null;
+  const palette = foxRankTheme.getPalette(skinId);
   return {
     skinId,
     start: String(palette && palette.start ? palette.start : '#8dc2fa'),
@@ -67,18 +65,7 @@ function resolveFoxRankSkinPaletteFromSettings(settings = null) {
 
 function applyFoxRankThemeCssVarsFromSettings(settings = null) {
   const palette = resolveFoxRankSkinPaletteFromSettings(settings);
-  const targets = [document.documentElement, document.body].filter(Boolean);
-  targets.forEach((node) => {
-    node.style.setProperty('--fox-rank-skin-start', palette.start);
-    node.style.setProperty('--fox-rank-skin-end', palette.end);
-    node.style.setProperty('--fox-rank-aura-start', palette.start);
-    node.style.setProperty('--fox-rank-aura-end', palette.end);
-    if (palette.skinId) {
-      node.dataset.foxRankSkin = palette.skinId;
-    } else if (node.dataset && Object.prototype.hasOwnProperty.call(node.dataset, 'foxRankSkin')) {
-      delete node.dataset.foxRankSkin;
-    }
-  });
+  foxRankTheme.applyCssVars(palette);
 }
 
 function applyMergedThemeSnapshot(preloadedSettings = null) {

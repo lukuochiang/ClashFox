@@ -7,6 +7,10 @@ const detectSystemLocale = typeof trackersLocaleUtils.detectSystemLocale === 'fu
 const normalizeLocaleCode = typeof trackersLocaleUtils.normalizeLocaleCode === 'function'
   ? trackersLocaleUtils.normalizeLocaleCode
   : (value => String(value || 'en').trim().toLowerCase() || 'en');
+const foxRankTheme = globalThis.CLASHFOX_FOX_RANK_THEME || {
+  getPalette: () => null,
+  applyCssVars: () => {},
+};
 let map = null;
 let localMarker = null;
 let localMarkerLayer = null; // 根节点独立图层
@@ -51,12 +55,7 @@ let currentLinks = [];
 let currentMarkers = new Map(); // key: lat,lon -> marker
 let currentPolylines = new Map(); // key: fromLat,fromLon-toLat,toLon -> polyline
 let currentLabels = new Map(); // key: labelKey -> label marker
-const FOX_RANK_SKIN_PALETTES = {
-  campfire: { start: '#ffb86c', end: '#ff8f57' },
-  aurora: { start: '#7df3d2', end: '#4bc6ff' },
-  starlight: { start: '#c685ff', end: '#8d6dff' },
-  'solar-crown': { start: '#f6d365', end: '#fda085' },
-};
+
 
 const statsEl = document.getElementById('worldwideStats');
 const detailBodyEl = document.getElementById('worldwideDetailBody');
@@ -228,7 +227,7 @@ function resolveFoxRankSkinPaletteFromSettings(settings = null) {
     || appearance.foxRankSkin
     || '',
   ).trim().toLowerCase();
-  const palette = FOX_RANK_SKIN_PALETTES[skinId] || null;
+  const palette = foxRankTheme.getPalette(skinId);
   return {
     skinId,
     start: String(palette && palette.start ? palette.start : '#8dc2fa'),
@@ -238,18 +237,7 @@ function resolveFoxRankSkinPaletteFromSettings(settings = null) {
 
 function applyFoxRankThemeCssVarsFromSettings(settings = null) {
   const palette = resolveFoxRankSkinPaletteFromSettings(settings);
-  const targets = [document.documentElement, document.body].filter(Boolean);
-  targets.forEach((node) => {
-    node.style.setProperty('--fox-rank-skin-start', palette.start);
-    node.style.setProperty('--fox-rank-skin-end', palette.end);
-    node.style.setProperty('--fox-rank-aura-start', palette.start);
-    node.style.setProperty('--fox-rank-aura-end', palette.end);
-    if (palette.skinId) {
-      node.dataset.foxRankSkin = palette.skinId;
-    } else if (node.dataset && Object.prototype.hasOwnProperty.call(node.dataset, 'foxRankSkin')) {
-      delete node.dataset.foxRankSkin;
-    }
-  });
+  foxRankTheme.applyCssVars(palette);
 }
 
 async function refreshSystemLocaleFromMain() {

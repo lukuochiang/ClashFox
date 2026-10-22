@@ -1,13 +1,14 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const http = require('http');
 const https = require('https');
 const dns = require('dns');
 const net = require('net');
 const zlib = require('zlib');
 const { app, BrowserWindow, ipcMain, dialog, nativeImage, Menu, nativeTheme, shell, Tray, session, clipboard, screen } = require('electron');
 const { spawn, spawnSync, execFile } = require('child_process');
+const logger = require('./main/logger.js');
+const CONSTANTS = require('./main/constants.js');
 
 const isDev = !app.isPackaged;
 const ROOT_DIR = isDev ? path.join(__dirname, '..') : process.resourcesPath;
@@ -52,8 +53,8 @@ function ensureAppDirs() {
     fs.mkdirSync(dataDir, { recursive: true });
     fs.mkdirSync(logDir, { recursive: true });
     fs.mkdirSync(pidDir, { recursive: true });
-  } catch {
-    // ignore
+  } catch (error) {
+    logger.error('ensureAppDirs', 'failed to create app directories', error);
   }
 }
 
@@ -359,36 +360,14 @@ const OUTBOUND_MODE_BADGE = {
   direct: 'D',
 };
 const CONNECTIVITY_REFRESH_MS = 1500;
-const CHECK_UPDATE_API_URL = 'https://api.github.com/repos/lukuochiang/ClashFox/releases?per_page=30';
-const CHECK_UPDATE_STABLE_URL = 'https://github.com/lukuochiang/ClashFox/releases/latest';
-const CHECK_UPDATE_BETA_URL = 'https://github.com/lukuochiang/ClashFox/releases';
-const HELPER_RELEASE_LATEST_URL = 'https://github.com/lukuochiang/ClashFox-Helper/releases/latest';
-const KERNEL_RELEASE_API = {
-  vernesong: 'https://api.github.com/repos/vernesong/mihomo/releases?per_page=50',
-  MetaCubeX: 'https://api.github.com/repos/MetaCubeX/mihomo/releases?per_page=50',
-};
-const KERNEL_TAGS_API = {
-  vernesong: 'https://api.github.com/repos/vernesong/mihomo/tags?per_page=100',
-  MetaCubeX: 'https://api.github.com/repos/MetaCubeX/mihomo/tags?per_page=100',
-};
-const KERNEL_BETA_VERSION_TXT_URL = {
-  vernesong: 'https://github.com/vernesong/mihomo/releases/download/Prerelease-Alpha/version.txt',
-  MetaCubeX: 'https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/version.txt',
-};
-const PANEL_PRESETS = {
-  zashboard: {
-    name: 'zashboard',
-    displayName: 'Zashboard',
-    url: 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip',
-    'external-ui-url': 'ui',
-  },
-  metacubexd: {
-    name: 'metacubexd',
-    displayName: 'MetaCubeXD',
-    url: 'https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz',
-    'external-ui-url': 'ui',
-  },
-};
+const CHECK_UPDATE_API_URL = CONSTANTS.CHECK_UPDATE_API_URL;
+const CHECK_UPDATE_STABLE_URL = CONSTANTS.CHECK_UPDATE_STABLE_URL;
+const CHECK_UPDATE_BETA_URL = CONSTANTS.CHECK_UPDATE_BETA_URL;
+const HELPER_RELEASE_LATEST_URL = CONSTANTS.HELPER_RELEASE_LATEST_URL;
+const KERNEL_RELEASE_API = CONSTANTS.KERNEL_RELEASE_API;
+const KERNEL_TAGS_API = CONSTANTS.KERNEL_TAGS_API;
+const KERNEL_BETA_VERSION_TXT_URL = CONSTANTS.KERNEL_BETA_VERSION_TXT_URL;
+const PANEL_PRESETS = CONSTANTS.PANEL_PRESETS;
 const DEFAULT_MAIN_WINDOW_WIDTH = 1200;
 const DEFAULT_MAIN_WINDOW_HEIGHT = 725;
 const MIN_MAIN_WINDOW_WIDTH = 980;
@@ -1858,775 +1837,58 @@ function resolveUserAppDataDirFromSettings() {
     : '~/Library/Application Support/ClashFox'));
 }
 
-function formatFileModifiedTime(value) {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return '-';
-  }
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const dd = String(date.getDate()).padStart(2, '0');
-  const hh = String(date.getHours()).padStart(2, '0');
-  const mi = String(date.getMinutes()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
-}
+// Phase 2: file-listing domain extracted to src/main/services/file-listing.js (injected resolvers).
+const {
+  listConfigFilesFromFs,
+  listKernelFilesFromFs,
+  listBackupFilesFromFs,
+} = require("./main/services/file-listing.js").createFileListing({
+  resolveDataDirectoryFromSettings,
+  resolveCoreDirectoryFromSettings,
+});
 
-function listConfigFilesFromFs() {
-  try {
-    const configFilesDir = resolveDataDirectoryFromSettings();
-    fs.mkdirSync(configFilesDir, { recursive: true });
-    const items = fs.readdirSync(configFilesDir, { withFileTypes: true })
-      .filter((entry) => entry && entry.isFile())
-      .filter((entry) => /\.(ya?ml|json)$/i.test(String(entry.name || '')))
-      .map((entry) => {
-        const filePath = path.join(configFilesDir, entry.name);
-        const stat = fs.statSync(filePath);
-        return {
-          name: entry.name,
-          path: filePath,
-          modified: formatFileModifiedTime(stat.mtime),
-          modifiedAt: stat.mtimeMs || stat.mtime.getTime() || 0,
-        };
-      })
-      .sort((a, b) => {
-        const delta = Number(b.modifiedAt || 0) - Number(a.modifiedAt || 0);
-        if (delta !== 0) {
-          return delta;
-        }
-        return String(a.name || '').localeCompare(String(b.name || ''));
-      })
-      .map(({ modifiedAt, ...rest }) => rest);
-    return { ok: true, data: items };
-  } catch (error) {
-    return {
-      ok: false,
-      error: 'configs_read_failed',
-      details: String(error && error.message ? error.message : error || ''),
-    };
-  }
-}
+// Phase 2: config import/naming domain extracted to src/main/services/config-naming.js.
+const {
+  buildUniqueFilePath,
+  buildImportedConfigFileName,
+  normalizeImportedConfigContent,
+  normalizeConfigRenameFileName,
+  parseCommandOptionValues,
+  isPathInsideDirectory,
+} = require('./main/services/config-naming.js');
 
-function listKernelFilesFromFs() {
-  try {
-    const coreDir = resolveCoreDirectoryFromSettings();
-    fs.mkdirSync(coreDir, { recursive: true });
-    const backupDir = path.join(coreDir, 'cfox-backup');
-    fs.mkdirSync(backupDir, { recursive: true });
-    
-    // Read files from both core directory and backup directory
-    const items = [];
-    
-    // Read from core directory
-    const coreFiles = fs.readdirSync(coreDir, { withFileTypes: true })
-      .filter((entry) => entry && (entry.isFile() || entry.isSymbolicLink()))
-      .filter((entry) => {
-        const name = String(entry.name || '');
-        return name === 'mihomo' || name.startsWith('mihomo-darwin-');
-      })
-      .map((entry) => {
-        const filePath = path.join(coreDir, entry.name);
-        const stat = fs.statSync(filePath);
-        return {
-          name: entry.name,
-          path: filePath,
-          modified: formatFileModifiedTime(stat.mtime),
-          modifiedAt: stat.mtimeMs || stat.mtime.getTime() || 0,
-          size: String(stat.size || 0),
-        };
-      });
-    
-    items.push(...coreFiles);
-    
-    // Read from backup directory
-    const backupFiles = fs.readdirSync(backupDir, { withFileTypes: true })
-      .filter((entry) => entry && entry.isFile())
-      .filter((entry) => {
-        const name = String(entry.name || '');
-        return name.startsWith('mihomo.backup.');
-      })
-      .map((entry) => {
-        const filePath = path.join(backupDir, entry.name);
-        const stat = fs.statSync(filePath);
-        return {
-          name: entry.name,
-          path: filePath,
-          modified: formatFileModifiedTime(stat.mtime),
-          modifiedAt: stat.mtimeMs || stat.mtime.getTime() || 0,
-          size: String(stat.size || 0),
-        };
-      });
-    
-    items.push(...backupFiles);
-    
-    // Sort by modified time descending
-    items.sort((a, b) => {
-      const delta = Number(b.modifiedAt || 0) - Number(a.modifiedAt || 0);
-      if (delta !== 0) {
-        return delta;
-      }
-      return String(a.name || '').localeCompare(String(b.name || ''));
-    });
-    
-    const result = items.map(({ modifiedAt, ...rest }) => rest);
-    return { ok: true, data: result };
-  } catch (error) {
-    return {
-      ok: false,
-      error: 'kernels_read_failed',
-      details: String(error && error.message ? error.message : error || ''),
-    };
-  }
-}
+// Phase 2: network transport domain extracted to src/main/services/net.js (injected getUserAgent).
+const {
+  fetchTextFromRemoteUrl,
+  fetchJson,
+  fetchJsonWithRetry,
+  fetchText,
+  fetchTextViaCurl,
+  fetchLatestReleaseTagViaCurlHead,
+} = require('./main/services/net.js').createNet({
+  getUserAgent: () => `ClashFox/${app.getVersion() || '0.0.0'}`,
+});
 
-function listBackupFilesFromFs() {
-  try {
-    const coreDir = resolveCoreDirectoryFromSettings();
-    const backupDir = path.join(coreDir, 'cfox-backup');
-    fs.mkdirSync(backupDir, { recursive: true });
-    
-    const items = fs.readdirSync(backupDir, { withFileTypes: true })
-      .filter((entry) => entry && entry.isFile())
-      .filter((entry) => {
-        const name = String(entry.name || '');
-        return name.startsWith('mihomo.backup.');
-      })
-      .map((entry) => {
-        const filePath = path.join(backupDir, entry.name);
-        const stat = fs.statSync(filePath);
-        
-        // Extract version and timestamp from filename
-        // Format: mihomo.backup.mihomo-darwin-amd64-v1.19.0.20241218_123456
-        const name = entry.name;
-        const backupRe = /^mihomo\.backup\.(mihomo-darwin-(amd64|arm64|x64)-.+)\.([0-9]{8}_[0-9]{6})$/;
-        const match = name.match(backupRe);
-        
-        let version = '';
-        let timestamp = '';
-        if (match) {
-          version = match[1];
-          timestamp = match[3];
-        }
-        
-        return {
-          name: name,
-          version: version,
-          timestamp: timestamp,
-          path: filePath,
-          modifiedAt: stat.mtimeMs || stat.mtime.getTime() || 0,
-        };
-      })
-      .sort((a, b) => {
-        const delta = Number(b.modifiedAt || 0) - Number(a.modifiedAt || 0);
-        if (delta !== 0) {
-          return delta;
-        }
-        return String(a.name || '').localeCompare(String(b.name || ''));
-      });
-    
-    // Add index to each item
-    const result = items.map((item, index) => ({
-      index: index + 1,
-      ...item,
-    }));
-    return { ok: true, data: result };
-  } catch (error) {
-    return {
-      ok: false,
-      error: 'backups_read_failed',
-      details: String(error && error.message ? error.message : error || ''),
-    };
-  }
-}
+// Phase 2: kernel-backup domain extracted to src/main/services/kernel-backup.js (injected deps).
+const kernelBackup = require('./main/services/kernel-backup.js');
+const formatBackupTimestamp = kernelBackup.formatBackupTimestamp;
+const {
+  deleteBackupFilesFromFs,
+  switchKernelBackupFromFs,
+} = kernelBackup.createKernelBackup({
+  resolveCoreDirectoryFromSettings,
+  listBackupFilesFromFs,
+});
 
-function buildUniqueFilePath(targetDir, fileName) {
-  const ext = path.extname(fileName || '');
-  const base = path.basename(fileName || '', ext) || 'imported-config';
-  let candidate = path.join(targetDir, `${base}${ext}`);
-  let idx = 1;
-  while (fs.existsSync(candidate)) {
-    candidate = path.join(targetDir, `${base}-${idx}${ext}`);
-    idx += 1;
-  }
-  return candidate;
-}
-
-function sanitizeImportedConfigFileName(fileName = '') {
-  const raw = String(fileName || '').trim().replace(/[?#].*$/, '');
-  if (!raw) {
-    return 'imported-config';
-  }
-  const baseName = path.basename(raw);
-  const cleaned = baseName
-    .replace(/[^0-9A-Za-z._-]+/g, '-')
-    .replace(/^[.-]+/, '')
-    .replace(/-+/g, '-')
-    .replace(/-+$/, '');
-  return cleaned || 'imported-config';
-}
-
-function resolveImportedConfigExtension(urlText = '', contentType = '') {
-  const allowSet = new Set(['.yaml', '.yml', '.json']);
-  try {
-    const parsed = new URL(String(urlText || ''));
-    const extFromPath = String(path.extname(parsed.pathname || '') || '').toLowerCase();
-    if (allowSet.has(extFromPath)) {
-      return extFromPath;
-    }
-  } catch {}
-  const typeText = String(contentType || '').toLowerCase();
-  if (typeText.includes('json')) {
-    return '.json';
-  }
-  return '.yaml';
-}
-
-function buildImportedConfigFileName(urlText = '', contentType = '') {
-  let parsedBaseName = '';
-  try {
-    const parsed = new URL(String(urlText || ''));
-    const decodedPath = decodeURIComponent(parsed.pathname || '');
-    parsedBaseName = path.basename(decodedPath || '');
-  } catch {
-    parsedBaseName = '';
-  }
-  const sanitized = sanitizeImportedConfigFileName(parsedBaseName);
-  const ext = resolveImportedConfigExtension(urlText, contentType);
-  const currentExt = String(path.extname(sanitized || '') || '').toLowerCase();
-  if (currentExt === '.yaml' || currentExt === '.yml' || currentExt === '.json') {
-    return sanitized;
-  }
-  return `${sanitized}${ext}`;
-}
-
-function fetchTextFromRemoteUrl(url, timeoutMs = 12000, depth = 0) {
-  return new Promise((resolve, reject) => {
-    if (depth > 5) {
-      reject(new Error('TOO_MANY_REDIRECTS'));
-      return;
-    }
-    const normalized = String(url || '').trim();
-    if (!normalized) {
-      reject(new Error('INVALID_URL'));
-      return;
-    }
-    let parsed;
-    try {
-      parsed = new URL(normalized);
-    } catch {
-      reject(new Error('INVALID_URL'));
-      return;
-    }
-    const client = parsed.protocol === 'http:' ? http : https;
-    const req = client.get(parsed, {
-      headers: {
-        'User-Agent': `ClashFox/${app.getVersion() || '0.0.0'}`,
-        Accept: 'application/x-yaml,application/yaml,text/yaml,text/plain,application/json,*/*',
-      },
-    }, (res) => {
-      const statusCode = Number(res.statusCode || 0);
-      if (statusCode >= 300 && statusCode < 400 && res.headers.location) {
-        res.resume();
-        const nextUrl = new URL(String(res.headers.location), parsed).toString();
-        fetchTextFromRemoteUrl(nextUrl, timeoutMs, depth + 1).then(resolve).catch(reject);
-        return;
-      }
-      if (statusCode < 200 || statusCode >= 300) {
-        res.resume();
-        reject(new Error(`HTTP_${statusCode}`));
-        return;
-      }
-      const chunks = [];
-      let totalBytes = 0;
-      const maxBytes = 2 * 1024 * 1024;
-      res.on('data', (chunk) => {
-        const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-        totalBytes += buf.length;
-        if (totalBytes > maxBytes) {
-          req.destroy(new Error('PAYLOAD_TOO_LARGE'));
-          return;
-        }
-        chunks.push(buf);
-      });
-      res.on('end', () => {
-        const body = Buffer.concat(chunks).toString('utf8');
-        resolve({
-          body,
-          contentType: String(res.headers['content-type'] || '').trim(),
-          finalUrl: parsed.toString(),
-        });
-      });
-    });
-    req.on('error', reject);
-    req.setTimeout(timeoutMs, () => {
-      req.destroy(new Error('TIMEOUT'));
-    });
-  });
-}
-
-function decodePossibleBase64Payload(raw = '') {
-  const text = String(raw || '').trim();
-  if (!text) {
-    return '';
-  }
-  const normalizeDecoded = (decoded = '') => String(decoded || '').replace(/^\uFEFF/, '').trim();
-  const looksLikeConfigText = (decoded = '') => {
-    const candidate = normalizeDecoded(decoded);
-    if (!candidate) {
-      return false;
-    }
-    if (candidate.startsWith('{') || candidate.startsWith('[')) {
-      return true;
-    }
-    if (candidate.includes('\n') && candidate.includes(':')) {
-      return true;
-    }
-    return /(proxies|proxy-providers|rules|mixed-port|mode|allow-lan)\s*:/i.test(candidate);
-  };
-  const tryDecode = (base64Text = '') => {
-    const normalizedBase64 = String(base64Text || '').trim().replace(/-/g, '+').replace(/_/g, '/');
-    if (!normalizedBase64) {
-      return '';
-    }
-    const padded = normalizedBase64.padEnd(Math.ceil(normalizedBase64.length / 4) * 4, '=');
-    try {
-      const decoded = Buffer.from(padded, 'base64').toString('utf8');
-      return normalizeDecoded(decoded);
-    } catch {
-      return '';
-    }
-  };
-
-  const dataUriMatch = text.match(/^data:[^;,]+;base64,(.+)$/i);
-  if (dataUriMatch && dataUriMatch[1]) {
-    const decoded = tryDecode(dataUriMatch[1]);
-    if (decoded) {
-      return decoded;
-    }
-  }
-
-  const compact = text.replace(/\s+/g, '');
-  if (
-    compact.length >= 32
-    && /^[A-Za-z0-9+/=_-]+$/.test(compact)
-  ) {
-    const decoded = tryDecode(compact);
-    if (decoded && looksLikeConfigText(decoded)) {
-      return decoded;
-    }
-  }
-  return '';
-}
-
-function normalizeImportedConfigContent(raw = '') {
-  const source = String(raw || '').replace(/^\uFEFF/, '');
-  const decoded = decodePossibleBase64Payload(source);
-  const normalized = decoded || source;
-  return String(normalized).replace(/\r\n/g, '\n').trim();
-}
-
-function normalizeConfigRenameFileName(inputName = '', currentName = '') {
-  const raw = String(inputName || '').trim();
-  if (!raw) {
-    return { ok: false, error: 'invalid_name' };
-  }
-  if (raw.includes('/') || raw.includes('\\')) {
-    return { ok: false, error: 'invalid_name' };
-  }
-  const safeRaw = raw.replace(/[\u0000-\u001f<>:"|?*]/g, '-').trim();
-  if (!safeRaw || safeRaw === '.' || safeRaw === '..') {
-    return { ok: false, error: 'invalid_name' };
-  }
-  const currentExt = String(path.extname(currentName || '') || '').toLowerCase();
-  const requestedExt = String(path.extname(safeRaw || '') || '').toLowerCase();
-  const fallbackExt = currentExt === '.yml' ? '.yml' : '.yaml';
-  const ext = requestedExt || fallbackExt;
-  if (!['.yaml', '.yml'].includes(ext)) {
-    return { ok: false, error: 'invalid_extension' };
-  }
-  const baseName = String(path.basename(safeRaw, path.extname(safeRaw) || '') || '').trim();
-  if (!baseName || baseName === '.' || baseName === '..') {
-    return { ok: false, error: 'invalid_name' };
-  }
-  const finalName = `${baseName}${ext}`;
-  return { ok: true, fileName: finalName };
-}
-
-function parseCommandOptionValues(args = [], flag = '') {
-  const result = [];
-  const targetFlag = String(flag || '').trim();
-  if (!targetFlag) {
-    return result;
-  }
-  for (let index = 0; index < args.length; index += 1) {
-    const current = String(args[index] || '').trim();
-    if (current !== targetFlag) {
-      continue;
-    }
-    const next = String(args[index + 1] || '').trim();
-    if (next) {
-      result.push(next);
-      index += 1;
-    }
-  }
-  return result;
-}
-
-function isPathInsideDirectory(targetPath = '', parentDir = '') {
-  const resolvedTarget = path.resolve(String(targetPath || '').trim());
-  const resolvedParent = path.resolve(String(parentDir || '').trim());
-  return resolvedTarget === resolvedParent || resolvedTarget.startsWith(`${resolvedParent}${path.sep}`);
-}
-
-function deleteBackupFilesFromFs(paths = []) {
-  try {
-    const coreDir = resolveCoreDirectoryFromSettings();
-    const backupDir = path.join(coreDir, 'cfox-backup');
-    fs.mkdirSync(backupDir, { recursive: true });
-    const targets = Array.isArray(paths)
-      ? paths.map((item) => String(item || '').trim()).filter(Boolean)
-      : [];
-    if (!targets.length) {
-      return { ok: false, error: 'delete_empty' };
-    }
-    let deletedCount = 0;
-    for (const target of targets) {
-      if (!isPathInsideDirectory(target, backupDir)) {
-        return { ok: false, error: 'invalid_backup_path', details: target };
-      }
-      const baseName = path.basename(target);
-      if (!baseName.startsWith('mihomo.backup.')) {
-        return { ok: false, error: 'invalid_backup_file', details: baseName };
-      }
-      if (!fs.existsSync(target)) {
-        continue;
-      }
-      fs.unlinkSync(target);
-      deletedCount += 1;
-    }
-    return { ok: true, deletedCount };
-  } catch (error) {
-    return {
-      ok: false,
-      error: 'delete_backups_failed',
-      details: String(error && error.message ? error.message : error || ''),
-    };
-  }
-}
-
-function switchKernelBackupFromFs(index = 0) {
-  try {
-    const safeIndex = Number.parseInt(String(index || ''), 10);
-    if (!Number.isFinite(safeIndex) || safeIndex <= 0) {
-      return { ok: false, error: 'invalid_backup_index' };
-    }
-    const backupList = listBackupFilesFromFs();
-    if (!backupList || backupList.ok === false) {
-      return backupList || { ok: false, error: 'backups_read_failed' };
-    }
-    const selected = Array.isArray(backupList.data)
-      ? backupList.data.find((item) => Number(item.index) === safeIndex)
-      : null;
-    if (!selected || !selected.path) {
-      return { ok: false, error: 'backup_not_found' };
-    }
-
-    const coreDir = resolveCoreDirectoryFromSettings();
-    const backupDir = path.join(coreDir, 'cfox-backup');
-    const activeCore = path.join(coreDir, 'mihomo');
-    fs.mkdirSync(coreDir, { recursive: true });
-    fs.mkdirSync(backupDir, { recursive: true });
-
-    if (!isPathInsideDirectory(selected.path, backupDir)) {
-      return { ok: false, error: 'invalid_backup_path', details: selected.path };
-    }
-
-    fs.copyFileSync(selected.path, activeCore);
-    fs.chmodSync(activeCore, 0o755);
-    return {
-      ok: true,
-      selected: selected.name || path.basename(selected.path),
-      path: activeCore,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      error: 'switch_failed',
-      details: String(error && error.message ? error.message : error || ''),
-    };
-  }
-}
-
-function normalizeVersionTag(version) {
-  return String(version || '').trim().replace(/^v/i, '');
-}
-
-function formatBackupTimestamp(date = new Date()) {
-  const value = date instanceof Date ? date : new Date(date);
-  const year = String(value.getFullYear());
-  const month = String(value.getMonth() + 1).padStart(2, '0');
-  const day = String(value.getDate()).padStart(2, '0');
-  const hours = String(value.getHours()).padStart(2, '0');
-  const minutes = String(value.getMinutes()).padStart(2, '0');
-  const seconds = String(value.getSeconds()).padStart(2, '0');
-  return `${year}${month}${day}_${hours}${minutes}${seconds}`;
-}
+// Phase 2: semver domain extracted to src/main/services/version.js.
+const {
+  normalizeVersionTag,
+  compareVersions,
+} = require('./main/services/version.js');
 
 function normalizeKernelArchLabel(arch = '') {
   const value = String(arch || '').trim().toLowerCase();
   return value === 'arm64' ? 'arm64' : 'amd64';
-}
-
-function parseVersion(version) {
-  const normalized = normalizeVersionTag(version);
-  const match = normalized.match(/^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/);
-  if (!match) {
-    return null;
-  }
-  const [, major, minor, patch, prereleaseRaw] = match;
-  const prerelease = prereleaseRaw
-    ? prereleaseRaw.split('.').map((token) => {
-      if (/^\d+$/.test(token)) {
-        return Number.parseInt(token, 10);
-      }
-      return token.toLowerCase();
-    })
-    : [];
-  return {
-    major: Number.parseInt(major, 10),
-    minor: Number.parseInt(minor, 10),
-    patch: Number.parseInt(patch, 10),
-    prerelease,
-    raw: normalized,
-  };
-}
-
-function comparePrerelease(left = [], right = []) {
-  if (!left.length && !right.length) {
-    return 0;
-  }
-  if (!left.length) {
-    return 1;
-  }
-  if (!right.length) {
-    return -1;
-  }
-  const maxLen = Math.max(left.length, right.length);
-  for (let i = 0; i < maxLen; i += 1) {
-    const a = left[i];
-    const b = right[i];
-    if (a === undefined) return -1;
-    if (b === undefined) return 1;
-    if (a === b) continue;
-    const aNum = typeof a === 'number';
-    const bNum = typeof b === 'number';
-    if (aNum && bNum) {
-      return a > b ? 1 : -1;
-    }
-    if (aNum) return -1;
-    if (bNum) return 1;
-    return String(a).localeCompare(String(b));
-  }
-  return 0;
-}
-
-function compareVersions(left, right) {
-  const a = parseVersion(left);
-  const b = parseVersion(right);
-  if (!a || !b) {
-    return String(normalizeVersionTag(left)).localeCompare(String(normalizeVersionTag(right)));
-  }
-  if (a.major !== b.major) return a.major > b.major ? 1 : -1;
-  if (a.minor !== b.minor) return a.minor > b.minor ? 1 : -1;
-  if (a.patch !== b.patch) return a.patch > b.patch ? 1 : -1;
-  return comparePrerelease(a.prerelease, b.prerelease);
-}
-
-function fetchJson(url, timeoutMs = 6000) {
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, {
-      headers: {
-        'User-Agent': `ClashFox/${app.getVersion() || '0.0.0'}`,
-        Accept: 'application/vnd.github+json',
-      },
-    }, (res) => {
-      const statusCode = Number(res.statusCode || 0);
-      if (statusCode >= 300 && statusCode < 400 && res.headers.location) {
-        res.resume();
-        fetchJson(res.headers.location, timeoutMs).then(resolve).catch(reject);
-        return;
-      }
-      if (statusCode < 200 || statusCode >= 300) {
-        res.resume();
-        reject(new Error(`HTTP_${statusCode}`));
-        return;
-      }
-      let body = '';
-      res.setEncoding('utf8');
-      res.on('data', (chunk) => {
-        body += chunk;
-      });
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(body));
-        } catch {
-          reject(new Error('INVALID_JSON'));
-        }
-      });
-    });
-    req.on('error', reject);
-    req.setTimeout(timeoutMs, () => {
-      req.destroy(new Error('TIMEOUT'));
-    });
-  });
-}
-
-function isRetryableHttpError(error) {
-  const text = String((error && error.message) || error || '').trim().toUpperCase();
-  if (!text) {
-    return false;
-  }
-  if (
-    text.includes('TIMEOUT')
-    || text.includes('ECONNRESET')
-    || text.includes('ETIMEDOUT')
-    || text.includes('EAI_AGAIN')
-    || text.includes('ENOTFOUND')
-    || text.includes('ECONNREFUSED')
-  ) {
-    return true;
-  }
-  const match = text.match(/^HTTP_(\d{3})$/);
-  if (!match) {
-    return false;
-  }
-  const code = Number.parseInt(match[1], 10);
-  if (!Number.isFinite(code)) {
-    return false;
-  }
-  return code === 403 || code === 408 || code === 409 || code === 425 || code === 429 || code >= 500;
-}
-
-async function fetchJsonWithRetry(url, {
-  timeoutMs = 8000,
-  retries = 2,
-  baseDelayMs = 280,
-} = {}) {
-  let lastError = null;
-  for (let attempt = 0; attempt <= retries; attempt += 1) {
-    try {
-      return await fetchJson(url, timeoutMs);
-    } catch (error) {
-      lastError = error;
-      const shouldRetry = attempt < retries && isRetryableHttpError(error);
-      if (!shouldRetry) {
-        throw error;
-      }
-      const jitter = Math.floor(Math.random() * 140);
-      const delay = baseDelayMs * (2 ** attempt) + jitter;
-      await sleep(delay);
-    }
-  }
-  throw lastError || new Error('FETCH_JSON_WITH_RETRY_FAILED');
-}
-
-function fetchText(url, timeoutMs = 6000) {
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, {
-      headers: {
-        'User-Agent': `ClashFox/${app.getVersion() || '0.0.0'}`,
-        Accept: 'text/plain,*/*',
-      },
-    }, (res) => {
-      const statusCode = Number(res.statusCode || 0);
-      if (statusCode >= 300 && statusCode < 400 && res.headers.location) {
-        res.resume();
-        fetchText(res.headers.location, timeoutMs).then(resolve).catch(reject);
-        return;
-      }
-      if (statusCode < 200 || statusCode >= 300) {
-        res.resume();
-        reject(new Error(`HTTP_${statusCode}`));
-        return;
-      }
-      let body = '';
-      res.setEncoding('utf8');
-      res.on('data', (chunk) => {
-        body += chunk;
-      });
-      res.on('end', () => {
-        resolve(String(body || ''));
-      });
-    });
-    req.on('error', reject);
-    req.setTimeout(timeoutMs, () => {
-      req.destroy(new Error('TIMEOUT'));
-    });
-  });
-}
-
-function fetchTextViaCurl(url, timeoutMs = 9000) {
-  return new Promise((resolve, reject) => {
-    const maxTimeSec = Math.max(3, Math.ceil(Number(timeoutMs || 9000) / 1000));
-    const args = [
-      '--silent',
-      '--show-error',
-      '--location',
-      '--max-time',
-      String(maxTimeSec),
-      '-H',
-      'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-      '-H',
-      'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      String(url || ''),
-    ];
-    execFile('/usr/bin/curl', args, { timeout: timeoutMs + 1000 }, (error, stdout = '', stderr = '') => {
-      if (error) {
-        reject(new Error(String(stderr || error.message || 'curl_fetch_failed').trim() || 'curl_fetch_failed'));
-        return;
-      }
-      const text = String(stdout || '');
-      if (!text.trim()) {
-        reject(new Error('curl_empty_response'));
-        return;
-      }
-      resolve(text);
-    });
-  });
-}
-
-function fetchLatestReleaseTagViaCurlHead(url, timeoutMs = 7000) {
-  return new Promise((resolve, reject) => {
-    const maxTimeSec = Math.max(3, Math.ceil(Number(timeoutMs || 7000) / 1000));
-    const args = [
-      '--silent',
-      '--show-error',
-      '--head',
-      '--max-time',
-      String(maxTimeSec),
-      '-H',
-      'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-      String(url || ''),
-    ];
-    execFile('/usr/bin/curl', args, { timeout: timeoutMs + 1000 }, (error, stdout = '', stderr = '') => {
-      if (error) {
-        reject(new Error(String(stderr || error.message || 'curl_head_failed').trim() || 'curl_head_failed'));
-        return;
-      }
-      const text = String(stdout || '');
-      const locationMatch = text.match(/^\s*location:\s*(.+)$/im);
-      if (!locationMatch || !locationMatch[1]) {
-        reject(new Error('head_location_missing'));
-        return;
-      }
-      const location = String(locationMatch[1]).trim();
-      const tagMatch = location.match(/\/releases\/tag\/([^/?#\s]+)/i);
-      if (!tagMatch || !tagMatch[1]) {
-        reject(new Error('head_tag_missing'));
-        return;
-      }
-      resolve(tagMatch[1]);
-    });
-  });
 }
 
 function downloadFile(url, targetPath, timeoutMs = 20000, redirectCount = 0) {
@@ -2687,96 +1949,13 @@ function downloadFile(url, targetPath, timeoutMs = 20000, redirectCount = 0) {
   });
 }
 
-function extractSemverFromText(raw = '') {
-  const source = String(raw || '').trim();
-  if (!source) {
-    return '';
-  }
-  const fullMatch = source.match(/v?\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?/);
-  if (!fullMatch || !fullMatch[0]) {
-    return '';
-  }
-  const candidate = normalizeVersionTag(fullMatch[0]);
-  const baseMatch = candidate.match(/^\d+\.\d+\.\d+/);
-  const base = baseMatch ? baseMatch[0] : '';
-  if (!base) {
-    return candidate;
-  }
-  const suffix = candidate.startsWith(`${base}-`) ? candidate.slice(base.length + 1) : '';
-  if (!suffix) {
-    return base;
-  }
-  if (/(darwin|linux|windows|macos|mac|arm64|aarch64|amd64|x64|x86|universal|tar|zip|gz|pkg|dmg)/i.test(suffix)) {
-    return base;
-  }
-  return candidate;
-}
-
-function scoreHelperAsset(asset = {}, arch = process.arch) {
-  const name = String(asset && asset.name ? asset.name : '').trim();
-  if (!name) {
-    return -1;
-  }
-  const lower = name.toLowerCase();
-  if (!lower.includes('helper')) {
-    return -1;
-  }
-  const extOk = lower.endsWith('.tar.gz')
-    || lower.endsWith('.tgz')
-    || lower.endsWith('.zip')
-    || lower.endsWith('.gz')
-    || lower === 'com.clashfox.helper'
-    || lower.endsWith('/com.clashfox.helper');
-  if (!extOk) {
-    return -1;
-  }
-  let score = 0;
-  if (lower.includes('darwin') || lower.includes('macos') || lower.includes('mac')) {
-    score += 30;
-  }
-  if (arch === 'arm64') {
-    if (lower.includes('arm64') || lower.includes('aarch64')) {
-      score += 25;
-    } else if (lower.includes('universal')) {
-      score += 20;
-    } else if (lower.includes('amd64') || lower.includes('x64')) {
-      score -= 20;
-    }
-  } else if (arch === 'x64') {
-    if (lower.includes('x64') || lower.includes('amd64')) {
-      score += 25;
-    } else if (lower.includes('universal')) {
-      score += 20;
-    } else if (lower.includes('arm64') || lower.includes('aarch64')) {
-      score -= 20;
-    }
-  }
-  if (lower.endsWith('.tar.gz') || lower.endsWith('.tgz')) {
-    score += 8;
-  } else if (lower.endsWith('.zip')) {
-    score += 6;
-  } else if (lower === 'com.clashfox.helper') {
-    score += 4;
-  }
-  return score;
-}
-
-function pickHelperAssetFromRelease(release = {}, arch = process.arch) {
-  const assets = Array.isArray(release && release.assets) ? release.assets : [];
-  let best = null;
-  let bestScore = -1;
-  for (const asset of assets) {
-    const score = scoreHelperAsset(asset, arch);
-    if (score > bestScore) {
-      bestScore = score;
-      best = asset;
-    }
-  }
-  if (!best || bestScore < 0) {
-    return null;
-  }
-  return best;
-}
+// Phase 2: release-asset selection extracted to src/main/services/release-assets.js.
+const {
+  extractSemverFromText,
+  scoreHelperAsset,
+  pickHelperAssetFromRelease,
+  normalizeHelperVersion,
+} = require('./main/services/release-assets.js');
 
 async function fetchLatestHelperReleaseFallback() {
   let html = '';
@@ -3378,85 +2557,13 @@ async function checkHelperUpdates({ force = true } = {}) {
   };
 }
 
-function pickLatestRelease(releases = [], acceptBeta = false) {
-  if (!Array.isArray(releases)) {
-    return null;
-  }
-  for (const release of releases) {
-    if (!release || release.draft) {
-      continue;
-    }
-    if (!acceptBeta && release.prerelease) {
-      continue;
-    }
-    return release;
-  }
-  return null;
-}
-
-function pickLatestKernelRelease(releases = [], acceptBeta = false) {
-  if (!Array.isArray(releases)) {
-    return null;
-  }
-  const betaLikePattern = /(alpha|beta|rc|pre(?:release)?|preview|nightly|canary|dev|smart)/i;
-  const isBetaLikeRelease = (release) => {
-    if (!release || release.draft) {
-      return false;
-    }
-    if (release.prerelease) {
-      return true;
-    }
-    const tagOrName = String(release.tag_name || release.name || '').trim();
-    return betaLikePattern.test(tagOrName);
-  };
-  let fallback = null;
-  for (const release of releases) {
-    if (!release || release.draft) {
-      continue;
-    }
-    if (!acceptBeta && release.prerelease) {
-      continue;
-    }
-    if (acceptBeta && !isBetaLikeRelease(release)) {
-      if (!fallback) {
-        fallback = release;
-      }
-      continue;
-    }
-    if (!fallback) {
-      fallback = release;
-    }
-    const latestTag = String(release.tag_name || release.name || '').trim();
-    const latest = extractKernelSemver(latestTag);
-    if (latest) {
-      return release;
-    }
-  }
-  return fallback;
-}
-
-function extractKernelSemver(raw = '') {
-  const source = String(raw || '').trim();
-  if (!source) {
-    return '';
-  }
-  const match = source.match(/v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/);
-  return match ? normalizeVersionTag(match[0]) : '';
-}
-
-function isStableKernelVersion(raw = '') {
-  const normalizedRaw = String(raw || '').toLowerCase();
-  const prereleaseMarkerPattern = /(^|[^a-z0-9])(alpha-smart|alpha|beta|rc|pre(?:release)?|preview|nightly|canary|dev|smart)([^a-z0-9]|$)/i;
-  if (prereleaseMarkerPattern.test(normalizedRaw)) {
-    return false;
-  }
-  const semver = extractKernelSemver(raw);
-  if (!semver) {
-    return false;
-  }
-  const parsed = parseVersion(semver);
-  return Boolean(parsed && (!Array.isArray(parsed.prerelease) || parsed.prerelease.length === 0));
-}
+// Phase 2: kernel/helper release selection extracted to src/main/services/kernel-release-selection.js.
+const {
+  pickLatestRelease,
+  pickLatestKernelRelease,
+  extractKernelSemver,
+  isStableKernelVersion,
+} = require('./main/services/kernel-release-selection.js');
 
 async function checkKernelUpdates({ source = 'vernesong', currentVersion = '', acceptBeta } = {}) {
   const sourceKey = Object.prototype.hasOwnProperty.call(KERNEL_RELEASE_API, source) ? source : 'vernesong';
@@ -4103,19 +3210,12 @@ async function resolveInstallVersionBranch({
   return 'Prerelease-Alpha';
 }
 
-function buildReleaseTagCandidates(versionBranch = '') {
-  const normalized = String(versionBranch || '').trim();
-  if (!normalized) {
-    return [];
-  }
-  const candidates = [normalized];
-  if (/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/i.test(normalized)) {
-    candidates.push(normalized.replace(/^v/i, ''));
-  } else if (/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/i.test(normalized)) {
-    candidates.unshift(`v${normalized}`);
-  }
-  return Array.from(new Set(candidates.filter(Boolean)));
-}
+// Phase 2: install-version resolution/matching extracted to src/main/services/install-version.js.
+const {
+  buildReleaseTagCandidates,
+  extractInstallVersionHash,
+  currentKernelMatchesVersion,
+} = require('./main/services/install-version.js');
 
 async function fetchGithubReleaseByTagCandidates(githubUser = 'vernesong', versionBranch = '') {
   const candidates = buildReleaseTagCandidates(versionBranch);
@@ -4203,38 +3303,6 @@ async function fetchVersionInfoByBranchCandidates(githubUser = 'vernesong', vers
     ok: false,
     error: lastError ? String(lastError.message || lastError) : 'HTTP_404',
   };
-}
-
-function extractInstallVersionHash(versionInfo = '', versionBranch = '') {
-  const raw = String(versionInfo || '');
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return '';
-  }
-  if (String(versionBranch || '').trim() === 'Prerelease-Alpha') {
-    const prereleaseMatch = trimmed.match(/alpha(?:-smart)?-[0-9a-f]+/i);
-    if (prereleaseMatch && prereleaseMatch[0]) {
-      return prereleaseMatch[0];
-    }
-  }
-  const firstNonEmptyLine = trimmed
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find(Boolean);
-  return firstNonEmptyLine || '';
-}
-
-function normalizeInstallVersionIdentity(value = '') {
-  return String(value || '').trim().replace(/^v/i, '').toLowerCase();
-}
-
-function currentKernelMatchesVersion(currentVersion = '', targetVersion = '') {
-  const current = normalizeInstallVersionIdentity(currentVersion);
-  const target = normalizeInstallVersionIdentity(targetVersion);
-  if (!current || !target) {
-    return false;
-  }
-  return current === target || current.includes(target) || target.includes(current);
 }
 
 function backupKernelExists(backupDir = '', kernelName = '') {
@@ -4794,30 +3862,6 @@ function getHelperPaths() {
   };
 }
 
-function normalizeHelperVersion(raw = '') {
-  const text = String(raw || '').trim();
-  if (!text) {
-    return '';
-  }
-  try {
-    const parsed = JSON.parse(text);
-    if (parsed && typeof parsed.version === 'string' && parsed.version.trim()) {
-      return parsed.version.trim();
-    }
-  } catch {
-    // ignore non-json format
-  }
-  const match = text.match(/"version"\s*:\s*"([^"]+)"/i);
-  if (match && match[1]) {
-    return String(match[1]).trim();
-  }
-  const semver = extractSemverFromText(text);
-  if (semver) {
-    return semver;
-  }
-  return '';
-}
-
 function readInstalledHelperVersion(paths = getHelperPaths()) {
   const metaPaths = [
     String((paths && paths.versionMeta) || '').trim(),
@@ -4937,6 +3981,182 @@ function readControllerAccessFromConfigPath(configPath = '') {
     };
   } catch {
     return { controller: '', secret: '' };
+  }
+}
+
+function parseControllerHostPort(controllerRaw = '', defaultHost = '127.0.0.1') {
+  const text = String(controllerRaw || '').trim();
+  if (!text) {
+    return { host: defaultHost, port: 0 };
+  }
+  let host = defaultHost;
+  let portText = '';
+  const bracketed = text.match(/^\[([^\]]+)\]:(\d+)$/);
+  if (bracketed) {
+    host = bracketed[1];
+    portText = bracketed[2];
+  } else {
+    const idx = text.lastIndexOf(':');
+    if (idx >= 0) {
+      host = text.slice(0, idx).trim() || defaultHost;
+      portText = text.slice(idx + 1).trim();
+    } else {
+      portText = text;
+    }
+  }
+  const port = Number.parseInt(portText, 10);
+  return { host, port: Number.isFinite(port) ? port : 0 };
+}
+
+function checkTcpPortFree(host = '127.0.0.1', port = 0, timeoutMs = 700) {
+  return new Promise((resolve) => {
+    if (!Number.isFinite(port) || port <= 0 || port > 65535) {
+      resolve(false);
+      return;
+    }
+    let settled = false;
+    const server = net.createServer();
+    const finish = (free) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      try {
+        server.close();
+      } catch {
+        // ignore close errors
+      }
+      resolve(free);
+    };
+    server.once('error', () => finish(false));
+    server.once('listening', () => {
+      try {
+        server.close(() => finish(true));
+      } catch {
+        finish(true);
+      }
+    });
+    try {
+      const bindHost = (!host || host === '0.0.0.0' || host === '::') ? undefined : host;
+      server.listen(port, bindHost);
+    } catch {
+      finish(false);
+    }
+    setTimeout(() => finish(false), timeoutMs);
+  });
+}
+
+async function findFreeControllerPort(host = '127.0.0.1', startPort = 9090, maxAttempts = 60) {
+  const base = Number.isFinite(startPort) && startPort > 0 ? startPort : 9090;
+  const seen = new Set();
+  for (let i = 0; i < maxAttempts; i += 1) {
+    const candidate = base + i;
+    if (candidate > 65535 || seen.has(candidate)) {
+      continue;
+    }
+    seen.add(candidate);
+    if (await checkTcpPortFree(host, candidate)) {
+      return candidate;
+    }
+  }
+  return 0;
+}
+
+function rewriteConfigExternalController(configPath = '', nextController = '') {
+  const target = String(nextController || '').trim();
+  if (!configPath || !fs.existsSync(configPath)) {
+    return { ok: false, reason: 'config_missing' };
+  }
+  if (!target) {
+    return { ok: false, reason: 'invalid_controller' };
+  }
+  let raw = '';
+  try {
+    raw = String(fs.readFileSync(configPath, 'utf8') || '');
+  } catch {
+    return { ok: false, reason: 'read_failed' };
+  }
+  const lines = raw.split(/\r?\n/);
+  let changed = false;
+  let foundTopLevel = false;
+  for (let i = 0; i < lines.length; i += 1) {
+    if (/^external-controller\s*:/.test(lines[i])) {
+      foundTopLevel = true;
+      const replacement = `external-controller: ${target}`;
+      if (lines[i] !== replacement) {
+        lines[i] = replacement;
+        changed = true;
+      }
+      break;
+    }
+  }
+  if (!foundTopLevel) {
+    lines.unshift(`external-controller: ${target}`);
+    changed = true;
+  }
+  if (!changed) {
+    return { ok: true, changed: false };
+  }
+  try {
+    fs.writeFileSync(configPath, lines.join('\n'), 'utf8');
+    return { ok: true, changed: true };
+  } catch (err) {
+    return { ok: false, reason: 'write_failed', details: String((err && err.message) || err) };
+  }
+}
+
+async function ensureControllerPortAvailableBeforeStart() {
+  try {
+    const settings = readAppSettings();
+    const configPath = resolveConfigPathFromSettingsOrArgs(settings);
+    const configAccess = readControllerAccessFromConfigPath(configPath);
+    const panelManager = settings && typeof settings.panelManager === 'object' ? settings.panelManager : {};
+    const controllerRaw = String(
+      configAccess.controller
+      || (typeof settings.externalController === 'string' ? settings.externalController : '')
+      || (typeof panelManager.externalController === 'string' ? panelManager.externalController : '')
+      || '127.0.0.1:9090',
+    ).trim();
+    const { host, port } = parseControllerHostPort(controllerRaw);
+    if (!port) {
+      return { ok: true, skipped: 'no_controller_port' };
+    }
+    const free = await checkTcpPortFree(host, port);
+    if (free) {
+      return { ok: true, skipped: 'port_available', controller: `${host}:${port}` };
+    }
+    const nextPort = await findFreeControllerPort(host, port + 1, 60);
+    if (!nextPort) {
+      return {
+        ok: false,
+        error: 'controller_port_conflict',
+        details: `${host}:${port} is occupied by another app and no free port was found`,
+      };
+    }
+    const nextController = `${host}:${nextPort}`;
+    const rewrite = rewriteConfigExternalController(configPath, nextController);
+    if (!rewrite.ok) {
+      return {
+        ok: false,
+        error: 'controller_port_conflict',
+        details: rewrite.details || rewrite.reason || 'failed to update controller port in config',
+      };
+    }
+    const nextSettings = { ...settings };
+    if (!nextSettings.panelManager || typeof nextSettings.panelManager !== 'object') {
+      nextSettings.panelManager = {};
+    }
+    nextSettings.externalController = nextController;
+    nextSettings.panelManager.externalController = nextController;
+    writeAppSettings(nextSettings);
+    emitSettingsUpdated(nextSettings);
+    return { ok: true, changed: true, from: `${host}:${port}`, to: nextController };
+  } catch (err) {
+    return {
+      ok: false,
+      error: 'controller_port_conflict',
+      details: String((err && err.message) || err),
+    };
   }
 }
 
@@ -5240,31 +4460,12 @@ async function measureDnsLatency(hostname = 'cloudflare.com') {
   }
 }
 
-function extractIpFromPayload(raw = '') {
-  const text = String(raw || '').trim();
-  if (!text) {
-    return '';
-  }
-  try {
-    const parsed = JSON.parse(text);
-    const directCandidates = [
-      parsed && parsed.ip,
-      parsed && parsed.address,
-      parsed && parsed.query,
-      parsed && parsed.data && parsed.data.ip,
-      parsed && parsed.data && parsed.data.address,
-      parsed && parsed.ipip && parsed.ipip.ip,
-    ];
-    for (const candidate of directCandidates) {
-      const value = String(candidate || '').trim();
-      if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(value)) {
-        return value;
-      }
-    }
-  } catch {}
-  const match = text.match(/\b\d{1,3}(?:\.\d{1,3}){3}\b/);
-  return match && match[0] ? String(match[0]).trim() : '';
-}
+// Phase 2: ip/network-detail parsers extracted to src/main/services/ip-detail-parsers.js.
+const {
+  extractIpFromPayload,
+  parseNetworkDetailPayload,
+  parseIpapiMetaPayload,
+} = require('./main/services/ip-detail-parsers.js');
 
 async function fetchPublicIpViaCurl(url, { proxyPort = '', useProxy = false } = {}) {
   const requestUrl = String(url || '').trim();
@@ -5280,112 +4481,6 @@ async function fetchPublicIpViaCurl(url, { proxyPort = '', useProxy = false } = 
   }
   const output = await execFileText('/usr/bin/curl', args, 4000);
   return extractIpFromPayload(output);
-}
-
-function parseNetworkDetailPayload(raw = '', endpoint = '') {
-  const text = String(raw || '').trim();
-  if (!text) {
-    return { ip: '', detail: '', source: endpoint };
-  }
-  const cleanNetworkText = (value = '') => String(value || '').replace(/^[,\s，]+|[,\s，]+$/g, '').trim();
-  const ip = extractIpFromPayload(text);
-  try {
-    const parsed = JSON.parse(text);
-    const city = cleanNetworkText(
-      (parsed && parsed.city)
-      || (parsed && parsed.location && parsed.location.city)
-      || (parsed && parsed.data && parsed.data.city)
-      || '',
-    );
-    const region = cleanNetworkText(
-      (parsed && parsed.region)
-      || (parsed && parsed.location && parsed.location.region)
-      || (parsed && parsed.data && parsed.data.region)
-      || '',
-    );
-    const country = cleanNetworkText(
-      (parsed && parsed.country)
-      || (parsed && parsed.location && parsed.location.country)
-      || (parsed && parsed.data && parsed.data.country)
-      || '',
-    );
-    const locationText = cleanNetworkText(
-      (parsed && typeof parsed.location === 'string' && parsed.location)
-      || (parsed && parsed.data && parsed.data.location)
-      || '',
-    );
-    const isp = cleanNetworkText(
-      (parsed && parsed.isp)
-      || (parsed && parsed.organization)
-      || (parsed && parsed.as)
-      || (parsed && parsed.asn && (parsed.asn.org || parsed.asn.name))
-      || (parsed && parsed.company && parsed.company.name)
-      || (parsed && parsed.data && (parsed.data.isp || parsed.data.org))
-      || '',
-    );
-    const locationParts = [country, region, city].filter(Boolean);
-    const summary = [locationParts.join(' ') || locationText, isp].filter(Boolean).join(' · ');
-    return {
-      ip,
-      detail: summary || '',
-      source: endpoint,
-    };
-  } catch {
-    return {
-      ip,
-      detail: '',
-      source: endpoint,
-    };
-  }
-}
-
-function parseIpapiMetaPayload(raw = '') {
-  const text = String(raw || '').trim();
-  if (!text) {
-    return {
-      originalIp: '',
-      nativeIp: null,
-      riskScore: null,
-      riskLevel: '',
-    };
-  }
-  try {
-    const parsed = JSON.parse(text);
-    const originalIp = String((parsed && parsed.ip) || '').trim();
-    const bogon = Boolean(parsed && parsed.is_bogon);
-    const datacenter = Boolean(parsed && parsed.is_datacenter);
-    const tor = Boolean(parsed && parsed.is_tor);
-    const proxy = Boolean(parsed && parsed.is_proxy);
-    const vpn = Boolean(parsed && parsed.is_vpn);
-    const abuser = Boolean(parsed && parsed.is_abuser);
-    const crawler = Boolean(parsed && parsed.is_crawler);
-    const mobile = Boolean(parsed && parsed.is_mobile);
-    const riskScore = Math.min(100, Math.max(0,
-      (bogon ? 40 : 0)
-      + (datacenter ? 25 : 0)
-      + (tor ? 20 : 0)
-      + (proxy ? 20 : 0)
-      + (vpn ? 20 : 0)
-      + (abuser ? 25 : 0)
-      + (crawler ? 10 : 0)
-      + (mobile ? 6 : 0)
-    ));
-    const riskLevel = riskScore >= 60 ? 'high' : (riskScore >= 30 ? 'medium' : 'low');
-    const nativeIp = !(bogon || datacenter || tor || proxy || vpn || abuser || crawler);
-    return {
-      originalIp,
-      nativeIp,
-      riskScore,
-      riskLevel,
-    };
-  } catch {
-    return {
-      originalIp: '',
-      nativeIp: null,
-      riskScore: null,
-      riskLevel: '',
-    };
-  }
 }
 
 async function fetchNetworkDetailWithFallback({ proxyPort = '', useProxy = false } = {}) {
@@ -5499,6 +4594,31 @@ function getPanelDir(panelName) {
   return path.join(getPanelUiDir(), String(panelName || '').trim());
 }
 
+function resolveDashboardUiPath(panelName = '') {
+  const panel = String(panelName || '').trim();
+  // Panels installed through ClashFox are unpacked into <data>/ui/<panel>/,
+  // but mihomo can also auto-download a default UI directly into <data>/ui/.
+  // Prefer the panel subdirectory when it actually has an index.html, then
+  // fall back to the ui root so the dashboard opens the panel that is served.
+  if (panel) {
+    try {
+      if (fs.existsSync(path.join(getPanelDir(panel), 'index.html'))) {
+        return `ui/${panel}/`;
+      }
+    } catch {
+      // ignore and fall through
+    }
+  }
+  try {
+    if (fs.existsSync(path.join(getPanelUiDir(), 'index.html'))) {
+      return 'ui/';
+    }
+  } catch {
+    // ignore
+  }
+  return panel ? `ui/${panel}/` : 'ui/';
+}
+
 function normalizePanelRoot(panelDir) {
   const indexPath = path.join(panelDir, 'index.html');
   if (fs.existsSync(indexPath)) {
@@ -5534,22 +4654,90 @@ function normalizePanelRoot(panelDir) {
   }
 }
 
-function resolvePanelPreset(preset = {}) {
-  if (typeof preset === 'string') {
-    return PANEL_PRESETS[String(preset || '').trim().toLowerCase()] || null;
+// Phase 2: panel preset resolution extracted to src/main/services/panel-preset-resolver.js.
+const { resolvePanelPreset } = require('./main/services/panel-preset-resolver.js');
+
+function runShellWithAdminPrivileges(command = '') {
+  return new Promise((resolve) => {
+    const script = [
+      'try',
+      `set out to do shell script ${JSON.stringify(command)} with administrator privileges`,
+      'return out',
+      'on error errMsg number errNum',
+      `return "${SYSTEM_AUTH_ERROR_PREFIX}:" & (errNum as text) & ":" & errMsg`,
+      'end try',
+    ].join('\n');
+    execFile('osascript', ['-e', script], { timeout: 60 * 1000 }, (error, stdout) => {
+      if (error) {
+        resolve({ ok: false, error: 'system_auth_failed', details: error.message || String(error) });
+        return;
+      }
+      const output = String(stdout || '').trim();
+      if (output.startsWith(`${SYSTEM_AUTH_ERROR_PREFIX}:`)) {
+        const payload = output.slice(SYSTEM_AUTH_ERROR_PREFIX.length + 1);
+        const firstColonIndex = payload.indexOf(':');
+        const errNumRaw = firstColonIndex >= 0 ? payload.slice(0, firstColonIndex) : payload;
+        const errMsg = firstColonIndex >= 0 ? payload.slice(firstColonIndex + 1).trim() : '';
+        const errNum = Number.parseInt(String(errNumRaw || '').trim(), 10);
+        if (errNum === -128) {
+          resolve({ ok: false, error: 'sudo_required' });
+          return;
+        }
+        resolve({ ok: false, error: 'system_auth_failed', details: errMsg || 'system_authorization_failed' });
+        return;
+      }
+      resolve({ ok: true, output });
+    });
+  });
+}
+
+async function ensurePanelUiDirWritable(dir = '') {
+  const target = String(dir || '').trim();
+  if (!target) {
+    return null;
   }
-  const panelName = String((preset && preset.name) || '').trim().toLowerCase();
-  if (panelName && PANEL_PRESETS[panelName]) {
+  try {
+    fs.mkdirSync(target, { recursive: true });
+  } catch {
+    // ignore: existence is enough here
+  }
+  try {
+    fs.accessSync(target, fs.constants.W_OK);
+    return null;
+  } catch {
+    // Not writable by the current user. The external-ui directory is often
+    // created by mihomo running as the privileged helper (root), which leaves
+    // it root-owned; elevate a chown so the GUI can manage panels there.
+  }
+  let consoleUser = '';
+  try {
+    const statResult = spawnSync('/usr/bin/stat', ['-f', '%Su', '/dev/console'], { encoding: 'utf8', timeout: 2000 });
+    consoleUser = String((statResult && statResult.stdout) || '').trim();
+  } catch {
+    // ignore
+  }
+  if (!consoleUser) {
+    consoleUser = String(process.env.USER || process.env.LOGNAME || '').trim();
+  }
+  if (!consoleUser || consoleUser === 'root') {
+    return { ok: false, error: 'panel_dir_not_writable', details: target };
+  }
+  const quote = (value) => `'${String(value || '').replace(/'/g, `'\\''`)}'`;
+  const command = `/usr/sbin/chown -R ${quote(consoleUser)} ${quote(target)} && /bin/chmod -R u+rwX ${quote(target)}`;
+  const auth = await runShellWithAdminPrivileges(command);
+  if (!auth || !auth.ok) {
     return {
-      ...PANEL_PRESETS[panelName],
-      ...(preset && typeof preset === 'object' ? preset : {}),
-      name: panelName,
+      ok: false,
+      error: (auth && auth.error) || 'system_auth_failed',
+      details: (auth && auth.details) || target,
     };
   }
-  if (preset && typeof preset === 'object') {
-    return preset;
+  try {
+    fs.accessSync(target, fs.constants.W_OK);
+    return null;
+  } catch {
+    return { ok: false, error: 'panel_dir_not_writable', details: target };
   }
-  return null;
 }
 
 async function installPanelMain(preset = {}) {
@@ -5587,6 +4775,11 @@ async function installPanelMain(preset = {}) {
     if (files.length > 0) {
       return { ok: true, installed: false, skipped: true, path: panelDir };
     }
+  }
+
+  const uiWritable = await ensurePanelUiDirWritable(panelUiDir);
+  if (uiWritable && uiWritable.ok === false) {
+    return uiWritable;
   }
 
   await fs.promises.mkdir(panelUiDir, { recursive: true });
@@ -8270,7 +7463,7 @@ async function openDashboardPanel() {
     const dashboardConnecting = resolveDashboardStatusText(uiLabels, 'dashboardConnecting', controller);
     const dashboardConnected = resolveDashboardStatusText(uiLabels, 'dashboardConnected', controller);
     const dashboardUnavailable = resolveDashboardStatusText(uiLabels, 'dashboardUnavailable', controller);
-    const dashboardUrl = new URL(`${controller}/ui/${panel}/`);
+    const dashboardUrl = new URL(`${controller}/${resolveDashboardUiPath(panel)}`);
     if (secret) {
       // Different dashboards use different query keys; set both for compatibility.
       dashboardUrl.searchParams.set('token', secret);
@@ -12044,6 +11237,19 @@ function runBridge(args, options = {}) {
         const bridgeArgs = normalized.args;
         // console.log('[runBridge] Running command:', args);
 
+        const firstCmd = String(Array.isArray(bridgeArgs) ? bridgeArgs[0] : '').trim().toLowerCase();
+        if (firstCmd === 'start' || firstCmd === 'restart') {
+          try {
+            const portGuard = await ensureControllerPortAvailableBeforeStart();
+            if (portGuard && portGuard.ok === false) {
+              resolve(portGuard);
+              return;
+            }
+          } catch {
+            // non-fatal: proceed with the configured controller port
+          }
+        }
+
         const helperResult = await runBridgeViaHelper(bridgeArgs);
         if (helperResult) {
           resolve(helperResult);
@@ -12120,16 +11326,8 @@ function createWindow(showOnCreate = false) {
     const settingsPath = getSettingsPath();
     win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
       const url = details.url || '';
-      const isLocalControllerRequest =
-        url.startsWith('http://127.0.0.1:9090/')
-        || url.startsWith('http://localhost:9090/')
-        || url.startsWith('ws://127.0.0.1:9090/')
-        || url.startsWith('ws://localhost:9090/');
-      if (!isLocalControllerRequest) {
-        callback({ requestHeaders: details.requestHeaders });
-        return;
-      }
       let secret = '';
+      let controllerAuthority = '127.0.0.1:9090';
       try {
         if (fs.existsSync(settingsPath)) {
           const raw = fs.readFileSync(settingsPath, 'utf8');
@@ -12137,9 +11335,35 @@ function createWindow(showOnCreate = false) {
           if (parsed && typeof parsed.secret === 'string') {
             secret = parsed.secret.trim();
           }
+          const candidate = String(
+            (parsed && typeof parsed.externalController === 'string' ? parsed.externalController : '')
+            || (parsed && parsed.panelManager && typeof parsed.panelManager.externalController === 'string'
+              ? parsed.panelManager.externalController : ''),
+          ).trim();
+          if (candidate) {
+            controllerAuthority = candidate;
+          }
         }
       } catch {
-        // ignore
+        // ignore settings parse errors
+      }
+      const authority = String(controllerAuthority || '')
+        .replace(/^https?:\/\//i, '')
+        .replace(/\/+$/, '');
+      const prefixes = [
+        `http://${authority}/`,
+        `https://${authority}/`,
+        `ws://${authority}/`,
+        `wss://${authority}/`,
+      ];
+      if (/^127\.0\.0\.1:/.test(authority)) {
+        const localAuthority = `localhost:${authority.slice('127.0.0.1:'.length)}`;
+        prefixes.push(`http://${localAuthority}/`, `ws://${localAuthority}/`);
+      }
+      const isLocalControllerRequest = prefixes.some((prefix) => url.startsWith(prefix));
+      if (!isLocalControllerRequest) {
+        callback({ requestHeaders: details.requestHeaders });
+        return;
       }
       if (secret) {
         details.requestHeaders = {
@@ -12353,13 +11577,56 @@ function setDockIcon() {
   // Icon not set: all candidates failed - silent in production
 }
 
+const CONTENT_SECURITY_POLICY_DIRECTIVES = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://unpkg.com",
+  "style-src 'self' 'unsafe-inline' https://unpkg.com",
+  [
+    "img-src 'self' data: blob:",
+    'https://*.basemaps.cartocdn.com',
+    'https://*.tile.openstreetmap.org',
+    'http://*.tile.openstreetmap.org',
+    'https://*.tile.openstreetmap.fr',
+    'https://server.arcgisonline.com',
+    'https://*.tile.opentopomap.org',
+    'https://*.is.autonavi.com',
+  ].join(' '),
+  "font-src 'self' data:",
+  "connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* https://unpkg.com",
+  "worker-src 'self' blob:",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "form-action 'self'",
+];
+
+function applyContentSecurityPolicy() {
+  const policy = CONTENT_SECURITY_POLICY_DIRECTIVES.join('; ');
+  try {
+    session.defaultSession.webRequest.onHeadersReceived({ urls: ['file://*/*'] }, (details, callback) => {
+      const headers = { ...(details.responseHeaders || {}) };
+      const hasPolicy = Object.keys(headers).some((key) => String(key).toLowerCase() === 'content-security-policy');
+      if (!hasPolicy) {
+        headers['Content-Security-Policy'] = [policy];
+      }
+      callback({ responseHeaders: headers });
+    });
+  } catch (err) {
+    if (globalSettings.debugMode) {
+      console.error('[csp] failed to register Content-Security-Policy handler:', err && err.message);
+    }
+  }
+}
+
 app.whenReady().then(() => {
+  logger.setLogDirectory(resolveLogDirectoryFromSettings());
+  applyContentSecurityPolicy();
   ensureAppDirs();
   reconcileSettingsFileWithDefaults();
   const startupSettings = readAppSettings();
   globalSettings.debugMode = Boolean(
     startupSettings && (startupSettings.debugMode ?? startupSettings.appearance?.debugMode),
   );
+  logger.setDebugEnabled(globalSettings.debugMode);
   setDockIcon();
   createTrayMenu();
   ensureTrayMenuWindow();
@@ -13153,10 +12420,19 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:openExternal', async (_event, url) => {
     if (!url || typeof url !== 'string') {
-      return { ok: false };
+      return { ok: false, error: 'invalid_url' };
+    }
+    let parsed;
+    try {
+      parsed = new URL(url.trim());
+    } catch {
+      return { ok: false, error: 'invalid_url' };
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return { ok: false, error: 'protocol_not_allowed' };
     }
     try {
-      await shell.openExternal(url);
+      await shell.openExternal(parsed.toString());
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err.message };
@@ -13205,7 +12481,14 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clashfox:clearUiStorage', async () => {
     try {
-      const origin = 'http://127.0.0.1:9090';
+      const uiSettings = readAppSettings();
+      const uiPanelManager = uiSettings && typeof uiSettings.panelManager === 'object' ? uiSettings.panelManager : {};
+      const controllerAuthority = String(
+        (typeof uiSettings.externalController === 'string' ? uiSettings.externalController : '')
+        || (typeof uiPanelManager.externalController === 'string' ? uiPanelManager.externalController : '')
+        || '127.0.0.1:9090',
+      ).trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+      const origin = `http://${controllerAuthority}`;
       await session.defaultSession.clearStorageData({
         origin,
         storages: ['serviceworkers', 'caches'],
@@ -13747,6 +13030,7 @@ app.whenReady().then(() => {
       return { ok: true, unchanged: true };
     }
     globalSettings.debugMode = next;
+    logger.setDebugEnabled(next);
     try {
       const persisted = readAppSettings();
       if (!persisted.appearance || typeof persisted.appearance !== 'object') {

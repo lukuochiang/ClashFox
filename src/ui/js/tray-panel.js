@@ -36,13 +36,19 @@ const PANEL_MIN_HEIGHT = 286;
 const PANEL_RESIZE_DIFF_THRESHOLD = 4;
 let panelResizeScheduled = false;
 let panelRendererVisible = false;
-const FOX_RANK_SKIN_PALETTES = {
-  campfire: { start: '#ffb86c', end: '#ff8f57' },
-  aurora: { start: '#7df3d2', end: '#4bc6ff' },
-  starlight: { start: '#c685ff', end: '#8d6dff' },
-  'solar-crown': { start: '#f6d365', end: '#fda085' },
-  'nebula-flare': { start: '#ff8bd8', end: '#8f7cff' },
-  'void-aurora': { start: '#8ef0ff', end: '#6ea0ff' },
+const foxRankTheme = globalThis.CLASHFOX_FOX_RANK_THEME || {
+  getPalette: () => null,
+  applyCssVars: (palette) => palette,
+};
+const uiFormat = globalThis.CLASHFOX_FORMAT_UTILS || {
+  formatBytes: (value, options = {}) => {
+    const fallback = typeof options.fallback === 'string' ? options.fallback : '-';
+    const num = Number.parseFloat(value);
+    if (!Number.isFinite(num) || num < 0) {
+      return fallback;
+    }
+    return `${num} B`;
+  },
 };
 let panelI18n = {
   chartTitle: 'Network Rate',
@@ -129,7 +135,7 @@ function resolveFoxRankSkinPaletteFromSettings(settings = null) {
     || appearance.foxRankSkin
     || '',
   ).trim().toLowerCase();
-  const palette = FOX_RANK_SKIN_PALETTES[skinId] || null;
+  const palette = foxRankTheme.getPalette(skinId);
   return {
     skinId,
     start: String(palette && palette.start ? palette.start : '#8dc2fa'),
@@ -139,32 +145,11 @@ function resolveFoxRankSkinPaletteFromSettings(settings = null) {
 
 function applyFoxRankThemeCssVarsFromSettings(settings = null) {
   const palette = resolveFoxRankSkinPaletteFromSettings(settings);
-  const targets = [document.documentElement, document.body].filter(Boolean);
-  targets.forEach((node) => {
-    node.style.setProperty('--fox-rank-skin-start', palette.start);
-    node.style.setProperty('--fox-rank-skin-end', palette.end);
-    node.style.setProperty('--fox-rank-aura-start', palette.start);
-    node.style.setProperty('--fox-rank-aura-end', palette.end);
-    if (palette.skinId) {
-      node.dataset.foxRankSkin = palette.skinId;
-    } else if (node.dataset && Object.prototype.hasOwnProperty.call(node.dataset, 'foxRankSkin')) {
-      delete node.dataset.foxRankSkin;
-    }
-  });
+  foxRankTheme.applyCssVars(palette);
 }
 
 function formatBytes(value) {
-  const num = Number.parseFloat(value);
-  if (!Number.isFinite(num) || num < 0) return '-';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let size = num;
-  let idx = 0;
-  while (size >= 1024 && idx < units.length - 1) {
-    size /= 1024;
-    idx += 1;
-  }
-  const fixed = size >= 100 ? 0 : size >= 10 ? 1 : 2;
-  return `${size.toFixed(fixed)} ${units[idx]}`;
+  return uiFormat.formatBytes(value, { fallback: '-' });
 }
 
 function formatExpireAt(value) {
